@@ -30,10 +30,11 @@ npm run dev
   liquidity, 24h change, and chart / web / 𝕏 / tg links. Click the ticker or
   address to copy. Data comes from Rick-style scanner posts (parsed, never
   shown) and Dexscreener's public API, fetched once per address.
-- "called N×" counts how many times a contract has been posted across all
-  watched chats since the server started.
-- Bot posts and repeat calls are hidden by default. Toggles in the feed bar
-  bring them back. Filter matches text, author, chat, ticker and name.
+- "called N×" counts how many different chats have posted a contract since
+  the server started (hover to see which). Repeats inside the same chat don't
+  count.
+- Bot posts and repeat posts (a contract already posted in that same chat) are
+  hidden by default. Toggles in the feed bar bring them back. Filter matches text, author, chat, ticker and name.
 
 ## Setup (in the browser, ⚙ top right)
 

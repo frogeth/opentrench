@@ -19,6 +19,8 @@ const MAX_TOKENS = 2000;
 export class MessageHub extends EventEmitter {
   private buffer: FeedMessage[] = [];
   private tokens = new Map<string, TokenInfo>();
+  /** address -> chat ids that have posted it */
+  private tokenChats = new Map<string, Set<string>>();
   private status: Status = { discord: 'disconnected', telegram: 'disconnected', loginStep: 'idle', error: {} };
 
   constructor(
@@ -34,13 +36,22 @@ export class MessageHub extends EventEmitter {
     for (const c of msg.contracts) {
       let t = this.tokens.get(c.address);
       if (!t) {
-        t = { chain: c.chain, address: c.address, seen: 1, firstSeenTs: msg.ts };
+        t = { chain: c.chain, address: c.address, seen: 0, calledIn: [], firstSeenTs: msg.ts };
         this.tokens.set(c.address, t);
-        if (this.tokens.size > MAX_TOKENS) this.tokens.delete(this.tokens.keys().next().value!);
-        anyNew = true;
+        this.tokenChats.set(c.address, new Set());
+        if (this.tokens.size > MAX_TOKENS) {
+          const oldest = this.tokens.keys().next().value!;
+          this.tokens.delete(oldest);
+          this.tokenChats.delete(oldest);
+        }
         this.enrich(t);
-      } else {
-        t.seen++;
+      }
+      const chats = this.tokenChats.get(c.address)!;
+      if (!chats.has(msg.chatId)) {
+        chats.add(msg.chatId);
+        t.seen = chats.size;
+        t.calledIn.push(msg.chatName);
+        anyNew = true;
       }
       if (meta) applyMeta(t, meta, msg.isBot);
       this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);

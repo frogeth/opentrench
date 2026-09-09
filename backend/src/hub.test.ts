@@ -64,25 +64,27 @@ describe('MessageHub', () => {
     expect(hub.hello().status.error).toEqual({});
   });
 
-  it('creates a token on first sight, counts later calls, flags repeats', () => {
+  it('counts one call per chat and flags repeats within a chat', () => {
     const hub = new MessageHub();
     const events: ServerEvent[] = [];
     hub.on('event', (e) => events.push(e));
-    hub.push(msg(1, `ca ${EVM}`));
-    hub.push(msg(2, `again ${EVM}`));
-    hub.push(msg(3, `${EVM} and ${SOL}`));
+    hub.push(msg(1, `ca ${EVM}`, { chatId: 'a', chatName: '#a' }));
+    hub.push(msg(2, `again ${EVM}`, { chatId: 'a', chatName: '#a' }));
+    hub.push(msg(3, `${EVM} and ${SOL}`, { chatId: 'b', chatName: 'B group' }));
+    hub.push(msg(4, `${EVM}`, { chatId: 'b', chatName: 'B group' }));
     const msgs = events.filter((e) => e.type === 'message').map((e) => (e as any).msg as FeedMessage);
-    expect(msgs.map((m) => m.repeat)).toEqual([false, true, false]);
+    expect(msgs.map((m) => m.repeat)).toEqual([false, true, false, true]);
     const toks = tokensOf(events);
     expect(toks.map((t) => [t.address, t.seen])).toEqual([
       [EVM, 1],
+      [EVM, 1],
       [EVM, 2],
-      [EVM, 3],
       [SOL, 1],
+      [EVM, 2],
     ]);
-    expect(hub.hello().tokens.map((t) => [t.address, t.seen, t.firstSeenTs])).toEqual([
-      [EVM, 3, 1],
-      [SOL, 1, 3],
+    expect(hub.hello().tokens.map((t) => [t.address, t.seen, t.calledIn, t.firstSeenTs])).toEqual([
+      [EVM, 2, ['#a', 'B group'], 1],
+      [SOL, 1, ['B group'], 3],
     ]);
   });
 

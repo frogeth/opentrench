@@ -50,7 +50,9 @@ export function TokenCard({ c, t }: { c: Contract; t?: TokenInfo }) {
             {copied ? 'copied' : (t?.symbol ?? short)}
           </button>
           {t?.name && t.name !== t.symbol && <span className="token-name">{t.name}</span>}
-          <span className="token-seen">called {t?.seen ?? 1}×</span>
+          <span className="token-seen" title={t?.calledIn?.length ? `called in:\n${t.calledIn.join('\n')}` : undefined}>
+            called {t?.seen ?? 1}×
+          </span>
         </div>
         <div className="token-stats">
           <span className="token-addr" onClick={copy}>

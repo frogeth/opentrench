@@ -17,7 +17,7 @@ export interface FeedMessage {
   text: string;
   ts: number;
   contracts: Contract[];
-  /** true when every contract in this message had already been seen */
+  /** true when every contract in this message had already been posted in this chat */
   repeat: boolean;
   link?: string;
   hasAttachment: boolean;
@@ -26,7 +26,10 @@ export interface FeedMessage {
 export interface TokenInfo {
   chain: Chain;
   address: string;
+  /** number of distinct chats that have posted this contract */
   seen: number;
+  /** names of those chats, in order of first post */
+  calledIn: string[];
   firstSeenTs: number;
   name?: string;
   symbol?: string;
