@@ -1,4 +1,4 @@
-import type { FeedMessage, LinkPreview, MediaItem, Reaction, ReplyContext } from '../types.js';
+import type { EmbedInfo, FeedMessage, LinkPreview, MediaItem, Reaction, ReplyContext } from '../types.js';
 
 export interface DiscordChannelInfo {
   name: string;
@@ -47,6 +47,41 @@ export function discordMedia(d: any): MediaItem[] {
     add({ kind: 'sticker', url: `https://media.discordapp.net/stickers/${s.id}.${ext}?size=160` });
   }
   for (const m of String(d.content ?? '').matchAll(MEDIA_URL_RE)) add({ kind: kindForUrl(m[0]), url: m[0] });
+  return out;
+}
+
+const str = (v: unknown): string | undefined => {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return s || undefined;
+};
+
+/**
+ * Rich embeds (bot/webhook cards, link unfurls) kept structured. Media-only
+ * embeds are handled by discordMedia, tweet unfurls by discordPreviews.
+ */
+export function discordEmbeds(d: any): EmbedInfo[] {
+  const out: EmbedInfo[] = [];
+  for (const e of d.embeds ?? []) {
+    if (e.type === 'gifv' || e.type === 'image' || e.type === 'video') continue;
+    if (TWEET_URL_RE.test(String(e.url ?? '')) && e.description) continue;
+    const fields = (Array.isArray(e.fields) ? e.fields : [])
+      .map((f: any) => ({ name: str(f?.name) ?? '', value: str(f?.value) ?? '', inline: !!f?.inline }))
+      .filter((f: { name: string; value: string }) => f.name || f.value);
+    const emb: EmbedInfo = {
+      title: str(e.title),
+      url: str(e.url),
+      description: str(e.description),
+      color: typeof e.color === 'number' ? `#${e.color.toString(16).padStart(6, '0')}` : undefined,
+      author: str(e.author?.name) ? { name: String(e.author.name).trim(), url: str(e.author.url), icon: str(e.author.proxy_icon_url ?? e.author.icon_url) } : undefined,
+      fields,
+      thumbnail: str(e.thumbnail?.proxy_url ?? e.thumbnail?.url),
+      image: str(e.image?.proxy_url ?? e.image?.url),
+      footer: str(e.footer?.text),
+    };
+    if (!emb.title && !emb.description && fields.length === 0 && !emb.image && !emb.author) continue;
+    for (const k of Object.keys(emb) as (keyof EmbedInfo)[]) if (emb[k] === undefined) delete emb[k];
+    out.push(emb);
+  }
   return out;
 }
 
@@ -115,7 +150,9 @@ export function normalizeDiscord(d: any, ch: DiscordChannelInfo): FeedMessage {
     if (e.description) parts.push(e.description);
     for (const f of e.fields ?? []) if (f.value) parts.push(f.value);
   }
+  const embeds = discordEmbeds(d);
   return {
+    ...(embeds.length ? { body: String(d.content ?? ''), embeds } : {}),
     id: `discord:${d.id}`,
     source: 'discord',
     chatId: String(d.channel_id),

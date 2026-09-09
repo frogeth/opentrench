@@ -7,6 +7,7 @@ import { TokenChip } from './TokenChip';
 import { Icon } from './Icon';
 import { AuthorMenu } from './AuthorMenu';
 import { RichText } from './RichText';
+import { Embed } from './Embed';
 
 const isVideoFile = (url: string, mime?: string) => (mime ? mime.startsWith('video/') : /\.(mp4|webm|mov)(\?|$)/i.test(url));
 
@@ -118,9 +119,9 @@ export function MessageRow({
             <span className="reply-arrow">↩</span> <b>{m.replyTo.author}</b> <RichText text={m.replyTo.text} />
           </div>
         )}
-        {m.text && (
+        {(m.embeds?.length ? m.body : m.text) && (
           <div className="row-text">
-            <RichText text={m.text} contracts={m.contracts.map((c) => c.address)} />
+            <RichText text={m.embeds?.length ? m.body ?? '' : m.text} contracts={m.contracts.map((c) => c.address)} />
             {m.hasAttachment && !m.media?.length && (
               <span className="attach" title="has attachment">
                 {' '}
@@ -129,6 +130,9 @@ export function MessageRow({
             )}
           </div>
         )}
+        {m.embeds?.map((e, i) => (
+          <Embed key={i} e={e} contracts={m.contracts.map((c) => c.address)} />
+        ))}
         {m.media && m.media.length > 0 && (
           <div className="media">
             {m.media.map((x) => (

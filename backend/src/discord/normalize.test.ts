@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { discordMedia, discordPreviews, discordReaction, normalizeDiscord } from './normalize.js';
+import { discordEmbeds, discordMedia, discordPreviews, discordReaction, normalizeDiscord } from './normalize.js';
 
 const payload = {
   id: '111',
@@ -25,6 +25,8 @@ describe('normalizeDiscord', () => {
       avatar: 'https://cdn.discordapp.com/guilds/333/users/444/avatars/guildhash.png?size=64',
       isBot: false,
       text: 'gm\nT\nD\nv',
+      body: 'gm',
+      embeds: [{ title: 'T', description: 'D', fields: [{ name: 'n', value: 'v', inline: false }] }],
       ts: Date.parse('2026-09-08T12:00:00.000Z'),
       contracts: [],
       repeat: false,
@@ -102,6 +104,44 @@ describe('normalizeDiscord', () => {
       name: 'pepe',
       imageUrl: 'https://cdn.discordapp.com/emojis/42.gif?size=32',
     });
+  });
+  it('keeps rich embeds structured, skipping media and tweet unfurls', () => {
+    const embeds = discordEmbeds({
+      embeds: [
+        {
+          type: 'rich',
+          title: '$babybaton · baby baton',
+          url: 'https://dexscreener.com/solana/FJHv',
+          description: '**Called** in Potion',
+          color: 0x3ddc84,
+          author: { name: 'Captain Hook', icon_url: 'https://cdn/x.png' },
+          fields: [
+            { name: 'MC', value: '$118K', inline: true },
+            { name: 'Links', value: '[X](https://x.com/a) · [Dex](https://dexscreener.com/b)' },
+          ],
+          thumbnail: { url: 'https://cdn/thumb.png' },
+          footer: { text: 'Potion' },
+        },
+        { type: 'gifv', url: 'https://tenor.com/x', video: { url: 'https://media.tenor.com/x.mp4' } },
+        { type: 'link', url: 'https://x.com/a/status/1', description: 'tweet', author: { name: 'A (@a)' } },
+        { type: 'rich' },
+      ],
+    });
+    expect(embeds).toEqual([
+      {
+        title: '$babybaton · baby baton',
+        url: 'https://dexscreener.com/solana/FJHv',
+        description: '**Called** in Potion',
+        color: '#3ddc84',
+        author: { name: 'Captain Hook', icon: 'https://cdn/x.png' },
+        fields: [
+          { name: 'MC', value: '$118K', inline: true },
+          { name: 'Links', value: '[X](https://x.com/a) · [Dex](https://dexscreener.com/b)', inline: false },
+        ],
+        thumbnail: 'https://cdn/thumb.png',
+        footer: 'Potion',
+      },
+    ]);
   });
   it('flags bot authors', () => {
     const m = normalizeDiscord({ ...payload, author: { ...payload.author, bot: true } }, { name: 'a', guildName: 'g' });

@@ -38,6 +38,20 @@ export interface LinkPreview {
   avatar?: string;
 }
 
+/** A Discord rich embed (bot/webhook cards), kept structured so the UI can render it like Discord does. */
+export interface EmbedInfo {
+  title?: string;
+  url?: string;
+  description?: string;
+  /** css color, e.g. #5865f2 */
+  color?: string;
+  author?: { name: string; url?: string; icon?: string };
+  fields: { name: string; value: string; inline: boolean }[];
+  thumbnail?: string;
+  image?: string;
+  footer?: string;
+}
+
 export interface FeedMessage {
   id: string;
   source: Source;
@@ -48,7 +62,11 @@ export interface FeedMessage {
   isBot: boolean;
   /** blacklisted, or a bot the bot policy does not allow; never counts as a call */
   hidden?: boolean;
+  /** everything, flattened (embeds included): what contract detection and search look at */
   text: string;
+  /** the message body alone, present when embeds are attached (the UI shows body + embeds instead of text) */
+  body?: string;
+  embeds?: EmbedInfo[];
   ts: number;
   contracts: Contract[];
   /** true when every contract in this message had already been posted in this chat */
