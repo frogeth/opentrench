@@ -121,6 +121,7 @@ describe('normalizeDiscord', () => {
           ],
           thumbnail: { url: 'https://cdn/thumb.png' },
           footer: { text: 'Potion' },
+          timestamp: '2026-09-09T22:58:00.000Z',
         },
         { type: 'gifv', url: 'https://tenor.com/x', video: { url: 'https://media.tenor.com/x.mp4' } },
         { type: 'link', url: 'https://x.com/a/status/1', description: 'tweet', author: { name: 'A (@a)' } },
@@ -140,6 +141,7 @@ describe('normalizeDiscord', () => {
         ],
         thumbnail: 'https://cdn/thumb.png',
         footer: 'Potion',
+        timestamp: Date.parse('2026-09-09T22:58:00.000Z'),
       },
     ]);
   });

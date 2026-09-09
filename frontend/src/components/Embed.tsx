@@ -1,6 +1,18 @@
 import type { EmbedInfo } from '../types';
 import { RichText } from './RichText';
 
+/** Discord's footer time: "Today at 6:58 PM", "Yesterday at …", or the date. */
+function footerTime(ts: number): string {
+  const d = new Date(ts);
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const day = new Date();
+  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  if (sameDay(d, day)) return `Today at ${time}`;
+  day.setDate(day.getDate() - 1);
+  if (sameDay(d, day)) return `Yesterday at ${time}`;
+  return `${d.toLocaleDateString()} ${time}`;
+}
+
 /** A Discord rich embed, laid out the way Discord does: colour bar, author, title, description, fields grid, media, footer. */
 export function Embed({ e, contracts }: { e: EmbedInfo; contracts: string[] }) {
   const title = e.title ? (
@@ -52,7 +64,13 @@ export function Embed({ e, contracts }: { e: EmbedInfo; contracts: string[] }) {
           </div>
         )}
         {e.image && <img className="embed-image" src={e.image} alt="" loading="lazy" />}
-        {e.footer && <div className="embed-footer">{e.footer}</div>}
+        {(e.footer || e.timestamp) && (
+          <div className="embed-footer">
+            {e.footer}
+            {e.footer && e.timestamp ? ' • ' : ''}
+            {e.timestamp ? footerTime(e.timestamp) : ''}
+          </div>
+        )}
       </div>
       {e.thumbnail && <img className="embed-thumb" src={e.thumbnail} alt="" loading="lazy" />}
     </div>

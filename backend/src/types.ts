@@ -50,6 +50,8 @@ export interface EmbedInfo {
   thumbnail?: string;
   image?: string;
   footer?: string;
+  /** embed timestamp (ms), shown after the footer like Discord does */
+  timestamp?: number;
 }
 
 export interface FeedMessage {

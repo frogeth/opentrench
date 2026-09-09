@@ -77,6 +77,7 @@ export function discordEmbeds(d: any): EmbedInfo[] {
       thumbnail: str(e.thumbnail?.proxy_url ?? e.thumbnail?.url),
       image: str(e.image?.proxy_url ?? e.image?.url),
       footer: str(e.footer?.text),
+      timestamp: e.timestamp && Number.isFinite(Date.parse(e.timestamp)) ? Date.parse(e.timestamp) : undefined,
     };
     if (!emb.title && !emb.description && fields.length === 0 && !emb.image && !emb.author) continue;
     for (const k of Object.keys(emb) as (keyof EmbedInfo)[]) if (emb[k] === undefined) delete emb[k];
