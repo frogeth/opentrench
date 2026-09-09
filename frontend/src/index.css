@@ -68,27 +68,42 @@ main { flex: 1; display: flex; min-height: 0; }
 .row-contracts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 
 .token {
-  display: flex; gap: 10px; align-items: flex-start; min-width: 260px; max-width: 520px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  display: flex; flex-direction: column; min-width: 280px; max-width: 560px; flex: 1 1 280px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; gap: 8px;
 }
+.token-open { max-width: 100%; }
+.token-row { display: flex; gap: 10px; align-items: flex-start; }
 .token-sol { border-left: 3px solid var(--sol); }
 .token-evm { border-left: 3px solid var(--evm); }
 .token-img { width: 36px; height: 36px; border-radius: 8px; flex: none; object-fit: cover; background: var(--bg); }
 .token-img-fallback { display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--muted); }
-.token-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.token-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .token-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .token-sym { background: none; border: none; color: var(--text); font-weight: 700; font-size: 14px; padding: 0; cursor: pointer; }
 .token-sym:hover { text-decoration: underline; }
 .token-name { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.net { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+.net-robinhood { color: #3ddc84; border-color: #3ddc84; }
+.net-base { color: #0052ff; border-color: #0052ff; }
+.net-ethereum { color: var(--evm); border-color: var(--evm); }
+.net-solana { color: var(--sol); border-color: var(--sol); }
+.net-bsc { color: #f0b90b; border-color: #f0b90b; }
 .token-seen { margin-left: auto; font-size: 11px; color: var(--warn); font-weight: 600; white-space: nowrap; }
-.token-stats { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
-.token-addr { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; }
+.token-stats { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); align-items: center; }
+.token-addr { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; }
 .token-addr:hover { color: var(--text); }
 .token-stats .up { color: var(--ok); }
 .token-stats .down { color: var(--err); }
-.token-links { display: flex; gap: 10px; font-size: 12px; }
-.token-links a { color: var(--tg); text-decoration: none; }
-.token-links a:hover { text-decoration: underline; }
+.token-pending { color: var(--warn); font-style: italic; }
+.token-links { display: flex; gap: 4px; align-items: center; }
+.token-link {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border-radius: 6px;
+  color: var(--muted); background: none; border: 1px solid transparent; cursor: pointer; font-size: 11px; text-decoration: none;
+}
+.token-link:hover { color: var(--text); border-color: var(--line); background: var(--bg); }
+.token-link.active { color: var(--ok); border-color: var(--ok); }
+.token-link .icon-x { width: 12px; height: 12px; }
+.token-chart { width: 100%; height: 360px; border: 1px solid var(--line); border-radius: 8px; background: #000; }
 .jump {
   position: absolute; bottom: 14px; right: 14px;
   background: var(--panel); border: 1px solid var(--line); color: var(--text);

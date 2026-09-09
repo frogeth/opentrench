@@ -26,10 +26,14 @@ npm run dev
 
 - Newest on top. Discord and Telegram merged, with each platform's logo and the
   poster's avatar.
-- Every contract address becomes a card: ticker, name, price, market cap,
-  liquidity, 24h change, and chart / web / 𝕏 / tg links. Click the ticker or
-  address to copy. Data comes from Rick-style scanner posts (parsed, never
-  shown) and Dexscreener's public API, fetched once per address.
+- Every contract address becomes a card: ticker, name, chain, price, market
+  cap, liquidity, 24h change, a **live chart** you can expand in place, and
+  icon links for chart / website / 𝕏 / Telegram / explorer. Click the ticker
+  or address to copy.
+- Token data is layered, so a minutes-old launch still resolves: Rick-style
+  scanner posts (parsed, never shown) → Dexscreener → GeckoTerminal (covers
+  Robinhood Chain and fresh pools) → Bankr (launch name, chain, socials). A
+  token with no price yet is re-checked after 1 and 5 minutes.
 - "called N×" counts how many different chats have posted a contract since
   the server started (hover to see which). Repeats inside the same chat don't
   count.

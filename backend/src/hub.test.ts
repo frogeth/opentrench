@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { MessageHub } from './hub.js';
 import type { FeedMessage, ServerEvent, TokenInfo } from './types.js';
 
@@ -114,6 +114,36 @@ describe('MessageHub', () => {
     const t = hub.hello().tokens[0];
     expect(t).toMatchObject({ priceUsd: 1.5, marketCap: 100, website: 'https://rick.example', symbol: 'DEX' });
     expect(tokensOf(events).at(-1)?.priceUsd).toBe(1.5);
+  });
+
+  it('retries enrichment while the price is missing, then stops', async () => {
+    vi.useFakeTimers();
+    try {
+      const results = [undefined, { symbol: 'FRESH', network: 'robinhood' }, { priceUsd: 0.5 }];
+      const calls: string[] = [];
+      const hub = new MessageHub(
+        500,
+        async (addr, chain) => {
+          calls.push(`${addr}:${chain}`);
+          return results[calls.length - 1];
+        },
+        { retryDelaysMs: [1000, 5000] },
+      );
+      hub.push(msg(1, EVM));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(calls).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(calls).toHaveLength(2);
+      expect(hub.hello().tokens[0]).toMatchObject({ symbol: 'FRESH', network: 'robinhood' });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(calls).toHaveLength(3);
+      expect(hub.hello().tokens[0].priceUsd).toBe(0.5);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(calls).toHaveLength(3);
+      expect(calls[0]).toBe(`${EVM}:evm`);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('survives a failing fetcher', async () => {

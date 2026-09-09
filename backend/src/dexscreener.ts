@@ -3,11 +3,16 @@ import type { TokenInfo } from './types.js';
 const API = 'https://api.dexscreener.com/latest/dex/tokens/';
 const TIMEOUT_MS = 8000;
 
-export type TokenFetcher = (address: string) => Promise<Partial<TokenInfo> | undefined>;
-
 function num(v: unknown): number | undefined {
   const n = typeof v === 'string' ? Number(v) : (v as number);
   return Number.isFinite(n) ? n : undefined;
+}
+
+export function dexscreenerEmbedUrl(chainId: string, pairAddress: string): string {
+  return (
+    `https://dexscreener.com/${chainId}/${pairAddress}?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0` +
+    `&chartLeftToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=15`
+  );
 }
 
 export function mapDexscreener(json: any, address: string): Partial<TokenInfo> | undefined {
@@ -27,7 +32,10 @@ export function mapDexscreener(json: any, address: string): Partial<TokenInfo> |
   if (liq !== undefined) out.liquidity = liq;
   const ch = num(best.priceChange?.h24);
   if (ch !== undefined) out.change24h = ch;
+  if (best.chainId) out.network = String(best.chainId);
+  if (best.pairAddress) out.pairAddress = String(best.pairAddress);
   if (best.url) out.chartUrl = String(best.url);
+  if (best.chainId && best.pairAddress) out.embedUrl = dexscreenerEmbedUrl(String(best.chainId), String(best.pairAddress));
   if (best.info?.imageUrl) out.imageUrl = String(best.info.imageUrl);
   const web = best.info?.websites?.[0]?.url;
   if (web) out.website = String(web);
@@ -38,14 +46,17 @@ export function mapDexscreener(json: any, address: string): Partial<TokenInfo> |
   return out;
 }
 
-export const fetchToken: TokenFetcher = async (address) => {
+export async function fetchDexscreener(
+  address: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Partial<TokenInfo> | undefined> {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(API + encodeURIComponent(address), { signal: ctl.signal });
+    const res = await fetchImpl(API + encodeURIComponent(address), { signal: ctl.signal });
     if (!res.ok) throw new Error(`dexscreener ${res.status}`);
     return mapDexscreener(await res.json(), address);
   } finally {
     clearTimeout(t);
   }
-};
+}

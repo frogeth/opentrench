@@ -4,6 +4,7 @@ import { mapDexscreener } from './dexscreener.js';
 const ADDR = '0x777777780838C00038ecD48F63f3C37669322Bc8';
 const pair = (liq: number, extra: Record<string, unknown> = {}) => ({
   chainId: 'ethereum',
+  pairAddress: `pair${liq}`,
   url: `https://dexscreener.com/ethereum/pair${liq}`,
   baseToken: { address: ADDR, name: 'Ethereumcat', symbol: 'ETHCAT' },
   priceUsd: '0.0002690',
@@ -39,7 +40,11 @@ describe('mapDexscreener', () => {
       marketCap: 268911,
       liquidity: 5000,
       change24h: -2.9,
+      network: 'ethereum',
+      pairAddress: 'pair5000',
       chartUrl: 'https://dexscreener.com/ethereum/pair5000',
+      embedUrl:
+        'https://dexscreener.com/ethereum/pair5000?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=15',
       imageUrl: 'https://img',
       website: 'https://ethcat.fun',
       twitter: 'https://x.com/ethcat__',

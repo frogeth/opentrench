@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { detectContracts } from './contracts.js';
-import type { TokenFetcher } from './dexscreener.js';
+import type { TokenFetcher } from './enrich.js';
 import type { ExtractedMeta } from './links.js';
 import type {
   DiscordState,
@@ -14,7 +14,10 @@ import type {
 } from './types.js';
 
 const META_KEYS = ['website', 'twitter', 'telegram', 'name', 'symbol'] as const;
+const DATA_KEYS = ['priceUsd', 'marketCap', 'liquidity', 'change24h', 'imageUrl', 'network', 'pairAddress', 'chartUrl', 'embedUrl', 'explorerUrl'] as const;
 const MAX_TOKENS = 2000;
+/** Re-fetch a token that came back without a price (fresh pair not indexed yet). */
+const DEFAULT_RETRY_DELAYS_MS = [60_000, 300_000];
 
 export class MessageHub extends EventEmitter {
   private buffer: FeedMessage[] = [];
@@ -23,11 +26,15 @@ export class MessageHub extends EventEmitter {
   private tokenChats = new Map<string, Set<string>>();
   private status: Status = { discord: 'disconnected', telegram: 'disconnected', loginStep: 'idle', error: {} };
 
+  private retryDelays: number[];
+
   constructor(
     private cap = 500,
     private fetcher?: TokenFetcher,
+    opts: { retryDelaysMs?: number[] } = {},
   ) {
     super();
+    this.retryDelays = opts.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
   }
 
   push(msg: FeedMessage, meta?: ExtractedMeta): void {
@@ -89,18 +96,20 @@ export class MessageHub extends EventEmitter {
     };
   }
 
-  private enrich(t: TokenInfo): void {
+  private enrich(t: TokenInfo, attempt = 0): void {
     if (!this.fetcher) return;
-    this.fetcher(t.address)
+    this.fetcher(t.address, t.chain)
       .then((info) => {
-        if (!info) return;
         const live = this.tokens.get(t.address);
         if (!live) return;
-        for (const k of ['priceUsd', 'marketCap', 'liquidity', 'change24h', 'imageUrl', 'chartUrl'] as const) {
-          if (info[k] !== undefined) (live as any)[k] = info[k];
+        if (info) {
+          for (const k of DATA_KEYS) if (info[k] !== undefined) (live as any)[k] = info[k];
+          for (const k of META_KEYS) if (info[k] && !live[k]) live[k] = info[k];
+          this.emit('event', { type: 'token', token: { ...live } } satisfies ServerEvent);
         }
-        for (const k of META_KEYS) if (info[k] && !live[k]) live[k] = info[k];
-        this.emit('event', { type: 'token', token: { ...live } } satisfies ServerEvent);
+        if (live.priceUsd === undefined && attempt < this.retryDelays.length) {
+          setTimeout(() => this.enrich(t, attempt + 1), this.retryDelays[attempt]);
+        }
       })
       .catch((e) => console.warn('[tokens] enrich failed', t.address, e?.message ?? e));
   }

@@ -38,7 +38,13 @@ export interface TokenInfo {
   liquidity?: number;
   change24h?: number;
   imageUrl?: string;
+  /** dexscreener-style chain id: ethereum | base | bsc | solana | robinhood | … */
+  network?: string;
+  pairAddress?: string;
   chartUrl?: string;
+  /** iframe-able live chart (Dexscreener or GeckoTerminal embed) */
+  embedUrl?: string;
+  explorerUrl?: string;
   website?: string;
   twitter?: string;
   telegram?: string;
