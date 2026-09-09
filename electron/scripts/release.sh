@@ -36,5 +36,5 @@ if [ -n "$APP" ]; then
   spctl --assess --type execute -vv "$APP"
 fi
 
-( cd .. && git add electron/package.json && git commit -qm "release: opentrench v$VERSION" && git tag "v$VERSION" && git push && git push --tags )
+( cd .. && git add electron/package.json package-lock.json && git commit -qm "release: opentrench v$VERSION" && git tag "v$VERSION" && git push && git push --tags )
 echo "==> published https://github.com/frogeth/opentrench/releases/tag/v$VERSION"
