@@ -6,7 +6,17 @@ import { Logo } from './Logo';
 type Tab = 'accounts' | 'feed' | 'trading';
 
 /** The one settings place: a modal with three tabs. Channels are managed in the sidebar, not here. */
-export function Settings({ status, onClose }: { status: Status; onClose: () => void }) {
+export function Settings({
+  status,
+  onClose,
+  chatOrder,
+  onChatOrder,
+}: {
+  status: Status;
+  onClose: () => void;
+  chatOrder: 'bottom' | 'top';
+  onChatOrder: (o: 'bottom' | 'top') => void;
+}) {
   const [cfg, setCfg] = useState<MaskedConfig | null>(null);
   const [tab, setTab] = useState<Tab>('accounts');
   const reload = () => api.config().then(setCfg).catch(() => {});
@@ -48,6 +58,18 @@ export function Settings({ status, onClose }: { status: Status; onClose: () => v
           )}
           {cfg && tab === 'feed' && (
             <>
+              <section>
+                <h2>Chat order</h2>
+                <div className="hint">Calls always show the newest call on top. This only affects the Chats panel.</div>
+                <div className="seg">
+                  <button className={chatOrder === 'bottom' ? 'active' : ''} onClick={() => onChatOrder('bottom')}>
+                    Newest at bottom (like Discord)
+                  </button>
+                  <button className={chatOrder === 'top' ? 'active' : ''} onClick={() => onChatOrder('top')}>
+                    Newest on top
+                  </button>
+                </div>
+              </section>
               <FavoritesSection cfg={cfg} onChange={reload} />
               <BlacklistSection cfg={cfg} onChange={reload} />
             </>

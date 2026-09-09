@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFeed } from './useFeed';
 import { Column } from './components/Column';
 import { CallCard } from './components/CallCard';
@@ -41,12 +41,14 @@ function tokenMatches(q: string, t: TokenInfo): boolean {
   );
 }
 
-/** Discord-style grouping: hide the header when the newer message just above is the same author within 5 min. */
+/** Discord-style grouping: hide the header when the message just above (in display order) is the same author within 5 min. */
 function continued(list: FeedMessage[], i: number): boolean {
   const above = list[i - 1];
   const m = list[i];
-  return !!above && above.author === m.author && above.chatName === m.chatName && above.ts - m.ts < 5 * 60_000 && !m.replyTo;
+  return !!above && above.author === m.author && above.chatName === m.chatName && Math.abs(above.ts - m.ts) < 5 * 60_000 && !m.replyTo;
 }
+
+export type ChatOrder = 'bottom' | 'top';
 
 export default function App() {
   const { messages, tokens, status, wsOpen, ping } = useFeed();
@@ -65,6 +67,23 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [previewMsgs, setPreviewMsgs] = useState<FeedMessage[] | null>(null);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
+  const [chatOrder, setChatOrderState] = useState<ChatOrder>(() => {
+    try {
+      return localStorage.getItem('trenchfeed.chatOrder') === 'top' ? 'top' : 'bottom';
+    } catch {
+      return 'bottom';
+    }
+  });
+  const setChatOrder = (o: ChatOrder) => {
+    setChatOrderState(o);
+    try {
+      localStorage.setItem('trenchfeed.chatOrder', o);
+    } catch {
+      /* ignore */
+    }
+  };
+  const chatBodyRef = useRef<HTMLDivElement>(null);
+  const [atEnd, setAtEnd] = useState(true);
   const [paneHidden, setPaneHidden] = useState(() => {
     try {
       return localStorage.getItem('trenchfeed.pane') === 'hidden';
@@ -234,6 +253,25 @@ export default function App() {
     );
   }, [messages, previewMsgs, view.preview, tokens, q, scope, showBots, showRepeats, watched.length, watchedNames]);
 
+  /** What the Chats column renders, in reading order. */
+  const shownMsgs = useMemo(() => (chatOrder === 'bottom' ? [...chatMsgs].reverse() : chatMsgs), [chatMsgs, chatOrder]);
+  const onChatScroll = () => {
+    const el = chatBodyRef.current;
+    if (!el) return;
+    setAtEnd(chatOrder === 'bottom' ? el.scrollHeight - el.scrollTop - el.clientHeight < 60 : el.scrollTop < 60);
+  };
+  useLayoutEffect(() => {
+    const el = chatBodyRef.current;
+    if (!el || !atEnd) return;
+    el.scrollTop = chatOrder === 'bottom' ? el.scrollHeight : 0;
+  }, [shownMsgs, chatOrder, atEnd]);
+  const jumpToLatest = () => {
+    const el = chatBodyRef.current;
+    if (!el) return;
+    el.scrollTo({ top: chatOrder === 'bottom' ? el.scrollHeight : 0, behavior: 'smooth' });
+    setAtEnd(true);
+  };
+
   const calls = useMemo(
     () =>
       Object.values(tokens)
@@ -362,6 +400,15 @@ export default function App() {
           title={title}
           count={chatMsgs.length}
           className={`col-chats col-discord${focused?.source === 'discord' ? ' col-hash' : ''}`}
+          bodyRef={chatBodyRef}
+          onScroll={onChatScroll}
+          footer={
+            !atEnd && (
+              <button className="jump" onClick={jumpToLatest}>
+                {chatOrder === 'bottom' ? '↓' : '↑'} latest
+              </button>
+            )
+          }
           extra={
             <>
               {focused && <Logo source={focused.source} size={12} />}
@@ -403,20 +450,22 @@ export default function App() {
               {watched.length === 0 ? 'No chats in your feed yet. Use the + in the rail.' : 'Nothing here yet.'}
             </div>
           )}
-          {chatMsgs.map((m, i) => (
+          {shownMsgs.map((m, i) => (
             <MessageRow
               key={m.id}
               m={m}
               tokens={tokens}
               onSelect={select}
               favorites={status.favorites}
-              continued={!!focused && continued(chatMsgs, i)}
+              continued={!!focused && continued(shownMsgs, i)}
               discord={!!focused}
             />
           ))}
         </Column>
       </main>
-      {settingsOpen && <Settings status={status} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <Settings status={status} onClose={() => setSettingsOpen(false)} chatOrder={chatOrder} onChatOrder={setChatOrder} />
+      )}
       {addOpen && (
         <AddChatsModal
           initialSource={addOpen}
