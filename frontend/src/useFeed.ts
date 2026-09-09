@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FeedMessage, ServerEvent, Status, TokenInfo } from './types';
 
 const MAX = 500;
@@ -16,6 +16,7 @@ export function useFeed() {
   });
   const [wsOpen, setWsOpen] = useState(false);
   const [ping, setPing] = useState<Extract<ServerEvent, { type: 'ping' }> | null>(null);
+  const boot = useRef<string | null>(null);
 
   useEffect(() => {
     let ws: WebSocket | undefined;
@@ -29,6 +30,12 @@ export function useFeed() {
       ws.onmessage = (e) => {
         const ev = JSON.parse(e.data) as ServerEvent;
         if (ev.type === 'hello') {
+          // A different server process may serve a different build: reload rather than run old assets.
+          if (boot.current && ev.boot && ev.boot !== boot.current) {
+            location.reload();
+            return;
+          }
+          boot.current = ev.boot ?? boot.current;
           setMessages([...ev.messages].reverse());
           setTokens(Object.fromEntries(ev.tokens.map((t) => [t.address, t])));
           setStatus(ev.status);

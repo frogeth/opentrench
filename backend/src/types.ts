@@ -168,7 +168,7 @@ export interface Status {
 }
 
 export type ServerEvent =
-  | { type: 'hello'; status: Status; messages: FeedMessage[]; tokens: TokenInfo[] }
+  | { type: 'hello'; status: Status; messages: FeedMessage[]; tokens: TokenInfo[]; /** changes on every server start: the page reloads to pick up new assets */ boot: string }
   | { type: 'message'; msg: FeedMessage }
   | { type: 'token'; token: TokenInfo }
   | { type: 'reactions'; msgId: string; reactions: Reaction[] }

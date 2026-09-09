@@ -17,6 +17,9 @@ import type {
   TokenInfo,
 } from './types.js';
 
+/** Identifies this server process; the UI reloads when it changes so a restart with a new build never leaves stale assets. */
+const BOOT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
 const META_KEYS = ['website', 'twitter', 'telegram', 'name', 'symbol'] as const;
 const DATA_KEYS = [
   'priceUsd',
@@ -299,6 +302,7 @@ export class MessageHub extends EventEmitter {
       status: this.getStatus(),
       messages: [...this.buffer],
       tokens: [...this.tokens.values()].map((t) => ({ ...t })),
+      boot: BOOT_ID,
     };
   }
 
