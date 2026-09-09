@@ -140,6 +140,7 @@ export default function App() {
       const next = on ? [...new Set([...list, id])] : list.filter((x) => x !== id);
       if (source === 'discord') await api.setDiscordWatch(next);
       else await api.setTelegramWatch(next);
+      if (!on && view?.chat?.id === id) setView({ source: view.source, guildId: view.guildId });
       reloadLists();
     } finally {
       setBusy(false);
@@ -149,18 +150,20 @@ export default function App() {
   const q = query.trim().toLowerCase();
   const errors = Object.entries(status.error) as [keyof Status['error'], string][];
 
+  /** Only chats on the watch list exist in the UI; a removed chat disappears with its messages. */
   const chats = useMemo(() => {
     const m = new Map<string, { count: number; source: Source; avatar?: string; id: string }>();
     for (const w of watched) m.set(w.name, { count: 0, source: w.source, avatar: w.avatar, id: w.id });
     for (const msg of messages) {
-      const e = m.get(msg.chatName) ?? { count: 0, source: msg.source, avatar: msg.chatAvatar, id: msg.chatId };
+      const e = m.get(msg.chatName);
+      if (!e) continue;
       e.count++;
       if (!e.avatar && msg.chatAvatar) e.avatar = msg.chatAvatar;
-      m.set(msg.chatName, e);
     }
     return [...m.entries()].sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]));
   }, [messages, watched]);
   const chatCounts = useMemo(() => new Map(chats.map(([name, c]) => [name, c.count])), [chats]);
+  const watchedNames = useMemo(() => new Set(watched.map((w) => w.name)), [watched]);
 
   /** Which chat names the current view scopes to (null = everything). */
   const scope = useMemo<Set<string> | null>(() => {
@@ -179,10 +182,11 @@ export default function App() {
         (m) =>
           (showBots || !m.isBot) &&
           (showRepeats || !m.repeat) &&
+          (watched.length === 0 || watchedNames.has(m.chatName)) &&
           (!scope || scope.has(m.chatName)) &&
           matchesQuery(q, m, tokens),
       ),
-    [messages, tokens, q, scope, showBots, showRepeats],
+    [messages, tokens, q, scope, showBots, showRepeats, watched.length, watchedNames],
   );
 
   const calls = useMemo(
