@@ -109,11 +109,17 @@ npm run dist:win -w electron   # Windows installer (.exe), built from macOS
 
 The app checks GitHub Releases (frogeth/opentrench) on launch and hourly, and
 there's "Check for Updates…" in the app menu. Windows installs updates
-silently on quit. macOS can self-update only when the build is signed and
-notarized (Developer ID cert in the keychain + `APPLE_ID`,
-`APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` in the environment when
-releasing); an unsigned Mac build shows a "download the new version" dialog
-instead. Cut a release with:
+silently on quit; macOS swaps the app in place because releases are signed
+and notarized. One-time setup on the Mac that cuts releases: create a
+"Developer ID Application" certificate in Xcode > Settings > Accounts >
+Manage Certificates, then store an app-specific password (from
+account.apple.com) in the keychain:
+
+```bash
+electron/scripts/apple-login.sh you@example.com
+```
+
+Cut a release with:
 
 ```bash
 npm run release -w electron            # patch bump, build mac + win, upload
