@@ -10,6 +10,10 @@ import { AuthorMenu } from './AuthorMenu';
 import { ChainBadge } from './ChainBadge';
 import { LaunchpadBadge } from './LaunchpadBadge';
 
+/**
+ * One call. Strict grid so every card has the same shape: caller line,
+ * image | identity | numbers, then buys | share. Nothing wraps; long text ellipsizes.
+ */
 export function CallCard({
   t,
   now,
@@ -24,7 +28,7 @@ export function CallCard({
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [imgBroken, setImgBroken] = useState(false);
-  const hasPrice = t.priceUsd !== undefined;
+  const hasPrice = t.priceUsd !== undefined || t.marketCap !== undefined;
   const copy = async () => {
     await copyText(t.address);
     setCopied(true);
@@ -38,56 +42,60 @@ export function CallCard({
   const shareLabel = `${t.symbol ? `$${t.symbol}` : ''}${t.name && t.name !== t.symbol ? ` ${t.name}` : ''}${
     c ? ` · called by ${c.author} in ${c.chatName}` : ''
   }`.trim();
+  const hot = t.seen >= 3 ? ' call-hot-3' : t.seen === 2 ? ' call-hot-2' : '';
 
   return (
-    <div
-      id={`call-${t.address}`}
-      className={`call call-${t.chain}${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${
-        t.seen >= 3 ? ' call-hot-3' : t.seen === 2 ? ' call-hot-2' : ''
-      }`}
-    >
+    <div id={`call-${t.address}`} className={`call${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${hot}`}>
       {t.seen >= 2 && <span key={t.lastCallTs} className="call-pulse" />}
 
-      {/* caller line */}
+      {/* 1 · caller line */}
       <div className="call-top">
-        {c && (
+        {c ? (
           <>
-            <Avatar src={c.avatar} name={c.author} size={20} crown={isFavorite(favorites, c.author)} />
-            <span className="call-author">{c.author}</span>
-            <AuthorMenu author={c.author} link={c.link} favorite={isFavorite(favorites, c.author)} />
-            <Logo source={c.source} size={11} />
-            <span className="muted call-chat">{c.chatName}</span>
+            <Avatar src={c.avatar} name={c.author} size={18} crown={isFavorite(favorites, c.author)} />
+            <span className="call-who">
+              <span className="call-author">{c.author}</span>
+              <AuthorMenu author={c.author} link={c.link} favorite={isFavorite(favorites, c.author)} />
+              <Logo source={c.source} size={10} />
+              <span className="call-chat">{c.chatName.replace(/\s*\([^)]*\)\s*$/, '')}</span>
+            </span>
+          </>
+        ) : (
+          <>
+            <span />
+            <span className="call-who" />
           </>
         )}
-        <span className="muted">{timeAgo(t.lastCallTs ?? t.firstSeenTs, now)}</span>
-        <span
-          className={`call-seen${t.seen >= 2 ? ' call-seen-hot' : ''}`}
-          title={t.calledIn.length ? `called in:\n${t.calledIn.join('\n')}` : undefined}
-        >
-          {t.seen >= 2 ? '🔥 ' : ''}
+        <span className="call-age">{timeAgo(t.lastCallTs ?? t.firstSeenTs, now)}</span>
+        <span className={`call-seen${t.seen >= 2 ? ' call-seen-hot' : ''}`} title={t.calledIn.length ? `called in:\n${t.calledIn.join('\n')}` : undefined}>
+          {t.seen >= 2 ? '🔥' : ''}
           {t.seen}×
         </span>
-        {hasPrice && money(t.marketCap) && (
-          <span className="call-mc-now">
-            MC: <b>{money(t.marketCap)}</b>
-          </span>
-        )}
+        <span className="call-mc-now">
+          {hasPrice && money(t.marketCap) ? (
+            <>
+              MC <b>{money(t.marketCap)}</b>
+            </>
+          ) : (
+            ''
+          )}
+        </span>
       </div>
 
-      {/* token block */}
+      {/* 2 · image | identity | numbers */}
       <div className="call-mid">
         <div className="call-imgwrap">
           {t.imageUrl && !imgBroken ? (
             <img className="call-img" src={t.imageUrl} alt="" loading="lazy" onError={() => setImgBroken(true)} />
           ) : (
             <div className="call-img call-img-fallback">
-              <ChainBadge network={t.network} chain={t.chain} size={28} className="net-plain" />
+              <ChainBadge network={t.network} chain={t.chain} size={26} className="net-plain" />
             </div>
           )}
-          <ChainBadge network={t.network} chain={t.chain} size={12} className="net-badge" />
+          <ChainBadge network={t.network} chain={t.chain} size={11} className="net-badge" />
           {t.launchpad && (
             <span className="lp-badge">
-              <LaunchpadBadge launchpad={t.launchpad} url={t.launchpadUrl} size={14} />
+              <LaunchpadBadge launchpad={t.launchpad} url={t.launchpadUrl} size={13} />
             </span>
           )}
         </div>
@@ -103,74 +111,74 @@ export function CallCard({
             <span className="call-addr" onClick={copy} title="click to copy">
               {shortAddr(t.address)} <Icon name="copy" size={10} />
             </span>
-            {hasPrice && price(t.priceUsd) && <span>{price(t.priceUsd)}</span>}
+            {hasPrice && price(t.priceUsd) && <span className="call-price">{price(t.priceUsd)}</span>}
           </div>
           <div className="call-tx">
             {txTotal > 0 ? (
-              <>
-                <span className="muted">TX {txTotal}</span>
-                <span className="txbar" title={`${buys} buys / ${sells} sells (24h)`}>
+              <span className="call-txn" title={`${buys} buys / ${sells} sells (24h)`}>
+                TX {txTotal >= 1000 ? `${(txTotal / 1000).toFixed(1)}K` : txTotal}
+                <span className="txbar">
                   <span className="txbar-buy" style={{ width: `${buyPct}%` }} />
                 </span>
-              </>
+              </span>
             ) : (
-              !hasPrice && <span className="pending">no pair yet · retrying</span>
+              <span className={hasPrice ? 'muted' : 'pending'}>
+                {t.priceUsd === undefined && t.marketCap !== undefined ? 'bonding · no pair yet' : hasPrice ? 'no trades yet' : 'no pair yet · retrying'}
+              </span>
             )}
             <TokenLinks t={t} showChart={showChart} onToggleChart={() => setShowChart((s) => !s)} />
           </div>
         </div>
         <div className="call-right">
-          {hasPrice ? (
-            <>
-              {money(t.volume24h) && (
-                <span className="call-kv">
-                  V <b>{money(t.volume24h)}</b>
-                </span>
-              )}
-              {money(t.marketCap) && (
-                <span className="call-kv call-mc">
-                  MC <b>{money(t.marketCap)}</b>
-                </span>
-              )}
-              {money(t.athMarketCap) && (
-                <span className="call-kv call-ath">
-                  ATH: <b>{money(t.athMarketCap)}</b>
-                </span>
-              )}
-              {money(t.liquidity) && (
-                <span className="call-kv">
-                  Liq <b>{money(t.liquidity)}</b>
-                </span>
-              )}
-            </>
-          ) : (
-            <span className="muted">—</span>
-          )}
+          <span className="call-kv">
+            {hasPrice && money(t.volume24h) ? (
+              <>
+                V <b>{money(t.volume24h)}</b>
+              </>
+            ) : (
+              ' '
+            )}
+          </span>
+          <span className="call-kv call-mc">
+            {hasPrice && money(t.marketCap) ? (
+              <>
+                MC <b>{money(t.marketCap)}</b>
+              </>
+            ) : (
+              <b className="muted">—</b>
+            )}
+          </span>
+          <span className="call-kv call-ath">
+            {hasPrice && money(t.athMarketCap) ? (
+              <>
+                ATH <b>{money(t.athMarketCap)}</b>
+              </>
+            ) : (
+              ' '
+            )}
+          </span>
+          <span className="call-kv">
+            {hasPrice && money(t.liquidity) ? (
+              <>
+                Liq <b>{money(t.liquidity)}</b>
+              </>
+            ) : (
+              ' '
+            )}
+          </span>
         </div>
       </div>
 
-      {/* bottom: cove + share */}
+      {/* 3 · buys | share */}
       <div className="call-bottom">
         <BuyRow buy={t.buy} />
-        <a
-          className="share"
-          href={telegramShareUrl(t.address, shareLabel)}
-          target="_blank"
-          rel="noreferrer"
-          title="share CA on Telegram"
-        >
+        <a className="share" href={telegramShareUrl(t.address, shareLabel)} target="_blank" rel="noreferrer" title="share CA on Telegram">
           <Icon name="telegram" size={13} /> share
         </a>
       </div>
 
       {showChart && t.embedUrl && (
-        <iframe
-          className="token-chart"
-          src={t.embedUrl}
-          title={`${t.symbol ?? 'token'} chart`}
-          loading="lazy"
-          allow="clipboard-write"
-        />
+        <iframe className="token-chart" src={t.embedUrl} title={`${t.symbol ?? 'token'} chart`} loading="lazy" allow="clipboard-write" />
       )}
     </div>
   );

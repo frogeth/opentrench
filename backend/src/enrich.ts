@@ -1,7 +1,18 @@
 import type { Chain, TokenInfo } from './types.js';
 import { fetchDexscreener } from './dexscreener.js';
 import { fetchGeckoTerminal } from './geckoterminal.js';
-import { createLaunchpadClassifier, fetchBankrLaunch, fetchO1, fetchPons, fetchStonks, type LaunchpadInfo } from './launchpads.js';
+import {
+  createLaunchpadClassifier,
+  fetchBankrLaunch,
+  fetchClanker,
+  fetchFlap,
+  fetchO1,
+  fetchPons,
+  fetchPumpfun,
+  fetchStonks,
+  fetchVirtuals,
+  type LaunchpadInfo,
+} from './launchpads.js';
 
 export type TokenFetcher = (address: string, chain: Chain) => Promise<Partial<TokenInfo> | undefined>;
 
@@ -30,7 +41,7 @@ export interface EnrichSources {
   log?: (msg: string) => void;
 }
 
-const FILL_KEYS = ['imageUrl', 'name', 'symbol', 'website', 'twitter', 'telegram', 'network', 'pairCreatedAt'] as const;
+const FILL_KEYS = ['imageUrl', 'name', 'symbol', 'website', 'twitter', 'telegram', 'network', 'pairCreatedAt', 'marketCap'] as const;
 
 /**
  * Dexscreener first. If it has no pair yet, GeckoTerminal (covers Robinhood
@@ -84,7 +95,11 @@ export function createDefaultEnricher(opts: { o1ApiKey?: () => string | undefine
       bankr: (a) => fetchBankrLaunch(a),
       stonks: (a) => fetchStonks(a),
       pons: (a) => fetchPons(a),
+      flap: (a) => fetchFlap(a),
+      virtuals: (a) => fetchVirtuals(a),
+      clanker: (a) => fetchClanker(a),
       o1: (a) => fetchO1(a, opts.o1ApiKey?.()),
+      pumpfun: (a) => fetchPumpfun(a),
     }),
   });
 }

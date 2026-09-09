@@ -5,21 +5,36 @@ import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
 import { ChainBadge } from './ChainBadge';
 import { LaunchpadBadge } from './LaunchpadBadge';
+import { useVisible } from '../useVisible';
 
 /** Compact token strip under a chat message: image with badges, ticker, the numbers that matter, links, buys. */
-export function TokenChip({ c, t, onSelect }: { c: Contract; t?: TokenInfo; onSelect?: (address: string) => void }) {
+export function TokenChip({
+  c,
+  t,
+  onSelect,
+  autoChart = false,
+}: {
+  c: Contract;
+  t?: TokenInfo;
+  onSelect?: (address: string) => void;
+  /** open the live chart without a click (only loads while on screen) */
+  autoChart?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
-  const [showChart, setShowChart] = useState(false);
+  const [manual, setManual] = useState<boolean | null>(null);
+  const showChart = manual ?? autoChart;
+  const setShowChart = (f: (s: boolean) => boolean) => setManual(f(showChart));
+  const [ref, visible] = useVisible<HTMLDivElement>();
   const [imgBroken, setImgBroken] = useState(false);
   const copy = async () => {
     await copyText(c.address);
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
-  const hasPrice = t?.priceUsd !== undefined;
+  const hasPrice = t?.priceUsd !== undefined || t?.marketCap !== undefined;
   const hot = (t?.seen ?? 1) >= 2;
   return (
-    <div className={`chip${showChart ? ' chip-open' : ''}${hot ? ' chip-hot' : ''}`}>
+    <div ref={ref} className={`chip${showChart ? ' chip-open' : ''}${hot ? ' chip-hot' : ''}`}>
       <div className="chip-row">
         <div className="chip-imgwrap" onClick={() => onSelect?.(c.address)} title="show in Calls">
           {t?.imageUrl && !imgBroken ? (
@@ -77,7 +92,13 @@ export function TokenChip({ c, t, onSelect }: { c: Contract; t?: TokenInfo; onSe
         </div>
       </div>
       {showChart && t?.embedUrl && (
-        <iframe className="token-chart" src={t.embedUrl} title="chart" loading="lazy" allow="clipboard-write" />
+        <div className="chip-chart">
+          {visible ? (
+            <iframe className="token-chart" src={t.embedUrl} title="chart" allow="clipboard-write" />
+          ) : (
+            <div className="token-chart token-chart-idle" />
+          )}
+        </div>
       )}
     </div>
   );

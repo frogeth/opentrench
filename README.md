@@ -68,9 +68,10 @@ Telegram login), **Feed** (favorite callers & pings, blacklist), **Trading**
   contract nobody has called yet: a desktop notification with a sound (enable
   with the 🔔 in the top bar) and a message to your own Telegram Saved
   Messages (toggle in Settings).
-- **Launchpads.** Bankr, Stonks, Pons (read straight off the token contract
-  on Robinhood Chain), pump.fun and letsbonk are detected automatically; o1
-  needs an API key (Settings → Launchpads). The launchpad's logo sits on the
+- **Launchpads.** pump.fun (coin API: image + market cap while still
+  bonding), Bankr, Stonks, Pons and Flap (read straight off the token contract
+  on Robinhood Chain / BNB), Virtuals, Clanker and letsbonk are detected
+  automatically; o1 needs an API key (Settings → Trading). The launchpad's logo sits on the
   token image and links to the launch page, and the launchpad's own token
   image and socials fill in when no chart site has them yet. IPFS images go
   through a local gateway-hopping proxy.
@@ -78,6 +79,8 @@ Telegram login), **Feed** (favorite callers & pings, blacklist), **Trading**
   amount prefilled, same deep-link format frogr uses. Amounts and an optional
   affiliate Telegram ID live in Settings → Buy buttons. Supported chains:
   Ethereum, Base, BNB, Robinhood Chain, MegaETH, Solana.
+- Live charts open automatically under every contract in Chats (only the
+  ones on screen actually load; switch it off in Settings → Feed).
 - Replies show the quoted message above the text; reactions show as pills
   under it and update live (Discord custom emoji render as images).
 - Images, GIFs, videos and stickers render inline (Telegram media is fetched

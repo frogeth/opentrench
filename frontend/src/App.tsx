@@ -82,6 +82,21 @@ export default function App() {
       /* ignore */
     }
   };
+  const [autoChart, setAutoChartState] = useState(() => {
+    try {
+      return localStorage.getItem('trenchfeed.autoChart') !== 'off';
+    } catch {
+      return true;
+    }
+  });
+  const setAutoChart = (on: boolean) => {
+    setAutoChartState(on);
+    try {
+      localStorage.setItem('trenchfeed.autoChart', on ? 'on' : 'off');
+    } catch {
+      /* ignore */
+    }
+  };
   const chatBodyRef = useRef<HTMLDivElement>(null);
   const [atEnd, setAtEnd] = useState(true);
   const [paneHidden, setPaneHidden] = useState(() => {
@@ -459,12 +474,20 @@ export default function App() {
               favorites={status.favorites}
               continued={!!focused && continued(shownMsgs, i)}
               discord={!!focused}
+              autoChart={autoChart}
             />
           ))}
         </Column>
       </main>
       {settingsOpen && (
-        <Settings status={status} onClose={() => setSettingsOpen(false)} chatOrder={chatOrder} onChatOrder={setChatOrder} />
+        <Settings
+          status={status}
+          onClose={() => setSettingsOpen(false)}
+          chatOrder={chatOrder}
+          onChatOrder={setChatOrder}
+          autoChart={autoChart}
+          onAutoChart={setAutoChart}
+        />
       )}
       {addOpen && (
         <AddChatsModal

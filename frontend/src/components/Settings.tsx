@@ -11,11 +11,15 @@ export function Settings({
   onClose,
   chatOrder,
   onChatOrder,
+  autoChart,
+  onAutoChart,
 }: {
   status: Status;
   onClose: () => void;
   chatOrder: 'bottom' | 'top';
   onChatOrder: (o: 'bottom' | 'top') => void;
+  autoChart: boolean;
+  onAutoChart: (on: boolean) => void;
 }) {
   const [cfg, setCfg] = useState<MaskedConfig | null>(null);
   const [tab, setTab] = useState<Tab>('accounts');
@@ -69,6 +73,13 @@ export function Settings({
                     Newest on top
                   </button>
                 </div>
+              </section>
+              <section>
+                <h2>Live charts in chat</h2>
+                <label className="check">
+                  <input type="checkbox" checked={autoChart} onChange={(e) => onAutoChart(e.target.checked)} /> Open the
+                  live chart under every contract in Chats (only loads while on screen)
+                </label>
               </section>
               <FavoritesSection cfg={cfg} onChange={reload} />
               <BlacklistSection cfg={cfg} onChange={reload} />

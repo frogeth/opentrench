@@ -7,7 +7,7 @@ import type { Chain, TokenInfo } from './types.js';
  * the launchpad itself becomes a badge on the card.
  */
 
-export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'o1';
+export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'o1' | 'virtuals' | 'flap' | 'clanker';
 
 export interface LaunchpadInfo extends Partial<TokenInfo> {
   launchpad: Launchpad;
@@ -31,7 +31,14 @@ async function getJson(url: string, fetchImpl: typeof fetch, headers: Record<str
 export function ipfsToHttp(uri: string | undefined | null): string | undefined {
   if (!uri) return undefined;
   const s = String(uri).trim();
-  if (/^https?:\/\//i.test(s)) return s;
+  if (/^https?:\/\//i.test(s)) {
+    // public gateway URL → our proxy (ipfs.io 403s randomly)
+    const g = /^https?:\/\/[^/]+\/ipfs\/([A-Za-z0-9]+)(\/[^?#]*)?/i.exec(s);
+    if (g) return `/api/ipfs/${g[1]}${g[2] ?? ''}`;
+    const sub = /^https?:\/\/([A-Za-z0-9]{40,})\.ipfs\.[^/]+(\/[^?#]*)?/i.exec(s);
+    if (sub) return `/api/ipfs/${sub[1]}${sub[2] ?? ''}`;
+    return s;
+  }
   const m = /^(?:ipfs:\/\/|ipfs\/)?(?:ipfs\/)?([A-Za-z0-9]+)(\/.*)?$/.exec(s);
   if (!m) return undefined;
   // served by our own gateway-hopping proxy (see ipfs.ts) — never a single flaky gateway
@@ -63,6 +70,145 @@ export function classifyBySuffix(address: string, chain: Chain): LaunchpadInfo |
   if (address.endsWith('pump')) return { launchpad: 'pumpfun', launchpadUrl: `https://pump.fun/coin/${address}` };
   if (address.endsWith('bonk')) return { launchpad: 'letsbonk', launchpadUrl: `https://letsbonk.fun/token/${address}` };
   return undefined;
+}
+
+// ---------- pump.fun (Solana): frontend API, works before any DEX pair ----------
+
+export function mapPumpfun(c: any): LaunchpadInfo | undefined {
+  if (!c?.mint) return undefined;
+  const out: LaunchpadInfo = { launchpad: 'pumpfun', launchpadUrl: `https://pump.fun/coin/${c.mint}`, network: 'solana' };
+  if (c.name) out.name = String(c.name);
+  if (c.symbol) out.symbol = String(c.symbol);
+  const img = ipfsToHttp(c.image_uri);
+  if (img) out.imageUrl = img;
+  const mc = Number(c.usd_market_cap);
+  if (Number.isFinite(mc) && mc > 0) out.marketCap = mc;
+  const created = Number(c.created_timestamp);
+  if (Number.isFinite(created) && created > 0) out.pairCreatedAt = created;
+  const x = xUrl(c.twitter);
+  if (x) out.twitter = x;
+  const tg = tgUrl(c.telegram);
+  if (tg) out.telegram = tg;
+  if (c.website) out.website = String(c.website);
+  return out;
+}
+
+export async function fetchPumpfun(mint: string, fetchImpl: typeof fetch = fetch): Promise<LaunchpadInfo | undefined> {
+  const json = await getJson(`https://frontend-api-v3.pump.fun/coins/${encodeURIComponent(mint)}`, fetchImpl, {
+    'user-agent': 'Mozilla/5.0 (trenchfeed)',
+  });
+  return json ? mapPumpfun(json) : undefined;
+}
+
+// ---------- Virtuals (Base / Solana / Robinhood): agent API ----------
+
+const VIRTUALS_API = 'https://api.virtuals.io/api/virtuals';
+
+export function mapVirtuals(v: any, address: string): LaunchpadInfo | undefined {
+  if (!v?.id) return undefined;
+  const chain = String(v.chain ?? 'BASE').toUpperCase();
+  const network = chain === 'SOLANA' ? 'solana' : chain === 'ROBINHOOD' ? 'robinhood' : 'base';
+  const ref = v.symbol ? String(v.symbol).toLowerCase() : String(v.id);
+  const out: LaunchpadInfo = { launchpad: 'virtuals', launchpadUrl: `https://app.virtuals.io/virtuals/${ref}`, network };
+  if (v.name) out.name = String(v.name);
+  if (v.symbol) out.symbol = String(v.symbol);
+  if (v.image?.url) out.imageUrl = String(v.image.url);
+  const s = v.socials ?? {};
+  const tw = s.VERIFIED_LINKS?.TWITTER ?? s.x ?? s.TWITTER ?? (s.VERIFIED_USERNAMES?.TWITTER ? `https://x.com/${s.VERIFIED_USERNAMES.TWITTER}` : undefined);
+  const x = xUrl(tw);
+  if (x) out.twitter = x;
+  const web = s.VERIFIED_LINKS?.WEBSITE ?? s.website ?? s.WEBSITE;
+  if (web) out.website = String(web);
+  const tg = tgUrl(s.VERIFIED_LINKS?.TELEGRAM ?? s.telegram ?? s.TELEGRAM);
+  if (tg) out.telegram = tg;
+  const lp = v.lpCreatedAt ? Date.parse(String(v.lpCreatedAt)) : NaN;
+  if (Number.isFinite(lp)) out.pairCreatedAt = lp;
+  void address;
+  return out;
+}
+
+export async function fetchVirtuals(address: string, fetchImpl: typeof fetch = fetch): Promise<LaunchpadInfo | undefined> {
+  const a = encodeURIComponent(address);
+  const q =
+    `filters%5B%24or%5D%5B0%5D%5BtokenAddress%5D%5B%24eqi%5D=${a}` +
+    `&filters%5B%24or%5D%5B1%5D%5BpreToken%5D%5B%24eqi%5D=${a}` +
+    `&populate=%2A&pagination%5BpageSize%5D=1`;
+  const json = await getJson(`${VIRTUALS_API}?${q}`, fetchImpl);
+  const v = json?.data?.[0];
+  return v ? mapVirtuals(v, address) : undefined;
+}
+
+// ---------- Flap (Robinhood + BNB): metaURI() on the token, JSON on IPFS ----------
+
+export const BSC_RPC = 'https://bsc-dataseed.binance.org';
+const FLAP_SEL = { metaURI: '0x67605787' };
+const FLAP_GATEWAYS = ['https://flap.mypinata.cloud/ipfs/', 'https://ipfs.io/ipfs/', 'https://dweb.link/ipfs/'];
+
+export function mapFlap(meta: any, network: string, address: string): LaunchpadInfo {
+  const out: LaunchpadInfo = { launchpad: 'flap', launchpadUrl: `https://flap.sh/token/${address.toLowerCase()}`, network };
+  const img = ipfsToHttp(meta?.image);
+  if (img) out.imageUrl = img;
+  const x = xUrl(meta?.twitter);
+  if (x) out.twitter = x;
+  const tg = tgUrl(meta?.telegram);
+  if (tg) out.telegram = tg;
+  if (meta?.website) out.website = String(meta.website);
+  if (meta?.name) out.name = String(meta.name);
+  if (meta?.symbol) out.symbol = String(meta.symbol);
+  return out;
+}
+
+export async function fetchFlap(address: string, fetchImpl: typeof fetch = fetch, rpcs: [string, string][] = [['robinhood', ROBINHOOD_RPC], ['bsc', BSC_RPC]]): Promise<LaunchpadInfo | undefined> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return undefined;
+  for (const [network, rpc] of rpcs) {
+    const res = await ethCall(rpc, address, FLAP_SEL.metaURI, fetchImpl).catch(() => undefined);
+    const uri = res ? decodeStrings(res, 1)?.[0] : undefined;
+    if (!uri) continue;
+    const cid = uri.trim().replace(/^ipfs:\/\//i, '').replace(/^ipfs\//i, '');
+    let meta: any;
+    for (const gw of FLAP_GATEWAYS) {
+      meta = await getJson(gw + cid, fetchImpl).catch(() => undefined);
+      if (meta) break;
+    }
+    return mapFlap(meta ?? {}, network, address);
+  }
+  return undefined;
+}
+
+// ---------- Clanker (Base / Robinhood / BNB): search endpoint, best effort ----------
+
+const CLANKER_CHAINS: Record<number, string> = { 8453: 'base', 4663: 'robinhood', 56: 'bsc' };
+
+export function mapClanker(json: any, address: string): LaunchpadInfo | undefined {
+  const list: any[] = Array.isArray(json?.data) ? json.data : [];
+  const d = list.find((t) => String(t?.contract_address ?? '').toLowerCase() === address.toLowerCase());
+  if (!d) return undefined;
+  const out: LaunchpadInfo = {
+    launchpad: 'clanker',
+    launchpadUrl: `https://www.clanker.world/clanker/${address.toLowerCase()}`,
+    network: CLANKER_CHAINS[Number(d.chain_id ?? 8453)] ?? 'base',
+  };
+  if (d.name) out.name = String(d.name);
+  if (d.symbol) out.symbol = String(d.symbol);
+  const img = d.img_url ?? d.image ?? d.metadata?.image;
+  if (img) out.imageUrl = ipfsToHttp(String(img));
+  for (const sl of d.socialLinks ?? []) {
+    const n = String(sl?.name ?? '').toLowerCase();
+    if (!sl?.link) continue;
+    if (n === 'website' && !out.website) out.website = String(sl.link);
+    if ((n === 'twitter' || n === 'x') && !out.twitter) out.twitter = String(sl.link);
+    if (n === 'telegram' && !out.telegram) out.telegram = String(sl.link);
+  }
+  const created = d.created_at ? Date.parse(String(d.created_at)) : NaN;
+  if (Number.isFinite(created)) out.pairCreatedAt = created;
+  return out;
+}
+
+export async function fetchClanker(address: string, fetchImpl: typeof fetch = fetch): Promise<LaunchpadInfo | undefined> {
+  const json = await getJson(`https://www.clanker.world/api/tokens/search?q=${encodeURIComponent(address)}`, fetchImpl, {
+    'user-agent': 'Mozilla/5.0 (trenchfeed)',
+  });
+  return json ? mapClanker(json, address) : undefined;
 }
 
 // ---------- Bankr (Base + Robinhood) ----------
@@ -232,21 +378,39 @@ export interface LaunchpadProbes {
   bankr?: (a: string) => Promise<LaunchpadInfo | undefined>;
   stonks?: (a: string) => Promise<LaunchpadInfo | undefined>;
   pons?: (a: string) => Promise<LaunchpadInfo | undefined>;
+  flap?: (a: string) => Promise<LaunchpadInfo | undefined>;
+  virtuals?: (a: string) => Promise<LaunchpadInfo | undefined>;
+  clanker?: (a: string) => Promise<LaunchpadInfo | undefined>;
   o1?: (a: string) => Promise<LaunchpadInfo | undefined>;
+  pumpfun?: (a: string) => Promise<LaunchpadInfo | undefined>;
   log?: (m: string) => void;
 }
 
-/** First launchpad that claims the token wins. Solana is decided by suffix alone. */
+/**
+ * First launchpad that claims the token wins. Solana: pump.fun mints (suffix)
+ * get the pump.fun API for image/mcap; letsbonk by suffix. EVM: probes in order.
+ */
 export function createLaunchpadClassifier(p: LaunchpadProbes): (address: string, chain: Chain) => Promise<LaunchpadInfo | undefined> {
   const log = p.log ?? ((m: string) => console.warn('[launchpad]', m));
   return async (address, chain) => {
     const bySuffix = classifyBySuffix(address, chain);
+    if (bySuffix?.launchpad === 'pumpfun' && p.pumpfun) {
+      try {
+        const full = await p.pumpfun(address);
+        if (full) return full;
+      } catch (e: any) {
+        log(`pumpfun probe failed for ${address}: ${e?.message ?? e}`);
+      }
+    }
     if (bySuffix) return bySuffix;
     if (chain !== 'evm') return undefined;
     for (const [name, probe] of [
       ['bankr', p.bankr],
       ['stonks', p.stonks],
       ['pons', p.pons],
+      ['flap', p.flap],
+      ['virtuals', p.virtuals],
+      ['clanker', p.clanker],
       ['o1', p.o1],
     ] as const) {
       if (!probe) continue;

@@ -8,7 +8,11 @@ import {
   fetchStonks,
   ipfsToHttp,
   mapBankrLaunch,
+  mapClanker,
+  mapFlap,
+  mapPumpfun,
   mapStonksCoin,
+  mapVirtuals,
 } from './launchpads.js';
 
 const A = '0xa419Bb493ed5059f28dfd84348A2F93D70ECf003';
@@ -36,11 +40,70 @@ describe('launchpads', () => {
     expect(classifyBySuffix('0xpump', 'evm')).toBeUndefined();
   });
 
-  it('turns ipfs uris into gateway urls', () => {
+  it('turns ipfs uris and gateway urls into proxy urls', () => {
     expect(ipfsToHttp('ipfs://bafyabc')).toBe('/api/ipfs/bafyabc');
     expect(ipfsToHttp('ipfs://bafyabc/logo.png')).toBe('/api/ipfs/bafyabc/logo.png');
+    expect(ipfsToHttp('https://ipfs.io/ipfs/QmSkPm?x=1')).toBe('/api/ipfs/QmSkPm');
+    expect(ipfsToHttp('https://bafkreiabcdefghijklmnopqrstuvwxyz0123456789abcd.ipfs.dweb.link/a.png')).toBe('/api/ipfs/bafkreiabcdefghijklmnopqrstuvwxyz0123456789abcd/a.png');
     expect(ipfsToHttp('https://x.example/a.png')).toBe('https://x.example/a.png');
     expect(ipfsToHttp('')).toBeUndefined();
+  });
+
+  it('maps a pump.fun coin (bonding tokens have mcap but no pair)', () => {
+    expect(
+      mapPumpfun({ mint: 'Mintpump', name: 'Fantasy', symbol: 'FIX', image_uri: 'https://ipfs.io/ipfs/QmImg', usd_market_cap: 312596.2, created_timestamp: 1788983429000, twitter: null, website: 'https://fix.fun' }),
+    ).toEqual({
+      launchpad: 'pumpfun',
+      launchpadUrl: 'https://pump.fun/coin/Mintpump',
+      network: 'solana',
+      name: 'Fantasy',
+      symbol: 'FIX',
+      imageUrl: '/api/ipfs/QmImg',
+      marketCap: 312596.2,
+      pairCreatedAt: 1788983429000,
+      website: 'https://fix.fun',
+    });
+    expect(mapPumpfun({ statusCode: 404 })).toBeUndefined();
+  });
+
+  it('maps a Virtuals agent', () => {
+    expect(
+      mapVirtuals({ id: 1199, name: 'aixbt', symbol: 'AIXBT', chain: 'BASE', image: { url: 'https://cdn/x.png' }, socials: { VERIFIED_LINKS: { TWITTER: 'https://x.com/aixbt_agent' } }, lpCreatedAt: '2024-11-02T05:26:35.000Z' }, '0xabc'),
+    ).toEqual({
+      launchpad: 'virtuals',
+      launchpadUrl: 'https://app.virtuals.io/virtuals/aixbt',
+      network: 'base',
+      name: 'aixbt',
+      symbol: 'AIXBT',
+      imageUrl: 'https://cdn/x.png',
+      twitter: 'https://x.com/aixbt_agent',
+      pairCreatedAt: Date.parse('2024-11-02T05:26:35.000Z'),
+    });
+  });
+
+  it('maps Flap metadata and a Clanker search hit', () => {
+    expect(mapFlap({ image: 'ipfs://QmF', twitter: '@flapper', telegram: 'flapchat', website: 'https://flap.example' }, 'bsc', '0xABC')).toEqual({
+      launchpad: 'flap',
+      launchpadUrl: 'https://flap.sh/token/0xabc',
+      network: 'bsc',
+      imageUrl: '/api/ipfs/QmF',
+      twitter: 'https://x.com/flapper',
+      telegram: 'https://t.me/flapchat',
+      website: 'https://flap.example',
+    });
+    expect(
+      mapClanker({ data: [{ contract_address: '0xABC', name: 'Clank', symbol: 'CLK', chain_id: 4663, img_url: 'https://i/c.png', socialLinks: [{ name: 'Website', link: 'https://c.example' }, { name: 'X', link: 'https://x.com/clk' }] }] }, '0xabc'),
+    ).toEqual({
+      launchpad: 'clanker',
+      launchpadUrl: 'https://www.clanker.world/clanker/0xabc',
+      network: 'robinhood',
+      name: 'Clank',
+      symbol: 'CLK',
+      imageUrl: 'https://i/c.png',
+      website: 'https://c.example',
+      twitter: 'https://x.com/clk',
+    });
+    expect(mapClanker({ data: [] }, '0xabc')).toBeUndefined();
   });
 
   it('maps a Bankr launch with its ipfs image', () => {
@@ -121,6 +184,20 @@ describe('launchpads', () => {
     expect(pons).not.toHaveBeenCalled();
     expect((await classify('Mintpump', 'sol'))?.launchpad).toBe('pumpfun');
     expect(bankr).toHaveBeenCalledTimes(1);
+  });
+
+  it('pump.fun mints get the full pump.fun record when the API answers, suffix badge otherwise', async () => {
+    const withApi = createLaunchpadClassifier({ pumpfun: async () => ({ launchpad: 'pumpfun' as const, launchpadUrl: 'u', symbol: 'FIX', marketCap: 5 }), log: () => {} });
+    expect(await withApi('Mintpump', 'sol')).toMatchObject({ symbol: 'FIX', marketCap: 5 });
+    const noApi = createLaunchpadClassifier({ pumpfun: async () => undefined, log: () => {} });
+    expect((await noApi('Mintpump', 'sol'))?.launchpadUrl).toBe('https://pump.fun/coin/Mintpump');
+    const dead = createLaunchpadClassifier({
+      pumpfun: async () => {
+        throw new Error('down');
+      },
+      log: () => {},
+    });
+    expect((await dead('Mintpump', 'sol'))?.launchpad).toBe('pumpfun');
   });
 
   it('survives a throwing probe', async () => {
