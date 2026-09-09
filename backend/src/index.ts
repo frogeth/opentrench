@@ -44,6 +44,22 @@ const svc: Services = new Services(cfg, hub);
 const store = new StateStore(process.env.TRENCHFEED_STATE ?? path.join(root, 'state.json'));
 hub.load(store.load());
 hub.on('changed', () => store.schedule(() => hub.snapshot()));
+// Desktop app: die with the parent. On Windows a killed/crashed Electron leaves the
+// backend (this same exe running as node) orphaned, which then blocks the installer
+// ("opentrench cannot be closed") and gets silently re-attached by every later launch.
+const parentPid = Number(process.env.TRENCHFEED_PARENT_PID);
+if (parentPid > 0) {
+  setInterval(() => {
+    try {
+      process.kill(parentPid, 0);
+    } catch {
+      console.log('[backend] parent gone, exiting');
+      store.flush();
+      process.exit(0);
+    }
+  }, 2000).unref();
+}
+
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     store.flush();

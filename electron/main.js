@@ -76,6 +76,7 @@ async function startBackend() {
       PORT: String(PORT),
       TRENCHFEED_CONFIG: p.config,
       TRENCHFEED_STATE: p.state,
+      TRENCHFEED_PARENT_PID: String(process.pid),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
