@@ -1,10 +1,11 @@
 import { Router, json, type Request, type Response } from 'express';
+import type { HoverFetchers } from './hover.js';
 import type { ConfigStore } from './config.js';
 import type { MessageHub } from './hub.js';
 import type { Services } from './services.js';
 import { IpfsCache } from './ipfs.js';
 
-export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services): Router {
+export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hover?: HoverFetchers): Router {
   const r = Router();
   r.use(json({ limit: '64kb' }));
   const ipfs = new IpfsCache();
@@ -49,6 +50,23 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services): Rou
     }),
   );
   r.get('/config', wrap(() => cfg.masked()));
+  // Hover cards: fetched on demand, cached in memory, never stored.
+  r.get(
+    '/site-preview',
+    wrap(async (req) => {
+      const url = String(req.query.url ?? '');
+      if (!/^https?:\/\//i.test(url) || url.length > 2048) throw new Error('url required');
+      return (hover ? await hover.site(url) : undefined) ?? null;
+    }),
+  );
+  r.get(
+    '/x-profile/:handle',
+    wrap(async (req) => {
+      const handle = String(req.params.handle ?? '').replace(/^@/, '');
+      if (!/^[A-Za-z0-9_]{1,20}$/.test(handle)) throw new Error('handle required');
+      return (hover ? await hover.xProfile(handle) : undefined) ?? null;
+    }),
+  );
   r.get('/watched', wrap(() => svc.watchedChats()));
   r.get(
     '/preview/:source/:id',

@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { ConfigStore } from './config.js';
 import { MessageHub } from './hub.js';
+import { createSecurityFetcher } from './security.js';
+import { createHoverFetchers } from './hover.js';
 import { createDefaultEnricher } from './enrich.js';
 import { BATCH_MAX, fetchDexscreenerBatch } from './dexscreener.js';
 import type { CoveOptions } from './cove.js';
@@ -20,6 +22,7 @@ const HOST = '127.0.0.1';
 
 const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'config.json'));
 const hub: MessageHub = new MessageHub(500, createDefaultEnricher({ o1ApiKey: () => cfg.get().o1ApiKey }), {
+  security: createSecurityFetcher(),
   cove: (): CoveOptions => ({ amounts: cfg.get().cove.amounts, affiliateId: svc.affiliateId() }),
   blacklist: () => cfg.get().blacklist,
   bots: () => cfg.get().bots,
@@ -40,7 +43,14 @@ setInterval(() => {
       .catch((e) => console.warn('[refresh] dexscreener failed', e?.message ?? e));
   }
 }, REFRESH_MS).unref();
+// Holder security moves slowly: refresh every 10 minutes for tokens called in the last 6h.
+setInterval(() => {
+  for (const t of hub.activeTokens(6 * 60 * 60 * 1000).slice(0, 40)) {
+    if (!t.security || Date.now() - t.security.fetchedAt > 9 * 60 * 1000) hub.refetchSecurity(t.address);
+  }
+}, 10 * 60 * 1000).unref();
 const svc: Services = new Services(cfg, hub);
+const hover = createHoverFetchers();
 const store = new StateStore(process.env.TRENCHFEED_STATE ?? path.join(root, 'state.json'));
 hub.load(store.load());
 hub.on('changed', () => store.schedule(() => hub.snapshot()));
@@ -68,7 +78,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
 }
 
 const app = express();
-app.use('/api', createApi(cfg, hub, svc));
+app.use('/api', createApi(cfg, hub, svc, hover));
 
 const dist = path.resolve(root, '..', 'frontend', 'dist');
 if (fs.existsSync(dist)) {

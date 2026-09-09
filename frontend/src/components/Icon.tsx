@@ -1,4 +1,4 @@
-export type IconName = 'chart' | 'live' | 'globe' | 'x' | 'telegram' | 'explorer' | 'copy';
+export type IconName = 'chart' | 'live' | 'globe' | 'x' | 'telegram' | 'explorer' | 'copy' | 'search' | 'people' | 'top' | 'dev' | 'insider' | 'sniper' | 'bundle' | 'lock';
 
 // Small inline glyphs. X and Telegram from Simple Icons (CC0); the rest hand-drawn.
 const PATHS: Record<IconName, string> = {
@@ -17,6 +17,22 @@ const PATHS: Record<IconName, string> = {
   explorer:
     'M10 2a8 8 0 0 1 6.3 12.9l5.4 5.4-1.4 1.4-5.4-5.4A8 8 0 1 1 10 2zm0 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12zm-3 4h6v2H7V8zm0 3h6v2H7v-2z',
   copy: 'M8 2h10a2 2 0 0 1 2 2v10h-2V4H8V2zM4 6h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm0 2v12h10V8H4z',
+  // plain magnifier = search on X
+  search: 'M10 2a8 8 0 0 1 6.3 12.9l5.4 5.4-1.4 1.4-5.4-5.4A8 8 0 1 1 10 2zm0 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12z',
+  // two heads = holders
+  people: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-7 1.7-7 4v3h14v-3c0-2.3-3.7-4-7-4zm7-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-.6 0-1.2.1-1.8.2 1.7 1 2.8 2.4 2.8 3.8v3h6v-3c0-2.3-3.7-4-7-4z',
+  // podium = top 10
+  top: 'M9 4h6v16H9V4zm-7 8h6v8H2v-8zm14 4h6v4h-6v-4z',
+  // wrench = dev
+  dev: 'M21.7 6.3a6 6 0 0 1-7.6 7.6L6.4 21.6a2 2 0 0 1-2.8-2.8l7.7-7.7a6 6 0 0 1 7.6-7.6l-3.4 3.4 1.4 2.8 2.8 1.4 2-2z',
+  // eye = insiders
+  insider: 'M12 5C6.5 5 2.3 8.6 1 12c1.3 3.4 5.5 7 11 7s9.7-3.6 11-7c-1.3-3.4-5.5-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z',
+  // crosshair = snipers
+  sniper: 'M11 2h2v3.1a7 7 0 0 1 5.9 5.9H22v2h-3.1a7 7 0 0 1-5.9 5.9V22h-2v-3.1A7 7 0 0 1 5.1 13H2v-2h3.1A7 7 0 0 1 11 5.1V2zm1 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4z',
+  // stacked boxes = bundlers
+  bundle: 'M12 2 3 6.5v11L12 22l9-4.5v-11L12 2zm0 2.2 6.4 3.2L12 10.6 5.6 7.4 12 4.2zM5 9.1l6 3v7.3l-6-3V9.1zm8 10.3v-7.3l6-3v7.3l-6 3z',
+  // padlock = lp locked
+  lock: 'M12 2a5 5 0 0 1 5 5v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3zm0 10a1.5 1.5 0 0 0-.5 2.9V19h1v-2.1A1.5 1.5 0 0 0 12 14z',
 };
 
 export function Icon({ name, size = 14 }: { name: IconName; size?: number }) {

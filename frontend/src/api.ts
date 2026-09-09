@@ -22,6 +22,29 @@ export interface BotSeen {
   chats: string[];
   hidden: boolean;
 }
+export interface SitePreview {
+  url: string;
+  domain: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  siteName?: string;
+}
+export interface XProfile {
+  handle: string;
+  name: string;
+  url: string;
+  bio?: string;
+  avatar?: string;
+  banner?: string;
+  followers?: number;
+  following?: number;
+  tweets?: number;
+  joined?: number;
+  location?: string;
+  website?: string;
+  verified?: boolean;
+}
 export interface MaskedConfig {
   discord: { hasToken: boolean; watch: string[] };
   telegram: { apiId: number | null; hasApiHash: boolean; hasSession: boolean; watch: string[] };
@@ -78,6 +101,8 @@ export const api = {
   setO1Key: (apiKey: string) => req('PUT', '/o1', { apiKey }),
   setRailOrder: (ids: string[]) => req('PUT', '/rail-order', { ids }),
   watched: () => req<WatchedChat[]>('GET', '/watched'),
+  sitePreview: (url: string) => req<SitePreview | null>('GET', `/site-preview?url=${encodeURIComponent(url)}`),
+  xProfile: (handle: string) => req<XProfile | null>('GET', `/x-profile/${encodeURIComponent(handle)}`),
   preview: (source: 'discord' | 'telegram', id: string) =>
     req<import('./types').FeedMessage[]>('GET', `/preview/${source}/${encodeURIComponent(id)}`),
 };

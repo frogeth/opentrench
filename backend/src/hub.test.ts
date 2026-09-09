@@ -250,6 +250,36 @@ describe('MessageHub', () => {
     expect(hub.hello().tokens[0].seen).toBe(2);
   });
 
+  it('records every counted call with the market cap at that moment, and the first-call cap after enrichment', async () => {
+    const hub = new MessageHub(500, async () => ({ marketCap: 1000, priceUsd: 1, network: 'base' }));
+    hub.push(msg(1, EVM, { author: 'first', chatId: 'a', chatName: '#a' }));
+    await new Promise((r) => setTimeout(r, 0));
+    hub.updateMarket(EVM.toLowerCase(), { marketCap: 5000 });
+    hub.push(msg(2, EVM, { author: 'second', chatId: 'b', chatName: '#b' }));
+    hub.push(msg(3, EVM, { author: 'again', chatId: 'b', chatName: '#b' })); // same chat: not a call
+    const [t] = hub.hello().tokens;
+    expect(t.calls.map((c) => [c.author, c.chatName, c.marketCap])).toEqual([
+      ['first', '#a', 1000],
+      ['second', '#b', 5000],
+    ]);
+    expect(t.firstCallMarketCap).toBe(1000);
+    // rebuild keeps the caps it learned
+    hub.rebuild();
+    expect(hub.hello().tokens[0].calls.map((c) => c.marketCap)).toEqual([1000, 5000]);
+    expect(hub.hello().tokens[0].firstCallMarketCap).toBe(1000);
+  });
+
+  it('fetches holder security once the network is known and keeps it across rebuilds', async () => {
+    const hub = new MessageHub(500, async () => ({ priceUsd: 1, network: 'base' }), {
+      security: async (network, address) => ({ source: 'goplus', fetchedAt: 1, top10Pct: 21.2, holders: 5, devSold: true }),
+    });
+    hub.push(msg(1, EVM, { chatId: 'a', chatName: '#a' }));
+    await new Promise((r) => setTimeout(r, 5));
+    expect(hub.hello().tokens[0].security).toMatchObject({ top10Pct: 21.2, holders: 5 });
+    hub.rebuild();
+    expect(hub.hello().tokens[0].security).toMatchObject({ top10Pct: 21.2 });
+  });
+
   it('round-trips a snapshot', () => {
     const hub = new MessageHub(500);
     hub.push(msg(1, `${EVM} ${SOL}`, { chatId: 'a', chatName: '#a' }));

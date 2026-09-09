@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { detectContracts } from './contracts.js';
 import type { TokenFetcher } from './enrich.js';
+import type { SecurityFetcher } from './security.js';
 import { buildCoveLinks, type CoveOptions } from './cove.js';
 import type { ExtractedMeta } from './links.js';
 import type {
@@ -8,6 +9,7 @@ import type {
   BotSeen,
   DiscordState,
   FeedMessage,
+  TokenSecurity,
   LoginStep,
   Reaction,
   ServerEvent,
@@ -20,6 +22,7 @@ import type {
 /** Identifies this server process; the UI reloads when it changes so a restart with a new build never leaves stale assets. */
 const BOOT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+const MAX_CALLS = 50;
 const META_KEYS = ['website', 'twitter', 'telegram', 'name', 'symbol'] as const;
 const DATA_KEYS = [
   'priceUsd',
@@ -56,6 +59,8 @@ export interface HubOptions {
   retryDelaysMs?: number[];
   cove?: () => CoveOptions;
   blacklist?: () => string[];
+  /** holder security lookups (GoPlus / RugCheck); optional */
+  security?: SecurityFetcher;
   /** bot policy: hide all bots except `allow`, or show all bots except the blacklist */
   bots?: () => BotPolicy;
   favorites?: () => string[];
@@ -77,6 +82,7 @@ export class MessageHub extends EventEmitter {
   private retryDelays: number[];
   private cove: () => CoveOptions;
   private blacklist: () => string[];
+  private security?: SecurityFetcher;
   private botPolicy: () => BotPolicy;
   private favorites: () => string[];
 
@@ -89,6 +95,7 @@ export class MessageHub extends EventEmitter {
     this.retryDelays = opts.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
     this.cove = opts.cove ?? (() => ({ amounts: [25, 50, 100] }));
     this.blacklist = opts.blacklist ?? (() => []);
+    this.security = opts.security;
     this.botPolicy = opts.bots ?? (() => ({ default: 'hide', allow: [] }));
     this.favorites = opts.favorites ?? (() => []);
   }
@@ -114,6 +121,7 @@ export class MessageHub extends EventEmitter {
     if (!t) return;
     for (const k of DATA_KEYS) if (info[k] !== undefined) (t as any)[k] = info[k];
     if (t.marketCap !== undefined) t.athMarketCap = Math.max(t.athMarketCap ?? 0, t.marketCap);
+    this.noteFirstCallMc(t);
     this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
     this.changed();
   }
@@ -182,6 +190,7 @@ export class MessageHub extends EventEmitter {
           address: c.address,
           seen: 0,
           calledIn: [],
+          calls: [],
           firstSeenTs: msg.ts,
           lastCallTs: msg.ts,
           firstCaller: {
@@ -213,6 +222,17 @@ export class MessageHub extends EventEmitter {
         t.seen = chats.size;
         t.calledIn.push(msg.chatName);
         t.lastCallTs = Math.max(t.lastCallTs ?? 0, msg.ts);
+        t.calls.push({
+          author: msg.author,
+          avatar: msg.avatar,
+          chatName: msg.chatName,
+          source: msg.source,
+          msgId: msg.id,
+          link: msg.link,
+          ts: msg.ts,
+          marketCap: t.marketCap,
+        });
+        if (t.calls.length > MAX_CALLS) t.calls.splice(0, t.calls.length - MAX_CALLS);
         anyNew = true;
       }
       if (meta) applyMeta(t, meta, blocked);
@@ -237,6 +257,12 @@ export class MessageHub extends EventEmitter {
       if (!o) continue;
       for (const k of DATA_KEYS) if (o[k] !== undefined) (t as any)[k] = o[k];
       for (const k of META_KEYS) if (o[k]) t[k] = o[k];
+      if (o.security) t.security = o.security;
+      if (o.firstCallMarketCap !== undefined) t.firstCallMarketCap = o.firstCallMarketCap;
+      for (const c of t.calls) {
+        const oc = o.calls?.find((x) => x.msgId === c.msgId);
+        if (oc?.marketCap !== undefined) c.marketCap = oc.marketCap;
+      }
       this.applyBuy(t);
     }
     this.emit('event', this.hello());
@@ -342,6 +368,7 @@ export class MessageHub extends EventEmitter {
     for (const t of this.tokens.values()) {
       if (!this.tokenChats.has(t.address)) this.tokenChats.set(t.address, new Set());
       if (t.lastCallTs === undefined) t.lastCallTs = t.firstSeenTs;
+      if (!Array.isArray(t.calls)) t.calls = t.firstCaller ? [{ ...t.firstCaller }] : [];
       this.applyBuy(t);
       if (t.priceUsd === undefined && now - t.firstSeenTs < REENRICH_MAX_AGE_MS) this.enrich(t);
     }
@@ -363,15 +390,49 @@ export class MessageHub extends EventEmitter {
           for (const k of DATA_KEYS) if (info[k] !== undefined) (live as any)[k] = info[k];
           for (const k of META_KEYS) if (info[k] && !live[k]) live[k] = info[k];
           if (live.marketCap !== undefined) live.athMarketCap = Math.max(live.athMarketCap ?? 0, live.marketCap);
+          this.noteFirstCallMc(live);
           this.applyBuy(live);
           this.emit('event', { type: 'token', token: { ...live } } satisfies ServerEvent);
           this.changed();
+          if (live.network && !live.security) this.fetchSecurity(live);
         }
         if (live.priceUsd === undefined && attempt < this.retryDelays.length) {
           setTimeout(() => this.enrich(t, attempt + 1), this.retryDelays[attempt]);
         }
       })
       .catch((e) => console.warn('[tokens] enrich failed', t.address, e?.message ?? e));
+  }
+
+  /** The first call's market cap is whatever the first enrichment after it says. */
+  private noteFirstCallMc(t: TokenInfo): void {
+    if (t.marketCap === undefined) return;
+    const first = t.calls[0];
+    if (first && first.marketCap === undefined) first.marketCap = t.marketCap;
+    if (t.firstCallMarketCap === undefined) t.firstCallMarketCap = first?.marketCap ?? t.marketCap;
+  }
+
+  /** Holder security (top 10, dev, insiders…). Safe to call repeatedly; one in flight per token. */
+  fetchSecurity(t: TokenInfo): void {
+    if (!this.security || !t.network || this.securityInFlight.has(t.address)) return;
+    this.securityInFlight.add(t.address);
+    this.security(t.network, t.address)
+      .then((sec: TokenSecurity | undefined) => {
+        const live = this.tokens.get(t.address);
+        if (!live || !sec) return;
+        live.security = sec;
+        this.emit('event', { type: 'token', token: { ...live } } satisfies ServerEvent);
+        this.changed();
+      })
+      .catch((e) => console.warn('[tokens] security failed', t.address, e?.message ?? e))
+      .finally(() => this.securityInFlight.delete(t.address));
+  }
+
+  private securityInFlight = new Set<string>();
+
+  /** Refresh (or first-fetch) holder security for one token, e.g. from the periodic loop. */
+  refetchSecurity(address: string): void {
+    const t = this.tokens.get(address);
+    if (t) this.fetchSecurity(t);
   }
 
   private emitStatus(): void {

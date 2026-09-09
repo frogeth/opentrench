@@ -97,6 +97,42 @@ export interface FirstCaller {
   ts: number;
 }
 
+/** One chat's first post of a contract: who, where, when, and the market cap at that moment. */
+export interface CallRecord {
+  author: string;
+  avatar?: string;
+  chatName: string;
+  source: Source;
+  msgId: string;
+  link?: string;
+  ts: number;
+  /** market cap when the call was registered (first call: the first enrichment after it) */
+  marketCap?: number;
+}
+
+/** Holder security from GoPlus (EVM) or RugCheck (Solana). Percentages are 0..100. */
+export interface TokenSecurity {
+  source: 'goplus' | 'rugcheck';
+  fetchedAt: number;
+  holders?: number;
+  /** share of supply held by the ten largest non-pool wallets */
+  top10Pct?: number;
+  /** share of supply the deployer still holds */
+  devPct?: number;
+  devSold?: boolean;
+  insidersPct?: number;
+  snipersPct?: number;
+  bundlersPct?: number;
+  lpLockedPct?: number;
+  buyTax?: number;
+  sellTax?: number;
+  honeypot?: boolean;
+  mintable?: boolean;
+  freezable?: boolean;
+  /** RugCheck normalised risk score, 0 (clean) .. 100 */
+  score?: number;
+}
+
 export interface TokenInfo {
   chain: Chain;
   address: string;
@@ -106,6 +142,11 @@ export interface TokenInfo {
   seen: number;
   /** names of those chats, in order of first post */
   calledIn: string[];
+  /** every counted call, oldest first (bounded) */
+  calls: CallRecord[];
+  /** market cap at the first call, for the "3.2×" multiplier */
+  firstCallMarketCap?: number;
+  security?: TokenSecurity;
   firstSeenTs: number;
   /** when the most recent chat called it (drives Calls ordering) */
   lastCallTs: number;
