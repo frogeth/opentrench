@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Contract, TokenInfo } from '../types';
-import { copyText, money, shortAddr } from '../format';
+import { chartEmbedUrl, copyText, money, shortAddr, type ChartProvider } from '../format';
 import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
 import { ChainBadge } from './ChainBadge';
@@ -13,13 +13,16 @@ export function TokenChip({
   t,
   onSelect,
   autoChart = false,
+  chartProvider = 'basedbot',
 }: {
   c: Contract;
   t?: TokenInfo;
   onSelect?: (address: string) => void;
   /** open the live chart without a click (only loads while on screen) */
   autoChart?: boolean;
+  chartProvider?: ChartProvider;
 }) {
+  const embed = chartEmbedUrl(t, chartProvider);
   const [copied, setCopied] = useState(false);
   const [manual, setManual] = useState<boolean | null>(null);
   const showChart = manual ?? autoChart;
@@ -87,14 +90,14 @@ export function TokenChip({
           </div>
         </div>
         <div className="chip-actions">
-          <TokenLinks t={t} showChart={showChart} onToggleChart={() => setShowChart((s) => !s)} />
+          <TokenLinks t={t} showChart={showChart} onToggleChart={() => setShowChart((s) => !s)} canChart={!!embed} />
           <BuyRow buy={t?.buy} compact />
         </div>
       </div>
-      {showChart && t?.embedUrl && (
+      {showChart && embed && (
         <div className="chip-chart">
           {visible ? (
-            <iframe className="token-chart" src={t.embedUrl} title="chart" allow="clipboard-write" />
+            <iframe className="token-chart" src={embed} title="chart" allow="clipboard-write" allowFullScreen />
           ) : (
             <div className="token-chart token-chart-idle" />
           )}

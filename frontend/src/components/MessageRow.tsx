@@ -61,6 +61,7 @@ export function MessageRow({
   continued = false,
   discord = false,
   autoChart = false,
+  chartProvider = 'basedbot',
 }: {
   m: FeedMessage;
   tokens: Record<string, TokenInfo>;
@@ -71,6 +72,7 @@ export function MessageRow({
   /** Discord-style presentation (focused channel view) */
   discord?: boolean;
   autoChart?: boolean;
+  chartProvider?: import('../format').ChartProvider;
 }) {
   const fav = !m.isBot && isFavorite(favorites, m.author);
   return (
@@ -149,7 +151,7 @@ export function MessageRow({
         {m.contracts.length > 0 && (
           <div className="row-contracts">
             {m.contracts.map((c) => (
-              <TokenChip key={c.chain + c.address} c={c} t={tokens[c.address]} onSelect={onSelect} autoChart={autoChart} />
+              <TokenChip key={c.chain + c.address} c={c} t={tokens[c.address]} onSelect={onSelect} autoChart={autoChart} chartProvider={chartProvider} />
             ))}
           </div>
         )}

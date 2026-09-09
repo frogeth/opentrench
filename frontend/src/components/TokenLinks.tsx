@@ -5,10 +5,12 @@ export function TokenLinks({
   t,
   showChart,
   onToggleChart,
+  canChart = !!t?.embedUrl,
 }: {
   t?: TokenInfo;
   showChart: boolean;
   onToggleChart: () => void;
+  canChart?: boolean;
 }) {
   const links: [IconName, string, string | undefined][] = [
     ['chart', 'open chart', t?.chartUrl],
@@ -19,7 +21,7 @@ export function TokenLinks({
   ];
   return (
     <div className="token-links">
-      {t?.embedUrl && (
+      {canChart && (
         <button
           className={`token-link${showChart ? ' active' : ''}`}
           onClick={onToggleChart}

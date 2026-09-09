@@ -13,6 +13,8 @@ export function Settings({
   onChatOrder,
   autoChart,
   onAutoChart,
+  chartProvider,
+  onChartProvider,
 }: {
   status: Status;
   onClose: () => void;
@@ -20,6 +22,8 @@ export function Settings({
   onChatOrder: (o: 'bottom' | 'top') => void;
   autoChart: boolean;
   onAutoChart: (on: boolean) => void;
+  chartProvider: 'basedbot' | 'dexscreener';
+  onChartProvider: (p: 'basedbot' | 'dexscreener') => void;
 }) {
   const [cfg, setCfg] = useState<MaskedConfig | null>(null);
   const [tab, setTab] = useState<Tab>('accounts');
@@ -73,6 +77,18 @@ export function Settings({
                     Newest on top
                   </button>
                 </div>
+              </section>
+              <section>
+                <h2>Chart provider</h2>
+                <div className="seg">
+                  <button className={chartProvider === 'basedbot' ? 'active' : ''} onClick={() => onChartProvider('basedbot')}>
+                    BasedBot
+                  </button>
+                  <button className={chartProvider === 'dexscreener' ? 'active' : ''} onClick={() => onChartProvider('dexscreener')}>
+                    Dexscreener / GeckoTerminal
+                  </button>
+                </div>
+                <div className="hint">BasedBot needs the token's chain to be known; until then the Dexscreener chart is used.</div>
               </section>
               <section>
                 <h2>Live charts in chat</h2>

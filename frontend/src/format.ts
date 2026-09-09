@@ -90,3 +90,27 @@ export function beep(): void {
     /* no audio */
   }
 }
+
+export type ChartProvider = 'basedbot' | 'dexscreener';
+
+/** BasedBot's embed keys on the token address + a chain slug. */
+const BASEDBOT_SLUG: Record<string, string> = {
+  robinhood: 'robinhood',
+  base: 'base',
+  ethereum: 'ethereum',
+  solana: 'solana',
+  bsc: 'bsc',
+  arbitrum: 'arbitrum',
+};
+
+export function chartEmbedUrl(
+  t: { network?: string; address: string; embedUrl?: string } | undefined,
+  provider: ChartProvider,
+): string | undefined {
+  if (!t) return undefined;
+  if (provider === 'basedbot') {
+    const slug = t.network ? BASEDBOT_SLUG[t.network] : undefined;
+    if (slug) return `https://basedbot.app/embed/token/${slug}/${t.address}?interval=15`;
+  }
+  return t.embedUrl;
+}

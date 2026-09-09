@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { TokenInfo } from '../types';
-import { copyText, isFavorite, money, price, shortAddr, telegramShareUrl, timeAgo } from '../format';
+import { chartEmbedUrl, copyText, isFavorite, money, price, shortAddr, telegramShareUrl, timeAgo, type ChartProvider } from '../format';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 import { Icon } from './Icon';
@@ -19,12 +19,15 @@ export function CallCard({
   now,
   selected = false,
   favorites,
+  chartProvider = 'basedbot',
 }: {
   t: TokenInfo;
   now: number;
   selected?: boolean;
   favorites: string[];
+  chartProvider?: ChartProvider;
 }) {
+  const embed = chartEmbedUrl(t, chartProvider);
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [imgBroken, setImgBroken] = useState(false);
@@ -126,7 +129,7 @@ export function CallCard({
                 {t.priceUsd === undefined && t.marketCap !== undefined ? 'bonding · no pair yet' : hasPrice ? 'no trades yet' : 'no pair yet · retrying'}
               </span>
             )}
-            <TokenLinks t={t} showChart={showChart} onToggleChart={() => setShowChart((s) => !s)} />
+            <TokenLinks t={t} showChart={showChart} onToggleChart={() => setShowChart((s) => !s)} canChart={!!embed} />
           </div>
         </div>
         <div className="call-right">
@@ -177,8 +180,8 @@ export function CallCard({
         </a>
       </div>
 
-      {showChart && t.embedUrl && (
-        <iframe className="token-chart" src={t.embedUrl} title={`${t.symbol ?? 'token'} chart`} loading="lazy" allow="clipboard-write" />
+      {showChart && embed && (
+        <iframe className="token-chart" src={embed} title={`${t.symbol ?? 'token'} chart`} loading="lazy" allow="clipboard-write" allowFullScreen />
       )}
     </div>
   );

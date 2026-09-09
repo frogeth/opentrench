@@ -9,7 +9,7 @@ import { AddChatsModal } from './components/AddChatsModal';
 import { Logo } from './components/Logo';
 import { Avatar } from './components/Avatar';
 import { api, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
-import { beep } from './format';
+import { beep, type ChartProvider } from './format';
 import type { FeedMessage, Source, Status, TokenInfo } from './types';
 
 function Pill({ label, state }: { label: string; state: string }) {
@@ -93,6 +93,21 @@ export default function App() {
     setAutoChartState(on);
     try {
       localStorage.setItem('trenchfeed.autoChart', on ? 'on' : 'off');
+    } catch {
+      /* ignore */
+    }
+  };
+  const [chartProvider, setChartProviderState] = useState<ChartProvider>(() => {
+    try {
+      return localStorage.getItem('trenchfeed.chartProvider') === 'dexscreener' ? 'dexscreener' : 'basedbot';
+    } catch {
+      return 'basedbot';
+    }
+  });
+  const setChartProvider = (p: ChartProvider) => {
+    setChartProviderState(p);
+    try {
+      localStorage.setItem('trenchfeed.chartProvider', p);
     } catch {
       /* ignore */
     }
@@ -408,7 +423,7 @@ export default function App() {
             <div className="empty">{view.preview ? 'Previewing — add this chat to track its calls.' : 'No contracts seen yet.'}</div>
           )}
           {calls.map((t) => (
-            <CallCard key={t.address} t={t} now={now} selected={selected === t.address} favorites={status.favorites} />
+            <CallCard key={t.address} t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} />
           ))}
         </Column>
         <Column
@@ -475,6 +490,7 @@ export default function App() {
               continued={!!focused && continued(shownMsgs, i)}
               discord={!!focused}
               autoChart={autoChart}
+              chartProvider={chartProvider}
             />
           ))}
         </Column>
@@ -487,6 +503,8 @@ export default function App() {
           onChatOrder={setChatOrder}
           autoChart={autoChart}
           onAutoChart={setAutoChart}
+          chartProvider={chartProvider}
+          onChartProvider={setChartProvider}
         />
       )}
       {addOpen && (

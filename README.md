@@ -79,6 +79,9 @@ Telegram login), **Feed** (favorite callers & pings, blacklist), **Trading**
   amount prefilled, same deep-link format frogr uses. Amounts and an optional
   affiliate Telegram ID live in Settings → Buy buttons. Supported chains:
   Ethereum, Base, BNB, Robinhood Chain, MegaETH, Solana.
+- Charts come from **BasedBot** (token-address embeds on Robinhood, Base,
+  Ethereum, Solana, BNB, Arbitrum); Dexscreener / GeckoTerminal is the
+  fallback and can be made the default in Settings → Feed.
 - Live charts open automatically under every contract in Chats (only the
   ones on screen actually load; switch it off in Settings → Feed).
 - Replies show the quoted message above the text; reactions show as pills
