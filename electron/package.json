@@ -1,0 +1,50 @@
+{
+  "name": "trenchfeed-desktop",
+  "productName": "trenchfeed",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Discord + Telegram alpha feed with contract calls",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "prepare-backend": "node scripts/prepare-backend.js",
+    "dist": "npm run prepare-backend && electron-builder --mac dmg --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "xyz.trenchfeed.desktop",
+    "productName": "trenchfeed",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/backend",
+        "to": "backend"
+      },
+      {
+        "from": "../frontend/dist",
+        "to": "frontend/dist"
+      }
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.finance",
+      "target": [
+        "dmg"
+      ],
+      "darkModeSupport": true
+    },
+    "electronVersion": "33.4.11"
+  },
+  "dependencies": {
+    "app-builder-bin": "^4.2.0"
+  },
+  "author": "moussaboussi"
+}

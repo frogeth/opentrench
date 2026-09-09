@@ -97,6 +97,20 @@ Telegram login), **Feed** (favorite callers & pings, blacklist), **Trading**
 - Messages, calls, counts and reactions **persist across restarts** in
   `backend/state.json` (written a couple of seconds after each change). Filter matches text, author, chat, ticker and name.
 
+## Desktop app (macOS)
+
+```bash
+npm run desktop        # build, then open trenchfeed as an Electron window
+npm run desktop:dist   # build a .dmg into electron/dist/
+```
+
+The desktop app runs the same backend with Electron's bundled Node and keeps
+`config.json` / `state.json` in `~/Library/Application Support/trenchfeed`.
+First run from the repo copies the dev checkout's files there. If a server is
+already listening on 3210 the app attaches to it instead of starting another.
+External links open in your default browser. The build is unsigned: on first
+launch right-click the app → Open.
+
 ## Setup (in the browser, ⚙ top right)
 
 1. **Discord** — paste your user token, save. Then tick the channels to watch.

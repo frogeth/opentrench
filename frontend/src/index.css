@@ -422,3 +422,7 @@ b { font-weight: 600; }
 .ca:hover { border-color: var(--ok); background: rgba(61, 220, 132, 0.16); }
 .ca-copied { border-color: var(--ok); }
 .ca-tip { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); background: var(--ok); color: #05140a; font-weight: 700; font-size: 10px; padding: 1px 6px; border-radius: 4px; font-family: ui-sans-serif, system-ui, sans-serif; }
+
+/* ---------- desktop (Electron) chrome ---------- */
+.electron .top { padding-left: 84px; -webkit-app-region: drag; }
+.electron .top input, .electron .top button { -webkit-app-region: no-drag; }

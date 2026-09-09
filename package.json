@@ -1,13 +1,19 @@
 {
   "name": "trenchfeed",
   "private": true,
-  "workspaces": ["backend", "frontend"],
+  "workspaces": [
+    "backend",
+    "frontend",
+    "electron"
+  ],
   "scripts": {
     "dev": "concurrently -k -n api,web \"npm run dev -w backend\" \"npm run dev -w frontend\"",
     "build": "npm run build -w frontend && npm run build -w backend",
     "start": "npm start -w backend",
     "test": "npm test -w backend",
-    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend"
+    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
+    "desktop": "npm run build && npm start -w electron",
+    "desktop:dist": "npm run build && npm run dist -w electron"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
