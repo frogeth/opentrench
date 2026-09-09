@@ -28,6 +28,33 @@ const STEP_WAIT_MS = 20_000;
 const AVATAR_CACHE_MAX = 500;
 const MEDIA_MSG_MAX = 300;
 const MEDIA_BYTES_MAX = 120 * 1024 * 1024;
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (v: T) => void;
+  reject: (e: Error) => void;
+}
+function deferred<T>(): Deferred<T> {
+  let resolve!: (v: T) => void;
+  let reject!: (e: Error) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+/** Telegram entity links: the visible label (often an emoji) plus the hidden URL. */
+function entityLinks(text: string, entities: any[] | undefined): LinkIn[] {
+  const out: LinkIn[] = [];
+  for (const e of entities ?? []) {
+    const label = text.substr(e.offset ?? 0, e.length ?? 0);
+    if (e.className === 'MessageEntityTextUrl' && e.url) out.push({ label, url: String(e.url) });
+    else if (e.className === 'MessageEntityUrl') out.push({ label, url: label });
+  }
+  return out;
+}
+
 /**
  * Events: 'state' (TelegramState, error?), 'step' (LoginStep), 'session' (string|undefined),
  * 'message' (FeedMessage, ExtractedMeta), 'reactions' (msgId, Reaction[]).
