@@ -122,7 +122,9 @@ export function normalizeDiscord(d: any, ch: DiscordChannelInfo): FeedMessage {
     chatName: `#${ch.name} (${ch.guildName})`,
     author: authorName(d.author, d.member),
     avatar: avatarUrl(d),
-    isBot: !!d.author?.bot,
+    // Webhooks carry bot:true too, but a webhook channel *is* the feed (alert bots, scanners
+    // posting for people). Only real bot users (Rick etc.) are hidden; blacklist the rest.
+    isBot: !!d.author?.bot && !d.webhook_id,
     text: parts.filter(Boolean).join('\n'),
     ts: Date.parse(d.timestamp) || Date.now(),
     contracts: [],

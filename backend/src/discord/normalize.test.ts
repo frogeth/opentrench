@@ -107,4 +107,12 @@ describe('normalizeDiscord', () => {
     const m = normalizeDiscord({ ...payload, author: { ...payload.author, bot: true } }, { name: 'a', guildName: 'g' });
     expect(m.isBot).toBe(true);
   });
+  it('does not treat webhook posts as bots (alert channels are callers)', () => {
+    const m = normalizeDiscord(
+      { ...payload, member: undefined, webhook_id: '777', author: { ...payload.author, bot: true, username: 'Alerts', global_name: undefined } },
+      { name: 'a', guildName: 'g' },
+    );
+    expect(m.isBot).toBe(false);
+    expect(m.author).toBe('Alerts');
+  });
 });
