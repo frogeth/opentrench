@@ -1,0 +1,101 @@
+:root {
+  --bg: #0e0f13;
+  --panel: #171922;
+  --line: #262a36;
+  --text: #e6e8ef;
+  --muted: #8a90a5;
+  --dc: #5865f2;
+  --tg: #2aabee;
+  --ok: #3ddc84;
+  --warn: #f5b942;
+  --err: #ff5c5c;
+  --sol: #9945ff;
+  --evm: #627eea;
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+.app { display: flex; flex-direction: column; height: 100%; }
+header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel);
+}
+header h1 { font-size: 16px; margin: 0 8px 0 0; }
+.gear {
+  margin-left: auto; background: none; border: 1px solid var(--line); color: var(--text);
+  border-radius: 6px; padding: 4px 8px; cursor: pointer;
+}
+.pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill-connected { color: var(--ok); border-color: var(--ok); }
+.pill-connecting { color: var(--warn); border-color: var(--warn); }
+.pill-needs_login { color: var(--warn); border-color: var(--warn); }
+.pill-auth_error, .pill-disconnected { color: var(--err); border-color: var(--err); }
+.banner { background: #3a1c1c; color: #ffb3b3; padding: 8px 14px; cursor: pointer; border-bottom: 1px solid var(--err); }
+main { flex: 1; display: flex; min-height: 0; }
+
+.feed { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+.feed-bar { display: flex; gap: 12px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.feed-bar > input {
+  flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px;
+}
+.feed-bar label { white-space: nowrap; color: var(--muted); cursor: pointer; }
+.count { color: var(--muted); font-size: 12px; }
+.feed-list { flex: 1; overflow-y: auto; padding: 6px 0; }
+.empty { color: var(--muted); text-align: center; padding: 40px; }
+
+.row { padding: 6px 14px; border-left: 3px solid transparent; }
+.row:hover { background: var(--panel); }
+.row-discord { border-left-color: var(--dc); }
+.row-telegram { border-left-color: var(--tg); }
+.row-meta { display: flex; gap: 8px; align-items: baseline; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.badge { font-weight: 700; font-size: 10px; padding: 1px 5px; border-radius: 4px; color: #fff; }
+.badge-discord { background: var(--dc); }
+.badge-telegram { background: var(--tg); }
+.chat { color: var(--text); }
+.author { font-weight: 600; }
+.time a { color: var(--muted); text-decoration: none; }
+.time a:hover { text-decoration: underline; }
+.row-text { white-space: pre-wrap; word-break: break-word; margin-top: 2px; }
+.row-contracts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+
+.chip {
+  display: inline-flex; gap: 6px; align-items: center;
+  background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 6px; padding: 2px 8px; cursor: pointer;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.chip-chain { font-weight: 700; font-size: 10px; }
+.chip-sol .chip-chain { color: var(--sol); }
+.chip-evm .chip-chain { color: var(--evm); }
+.chip:hover { border-color: var(--muted); }
+.jump {
+  position: absolute; bottom: 14px; right: 14px;
+  background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 999px; padding: 6px 12px; cursor: pointer;
+}
+
+.settings {
+  width: 380px; border-left: 1px solid var(--line); background: var(--panel);
+  overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 18px;
+}
+.settings h2 { font-size: 14px; margin: 0 0 8px; }
+.settings section { display: flex; flex-direction: column; gap: 8px; }
+.settings input:not([type=checkbox]) {
+  background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; width: 100%;
+}
+.settings button {
+  background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer;
+}
+.settings button:disabled { opacity: 0.5; cursor: default; }
+.settings button.primary { border-color: var(--ok); color: var(--ok); }
+.settings .hint { color: var(--muted); font-size: 12px; }
+.settings .err { color: var(--err); font-size: 12px; }
+.picker { max-height: 260px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; padding: 4px; }
+.picker label { display: block; padding: 3px 6px; font-size: 13px; cursor: pointer; }
+.picker label:hover { background: var(--bg); }
+.picker .group { color: var(--muted); font-size: 11px; padding: 6px 6px 2px; text-transform: uppercase; }
+.settings .close { align-self: flex-end; }
