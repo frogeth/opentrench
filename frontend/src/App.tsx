@@ -5,6 +5,7 @@ import { CallCard } from './components/CallCard';
 import { MessageRow } from './components/MessageRow';
 import { Settings } from './components/Settings';
 import { ChannelSidebar, discordChatName, type View } from './components/ChannelSidebar';
+import { AddChatsModal } from './components/AddChatsModal';
 import { Logo } from './components/Logo';
 import { Avatar } from './components/Avatar';
 import { api, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
@@ -50,7 +51,8 @@ function continued(list: FeedMessage[], i: number): boolean {
 export default function App() {
   const { messages, tokens, status, wsOpen, ping } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [view, setView] = useState<View | null>(null);
+  const [addOpen, setAddOpen] = useState<Source | null>(null);
+  const [view, setView] = useState<View>({ rail: 'all' });
   const [query, setQuery] = useState('');
   const [showBots, setShowBots] = useState(false);
   const [showRepeats, setShowRepeats] = useState(false);
@@ -61,6 +63,8 @@ export default function App() {
   const [channels, setChannels] = useState<DiscordChannel[]>([]);
   const [dialogs, setDialogs] = useState<TelegramDialog[]>([]);
   const [busy, setBusy] = useState(false);
+  const [previewMsgs, setPreviewMsgs] = useState<FeedMessage[] | null>(null);
+  const [previewErr, setPreviewErr] = useState<string | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const [notify, setNotify] = useState<NotificationPermission>(() =>
     typeof Notification === 'undefined' ? 'denied' : Notification.permission,
@@ -117,6 +121,26 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ping]);
 
+  // Preview: fetch recent history for a chat that isn't in the feed.
+  useEffect(() => {
+    const p = view.preview;
+    if (!p) {
+      setPreviewMsgs(null);
+      setPreviewErr(null);
+      return;
+    }
+    let cancelled = false;
+    setPreviewMsgs(null);
+    setPreviewErr(null);
+    api
+      .preview(p.source, p.id)
+      .then((msgs) => !cancelled && setPreviewMsgs(Array.isArray(msgs) ? msgs : []))
+      .catch((e) => !cancelled && setPreviewErr(e.message ?? String(e)));
+    return () => {
+      cancelled = true;
+    };
+  }, [view.preview?.id, view.preview?.source]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const askNotify = () => {
     if (typeof Notification === 'undefined') return;
     if (Notification.permission === 'granted') {
@@ -140,7 +164,7 @@ export default function App() {
       const next = on ? [...new Set([...list, id])] : list.filter((x) => x !== id);
       if (source === 'discord') await api.setDiscordWatch(next);
       else await api.setTelegramWatch(next);
-      if (!on && view?.chat?.id === id) setView({ source: view.source, guildId: view.guildId });
+      if (!on && view.chat?.id === id) setView({ rail: view.rail });
       reloadLists();
     } finally {
       setBusy(false);
@@ -165,29 +189,26 @@ export default function App() {
   const chatCounts = useMemo(() => new Map(chats.map(([name, c]) => [name, c.count])), [chats]);
   const watchedNames = useMemo(() => new Set(watched.map((w) => w.name)), [watched]);
 
-  /** Which chat names the current view scopes to (null = everything). */
+  /** Which chat names the current view scopes to (null = everything watched). */
   const scope = useMemo<Set<string> | null>(() => {
-    if (!view) return null;
+    if (view.preview) return new Set([view.preview.name]);
     if (view.chat) return new Set([view.chat.name]);
-    if (view.source === 'discord') {
-      const g = view.guildId;
-      return new Set(channels.filter((c) => (!g || c.guildId === g) && cfg?.discord.watch.includes(c.id)).map(discordChatName));
-    }
-    return new Set(watched.filter((w) => w.source === 'telegram').map((w) => w.name));
+    if (view.rail === 'all') return null;
+    if (view.rail === 'telegram') return new Set(watched.filter((w) => w.source === 'telegram').map((w) => w.name));
+    return new Set(channels.filter((c) => c.guildId === view.rail && cfg?.discord.watch.includes(c.id)).map(discordChatName));
   }, [view, channels, cfg, watched]);
 
-  const chatMsgs = useMemo(
-    () =>
-      messages.filter(
-        (m) =>
-          (showBots || !m.isBot) &&
-          (showRepeats || !m.repeat) &&
-          (watched.length === 0 || watchedNames.has(m.chatName)) &&
-          (!scope || scope.has(m.chatName)) &&
-          matchesQuery(q, m, tokens),
-      ),
-    [messages, tokens, q, scope, showBots, showRepeats, watched.length, watchedNames],
-  );
+  const chatMsgs = useMemo(() => {
+    if (view.preview) return (previewMsgs ?? []).filter((m) => (showBots || !m.isBot) && matchesQuery(q, m, tokens));
+    return messages.filter(
+      (m) =>
+        (showBots || !m.isBot) &&
+        (showRepeats || !m.repeat) &&
+        (watched.length === 0 || watchedNames.has(m.chatName)) &&
+        (!scope || scope.has(m.chatName)) &&
+        matchesQuery(q, m, tokens),
+    );
+  }, [messages, previewMsgs, view.preview, tokens, q, scope, showBots, showRepeats, watched.length, watchedNames]);
 
   const calls = useMemo(
     () =>
@@ -199,43 +220,38 @@ export default function App() {
 
   const select = (address: string) => {
     if (!tokens[address]) return;
-    if (scope && !tokens[address].calledIn.some((c) => scope.has(c))) setView(null);
+    if (scope && !tokens[address].calledIn.some((c) => scope.has(c))) setView({ rail: 'all' });
     if (q && !tokenMatches(q, tokens[address])) setQuery('');
     setSelected(address);
   };
 
-  /** Open the Discord / Telegram layout on the most active watched chat of that source. */
-  const openSource = (source: Source) => {
-    if (view?.source === source) {
-      setView(null);
-      return;
-    }
-    const first = chats.find(([, c]) => c.source === source);
-    if (source === 'discord') {
-      const ch = first ? channels.find((c) => discordChatName(c) === first[0]) : undefined;
-      setView({ source, guildId: ch?.guildId, chat: ch ? { name: discordChatName(ch), id: ch.id } : undefined });
-    } else {
-      setView({ source, chat: first ? { name: first[0], id: first[1].id } : undefined });
-    }
-    setSettingsOpen(false);
-  };
-
   const openChat = (name: string, source: Source, id: string) => {
-    if (view?.chat?.name === name) {
-      setView(null);
+    if (view.chat?.name === name) {
+      setView({ rail: view.rail });
       return;
     }
     const ch = source === 'discord' ? channels.find((c) => c.id === id) : undefined;
-    setView({ source, guildId: ch?.guildId, chat: { name, id } });
+    setView({ rail: source === 'telegram' ? 'telegram' : (ch?.guildId ?? 'all'), chat: { name, id, source } });
   };
 
-  const title = view?.chat
-    ? view.chat.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '')
-    : view
-      ? view.source === 'discord'
-        ? 'Server'
-        : 'Telegram'
-      : 'Chats';
+  const openPreview = (source: Source, id: string, name: string, guildId?: string) => {
+    setAddOpen(null);
+    setView({ rail: source === 'telegram' ? 'telegram' : (guildId ?? view.rail), preview: { name, id, source } });
+  };
+
+  const focused = view.preview ?? view.chat;
+  const title = focused
+    ? focused.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '')
+    : view.rail === 'all'
+      ? 'All chats'
+      : view.rail === 'telegram'
+        ? 'Telegram'
+        : 'Server';
+  const previewInFeed = view.preview
+    ? view.preview.source === 'discord'
+      ? cfg?.discord.watch.includes(view.preview.id)
+      : cfg?.telegram.watch.includes(view.preview.id)
+    : false;
 
   return (
     <div className="app">
@@ -264,7 +280,7 @@ export default function App() {
           {notify === 'granted' ? (sound ? '🔔' : '🔕') : '🔔'}
           {notify !== 'granted' && <span className="bell-off">off</span>}
         </button>
-        <button className="gear" onClick={() => setSettingsOpen((o) => !o)} title="settings">
+        <button className="gear" onClick={() => setSettingsOpen(true)} title="settings">
           ⚙
         </button>
       </header>
@@ -275,28 +291,10 @@ export default function App() {
           if (tabsRef.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) tabsRef.current.scrollLeft += e.deltaY;
         }}
       >
-        <button
-          className={`tab tab-source${view?.source === 'discord' ? ' active' : ''}`}
-          onClick={() => openSource('discord')}
-          title="Discord view"
-        >
-          <Logo source="discord" size={14} />
-        </button>
-        <button
-          className={`tab tab-source${view?.source === 'telegram' ? ' active' : ''}`}
-          onClick={() => openSource('telegram')}
-          title="Telegram view"
-        >
-          <Logo source="telegram" size={14} />
-        </button>
-        <span className="tab-sep" />
-        <button className={`tab${view === null ? ' active' : ''}`} onClick={() => setView(null)}>
-          All
-        </button>
         {chats.map(([name, { count, source, avatar, id }]) => (
           <button
             key={name}
-            className={`tab${view?.chat?.name === name ? ' active' : ''}`}
+            className={`tab${view.chat?.name === name ? ' active' : ''}`}
             onClick={() => openChat(name, source, id)}
             title={name}
           >
@@ -305,6 +303,7 @@ export default function App() {
             {count > 0 && <span className="tab-count">{count}</span>}
           </button>
         ))}
+        {chats.length === 0 && <span className="hint">Add channels with the + in the rail.</span>}
       </div>
       {errors.length > 0 && (
         <div className="banner" onClick={() => setSettingsOpen(true)}>
@@ -315,21 +314,21 @@ export default function App() {
           ))}
         </div>
       )}
-      <main className={`columns${view ? ' columns-focus' : ''}`}>
-        {view && (
-          <ChannelSidebar
-            view={view}
-            cfg={cfg}
-            channels={channels}
-            dialogs={dialogs}
-            counts={chatCounts}
-            busy={busy}
-            onView={setView}
-            onToggle={toggleWatch}
-          />
-        )}
+      <main className="columns">
+        <ChannelSidebar
+          view={view}
+          cfg={cfg}
+          channels={channels}
+          dialogs={dialogs}
+          watched={watched}
+          counts={chatCounts}
+          onView={setView}
+          onAdd={() => setAddOpen(view.rail === 'telegram' ? 'telegram' : 'discord')}
+        />
         <Column title="Calls" count={calls.length} className="col-calls">
-          {calls.length === 0 && <div className="empty">No contracts seen yet.</div>}
+          {calls.length === 0 && (
+            <div className="empty">{view.preview ? 'Previewing — add this chat to track its calls.' : 'No contracts seen yet.'}</div>
+          )}
           {calls.map((t) => (
             <CallCard key={t.address} t={t} now={now} selected={selected === t.address} favorites={status.favorites} />
           ))}
@@ -337,9 +336,10 @@ export default function App() {
         <Column
           title={title}
           count={chatMsgs.length}
-          className={`col-chats${view ? ' col-discord' : ''}${view?.source === 'discord' && view.chat ? ' col-hash' : ''}`}
+          className={`col-chats col-discord${focused?.source === 'discord' ? ' col-hash' : ''}`}
           extra={
             <>
+              {focused && <Logo source={focused.source} size={12} />}
               <label>
                 <input type="checkbox" checked={showBots} onChange={(e) => setShowBots(e.target.checked)} /> bots
               </label>
@@ -350,11 +350,32 @@ export default function App() {
             </>
           }
         >
-          {chatMsgs.length === 0 && (
+          {view.preview && (
+            <div className="preview-bar">
+              <span>
+                Previewing <b>{view.preview.name}</b> — {previewInFeed ? 'in your feed' : 'not in your feed'}
+              </span>
+              {!previewInFeed && (
+                <button
+                  className="primary"
+                  disabled={busy}
+                  onClick={async () => {
+                    const p = view.preview!;
+                    await toggleWatch(p.source, p.id, true);
+                    setView({ rail: view.rail, chat: { name: p.name, id: p.id, source: p.source } });
+                  }}
+                >
+                  + add to feed
+                </button>
+              )}
+              <button onClick={() => setView({ rail: view.rail })}>close preview</button>
+            </div>
+          )}
+          {view.preview && previewMsgs === null && !previewErr && <div className="empty">Loading history…</div>}
+          {previewErr && <div className="empty err">{previewErr}</div>}
+          {!view.preview && chatMsgs.length === 0 && (
             <div className="empty">
-              {view
-                ? 'Nothing here yet. Pick a channel on the left (+ adds it to your feed).'
-                : 'No messages yet. Use the Discord / Telegram buttons above to add chats.'}
+              {watched.length === 0 ? 'No chats in your feed yet. Use the + in the rail.' : 'Nothing here yet.'}
             </div>
           )}
           {chatMsgs.map((m, i) => (
@@ -364,13 +385,26 @@ export default function App() {
               tokens={tokens}
               onSelect={select}
               favorites={status.favorites}
-              continued={!!view?.chat && continued(chatMsgs, i)}
-              discord={!!view}
+              continued={!!focused && continued(chatMsgs, i)}
+              discord={!!focused}
             />
           ))}
         </Column>
-        {settingsOpen && <Settings status={status} onClose={() => setSettingsOpen(false)} />}
       </main>
+      {settingsOpen && <Settings status={status} onClose={() => setSettingsOpen(false)} />}
+      {addOpen && (
+        <AddChatsModal
+          initialSource={addOpen}
+          guildId={view.rail !== 'all' && view.rail !== 'telegram' ? view.rail : undefined}
+          cfg={cfg}
+          channels={channels}
+          dialogs={dialogs}
+          busy={busy}
+          onToggle={toggleWatch}
+          onPreview={openPreview}
+          onClose={() => setAddOpen(null)}
+        />
+      )}
     </div>
   );
 }

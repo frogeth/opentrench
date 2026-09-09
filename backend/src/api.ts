@@ -50,6 +50,13 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services): Rou
   );
   r.get('/config', wrap(() => cfg.masked()));
   r.get('/watched', wrap(() => svc.watchedChats()));
+  r.get(
+    '/preview/:source/:id',
+    wrap((req) => {
+      const source = req.params.source === 'telegram' ? 'telegram' : 'discord';
+      return svc.preview(source, String(req.params.id), 50);
+    }),
+  );
   r.put(
     '/blacklist',
     wrap((req) => {

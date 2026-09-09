@@ -1,26 +1,66 @@
 import { useEffect, useState } from 'react';
-import { api, type DiscordChannel, type MaskedConfig, type TelegramDialog } from '../api';
+import { api, type MaskedConfig } from '../api';
 import type { Status } from '../types';
+import { Logo } from './Logo';
 
+type Tab = 'accounts' | 'feed' | 'trading';
+
+/** The one settings place: a modal with three tabs. Channels are managed in the sidebar, not here. */
 export function Settings({ status, onClose }: { status: Status; onClose: () => void }) {
   const [cfg, setCfg] = useState<MaskedConfig | null>(null);
+  const [tab, setTab] = useState<Tab>('accounts');
   const reload = () => api.config().then(setCfg).catch(() => {});
   useEffect(() => {
     reload();
   }, [status.discord, status.telegram]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   return (
-    <aside className="settings">
-      <button className="close" onClick={onClose}>
-        close
-      </button>
-      {cfg && <DiscordSection cfg={cfg} status={status} onChange={reload} />}
-      {cfg && <TelegramSection cfg={cfg} status={status} onChange={reload} />}
-      {cfg && <CoveSection cfg={cfg} onChange={reload} />}
-      {cfg && <FavoritesSection cfg={cfg} onChange={reload} />}
-      {cfg && <LaunchpadSection cfg={cfg} onChange={reload} />}
-      {cfg && <BlacklistSection cfg={cfg} onChange={reload} />}
-    </aside>
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal modal-settings">
+        <div className="modal-head">
+          <div className="seg">
+            <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>
+              Accounts
+            </button>
+            <button className={tab === 'feed' ? 'active' : ''} onClick={() => setTab('feed')}>
+              Feed
+            </button>
+            <button className={tab === 'trading' ? 'active' : ''} onClick={() => setTab('trading')}>
+              Trading
+            </button>
+          </div>
+          <button className="close" onClick={onClose}>
+            close
+          </button>
+        </div>
+        <div className="settings">
+          {!cfg && <div className="hint">Loading…</div>}
+          {cfg && tab === 'accounts' && (
+            <>
+              <DiscordAccount cfg={cfg} status={status} onChange={reload} />
+              <TelegramAccount cfg={cfg} status={status} onChange={reload} />
+            </>
+          )}
+          {cfg && tab === 'feed' && (
+            <>
+              <FavoritesSection cfg={cfg} onChange={reload} />
+              <BlacklistSection cfg={cfg} onChange={reload} />
+            </>
+          )}
+          {cfg && tab === 'trading' && (
+            <>
+              <CoveSection cfg={cfg} onChange={reload} />
+              <LaunchpadSection cfg={cfg} onChange={reload} />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -41,143 +81,107 @@ function useAsync() {
   return { busy, err, run };
 }
 
-function DiscordSection({ cfg, status, onChange }: { cfg: MaskedConfig; status: Status; onChange: () => void }) {
+function StatePill({ state }: { state: string }) {
+  return <span className={`pill pill-${state}`}>{state.replace('_', ' ')}</span>;
+}
+
+function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: Status; onChange: () => void }) {
   const [token, setToken] = useState('');
-  const [channels, setChannels] = useState<DiscordChannel[]>([]);
-  const [search, setSearch] = useState('');
+  const [edit, setEdit] = useState(!cfg.discord.hasToken);
   const { busy, err, run } = useAsync();
-
-  useEffect(() => {
-    if (status.discord === 'connected') api.discordChannels().then(setChannels).catch(() => {});
-  }, [status.discord]);
-
-  const toggle = (id: string) =>
-    run(async () => {
-      const next = cfg.discord.watch.includes(id)
-        ? cfg.discord.watch.filter((x) => x !== id)
-        : [...cfg.discord.watch, id];
-      await api.setDiscordWatch(next);
-      onChange();
-    });
-
-  const q = search.toLowerCase();
-  const shown = channels.filter(
-    (c) => !q || c.name.toLowerCase().includes(q) || c.guildName.toLowerCase().includes(q),
-  );
-  const groups = new Map<string, DiscordChannel[]>();
-  for (const c of shown) {
-    if (!groups.has(c.guildName)) groups.set(c.guildName, []);
-    groups.get(c.guildName)!.push(c);
-  }
-
   return (
     <section>
-      <h2>Discord</h2>
-      <div className="hint">
-        {cfg.discord.hasToken
-          ? 'Token saved.'
-          : 'Paste your Discord user token (DevTools → Network → any request → Authorization header).'}
-      </div>
-      <input type="password" placeholder="user token" value={token} onChange={(e) => setToken(e.target.value)} />
-      <button
-        className="primary"
-        disabled={busy || !token}
-        onClick={() =>
-          run(async () => {
-            await api.setDiscordToken(token);
-            setToken('');
-            onChange();
-          })
-        }
-      >
-        Save token &amp; connect
-      </button>
-      {err && <div className="err">{err}</div>}
-      {status.discord === 'connected' && (
+      <h2>
+        <Logo source="discord" size={14} /> Discord <StatePill state={status.discord} />
+      </h2>
+      {!edit ? (
+        <div className="row-inline">
+          <span className="hint">Token saved · {cfg.discord.watch.length} channel(s) in feed</span>
+          <button onClick={() => setEdit(true)}>Change token</button>
+        </div>
+      ) : (
         <>
-          <input placeholder="search channels…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <div className="picker">
-            {[...groups.entries()].map(([g, chs]) => (
-              <div key={g}>
-                <div className="group">{g}</div>
-                {chs.map((c) => (
-                  <label key={c.id}>
-                    <input type="checkbox" checked={cfg.discord.watch.includes(c.id)} onChange={() => toggle(c.id)} />{' '}
-                    #{c.name}
-                  </label>
-                ))}
-              </div>
-            ))}
-            {channels.length === 0 && <div className="hint">Waiting for channel list…</div>}
+          <div className="hint">Your Discord user token: DevTools → Network → any request → Authorization header.</div>
+          <input type="password" placeholder="user token" value={token} onChange={(e) => setToken(e.target.value)} />
+          <div className="row-inline">
+            <button
+              className="primary"
+              disabled={busy || !token}
+              onClick={() =>
+                run(async () => {
+                  await api.setDiscordToken(token);
+                  setToken('');
+                  setEdit(false);
+                  onChange();
+                })
+              }
+            >
+              Save &amp; connect
+            </button>
+            {cfg.discord.hasToken && <button onClick={() => setEdit(false)}>Cancel</button>}
           </div>
-          <div className="hint">{cfg.discord.watch.length} channel(s) watched</div>
         </>
       )}
+      {err && <div className="err">{err}</div>}
     </section>
   );
 }
 
-function TelegramSection({ cfg, status, onChange }: { cfg: MaskedConfig; status: Status; onChange: () => void }) {
+function TelegramAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: Status; onChange: () => void }) {
   const [apiId, setApiId] = useState(cfg.telegram.apiId ? String(cfg.telegram.apiId) : '');
   const [apiHash, setApiHash] = useState('');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
-  const [dialogs, setDialogs] = useState<TelegramDialog[]>([]);
-  const [search, setSearch] = useState('');
+  const [editCreds, setEditCreds] = useState(!(cfg.telegram.apiId && cfg.telegram.hasApiHash));
   const { busy, err, run } = useAsync();
-
-  useEffect(() => {
-    if (status.telegram === 'connected') api.telegramDialogs().then(setDialogs).catch(() => {});
-  }, [status.telegram]);
-
-  const toggle = (id: string) =>
-    run(async () => {
-      const next = cfg.telegram.watch.includes(id)
-        ? cfg.telegram.watch.filter((x) => x !== id)
-        : [...cfg.telegram.watch, id];
-      await api.setTelegramWatch(next);
-      onChange();
-    });
-
-  const q = search.toLowerCase();
-  const shown = dialogs.filter((d) => !q || d.title.toLowerCase().includes(q));
   const hasCreds = !!cfg.telegram.apiId && cfg.telegram.hasApiHash;
 
   return (
     <section>
-      <h2>Telegram</h2>
-      {!hasCreds && <div className="hint">Get an API ID and hash at my.telegram.org → API development tools.</div>}
-      <input placeholder="api id" value={apiId} onChange={(e) => setApiId(e.target.value)} />
-      <input
-        type="password"
-        placeholder={cfg.telegram.hasApiHash ? 'api hash (saved)' : 'api hash'}
-        value={apiHash}
-        onChange={(e) => setApiHash(e.target.value)}
-      />
-      <button
-        disabled={busy || !apiId || !apiHash}
-        onClick={() =>
-          run(async () => {
-            await api.setTelegramCreds(Number(apiId), apiHash);
-            setApiHash('');
-            onChange();
-          })
-        }
-      >
-        Save credentials
-      </button>
-
-      {hasCreds && status.telegram === 'needs_login' && status.loginStep === 'idle' && (
+      <h2>
+        <Logo source="telegram" size={14} /> Telegram <StatePill state={status.telegram} />
+      </h2>
+      {!editCreds ? (
+        <div className="row-inline">
+          <span className="hint">
+            API credentials saved · {cfg.telegram.watch.length} chat(s) in feed
+          </span>
+          <button onClick={() => setEditCreds(true)}>Change</button>
+        </div>
+      ) : (
         <>
+          <div className="hint">API ID and hash from my.telegram.org → API development tools.</div>
+          <input placeholder="api id" value={apiId} onChange={(e) => setApiId(e.target.value)} />
+          <input type="password" placeholder="api hash" value={apiHash} onChange={(e) => setApiHash(e.target.value)} />
+          <div className="row-inline">
+            <button
+              disabled={busy || !apiId || !apiHash}
+              onClick={() =>
+                run(async () => {
+                  await api.setTelegramCreds(Number(apiId), apiHash);
+                  setApiHash('');
+                  setEditCreds(false);
+                  onChange();
+                })
+              }
+            >
+              Save credentials
+            </button>
+            {hasCreds && <button onClick={() => setEditCreds(false)}>Cancel</button>}
+          </div>
+        </>
+      )}
+      {hasCreds && status.telegram === 'needs_login' && status.loginStep === 'idle' && (
+        <div className="row-inline">
           <input placeholder="phone, e.g. +15551234567" value={phone} onChange={(e) => setPhone(e.target.value)} />
           <button className="primary" disabled={busy || !phone} onClick={() => run(() => api.tgStart(phone))}>
             Send code
           </button>
-        </>
+        </div>
       )}
       {status.loginStep === 'code' && (
-        <>
+        <div className="row-inline">
           <input placeholder="login code" value={code} onChange={(e) => setCode(e.target.value)} />
           <button
             className="primary"
@@ -191,16 +195,11 @@ function TelegramSection({ cfg, status, onChange }: { cfg: MaskedConfig; status:
           >
             Submit code
           </button>
-        </>
+        </div>
       )}
       {status.loginStep === 'password' && (
-        <>
-          <input
-            type="password"
-            placeholder="2FA password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+        <div className="row-inline">
+          <input type="password" placeholder="2FA password" value={password} onChange={(e) => setPassword(e.target.value)} />
           <button
             className="primary"
             disabled={busy || !password}
@@ -213,23 +212,10 @@ function TelegramSection({ cfg, status, onChange }: { cfg: MaskedConfig; status:
           >
             Submit password
           </button>
-        </>
+        </div>
       )}
-      {err && <div className="err">{err}</div>}
-
       {status.telegram === 'connected' && (
-        <>
-          <input placeholder="search chats…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <div className="picker">
-            {shown.map((d) => (
-              <label key={d.id}>
-                <input type="checkbox" checked={cfg.telegram.watch.includes(d.id)} onChange={() => toggle(d.id)} />{' '}
-                {d.title} <span className="hint">({d.type})</span>
-              </label>
-            ))}
-            {dialogs.length === 0 && <div className="hint">Loading chats…</div>}
-          </div>
-          <div className="hint">{cfg.telegram.watch.length} chat(s) watched</div>
+        <div className="row-inline">
           <button
             disabled={busy}
             onClick={() =>
@@ -241,8 +227,9 @@ function TelegramSection({ cfg, status, onChange }: { cfg: MaskedConfig; status:
           >
             Log out
           </button>
-        </>
+        </div>
       )}
+      {err && <div className="err">{err}</div>}
     </section>
   );
 }
@@ -254,68 +241,61 @@ function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
     <section>
       <h2>Buy buttons (Cove)</h2>
       <div className="hint">
-        One-click buys open t.me/cove_trading_bot with the token and amount prefilled. Referral credit goes to
-        your logged-in Telegram account automatically.
+        One-click buys open t.me/cove_trading_bot with the token and amount prefilled. Referral credit goes to your
+        logged-in Telegram account automatically.
       </div>
-      <input placeholder="amounts in USD, e.g. 25, 50, 100" value={amounts} onChange={(e) => setAmounts(e.target.value)} />
-      <button
-        disabled={busy}
-        onClick={() =>
-          run(async () => {
-            const list = amounts
-              .split(/[,\s]+/)
-              .map(Number)
-              .filter((n) => Number.isFinite(n) && n > 0);
-            await api.setCove(list);
-            onChange();
-          })
-        }
-      >
-        Save
-      </button>
+      <div className="row-inline">
+        <input placeholder="amounts in USD, e.g. 25, 50, 100" value={amounts} onChange={(e) => setAmounts(e.target.value)} />
+        <button
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              const list = amounts
+                .split(/[,\s]+/)
+                .map(Number)
+                .filter((n) => Number.isFinite(n) && n > 0);
+              await api.setCove(list);
+              onChange();
+            })
+          }
+        >
+          Save
+        </button>
+      </div>
       {err && <div className="err">{err}</div>}
     </section>
   );
 }
 
-function BlacklistSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
-  const [name, setName] = useState('');
+function LaunchpadSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
+  const [key, setKey] = useState('');
   const { busy, err, run } = useAsync();
-  const remove = (n: string) =>
-    run(async () => {
-      await api.setBlacklist(cfg.blacklist.filter((x) => x !== n));
-      onChange();
-    });
   return (
     <section>
-      <h2>Blacklisted callers</h2>
+      <h2>Launchpads</h2>
       <div className="hint">
-        Their posts are hidden like bots and never create or count a call. Links they post still enrich tokens. Use the 🚫
-        next to any name in the feed, or add one here.
+        Bankr, Stonks, Pons, pump.fun and letsbonk are detected automatically. o1.exchange needs an API key (starts with
+        o1_launch_).
       </div>
-      <input placeholder="name, e.g. Rick or @lanternbot" value={name} onChange={(e) => setName(e.target.value)} />
-      <button
-        disabled={busy || !name.trim()}
-        onClick={() =>
-          run(async () => {
-            await api.blacklistAdd(name.trim());
-            setName('');
-            onChange();
-          })
-        }
-      >
-        Add
-      </button>
-      <div className="picker">
-        {cfg.blacklist.length === 0 && <div className="hint">Nobody blacklisted.</div>}
-        {cfg.blacklist.map((n) => (
-          <label key={n}>
-            <button className="mini" disabled={busy} onClick={() => remove(n)} title="remove">
-              ✕
-            </button>{' '}
-            {n}
-          </label>
-        ))}
+      <div className="row-inline">
+        <input
+          type="password"
+          placeholder={cfg.hasO1Key ? 'o1 api key (saved)' : 'o1 api key (optional)'}
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+        />
+        <button
+          disabled={busy || !key}
+          onClick={() =>
+            run(async () => {
+              await api.setO1Key(key.trim());
+              setKey('');
+              onChange();
+            })
+          }
+        >
+          Save
+        </button>
       </div>
       {err && <div className="err">{err}</div>}
     </section>
@@ -330,9 +310,10 @@ function FavoritesSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () =
       <h2>Favorite callers &amp; pings</h2>
       <div className="hint">
         Favorites get a 👑 and ping you when they post a contract nobody has called yet: a desktop notification
-        (enable with the 🔔 in the top bar) and a message to your own Telegram Saved Messages.
+        (enable with the 🔔 in the top bar) and a message to your own Telegram Saved Messages. Use ⋯ next to any name
+        in the feed, or add here.
       </div>
-      <label>
+      <label className="check">
         <input
           type="checkbox"
           checked={cfg.pingTelegram}
@@ -346,23 +327,26 @@ function FavoritesSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () =
         />{' '}
         Telegram Saved Messages ping
       </label>
-      <input placeholder="add a caller name" value={name} onChange={(e) => setName(e.target.value)} />
-      <button
-        disabled={busy || !name.trim()}
-        onClick={() =>
-          run(async () => {
-            await api.favoriteToggle(name.trim());
-            setName('');
-            onChange();
-          })
-        }
-      >
-        Add favorite
-      </button>
-      <div className="picker">
-        {cfg.favorites.length === 0 && <div className="hint">No favorites yet. Use ⋯ next to any name.</div>}
+      <div className="row-inline">
+        <input placeholder="add a caller name" value={name} onChange={(e) => setName(e.target.value)} />
+        <button
+          disabled={busy || !name.trim()}
+          onClick={() =>
+            run(async () => {
+              await api.favoriteToggle(name.trim());
+              setName('');
+              onChange();
+            })
+          }
+        >
+          Add
+        </button>
+      </div>
+      <div className="chips">
+        {cfg.favorites.length === 0 && <span className="hint">No favorites yet.</span>}
         {cfg.favorites.map((n) => (
-          <label key={n}>
+          <span key={n} className="chipname">
+            👑 {n}
             <button
               className="mini"
               disabled={busy}
@@ -375,9 +359,8 @@ function FavoritesSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () =
               title="remove"
             >
               ✕
-            </button>{' '}
-            👑 {n}
-          </label>
+            </button>
+          </span>
         ))}
       </div>
       {err && <div className="err">{err}</div>}
@@ -385,34 +368,52 @@ function FavoritesSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () =
   );
 }
 
-function LaunchpadSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
-  const [key, setKey] = useState('');
+function BlacklistSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
+  const [name, setName] = useState('');
   const { busy, err, run } = useAsync();
   return (
     <section>
-      <h2>Launchpads</h2>
+      <h2>Blacklisted callers</h2>
       <div className="hint">
-        Bankr, Stonks, Pons, pump.fun and letsbonk are detected automatically and show as a badge on the token image.
-        o1.exchange needs an API key (starts with o1_launch_).
+        Hidden like bots and never counted as a call; links they post still enrich tokens. Use ⋯ next to any name in
+        the feed, or add here.
       </div>
-      <input
-        type="password"
-        placeholder={cfg.hasO1Key ? 'o1 api key (saved)' : 'o1 api key (optional)'}
-        value={key}
-        onChange={(e) => setKey(e.target.value)}
-      />
-      <button
-        disabled={busy || !key}
-        onClick={() =>
-          run(async () => {
-            await api.setO1Key(key.trim());
-            setKey('');
-            onChange();
-          })
-        }
-      >
-        Save o1 key
-      </button>
+      <div className="row-inline">
+        <input placeholder="name, e.g. Rick or @lanternbot" value={name} onChange={(e) => setName(e.target.value)} />
+        <button
+          disabled={busy || !name.trim()}
+          onClick={() =>
+            run(async () => {
+              await api.blacklistAdd(name.trim());
+              setName('');
+              onChange();
+            })
+          }
+        >
+          Add
+        </button>
+      </div>
+      <div className="chips">
+        {cfg.blacklist.length === 0 && <span className="hint">Nobody blacklisted.</span>}
+        {cfg.blacklist.map((n) => (
+          <span key={n} className="chipname">
+            🚫 {n}
+            <button
+              className="mini"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await api.setBlacklist(cfg.blacklist.filter((x) => x !== n));
+                  onChange();
+                })
+              }
+              title="remove"
+            >
+              ✕
+            </button>
+          </span>
+        ))}
+      </div>
       {err && <div className="err">{err}</div>}
     </section>
   );

@@ -5,6 +5,8 @@ import { discordReaction, normalizeDiscord } from './discord/normalize.js';
 import { TelegramWrapper, type TelegramDialog } from './telegram/client.js';
 import { extractLinks, type ExtractedMeta } from './links.js';
 import { createPreviewer, type Previewer } from './previews.js';
+import { fetchChannelHistory } from './discord/rest.js';
+import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction } from './types.js';
 
 export class Services {
@@ -85,6 +87,25 @@ export class Services {
     });
     gw.connect();
     this.discord = gw;
+  }
+
+  /** Recent messages of any chat (newest first) without adding it to the feed. Not persisted. */
+  async preview(source: 'discord' | 'telegram', id: string, limit = 50): Promise<FeedMessage[]> {
+    let msgs: FeedMessage[] = [];
+    if (source === 'discord') {
+      const token = this.cfg.get().discord.token;
+      if (!token) return [];
+      const ch = this.discordChannels.get(id) ?? { id, name: id, guildId: '?', guildName: '?', position: 0 };
+      const raw = await fetchChannelHistory(token, id, limit);
+      msgs = raw.map((d) => normalizeDiscord(d, ch));
+    } else {
+      msgs = (await this.telegram?.history(id, limit)) ?? [];
+    }
+    for (const m of msgs) {
+      m.contracts = detectContracts(m.text);
+      m.isBot = m.isBot || this.hub.isBlacklisted(m.author);
+    }
+    return msgs;
   }
 
   listDiscordChannels(): DiscordChannel[] {

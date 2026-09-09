@@ -278,52 +278,74 @@ export class TelegramWrapper extends EventEmitter {
       const m = ev.message;
       const chatId = String(m.chatId ?? ev.chatId ?? '');
       if (!chatId) return;
-      const chat: any = await m.getChat().catch(() => null);
-      const sender: any = await m.getSender().catch(() => null);
-      const senderName = sender?.username
-        ? `@${sender.username}`
-        : [sender?.firstName, sender?.lastName].filter(Boolean).join(' ') || sender?.title || chat?.title || 'unknown';
-      const text = m.message ?? '';
-      const senderId = m.senderId ? String(m.senderId) : undefined;
-      let replyTo: TelegramPlain['replyTo'];
-      if (m.replyTo) {
-        const r: any = await m.getReplyMessage().catch(() => undefined);
-        if (r) {
-          const rs: any = await r.getSender?.().catch(() => null);
-          const rName = rs?.username
-            ? `@${rs.username}`
-            : [rs?.firstName, rs?.lastName].filter(Boolean).join(' ') || rs?.title || 'unknown';
-          replyTo = { author: rName, text: String(r.message ?? '').trim() || (r.media ? '📎 media' : '') };
-        }
-      }
-      const mediaUrl = `/api/telegram/media/${chatId}/${m.id}`;
-      const media = classifyMedia(m.media, mediaUrl);
-      const preview = webpagePreview(m.media, `${mediaUrl}?thumb=1`);
-      if (m.media && (media.length || preview?.image)) {
-        this.mediaMsgs.set(`${chatId}:${m.id}`, m);
-        if (this.mediaMsgs.size > MEDIA_MSG_MAX) this.mediaMsgs.delete(this.mediaMsgs.keys().next().value!);
-      }
-      const plain: TelegramPlain = {
-        id: m.id,
-        chatId,
-        chatTitle: chat?.title ?? chatId,
-        chatUsername: chat?.username ?? undefined,
-        senderId,
-        senderName,
-        isBot: sender?.bot === true,
-        text,
-        date: m.date,
-        hasMedia: !!m.media && m.media.className !== 'MessageMediaWebPage',
-        replyTo,
-        reactions: mapTelegramReactions((m.reactions as any)?.results),
-        media,
-        previews: preview ? [preview] : [],
-      };
-      const meta: ExtractedMeta = extractLinks(text, entityLinks(text, m.entities as any[] | undefined));
-      this.emit('message', normalizeTelegram(plain) satisfies FeedMessage, meta);
+      const { msg, meta } = await this.toFeed(m, chatId);
+      this.emit('message', msg, meta);
     } catch (e) {
       console.warn('[telegram] dropped message', e);
     }
+  }
+
+  /** Recent messages of a chat (newest first), for previewing a chat that isn't in the feed. */
+  async history(chatId: string, limit = 50): Promise<FeedMessage[]> {
+    if (!this.client || this.state !== 'connected') return [];
+    const msgs: any[] = await this.client.getMessages(bigInt(chatId), { limit });
+    const out: FeedMessage[] = [];
+    for (const m of msgs) {
+      if (!m || m.className !== 'Message') continue;
+      try {
+        out.push((await this.toFeed(m, chatId)).msg);
+      } catch {
+        /* skip one */
+      }
+    }
+    return out;
+  }
+
+  /** gramjs message → our FeedMessage (+ extracted link metadata). */
+  private async toFeed(m: any, chatId: string): Promise<{ msg: FeedMessage; meta: ExtractedMeta }> {
+    const chat: any = await m.getChat().catch(() => null);
+    const sender: any = await m.getSender().catch(() => null);
+    const senderName = sender?.username
+      ? `@${sender.username}`
+      : [sender?.firstName, sender?.lastName].filter(Boolean).join(' ') || sender?.title || chat?.title || 'unknown';
+    const text = m.message ?? '';
+    const senderId = m.senderId ? String(m.senderId) : undefined;
+    let replyTo: TelegramPlain['replyTo'];
+    if (m.replyTo) {
+      const r: any = await m.getReplyMessage().catch(() => undefined);
+      if (r) {
+        const rs: any = await r.getSender?.().catch(() => null);
+        const rName = rs?.username
+          ? `@${rs.username}`
+          : [rs?.firstName, rs?.lastName].filter(Boolean).join(' ') || rs?.title || 'unknown';
+        replyTo = { author: rName, text: String(r.message ?? '').trim() || (r.media ? '📎 media' : '') };
+      }
+    }
+    const mediaUrl = `/api/telegram/media/${chatId}/${m.id}`;
+    const media = classifyMedia(m.media, mediaUrl);
+    const preview = webpagePreview(m.media, `${mediaUrl}?thumb=1`);
+    if (m.media && (media.length || preview?.image)) {
+      this.mediaMsgs.set(`${chatId}:${m.id}`, m);
+      if (this.mediaMsgs.size > MEDIA_MSG_MAX) this.mediaMsgs.delete(this.mediaMsgs.keys().next().value!);
+    }
+    const plain: TelegramPlain = {
+      id: m.id,
+      chatId,
+      chatTitle: chat?.title ?? chatId,
+      chatUsername: chat?.username ?? undefined,
+      senderId,
+      senderName,
+      isBot: sender?.bot === true,
+      text,
+      date: m.date,
+      hasMedia: !!m.media && m.media.className !== 'MessageMediaWebPage',
+      replyTo,
+      reactions: mapTelegramReactions((m.reactions as any)?.results),
+      media,
+      previews: preview ? [preview] : [],
+    };
+    const meta: ExtractedMeta = extractLinks(text, entityLinks(text, m.entities as any[] | undefined));
+    return { msg: normalizeTelegram(plain), meta };
   }
 
   private async healthCheck(): Promise<void> {

@@ -24,15 +24,25 @@ npm run dev
 
 ## What the feed does
 
-**Calls** (one card per contract, newest call first) next to **Chats** (the
-merged message stream). The tab row lists every watched chat with its photo.
-The Discord / Telegram buttons at its left switch to a Discord-style view:
-server rail and channels by category (or your Telegram chat list) on the left,
-Calls and Chats scoped to the selected channel, messages grouped by author.
-Clicking a channel focuses it (and adds it to your feed if it wasn't); ✓ / +
-toggles add or remove. Clicking a chat tab opens the same view on that chat.
+One Discord-style layout for both platforms. The rail on the far left has
+**★ All** pinned on top, then your Discord servers (each with a Discord badge),
+one **Telegram** entry, and **+**. The sidebar next to it lists only what's in
+your feed for the selected rail item: channels by category for a server, your
+chats for Telegram, everything (grouped by server / Telegram) for All. Then
+**Calls** (one card per contract, newest call first) and **Chats**, both scoped
+to whatever is selected; a focused chat groups messages by author like
+Discord. The tab row under the header is a quick switcher across every watched
+chat.
+
+**+** opens the picker: every server & channel, or every Telegram chat, with a
+`+ add` / `✓ in feed` toggle and a preview eye. Clicking a name **previews**
+its recent history without adding it (a banner offers "+ add to feed").
 Clicking a ticker under a message jumps to and flashes its card in Calls.
 The search box matches text, authors, chats, tickers and addresses.
+
+Settings (⚙) is one modal with three tabs: **Accounts** (Discord token,
+Telegram login), **Feed** (favorite callers & pings, blacklist), **Trading**
+(Cove amounts, o1 key). Channels are managed in the sidebar, not in settings.
 
 - Newest on top. Discord and Telegram merged, with each platform's logo and the
   poster's avatar.

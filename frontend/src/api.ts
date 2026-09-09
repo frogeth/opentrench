@@ -59,4 +59,6 @@ export const api = {
   setPings: (telegram: boolean) => req('PUT', '/pings', { telegram }),
   setO1Key: (apiKey: string) => req('PUT', '/o1', { apiKey }),
   watched: () => req<WatchedChat[]>('GET', '/watched'),
+  preview: (source: 'discord' | 'telegram', id: string) =>
+    req<import('./types').FeedMessage[]>('GET', `/preview/${source}/${encodeURIComponent(id)}`),
 };
