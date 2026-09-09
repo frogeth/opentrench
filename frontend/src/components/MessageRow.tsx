@@ -5,7 +5,7 @@ import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 import { TokenChip } from './TokenChip';
 import { Icon } from './Icon';
-import { api } from '../api';
+import { AuthorMenu } from './AuthorMenu';
 
 const isVideoFile = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url);
 
@@ -68,15 +68,7 @@ export function MessageRow({
         <div className="row-meta">
           <span className="author">{m.author}</span>
           {m.isBot && <span className="bot-tag">bot</span>}
-          {!m.isBot && (
-            <button
-              className="block"
-              title={`blacklist ${m.author} (never counts as a caller)`}
-              onClick={() => void api.blacklistAdd(m.author).catch(() => {})}
-            >
-              🚫
-            </button>
-          )}
+          {!m.isBot && <AuthorMenu author={m.author} link={m.link} />}
           <span className="time">
             {m.link ? (
               <a href={m.link} target="_blank" rel="noreferrer">

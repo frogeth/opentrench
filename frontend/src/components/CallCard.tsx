@@ -6,7 +6,7 @@ import { Logo } from './Logo';
 import { Icon } from './Icon';
 import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
-import { api } from '../api';
+import { AuthorMenu } from './AuthorMenu';
 
 export function CallCard({ t, now, selected = false }: { t: TokenInfo; now: number; selected?: boolean }) {
   const [copied, setCopied] = useState(false);
@@ -60,13 +60,7 @@ export function CallCard({ t, now, selected = false }: { t: TokenInfo; now: numb
                 <span className="call-author">{c.author}</span>
                 <Logo source={c.source} size={11} />
                 <span className="muted">{c.chatName}</span>
-                <button
-                  className="block"
-                  title={`blacklist ${c.author} (never counts as a caller)`}
-                  onClick={() => void api.blacklistAdd(c.author).catch(() => {})}
-                >
-                  🚫
-                </button>
+                <AuthorMenu author={c.author} link={c.link} />
               </span>
             )}
           </div>
