@@ -6,6 +6,7 @@ import { Logo } from './Logo';
 import { TokenChip } from './TokenChip';
 import { Icon } from './Icon';
 import { AuthorMenu } from './AuthorMenu';
+import { RichText } from './RichText';
 
 const isVideoFile = (url: string, mime?: string) => (mime ? mime.startsWith('video/') : /\.(mp4|webm|mov)(\?|$)/i.test(url));
 
@@ -57,17 +58,32 @@ export function MessageRow({
   tokens,
   onSelect,
   favorites = [],
+  continued = false,
+  discord = false,
 }: {
   m: FeedMessage;
   tokens: Record<string, TokenInfo>;
   onSelect?: (address: string) => void;
   favorites?: string[];
+  /** same author as the message above within a few minutes: no avatar/header (Discord grouping) */
+  continued?: boolean;
+  /** Discord-style presentation (focused channel view) */
+  discord?: boolean;
 }) {
   const fav = !m.isBot && isFavorite(favorites, m.author);
   return (
-    <div className={`row row-${m.source}${m.repeat ? ' row-repeat' : ''}${m.isBot ? ' row-bot' : ''}${fav ? ' row-fav' : ''}`}>
-      <Avatar src={m.avatar} name={m.author} crown={fav} />
+    <div
+      className={`row row-${m.source}${m.repeat ? ' row-repeat' : ''}${m.isBot ? ' row-bot' : ''}${fav ? ' row-fav' : ''}${
+        discord ? ' row-discord' : ''
+      }${continued ? ' row-continued' : ''}`}
+    >
+      {continued ? (
+        <span className="row-gutter-time">{fmtTime(m.ts).replace(/:\d\d(?=\s|$)/, '')}</span>
+      ) : (
+        <Avatar src={m.avatar} name={m.author} size={discord ? 40 : 32} crown={fav} />
+      )}
       <div className="row-main">
+        {!continued && (
         <div className="row-meta">
           <span className="author">{m.author}</span>
           {m.isBot && <span className="bot-tag">bot</span>}
@@ -81,19 +97,22 @@ export function MessageRow({
               fmtTime(m.ts)
             )}
           </span>
-          <span className="chat-tag" title={m.chatName}>
-            {m.chatAvatar ? <Avatar src={m.chatAvatar} name={m.chatName} size={14} /> : <Logo source={m.source} size={11} />}
-            <span className="chat-tag-name">{m.chatName}</span>
-          </span>
+          {!discord && (
+            <span className="chat-tag" title={m.chatName}>
+              {m.chatAvatar ? <Avatar src={m.chatAvatar} name={m.chatName} size={14} /> : <Logo source={m.source} size={11} />}
+              <span className="chat-tag-name">{m.chatName}</span>
+            </span>
+          )}
         </div>
+        )}
         {m.replyTo && (
           <div className="reply" title={m.replyTo.text}>
-            <span className="reply-arrow">↩</span> <b>{m.replyTo.author}</b> {m.replyTo.text}
+            <span className="reply-arrow">↩</span> <b>{m.replyTo.author}</b> <RichText text={m.replyTo.text} />
           </div>
         )}
         {m.text && (
           <div className="row-text">
-            {m.text}
+            <RichText text={m.text} />
             {m.hasAttachment && !m.media?.length && (
               <span className="attach" title="has attachment">
                 {' '}

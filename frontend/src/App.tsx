@@ -4,10 +4,10 @@ import { Column } from './components/Column';
 import { CallCard } from './components/CallCard';
 import { MessageRow } from './components/MessageRow';
 import { Settings } from './components/Settings';
-import { Browser } from './components/Browser';
+import { ChannelSidebar, discordChatName, type View } from './components/ChannelSidebar';
 import { Logo } from './components/Logo';
 import { Avatar } from './components/Avatar';
-import { api, type WatchedChat } from './api';
+import { api, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
 import { beep } from './format';
 import type { FeedMessage, Source, Status, TokenInfo } from './types';
 
@@ -40,18 +40,27 @@ function tokenMatches(q: string, t: TokenInfo): boolean {
   );
 }
 
-type Panel = { kind: 'settings' } | { kind: 'browser'; source: Source } | null;
+/** Discord-style grouping: hide the header when the newer message just above is the same author within 5 min. */
+function continued(list: FeedMessage[], i: number): boolean {
+  const above = list[i - 1];
+  const m = list[i];
+  return !!above && above.author === m.author && above.chatName === m.chatName && above.ts - m.ts < 5 * 60_000 && !m.replyTo;
+}
 
 export default function App() {
   const { messages, tokens, status, wsOpen, ping } = useFeed();
-  const [panel, setPanel] = useState<Panel>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [view, setView] = useState<View | null>(null);
   const [query, setQuery] = useState('');
-  const [chatFilter, setChatFilter] = useState<string | null>(null);
   const [showBots, setShowBots] = useState(false);
   const [showRepeats, setShowRepeats] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const [watched, setWatched] = useState<WatchedChat[]>([]);
+  const [cfg, setCfg] = useState<MaskedConfig | null>(null);
+  const [channels, setChannels] = useState<DiscordChannel[]>([]);
+  const [dialogs, setDialogs] = useState<TelegramDialog[]>([]);
+  const [busy, setBusy] = useState(false);
   const tabsRef = useRef<HTMLDivElement>(null);
   const [notify, setNotify] = useState<NotificationPermission>(() =>
     typeof Notification === 'undefined' ? 'denied' : Notification.permission,
@@ -63,6 +72,28 @@ export default function App() {
       return true;
     }
   });
+
+  const reloadLists = () => {
+    api.watched().then(setWatched).catch(() => {});
+    api.config().then(setCfg).catch(() => {});
+  };
+  useEffect(reloadLists, [status.discord, status.telegram]);
+  useEffect(() => {
+    if (status.discord === 'connected') api.discordChannels().then(setChannels).catch(() => {});
+  }, [status.discord]);
+  useEffect(() => {
+    if (status.telegram === 'connected') api.telegramDialogs().then(setDialogs).catch(() => {});
+  }, [status.telegram]);
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
+  useEffect(() => {
+    if (!selected) return;
+    document.getElementById(`call-${selected}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const t = window.setTimeout(() => setSelected(null), 2500);
+    return () => window.clearTimeout(t);
+  }, [selected]);
   useEffect(() => {
     if (!ping) return;
     const label = ping.token.symbol ? `$${ping.token.symbol}` : ping.token.address.slice(0, 8);
@@ -85,6 +116,7 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ping]);
+
   const askNotify = () => {
     if (typeof Notification === 'undefined') return;
     if (Notification.permission === 'granted') {
@@ -100,34 +132,46 @@ export default function App() {
     void Notification.requestPermission().then(setNotify);
   };
 
-  useEffect(() => {
-    api.watched().then(setWatched).catch(() => {});
-  }, [status.discord, status.telegram, panel]);
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 15_000);
-    return () => window.clearInterval(id);
-  }, []);
-  useEffect(() => {
-    if (!selected) return;
-    document.getElementById(`call-${selected}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    const t = window.setTimeout(() => setSelected(null), 2500);
-    return () => window.clearTimeout(t);
-  }, [selected]);
+  const toggleWatch = async (source: Source, id: string, on: boolean) => {
+    if (!cfg) return;
+    setBusy(true);
+    try {
+      const list = source === 'discord' ? cfg.discord.watch : cfg.telegram.watch;
+      const next = on ? [...new Set([...list, id])] : list.filter((x) => x !== id);
+      if (source === 'discord') await api.setDiscordWatch(next);
+      else await api.setTelegramWatch(next);
+      reloadLists();
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const q = query.trim().toLowerCase();
   const errors = Object.entries(status.error) as [keyof Status['error'], string][];
 
   const chats = useMemo(() => {
-    const m = new Map<string, { count: number; source: Source; avatar?: string }>();
-    for (const w of watched) m.set(w.name, { count: 0, source: w.source, avatar: w.avatar });
+    const m = new Map<string, { count: number; source: Source; avatar?: string; id: string }>();
+    for (const w of watched) m.set(w.name, { count: 0, source: w.source, avatar: w.avatar, id: w.id });
     for (const msg of messages) {
-      const e = m.get(msg.chatName) ?? { count: 0, source: msg.source, avatar: msg.chatAvatar };
+      const e = m.get(msg.chatName) ?? { count: 0, source: msg.source, avatar: msg.chatAvatar, id: msg.chatId };
       e.count++;
       if (!e.avatar && msg.chatAvatar) e.avatar = msg.chatAvatar;
       m.set(msg.chatName, e);
     }
     return [...m.entries()].sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]));
   }, [messages, watched]);
+  const chatCounts = useMemo(() => new Map(chats.map(([name, c]) => [name, c.count])), [chats]);
+
+  /** Which chat names the current view scopes to (null = everything). */
+  const scope = useMemo<Set<string> | null>(() => {
+    if (!view) return null;
+    if (view.chat) return new Set([view.chat.name]);
+    if (view.source === 'discord') {
+      const g = view.guildId;
+      return new Set(channels.filter((c) => (!g || c.guildId === g) && cfg?.discord.watch.includes(c.id)).map(discordChatName));
+    }
+    return new Set(watched.filter((w) => w.source === 'telegram').map((w) => w.name));
+  }, [view, channels, cfg, watched]);
 
   const chatMsgs = useMemo(
     () =>
@@ -135,29 +179,59 @@ export default function App() {
         (m) =>
           (showBots || !m.isBot) &&
           (showRepeats || !m.repeat) &&
-          (!chatFilter || m.chatName === chatFilter) &&
+          (!scope || scope.has(m.chatName)) &&
           matchesQuery(q, m, tokens),
       ),
-    [messages, tokens, q, chatFilter, showBots, showRepeats],
+    [messages, tokens, q, scope, showBots, showRepeats],
   );
 
   const calls = useMemo(
     () =>
       Object.values(tokens)
-        .filter((t) => (!chatFilter || t.calledIn.includes(chatFilter)) && tokenMatches(q, t))
+        .filter((t) => (!scope || t.calledIn.some((c) => scope.has(c))) && tokenMatches(q, t))
         .sort((a, b) => (b.lastCallTs ?? b.firstSeenTs) - (a.lastCallTs ?? a.firstSeenTs)),
-    [tokens, q, chatFilter],
+    [tokens, q, scope],
   );
 
   const select = (address: string) => {
     if (!tokens[address]) return;
-    if (chatFilter && !tokens[address].calledIn.includes(chatFilter)) setChatFilter(null);
+    if (scope && !tokens[address].calledIn.some((c) => scope.has(c))) setView(null);
     if (q && !tokenMatches(q, tokens[address])) setQuery('');
     setSelected(address);
   };
 
-  const togglePanel = (next: Panel) =>
-    setPanel((p) => (p && next && JSON.stringify(p) === JSON.stringify(next) ? null : next));
+  /** Open the Discord / Telegram layout on the most active watched chat of that source. */
+  const openSource = (source: Source) => {
+    if (view?.source === source) {
+      setView(null);
+      return;
+    }
+    const first = chats.find(([, c]) => c.source === source);
+    if (source === 'discord') {
+      const ch = first ? channels.find((c) => discordChatName(c) === first[0]) : undefined;
+      setView({ source, guildId: ch?.guildId, chat: ch ? { name: discordChatName(ch), id: ch.id } : undefined });
+    } else {
+      setView({ source, chat: first ? { name: first[0], id: first[1].id } : undefined });
+    }
+    setSettingsOpen(false);
+  };
+
+  const openChat = (name: string, source: Source, id: string) => {
+    if (view?.chat?.name === name) {
+      setView(null);
+      return;
+    }
+    const ch = source === 'discord' ? channels.find((c) => c.id === id) : undefined;
+    setView({ source, guildId: ch?.guildId, chat: { name, id } });
+  };
+
+  const title = view?.chat
+    ? view.chat.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '')
+    : view
+      ? view.source === 'discord'
+        ? 'Server'
+        : 'Telegram'
+      : 'Chats';
 
   return (
     <div className="app">
@@ -186,7 +260,7 @@ export default function App() {
           {notify === 'granted' ? (sound ? '🔔' : '🔕') : '🔔'}
           {notify !== 'granted' && <span className="bell-off">off</span>}
         </button>
-        <button className="gear" onClick={() => togglePanel({ kind: 'settings' })} title="settings">
+        <button className="gear" onClick={() => setSettingsOpen((o) => !o)} title="settings">
           ⚙
         </button>
       </header>
@@ -198,28 +272,28 @@ export default function App() {
         }}
       >
         <button
-          className={`tab tab-source${panel?.kind === 'browser' && panel.source === 'discord' ? ' active' : ''}`}
-          onClick={() => togglePanel({ kind: 'browser', source: 'discord' })}
-          title="browse Discord servers"
+          className={`tab tab-source${view?.source === 'discord' ? ' active' : ''}`}
+          onClick={() => openSource('discord')}
+          title="Discord view"
         >
           <Logo source="discord" size={14} />
         </button>
         <button
-          className={`tab tab-source${panel?.kind === 'browser' && panel.source === 'telegram' ? ' active' : ''}`}
-          onClick={() => togglePanel({ kind: 'browser', source: 'telegram' })}
-          title="browse Telegram chats"
+          className={`tab tab-source${view?.source === 'telegram' ? ' active' : ''}`}
+          onClick={() => openSource('telegram')}
+          title="Telegram view"
         >
           <Logo source="telegram" size={14} />
         </button>
         <span className="tab-sep" />
-        <button className={`tab${chatFilter === null ? ' active' : ''}`} onClick={() => setChatFilter(null)}>
+        <button className={`tab${view === null ? ' active' : ''}`} onClick={() => setView(null)}>
           All
         </button>
-        {chats.map(([name, { count, source, avatar }]) => (
+        {chats.map(([name, { count, source, avatar, id }]) => (
           <button
             key={name}
-            className={`tab${chatFilter === name ? ' active' : ''}`}
-            onClick={() => setChatFilter(chatFilter === name ? null : name)}
+            className={`tab${view?.chat?.name === name ? ' active' : ''}`}
+            onClick={() => openChat(name, source, id)}
             title={name}
           >
             {avatar ? <Avatar src={avatar} name={name} size={16} /> : <Logo source={source} size={11} />}
@@ -229,7 +303,7 @@ export default function App() {
         ))}
       </div>
       {errors.length > 0 && (
-        <div className="banner" onClick={() => setPanel({ kind: 'settings' })}>
+        <div className="banner" onClick={() => setSettingsOpen(true)}>
           {errors.map(([k, v]) => (
             <div key={k}>
               <b>{k}:</b> {v}
@@ -237,7 +311,19 @@ export default function App() {
           ))}
         </div>
       )}
-      <main className="columns">
+      <main className={`columns${view ? ' columns-focus' : ''}`}>
+        {view && (
+          <ChannelSidebar
+            view={view}
+            cfg={cfg}
+            channels={channels}
+            dialogs={dialogs}
+            counts={chatCounts}
+            busy={busy}
+            onView={setView}
+            onToggle={toggleWatch}
+          />
+        )}
         <Column title="Calls" count={calls.length} className="col-calls">
           {calls.length === 0 && <div className="empty">No contracts seen yet.</div>}
           {calls.map((t) => (
@@ -245,9 +331,9 @@ export default function App() {
           ))}
         </Column>
         <Column
-          title="Chats"
+          title={title}
           count={chatMsgs.length}
-          className="col-chats"
+          className={`col-chats${view ? ' col-discord' : ''}${view?.source === 'discord' && view.chat ? ' col-hash' : ''}`}
           extra={
             <>
               <label>
@@ -261,14 +347,25 @@ export default function App() {
           }
         >
           {chatMsgs.length === 0 && (
-            <div className="empty">No messages yet. Use the Discord / Telegram buttons above to add chats.</div>
+            <div className="empty">
+              {view
+                ? 'Nothing here yet. Pick a channel on the left (+ adds it to your feed).'
+                : 'No messages yet. Use the Discord / Telegram buttons above to add chats.'}
+            </div>
           )}
-          {chatMsgs.map((m) => (
-            <MessageRow key={m.id} m={m} tokens={tokens} onSelect={select} favorites={status.favorites} />
+          {chatMsgs.map((m, i) => (
+            <MessageRow
+              key={m.id}
+              m={m}
+              tokens={tokens}
+              onSelect={select}
+              favorites={status.favorites}
+              continued={!!view?.chat && continued(chatMsgs, i)}
+              discord={!!view}
+            />
           ))}
         </Column>
-        {panel?.kind === 'settings' && <Settings status={status} onClose={() => setPanel(null)} />}
-        {panel?.kind === 'browser' && <Browser source={panel.source} onClose={() => setPanel(null)} />}
+        {settingsOpen && <Settings status={status} onClose={() => setSettingsOpen(false)} />}
       </main>
     </div>
   );

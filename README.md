@@ -24,13 +24,15 @@ npm run dev
 
 ## What the feed does
 
-Two equal panels: **Calls** (one card per contract, newest first, with who
-called it first) and **Chats** (the merged message stream). The tab row lists
-every watched chat with its photo and filters both panels to one chat; the
-Discord / Telegram buttons at its left open a channel browser (server rail,
-channels by category, add / remove from feed). Clicking a ticker under a
-message jumps to and flashes its card in Calls. The search box matches text,
-authors, chats, tickers and addresses.
+**Calls** (one card per contract, newest call first) next to **Chats** (the
+merged message stream). The tab row lists every watched chat with its photo.
+The Discord / Telegram buttons at its left switch to a Discord-style view:
+server rail and channels by category (or your Telegram chat list) on the left,
+Calls and Chats scoped to the selected channel, messages grouped by author.
+Clicking a channel focuses it (and adds it to your feed if it wasn't); ✓ / +
+toggles add or remove. Clicking a chat tab opens the same view on that chat.
+Clicking a ticker under a message jumps to and flashes its card in Calls.
+The search box matches text, authors, chats, tickers and addresses.
 
 - Newest on top. Discord and Telegram merged, with each platform's logo and the
   poster's avatar.
