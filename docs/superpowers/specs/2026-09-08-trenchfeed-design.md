@@ -209,3 +209,59 @@ effect immediately (in-memory set).
 - `npm run dev` runs both (backend on 3210 with tsx watch, Vite on 5173
   proxying `/api` and `/ws`).
 - `npm run build && npm start` serves the built frontend from the backend.
+
+---
+
+# Addendum 2026-09-08 (evening): v1.1 — feed order, avatars, bots, tokens
+
+Approved by the user after v1 ran against real accounts.
+
+## Changes
+
+1. **Newest on top.** Feed renders newest first, pinned to the top unless the
+   user scrolls down (then a "↑ latest" button).
+2. **Avatars.** Discord: CDN URL built from the gateway payload (guild avatar
+   > user avatar > default). Telegram: backend downloads the sender's profile
+   photo through the session on demand (`GET /api/telegram/avatar/:id`), caches
+   it in memory (cap 500), serves it locally.
+3. **Bot messages hidden but parsed.** `FeedMessage.isBot` set from Discord
+   `author.bot` / Telegram `sender.bot`. Frontend hides bot rows by default
+   ("show bots" toggle). The hub still reads them for token metadata.
+4. **First-time contracts + call counter.** The hub keeps a `TokenInfo` map
+   keyed by address. First mention: `seen=1`, message shown. Later mentions:
+   `seen++`, message flagged `repeat=true` and hidden by default ("show
+   repeats" toggle). Every token change is broadcast as a `token` event; the
+   card shows "called Nx".
+5. **Token metadata from Rick + Dexscreener.** Links are extracted from every
+   message that carries a contract: Discord markdown `[label](url)` and
+   Telegram `MessageEntityTextUrl` entities. Classified by domain:
+   x.com/twitter.com → twitter; plain t.me/<name> (no `?start=`, not a bot) →
+   telegram; everything not on the aggregator/explorer/bot list → website.
+   Rick's header line gives name + symbol. Dexscreener
+   (`api.dexscreener.com/latest/dex/tokens/{addr}`, best pair by liquidity)
+   fills price, market cap, liquidity, 24h change, image, chart URL, and
+   socials only where Rick had none. Fetched once per address; failures leave
+   the card bare.
+6. **Logos.** Discord and Telegram inline SVG replace the DC/TG badges.
+
+## New/changed types
+
+```ts
+interface FeedMessage { ...; avatar?: string; isBot: boolean; repeat: boolean }
+interface TokenInfo {
+  chain: 'sol' | 'evm'; address: string; seen: number; firstSeenTs: number;
+  name?: string; symbol?: string; priceUsd?: number; marketCap?: number;
+  liquidity?: number; change24h?: number; imageUrl?: string; chartUrl?: string;
+  website?: string; twitter?: string; telegram?: string;
+}
+type ServerEvent = ... | { type: 'token'; token: TokenInfo }
+hello adds `tokens: TokenInfo[]`
+```
+
+## New files
+
+```
+backend/src/links.ts            extractLinks(text, entityLinks) -> {website?, twitter?, telegram?, name?, symbol?}
+backend/src/dexscreener.ts      fetchToken(address) -> Partial<TokenInfo>
+frontend/src/components/TokenCard.tsx, Logo.tsx, Avatar.tsx
+```
