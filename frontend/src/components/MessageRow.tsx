@@ -116,7 +116,7 @@ export function MessageRow({
         )}
         {m.text && (
           <div className="row-text">
-            <RichText text={m.text} />
+            <RichText text={m.text} contracts={m.contracts.map((c) => c.address)} />
             {m.hasAttachment && !m.media?.length && (
               <span className="attach" title="has attachment">
                 {' '}
