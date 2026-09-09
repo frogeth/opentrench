@@ -8,7 +8,8 @@
   "scripts": {
     "start": "electron .",
     "prepare-backend": "node scripts/prepare-backend.js",
-    "dist": "npm run prepare-backend && electron-builder --mac dmg --publish never"
+    "dist": "npm run prepare-backend && electron-builder --mac dmg --publish never",
+    "dist:win": "npm run prepare-backend && electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {
     "electron": "^33.2.1",
@@ -41,7 +42,22 @@
       ],
       "darkModeSupport": true
     },
-    "electronVersion": "33.4.11"
+    "electronVersion": "33.4.11",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    }
   },
   "dependencies": {
     "app-builder-bin": "^4.2.0"

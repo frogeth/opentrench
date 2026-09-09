@@ -102,7 +102,12 @@ Telegram login), **Feed** (favorite callers & pings, blacklist), **Trading**
 ```bash
 npm run desktop        # build, then open opentrench as an Electron window
 npm run desktop:dist   # build a .dmg into electron/dist/
+npm run dist:win -w electron   # Windows installer (.exe), built from macOS
 ```
+
+Windows builds are unsigned too: SmartScreen shows "Windows protected your
+PC" on first run → More info → Run anyway. Each user connects their own
+Discord and Telegram accounts on first launch.
 
 The desktop app runs the same backend with Electron's bundled Node and keeps
 `config.json` / `state.json` in `~/Library/Application Support/opentrench` (an existing trenchfeed folder is adopted once).
