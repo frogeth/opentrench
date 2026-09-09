@@ -426,3 +426,8 @@ b { font-weight: 600; }
 /* ---------- desktop (Electron) chrome ---------- */
 .electron .top { padding-left: 84px; -webkit-app-region: drag; }
 .electron .top input, .electron .top button { -webkit-app-region: no-drag; }
+
+/* ---------- favorite crown ---------- */
+.avatar-wrap { position: relative; display: inline-block; flex: none; line-height: 0; }
+.crown { position: absolute; top: -9px; left: 50%; transform: translateX(-50%) rotate(-12deg); line-height: 1; pointer-events: none; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6)); }
+.row-fav .author { color: var(--warn); }
