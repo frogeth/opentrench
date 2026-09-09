@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import type { Contract, TokenInfo } from '../types';
-import { copyText, money, netLabel, shortAddr } from '../format';
+import { copyText, money, shortAddr } from '../format';
 import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
+import { ChainBadge } from './ChainBadge';
 
 /** Compact token strip shown under a chat message. */
 export function TokenChip({ c, t, onSelect }: { c: Contract; t?: TokenInfo; onSelect?: (address: string) => void }) {
@@ -24,7 +25,7 @@ export function TokenChip({ c, t, onSelect }: { c: Contract; t?: TokenInfo; onSe
         <span className="chip-addr" onClick={copy} title="click to copy">
           {copied ? 'copied' : shortAddr(c.address)}
         </span>
-        <span className={`net net-${t?.network ?? c.chain}`}>{netLabel(t?.network, c.chain)}</span>
+        <ChainBadge network={t?.network} chain={c.chain} size={11} />
         {hasPrice && money(t?.marketCap) && <span className="muted">MC {money(t?.marketCap)}</span>}
         {hasPrice && t?.change24h !== undefined && (
           <span className={t.change24h >= 0 ? 'up' : 'down'}>

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import type { TokenInfo } from '../types';
-import { copyText, isFavorite, money, netLabel, price, shortAddr, telegramShareUrl, timeAgo } from '../format';
+import { copyText, isFavorite, money, price, shortAddr, telegramShareUrl, timeAgo } from '../format';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 import { Icon } from './Icon';
 import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
 import { AuthorMenu } from './AuthorMenu';
+import { ChainBadge } from './ChainBadge';
 
 export function CallCard({
   t,
@@ -22,7 +23,6 @@ export function CallCard({
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const hasPrice = t.priceUsd !== undefined;
-  const label = netLabel(t.network, t.chain);
   const copy = async () => {
     await copyText(t.address);
     setCopied(true);
@@ -78,9 +78,11 @@ export function CallCard({
           {t.imageUrl ? (
             <img className="call-img" src={t.imageUrl} alt="" loading="lazy" />
           ) : (
-            <div className="call-img call-img-fallback">{label}</div>
+            <div className="call-img call-img-fallback">
+              <ChainBadge network={t.network} chain={t.chain} size={28} className="net-plain" />
+            </div>
           )}
-          <span className={`net net-badge net-${t.network ?? t.chain}`}>{label}</span>
+          <ChainBadge network={t.network} chain={t.chain} size={12} className="net-badge" />
         </div>
         <div className="call-info">
           <div className="call-head">
