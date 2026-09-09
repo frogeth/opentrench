@@ -1,4 +1,4 @@
-# trenchfeed
+# opentrench
 
 One live feed for your Discord channels and Telegram chats, with contract
 addresses highlighted and copyable. Runs entirely on your machine.
@@ -100,12 +100,12 @@ Telegram login), **Feed** (favorite callers & pings, blacklist), **Trading**
 ## Desktop app (macOS)
 
 ```bash
-npm run desktop        # build, then open trenchfeed as an Electron window
+npm run desktop        # build, then open opentrench as an Electron window
 npm run desktop:dist   # build a .dmg into electron/dist/
 ```
 
 The desktop app runs the same backend with Electron's bundled Node and keeps
-`config.json` / `state.json` in `~/Library/Application Support/trenchfeed`.
+`config.json` / `state.json` in `~/Library/Application Support/opentrench` (an existing trenchfeed folder is adopted once).
 First run from the repo copies the dev checkout's files there. If a server is
 already listening on 3210 the app attaches to it instead of starting another.
 External links open in your default browser. The build is unsigned: on first

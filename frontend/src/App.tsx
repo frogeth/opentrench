@@ -346,7 +346,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="top">
-        <div className="brand">trenchfeed</div>
+        <div className="brand">opentrench</div>
         <input
           className="search"
           placeholder="Search tokens, CA, callers, chats…"

@@ -1,4 +1,4 @@
-// trenchfeed desktop: runs the backend with Electron's bundled Node and opens a window on it.
+// opentrench desktop: runs the backend with Electron's bundled Node and opens a window on it.
 const { app, BrowserWindow, shell, nativeTheme } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
@@ -20,8 +20,15 @@ function paths() {
 
 /** First run from the repo: adopt the dev checkout's config/state so no re-login is needed. */
 function adoptDevFiles(p) {
-  if (p.packaged) return;
   fs.mkdirSync(p.data, { recursive: true });
+  // Renamed from trenchfeed: adopt the old app-data folder once.
+  const old = path.join(path.dirname(p.data), 'trenchfeed');
+  for (const f of ['config.json', 'state.json']) {
+    const to = path.join(p.data, f);
+    const from = path.join(old, f);
+    if (!fs.existsSync(to) && fs.existsSync(from)) fs.copyFileSync(from, to);
+  }
+  if (p.packaged) return;
   for (const [from, to] of [
     [path.join(p.backendDir, 'config.json'), p.config],
     [path.join(p.backendDir, 'state.json'), p.state],
@@ -89,7 +96,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 600,
     backgroundColor: '#0a0c0f',
-    title: 'trenchfeed',
+    title: 'opentrench',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 14 },
     webPreferences: { contextIsolation: true, sandbox: true },

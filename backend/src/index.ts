@@ -68,7 +68,7 @@ const server = http.createServer(app);
 attachWs(server, hub);
 
 server.listen(PORT, HOST, () => {
-  console.log(`trenchfeed listening on http://${HOST}:${PORT}`);
+  console.log(`opentrench listening on http://${HOST}:${PORT}`);
   svc.startDiscord();
   void svc.startTelegram();
 });

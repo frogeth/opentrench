@@ -1,6 +1,6 @@
 {
-  "name": "trenchfeed-desktop",
-  "productName": "trenchfeed",
+  "name": "opentrench-desktop",
+  "productName": "opentrench",
   "version": "0.1.0",
   "private": true,
   "description": "Discord + Telegram alpha feed with contract calls",
@@ -15,8 +15,8 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "xyz.trenchfeed.desktop",
-    "productName": "trenchfeed",
+    "appId": "xyz.opentrench.desktop",
+    "productName": "opentrench",
     "directories": {
       "output": "dist"
     },
