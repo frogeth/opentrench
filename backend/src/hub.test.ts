@@ -146,6 +146,31 @@ describe('MessageHub', () => {
     }
   });
 
+  it('records the first caller and builds Cove links once the chain is known', async () => {
+    const hub = new MessageHub(500, async () => ({ network: 'base', priceUsd: 1 }), {
+      cove: () => ({ amounts: [50], affiliateId: '7' }),
+    });
+    hub.push(msg(1, `${SOL} ${EVM}`, { author: 'caller', chatName: '#alpha', avatar: 'a.png' }));
+    let [sol, evm] = hub.hello().tokens;
+    expect(sol.firstCaller).toMatchObject({ author: 'caller', chatName: '#alpha', avatar: 'a.png', msgId: 'discord:1' });
+    expect(sol.buy?.amounts[0]).toMatchObject({ usd: 50 });
+    expect(sol.buy?.amounts[0].url).toMatch(/start=g_50s[0-9A-Za-z]{43}[0-9A-Za-z]{14}$/);
+    expect(evm.buy).toBeUndefined();
+    await new Promise((r) => setTimeout(r, 0));
+    [sol, evm] = hub.hello().tokens;
+    expect(evm.buy?.panel).toMatch(/start=b_b[0-9A-Za-z]{27}[0-9A-Za-z]{14}$/);
+  });
+
+  it('recomputes buy links when Cove settings change', () => {
+    let amounts = [25];
+    const hub = new MessageHub(500, undefined, { cove: () => ({ amounts }) });
+    hub.push(msg(1, SOL));
+    expect(hub.hello().tokens[0].buy?.amounts.map((a) => a.usd)).toEqual([25]);
+    amounts = [10, 500];
+    hub.recomputeBuyLinks();
+    expect(hub.hello().tokens[0].buy?.amounts.map((a) => a.usd)).toEqual([10, 500]);
+  });
+
   it('survives a failing fetcher', async () => {
     const hub = new MessageHub(500, async () => {
       throw new Error('boom');

@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { detectContracts } from './contracts.js';
 import type { TokenFetcher } from './enrich.js';
+import { buildCoveLinks, type CoveOptions } from './cove.js';
 import type { ExtractedMeta } from './links.js';
 import type {
   DiscordState,
@@ -27,14 +28,29 @@ export class MessageHub extends EventEmitter {
   private status: Status = { discord: 'disconnected', telegram: 'disconnected', loginStep: 'idle', error: {} };
 
   private retryDelays: number[];
+  private cove: () => CoveOptions;
 
   constructor(
     private cap = 500,
     private fetcher?: TokenFetcher,
-    opts: { retryDelaysMs?: number[] } = {},
+    opts: { retryDelaysMs?: number[]; cove?: () => CoveOptions } = {},
   ) {
     super();
     this.retryDelays = opts.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
+    this.cove = opts.cove ?? (() => ({ amounts: [25, 50, 100] }));
+  }
+
+  /** Rebuild every token's buy links (after the Cove settings change). */
+  recomputeBuyLinks(): void {
+    for (const t of this.tokens.values()) {
+      this.applyBuy(t);
+      this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
+    }
+  }
+
+  private applyBuy(t: TokenInfo): void {
+    const network = t.network ?? (t.chain === 'sol' ? 'solana' : undefined);
+    t.buy = buildCoveLinks(network, t.address, this.cove());
   }
 
   push(msg: FeedMessage, meta?: ExtractedMeta): void {
@@ -43,7 +59,23 @@ export class MessageHub extends EventEmitter {
     for (const c of msg.contracts) {
       let t = this.tokens.get(c.address);
       if (!t) {
-        t = { chain: c.chain, address: c.address, seen: 0, calledIn: [], firstSeenTs: msg.ts };
+        t = {
+          chain: c.chain,
+          address: c.address,
+          seen: 0,
+          calledIn: [],
+          firstSeenTs: msg.ts,
+          firstCaller: {
+            author: msg.author,
+            avatar: msg.avatar,
+            chatName: msg.chatName,
+            source: msg.source,
+            msgId: msg.id,
+            link: msg.link,
+            ts: msg.ts,
+          },
+        };
+        this.applyBuy(t);
         this.tokens.set(c.address, t);
         this.tokenChats.set(c.address, new Set());
         if (this.tokens.size > MAX_TOKENS) {
@@ -105,6 +137,7 @@ export class MessageHub extends EventEmitter {
         if (info) {
           for (const k of DATA_KEYS) if (info[k] !== undefined) (live as any)[k] = info[k];
           for (const k of META_KEYS) if (info[k] && !live[k]) live[k] = info[k];
+          this.applyBuy(live);
           this.emit('event', { type: 'token', token: { ...live } } satisfies ServerEvent);
         }
         if (live.priceUsd === undefined && attempt < this.retryDelays.length) {

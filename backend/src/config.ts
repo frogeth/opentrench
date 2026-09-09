@@ -4,9 +4,10 @@ import path from 'node:path';
 export interface Config {
   discord: { token?: string; watch: string[] };
   telegram: { apiId?: number; apiHash?: string; session?: string; watch: string[] };
+  cove: { affiliateId?: string; amounts: number[] };
 }
 
-const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] } };
+const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] } };
 
 export class ConfigStore {
   private cfg: Config;
@@ -34,6 +35,7 @@ export class ConfigStore {
         hasSession: !!this.cfg.telegram.session,
         watch: this.cfg.telegram.watch,
       },
+      cove: { affiliateId: this.cfg.cove.affiliateId ?? '', amounts: this.cfg.cove.amounts },
     };
   }
 
@@ -43,6 +45,7 @@ export class ConfigStore {
       return {
         discord: { ...DEFAULT.discord, ...raw.discord },
         telegram: { ...DEFAULT.telegram, ...raw.telegram },
+        cove: { ...DEFAULT.cove, ...raw.cove },
       };
     } catch {
       return structuredClone(DEFAULT);

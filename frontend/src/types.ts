@@ -23,9 +23,26 @@ export interface FeedMessage {
   hasAttachment: boolean;
 }
 
+export interface BuyLinks {
+  amounts: { usd: number; url: string }[];
+  panel: string;
+}
+
+export interface FirstCaller {
+  author: string;
+  avatar?: string;
+  chatName: string;
+  source: Source;
+  msgId: string;
+  link?: string;
+  ts: number;
+}
+
 export interface TokenInfo {
   chain: Chain;
   address: string;
+  firstCaller?: FirstCaller;
+  buy?: BuyLinks;
   /** number of distinct chats that have posted this contract */
   seen: number;
   /** names of those chats, in order of first post */

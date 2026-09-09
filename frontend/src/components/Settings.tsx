@@ -16,6 +16,7 @@ export function Settings({ status, onClose }: { status: Status; onClose: () => v
       </button>
       {cfg && <DiscordSection cfg={cfg} status={status} onChange={reload} />}
       {cfg && <TelegramSection cfg={cfg} status={status} onChange={reload} />}
+      {cfg && <CoveSection cfg={cfg} onChange={reload} />}
     </aside>
   );
 }
@@ -239,6 +240,39 @@ function TelegramSection({ cfg, status, onChange }: { cfg: MaskedConfig; status:
           </button>
         </>
       )}
+    </section>
+  );
+}
+
+function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
+  const [affiliate, setAffiliate] = useState(cfg.cove.affiliateId);
+  const [amounts, setAmounts] = useState(cfg.cove.amounts.join(', '));
+  const { busy, err, run } = useAsync();
+  return (
+    <section>
+      <h2>Buy buttons (Cove)</h2>
+      <div className="hint">
+        One-click buys open t.me/cove_trading_bot with the token and amount prefilled. Optional affiliate
+        Telegram ID for referral credit.
+      </div>
+      <input placeholder="affiliate telegram id (optional)" value={affiliate} onChange={(e) => setAffiliate(e.target.value)} />
+      <input placeholder="amounts in USD, e.g. 25, 50, 100" value={amounts} onChange={(e) => setAmounts(e.target.value)} />
+      <button
+        disabled={busy}
+        onClick={() =>
+          run(async () => {
+            const list = amounts
+              .split(/[,\s]+/)
+              .map(Number)
+              .filter((n) => Number.isFinite(n) && n > 0);
+            await api.setCove(affiliate.trim(), list);
+            onChange();
+          })
+        }
+      >
+        Save
+      </button>
+      {err && <div className="err">{err}</div>}
     </section>
   );
 }

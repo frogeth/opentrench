@@ -1,11 +1,8 @@
 import type { FeedMessage, TokenInfo } from '../types';
+import { fmtTime } from '../format';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
-import { TokenCard } from './TokenCard';
-
-function fmtTime(ts: number) {
-  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
+import { TokenChip } from './TokenChip';
 
 export function MessageRow({ m, tokens }: { m: FeedMessage; tokens: Record<string, TokenInfo> }) {
   return (
@@ -13,8 +10,6 @@ export function MessageRow({ m, tokens }: { m: FeedMessage; tokens: Record<strin
       <Avatar src={m.avatar} name={m.author} />
       <div className="row-main">
         <div className="row-meta">
-          <Logo source={m.source} />
-          <span className="chat">{m.chatName}</span>
           <span className="author">{m.author}</span>
           {m.isBot && <span className="bot-tag">bot</span>}
           <span className="time">
@@ -25,6 +20,9 @@ export function MessageRow({ m, tokens }: { m: FeedMessage; tokens: Record<strin
             ) : (
               fmtTime(m.ts)
             )}
+          </span>
+          <span className="chat-tag">
+            <Logo source={m.source} size={11} /> {m.chatName}
           </span>
         </div>
         <div className="row-text">
@@ -39,7 +37,7 @@ export function MessageRow({ m, tokens }: { m: FeedMessage; tokens: Record<strin
         {m.contracts.length > 0 && (
           <div className="row-contracts">
             {m.contracts.map((c) => (
-              <TokenCard key={c.chain + c.address} c={c} t={tokens[c.address]} />
+              <TokenChip key={c.chain + c.address} c={c} t={tokens[c.address]} />
             ))}
           </div>
         )}

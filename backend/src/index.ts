@@ -16,7 +16,7 @@ const PORT = Number(process.env.PORT ?? 3210);
 const HOST = '127.0.0.1';
 
 const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'config.json'));
-const hub = new MessageHub(500, defaultEnricher);
+const hub = new MessageHub(500, defaultEnricher, { cove: () => cfg.get().cove });
 const svc = new Services(cfg, hub);
 
 const app = express();

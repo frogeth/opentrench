@@ -24,6 +24,12 @@ npm run dev
 
 ## What the feed does
 
+Three columns, like a trading dashboard: **Calls** (one card per contract,
+newest first, with who called it first), **Chats** (the merged message
+stream), and **Callers** (only messages from people who have posted a CA).
+The tab row filters everything to one chat; the search box matches text,
+authors, chats, tickers and addresses across all columns.
+
 - Newest on top. Discord and Telegram merged, with each platform's logo and the
   poster's avatar.
 - Every contract address becomes a card: ticker, name, chain, price, market
@@ -37,8 +43,12 @@ npm run dev
 - "called N×" counts how many different chats have posted a contract since
   the server started (hover to see which). Repeats inside the same chat don't
   count.
+- **Buy buttons** open Cove (t.me/cove_trading_bot) with the token and a USD
+  amount prefilled, same deep-link format frogr uses. Amounts and an optional
+  affiliate Telegram ID live in Settings → Buy buttons. Supported chains:
+  Ethereum, Base, BNB, Robinhood Chain, MegaETH, Solana.
 - Bot posts and repeat posts (a contract already posted in that same chat) are
-  hidden by default. Toggles in the feed bar bring them back. Filter matches text, author, chat, ticker and name.
+  hidden by default. Toggles in the Chats column bring them back. Filter matches text, author, chat, ticker and name.
 
 ## Setup (in the browser, ⚙ top right)
 

@@ -19,6 +19,21 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services): Rou
     };
 
   r.get('/status', wrap(() => hub.getStatus()));
+  r.put(
+    '/cove',
+    wrap((req) => {
+      const affiliateId = String(req.body?.affiliateId ?? '').trim();
+      const amounts = (Array.isArray(req.body?.amounts) ? req.body.amounts : [])
+        .map(Number)
+        .filter((n: number) => Number.isFinite(n) && n > 0 && n <= 9999)
+        .slice(0, 5);
+      cfg.update((c) => {
+        c.cove.affiliateId = affiliateId || undefined;
+        c.cove.amounts = amounts.length ? amounts : [25, 50, 100];
+      });
+      hub.recomputeBuyLinks();
+    }),
+  );
   r.get('/config', wrap(() => cfg.masked()));
 
   r.put(
