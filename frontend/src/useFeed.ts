@@ -34,6 +34,8 @@ export function useFeed() {
           setMessages((m) => [ev.msg, ...m].slice(0, MAX));
         } else if (ev.type === 'token') {
           setTokens((t) => ({ ...t, [ev.token.address]: ev.token }));
+        } else if (ev.type === 'reactions') {
+          setMessages((m) => m.map((x) => (x.id === ev.msgId ? { ...x, reactions: ev.reactions } : x)));
         } else if (ev.type === 'status') setStatus(ev.status);
       };
       ws.onclose = () => {

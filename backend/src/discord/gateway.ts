@@ -27,7 +27,8 @@ const defaultFactory: WsFactory = (url) =>
 
 /**
  * Raw Discord gateway client for a user token.
- * Events: 'state' (DiscordState, error?), 'channels' (DiscordChannel[]), 'message' (raw MESSAGE_CREATE d).
+ * Events: 'state' (DiscordState, error?), 'channels' (DiscordChannel[]), 'message' (raw MESSAGE_CREATE d),
+ * 'reaction' (raw MESSAGE_REACTION_ADD/REMOVE d, delta ±1).
  */
 export class DiscordGateway extends EventEmitter {
   private ws?: WsLike;
@@ -144,6 +145,12 @@ export class DiscordGateway extends EventEmitter {
         break;
       case 'MESSAGE_CREATE':
         this.emit('message', d);
+        break;
+      case 'MESSAGE_REACTION_ADD':
+        this.emit('reaction', d, 1);
+        break;
+      case 'MESSAGE_REACTION_REMOVE':
+        this.emit('reaction', d, -1);
         break;
     }
   }

@@ -171,6 +171,27 @@ describe('MessageHub', () => {
     expect(hub.hello().tokens[0].buy?.amounts.map((a) => a.usd)).toEqual([10, 500]);
   });
 
+  it('tracks reactions by delta and by replacement, ignoring unknown messages', () => {
+    const hub = new MessageHub();
+    const events: ServerEvent[] = [];
+    hub.on('event', (e) => events.push(e));
+    hub.push(msg(1));
+    hub.applyReactionDelta('discord:1', { key: '🔥', name: '🔥' }, 1);
+    hub.applyReactionDelta('discord:1', { key: '🔥', name: '🔥' }, 1);
+    hub.applyReactionDelta('discord:1', { key: 'custom:9', name: 'pepe', imageUrl: 'u' }, 1);
+    hub.applyReactionDelta('discord:1', { key: '🔥', name: '🔥' }, -1);
+    hub.applyReactionDelta('discord:nope', { key: '🔥', name: '🔥' }, 1);
+    expect(hub.hello().messages[0].reactions).toEqual([
+      { key: '🔥', name: '🔥', count: 1 },
+      { key: 'custom:9', name: 'pepe', imageUrl: 'u', count: 1 },
+    ]);
+    hub.applyReactionDelta('discord:1', { key: '🔥', name: '🔥' }, -1);
+    expect(hub.hello().messages[0].reactions).toEqual([{ key: 'custom:9', name: 'pepe', imageUrl: 'u', count: 1 }]);
+    hub.setReactions('discord:1', [{ key: '👍', name: '👍', count: 3 }, { key: '❤', name: '❤', count: 0 }]);
+    expect(hub.hello().messages[0].reactions).toEqual([{ key: '👍', name: '👍', count: 3 }]);
+    expect(events.filter((e) => e.type === 'reactions')).toHaveLength(6);
+  });
+
   it('survives a failing fetcher', async () => {
     const hub = new MessageHub(500, async () => {
       throw new Error('boom');

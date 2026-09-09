@@ -1,4 +1,4 @@
-import type { FeedMessage } from '../types.js';
+import type { FeedMessage, Reaction, ReplyContext } from '../types.js';
 
 export interface TelegramPlain {
   id: number;
@@ -11,6 +11,21 @@ export interface TelegramPlain {
   text: string;
   date: number; // unix seconds
   hasMedia: boolean;
+  replyTo?: ReplyContext;
+  reactions?: Reaction[];
+}
+
+/** Map Telegram MessageReactions.results to our shape. Custom emoji have no cheap image; show a star. */
+export function mapTelegramReactions(results: any[] | undefined): Reaction[] {
+  const out: Reaction[] = [];
+  for (const r of results ?? []) {
+    const count = Number(r?.count ?? 0);
+    if (!count) continue;
+    const re = r.reaction;
+    if (re?.emoticon) out.push({ key: String(re.emoticon), name: String(re.emoticon), count });
+    else if (re?.documentId !== undefined) out.push({ key: `custom:${String(re.documentId)}`, name: '★', count });
+  }
+  return out;
 }
 
 export function normalizeTelegram(p: TelegramPlain): FeedMessage {
@@ -28,5 +43,7 @@ export function normalizeTelegram(p: TelegramPlain): FeedMessage {
     repeat: false,
     link: p.chatUsername ? `https://t.me/${p.chatUsername}/${p.id}` : undefined,
     hasAttachment: p.hasMedia,
+    replyTo: p.replyTo,
+    reactions: p.reactions,
   };
 }

@@ -1,4 +1,4 @@
-import type { FeedMessage } from '../types.js';
+import type { FeedMessage, Reaction, ReplyContext } from '../types.js';
 
 export interface DiscordChannelInfo {
   name: string;
@@ -19,6 +19,30 @@ function avatarUrl(d: any): string | undefined {
   }
 }
 
+function authorName(a: any, member?: any): string {
+  return member?.nick ?? a?.global_name ?? a?.username ?? 'unknown';
+}
+
+function replyContext(d: any): ReplyContext | undefined {
+  const r = d.referenced_message;
+  if (!r) return undefined;
+  const text = String(r.content ?? '').trim() || (r.attachments?.length ? '📎 attachment' : r.embeds?.length ? '(embed)' : '');
+  return { author: authorName(r.author, r.member), text };
+}
+
+/** Map a gateway emoji object to our reaction identity (no count). */
+export function discordReaction(emoji: any): Omit<Reaction, 'count'> {
+  if (emoji?.id) {
+    return {
+      key: `custom:${emoji.id}`,
+      name: String(emoji.name ?? 'emoji'),
+      imageUrl: `${CDN}/emojis/${emoji.id}.${emoji.animated ? 'gif' : 'png'}?size=32`,
+    };
+  }
+  const name = String(emoji?.name ?? '?');
+  return { key: name, name };
+}
+
 export function normalizeDiscord(d: any, ch: DiscordChannelInfo): FeedMessage {
   const parts: string[] = [d.content ?? ''];
   for (const e of d.embeds ?? []) {
@@ -31,7 +55,7 @@ export function normalizeDiscord(d: any, ch: DiscordChannelInfo): FeedMessage {
     source: 'discord',
     chatId: String(d.channel_id),
     chatName: `#${ch.name} (${ch.guildName})`,
-    author: d.member?.nick ?? d.author?.global_name ?? d.author?.username ?? 'unknown',
+    author: authorName(d.author, d.member),
     avatar: avatarUrl(d),
     isBot: !!d.author?.bot,
     text: parts.filter(Boolean).join('\n'),
@@ -40,5 +64,6 @@ export function normalizeDiscord(d: any, ch: DiscordChannelInfo): FeedMessage {
     repeat: false,
     link: d.guild_id ? `https://discord.com/channels/${d.guild_id}/${d.channel_id}/${d.id}` : undefined,
     hasAttachment: (d.attachments?.length ?? 0) > 0,
+    replyTo: replyContext(d),
   };
 }

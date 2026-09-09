@@ -103,6 +103,22 @@ describe('DiscordGateway', () => {
     expect(msgs).toEqual([{ id: 'm1', channel_id: 'c1', content: 'x' }]);
   });
 
+  it('emits reaction add/remove with a delta', () => {
+    const { gw, sockets } = setup();
+    const seen: any[] = [];
+    gw.on('reaction', (d, delta) => seen.push([d.message_id, d.emoji.name, delta]));
+    gw.connect();
+    const ws = sockets[0];
+    ws.fire('open');
+    ws.recv({ op: 10, d: { heartbeat_interval: 1000 } });
+    ws.recv({ op: 0, t: 'MESSAGE_REACTION_ADD', s: 2, d: { message_id: 'm1', channel_id: 'c1', emoji: { id: null, name: '🔥' } } });
+    ws.recv({ op: 0, t: 'MESSAGE_REACTION_REMOVE', s: 3, d: { message_id: 'm1', channel_id: 'c1', emoji: { id: null, name: '🔥' } } });
+    expect(seen).toEqual([
+      ['m1', '🔥', 1],
+      ['m1', '🔥', -1],
+    ]);
+  });
+
   it('reconnects with RESUME after a non-fatal close', () => {
     const { gw, sockets } = setup();
     gw.connect();

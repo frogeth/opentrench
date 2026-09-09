@@ -2,9 +2,11 @@ import { EventEmitter } from 'node:events';
 import bigInt from 'big-integer';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
-import { NewMessage, type NewMessageEvent } from 'telegram/events/index.js';
+import { NewMessage, Raw, type NewMessageEvent } from 'telegram/events/index.js';
+import { Api } from 'telegram/tl/index.js';
+import { getPeerId } from 'telegram/Utils.js';
 import type { FeedMessage, LoginStep, TelegramState } from '../types.js';
-import { normalizeTelegram, type TelegramPlain } from './normalize.js';
+import { mapTelegramReactions, normalizeTelegram, type TelegramPlain } from './normalize.js';
 import { extractLinks, type ExtractedMeta, type LinkIn } from '../links.js';
 
 export interface TelegramDialog {
@@ -53,7 +55,7 @@ function entityLinks(text: string, entities: any[] | undefined): LinkIn[] {
 
 /**
  * Events: 'state' (TelegramState, error?), 'step' (LoginStep), 'session' (string|undefined),
- * 'message' (FeedMessage, ExtractedMeta).
+ * 'message' (FeedMessage, ExtractedMeta), 'reactions' (msgId, Reaction[]).
  */
 export class TelegramWrapper extends EventEmitter {
   private client?: TelegramClient;
@@ -194,6 +196,14 @@ export class TelegramWrapper extends EventEmitter {
     client.addEventHandler((ev: NewMessageEvent) => {
       void this.onNewMessage(ev);
     }, new NewMessage({}));
+    client.addEventHandler((u: Api.UpdateMessageReactions) => {
+      try {
+        const peer = getPeerId(u.peer);
+        this.emit('reactions', `telegram:${peer}:${u.msgId}`, mapTelegramReactions((u.reactions as any)?.results));
+      } catch (e) {
+        console.warn('[telegram] reaction update dropped', e);
+      }
+    }, new Raw({ types: [Api.UpdateMessageReactions] }));
     this.healthTimer = setInterval(() => void this.healthCheck(), HEALTH_INTERVAL_MS);
     this.setState('connected');
   }
@@ -210,6 +220,17 @@ export class TelegramWrapper extends EventEmitter {
         : [sender?.firstName, sender?.lastName].filter(Boolean).join(' ') || sender?.title || chat?.title || 'unknown';
       const text = m.message ?? '';
       const senderId = m.senderId ? String(m.senderId) : undefined;
+      let replyTo: TelegramPlain['replyTo'];
+      if (m.replyTo) {
+        const r: any = await m.getReplyMessage().catch(() => undefined);
+        if (r) {
+          const rs: any = await r.getSender?.().catch(() => null);
+          const rName = rs?.username
+            ? `@${rs.username}`
+            : [rs?.firstName, rs?.lastName].filter(Boolean).join(' ') || rs?.title || 'unknown';
+          replyTo = { author: rName, text: String(r.message ?? '').trim() || (r.media ? '📎 media' : '') };
+        }
+      }
       const plain: TelegramPlain = {
         id: m.id,
         chatId,
@@ -221,6 +242,8 @@ export class TelegramWrapper extends EventEmitter {
         text,
         date: m.date,
         hasMedia: !!m.media,
+        replyTo,
+        reactions: mapTelegramReactions((m.reactions as any)?.results),
       };
       const meta: ExtractedMeta = extractLinks(text, entityLinks(text, m.entities as any[] | undefined));
       this.emit('message', normalizeTelegram(plain) satisfies FeedMessage, meta);

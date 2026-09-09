@@ -25,6 +25,11 @@ export function MessageRow({ m, tokens }: { m: FeedMessage; tokens: Record<strin
             <Logo source={m.source} size={11} /> {m.chatName}
           </span>
         </div>
+        {m.replyTo && (
+          <div className="reply" title={m.replyTo.text}>
+            <span className="reply-arrow">↩</span> <b>{m.replyTo.author}</b> {m.replyTo.text}
+          </div>
+        )}
         <div className="row-text">
           {m.text}
           {m.hasAttachment && (
@@ -34,6 +39,15 @@ export function MessageRow({ m, tokens }: { m: FeedMessage; tokens: Record<strin
             </span>
           )}
         </div>
+        {m.reactions && m.reactions.length > 0 && (
+          <div className="reactions">
+            {m.reactions.map((r) => (
+              <span key={r.key} className="reaction" title={r.name}>
+                {r.imageUrl ? <img src={r.imageUrl} alt={r.name} /> : r.name} <span className="reaction-n">{r.count}</span>
+              </span>
+            ))}
+          </div>
+        )}
         {m.contracts.length > 0 && (
           <div className="row-contracts">
             {m.contracts.map((c) => (

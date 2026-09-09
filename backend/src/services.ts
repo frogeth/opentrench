@@ -1,10 +1,10 @@
 import type { ConfigStore } from './config.js';
 import type { MessageHub } from './hub.js';
 import { DiscordGateway, type DiscordChannel } from './discord/gateway.js';
-import { normalizeDiscord } from './discord/normalize.js';
+import { discordReaction, normalizeDiscord } from './discord/normalize.js';
 import { TelegramWrapper, type TelegramDialog } from './telegram/client.js';
 import { extractLinks, type ExtractedMeta } from './links.js';
-import type { FeedMessage } from './types.js';
+import type { FeedMessage, Reaction } from './types.js';
 
 export class Services {
   discord?: DiscordGateway;
@@ -43,6 +43,10 @@ export class Services {
         console.warn('[discord] dropped message', e);
       }
     });
+    gw.on('reaction', (d, delta: number) => {
+      if (!this.cfg.get().discord.watch.includes(String(d.channel_id))) return;
+      this.hub.applyReactionDelta(`discord:${d.message_id}`, discordReaction(d.emoji), delta);
+    });
     gw.connect();
     this.discord = gw;
   }
@@ -75,6 +79,7 @@ export class Services {
       if (!this.cfg.get().telegram.watch.includes(m.chatId)) return;
       this.hub.push(m, meta);
     });
+    tg.on('reactions', (msgId: string, reactions: Reaction[]) => this.hub.setReactions(msgId, reactions));
     this.telegram = tg;
     await tg.connect();
   }

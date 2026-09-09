@@ -122,6 +122,19 @@ b { font-weight: 600; }
 .bot-tag { font-size: 9px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--line); text-transform: uppercase; }
 .row-text { white-space: pre-wrap; word-break: break-word; margin-top: 2px; font-size: 13px; }
 .row-contracts { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.reply {
+  font-size: 11px; color: var(--muted); margin: 2px 0; padding-left: 8px; border-left: 2px solid var(--line);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.reply b { color: var(--text); }
+.reply-arrow { color: var(--muted); }
+.reactions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 5px; }
+.reaction {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 1px 7px; border-radius: 999px;
+  background: var(--panel-2); border: 1px solid var(--line);
+}
+.reaction img { width: 14px; height: 14px; }
+.reaction-n { color: var(--muted); font-weight: 600; }
 
 .avatar { border-radius: 50%; flex: none; object-fit: cover; background: var(--panel-2); }
 .avatar-fallback { display: flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 700; }

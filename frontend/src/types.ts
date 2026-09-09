@@ -6,6 +6,19 @@ export interface Contract {
   address: string;
 }
 
+export interface Reaction {
+  /** stable id: the emoji itself, or custom:<id> */
+  key: string;
+  name: string;
+  count: number;
+  imageUrl?: string;
+}
+
+export interface ReplyContext {
+  author: string;
+  text: string;
+}
+
 export interface FeedMessage {
   id: string;
   source: Source;
@@ -21,6 +34,8 @@ export interface FeedMessage {
   repeat: boolean;
   link?: string;
   hasAttachment: boolean;
+  replyTo?: ReplyContext;
+  reactions?: Reaction[];
 }
 
 export interface BuyLinks {
@@ -82,4 +97,5 @@ export type ServerEvent =
   | { type: 'hello'; status: Status; messages: FeedMessage[]; tokens: TokenInfo[] }
   | { type: 'message'; msg: FeedMessage }
   | { type: 'token'; token: TokenInfo }
+  | { type: 'reactions'; msgId: string; reactions: Reaction[] }
   | { type: 'status'; status: Status };

@@ -7,6 +7,7 @@ import type {
   DiscordState,
   FeedMessage,
   LoginStep,
+  Reaction,
   ServerEvent,
   Source,
   Status,
@@ -99,6 +100,26 @@ export class MessageHub extends EventEmitter {
     this.buffer.push(msg);
     if (this.buffer.length > this.cap) this.buffer.splice(0, this.buffer.length - this.cap);
     this.emit('event', { type: 'message', msg } satisfies ServerEvent);
+  }
+
+  /** Replace a buffered message's reactions (Telegram sends full counts). */
+  setReactions(msgId: string, reactions: Reaction[]): void {
+    const m = this.buffer.find((x) => x.id === msgId);
+    if (!m) return;
+    m.reactions = reactions.filter((r) => r.count > 0);
+    this.emit('event', { type: 'reactions', msgId, reactions: m.reactions } satisfies ServerEvent);
+  }
+
+  /** Adjust one reaction's count (Discord sends add/remove deltas). */
+  applyReactionDelta(msgId: string, reaction: Omit<Reaction, 'count'>, delta: number): void {
+    const m = this.buffer.find((x) => x.id === msgId);
+    if (!m) return;
+    const list = m.reactions ?? [];
+    const existing = list.find((r) => r.key === reaction.key);
+    if (existing) existing.count += delta;
+    else if (delta > 0) list.push({ ...reaction, count: delta });
+    m.reactions = list.filter((r) => r.count > 0);
+    this.emit('event', { type: 'reactions', msgId, reactions: m.reactions } satisfies ServerEvent);
   }
 
   setStatus(source: 'discord', state: DiscordState, error?: string): void;

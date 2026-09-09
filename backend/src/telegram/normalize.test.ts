@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeTelegram } from './normalize.js';
+import { mapTelegramReactions, normalizeTelegram } from './normalize.js';
 
 describe('normalizeTelegram', () => {
   it('maps plain fields', () => {
@@ -31,6 +31,19 @@ describe('normalizeTelegram', () => {
       link: 'https://t.me/alphagrp/42',
       hasAttachment: true,
     });
+  });
+  it('maps reactions, skipping zero counts', () => {
+    expect(
+      mapTelegramReactions([
+        { reaction: { emoticon: '🔥' }, count: 3 },
+        { reaction: { documentId: '555' }, count: 1 },
+        { reaction: { emoticon: '👍' }, count: 0 },
+      ]),
+    ).toEqual([
+      { key: '🔥', name: '🔥', count: 3 },
+      { key: 'custom:555', name: '★', count: 1 },
+    ]);
+    expect(mapTelegramReactions(undefined)).toEqual([]);
   });
   it('omits link and avatar when unknown', () => {
     const m = normalizeTelegram({

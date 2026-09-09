@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeDiscord } from './normalize.js';
+import { discordReaction, normalizeDiscord } from './normalize.js';
 
 const payload = {
   id: '111',
@@ -52,6 +52,22 @@ describe('normalizeDiscord', () => {
       { name: 'a', guildName: 'g' },
     );
     expect(none.avatar).toBe('https://cdn.discordapp.com/embed/avatars/1.png');
+  });
+  it('carries reply context from referenced_message', () => {
+    const m = normalizeDiscord(
+      { ...payload, referenced_message: { author: { username: 'og', global_name: 'OG' }, content: 'first call' } },
+      { name: 'a', guildName: 'g' },
+    );
+    expect(m.replyTo).toEqual({ author: 'OG', text: 'first call' });
+    expect(normalizeDiscord(payload, { name: 'a', guildName: 'g' }).replyTo).toBeUndefined();
+  });
+  it('maps unicode and custom reactions', () => {
+    expect(discordReaction({ id: null, name: '🔥' })).toEqual({ key: '🔥', name: '🔥' });
+    expect(discordReaction({ id: '42', name: 'pepe', animated: true })).toEqual({
+      key: 'custom:42',
+      name: 'pepe',
+      imageUrl: 'https://cdn.discordapp.com/emojis/42.gif?size=32',
+    });
   });
   it('flags bot authors', () => {
     const m = normalizeDiscord({ ...payload, author: { ...payload.author, bot: true } }, { name: 'a', guildName: 'g' });
