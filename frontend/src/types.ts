@@ -46,6 +46,8 @@ export interface FeedMessage {
   author: string;
   avatar?: string;
   isBot: boolean;
+  /** blacklisted, or a bot the bot policy does not allow; never counts as a call */
+  hidden?: boolean;
   text: string;
   ts: number;
   contracts: Contract[];

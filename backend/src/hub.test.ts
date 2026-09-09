@@ -199,7 +199,7 @@ describe('MessageHub', () => {
     hub.on('event', (e) => events.push(e));
     hub.push(msg(1, EVM, { author: 'Rick', chatId: 'a' }), { website: 'https://rick.example' });
     expect(hub.hello().tokens).toEqual([]);
-    expect((events.at(-1) as any).msg.isBot).toBe(true);
+    expect((events.at(-1) as any).msg.hidden).toBe(true);
     hub.push(msg(2, EVM, { author: 'LanternBot', isBot: true, chatId: 'b' }));
     expect(hub.hello().tokens).toEqual([]);
     hub.push(msg(3, EVM, { author: 'human', chatId: 'c', chatName: '#c' }));
@@ -221,8 +221,33 @@ describe('MessageHub', () => {
     hub.on('event', (e) => events.push(e));
     hub.rebuild();
     expect(hub.hello().tokens[0]).toMatchObject({ seen: 1, calledIn: ['#b'], firstCaller: { author: 'human' }, priceUsd: 2 });
-    expect(hub.hello().messages[0].isBot).toBe(true);
-    expect(events.map((e) => e.type)).toEqual(['tokens']);
+    expect(hub.hello().messages[0].hidden).toBe(true);
+    expect(events.map((e) => e.type)).toEqual(['hello']);
+  });
+
+  it('bot policy: hidden by default, allow-listed bots show and count; "show" default flips it', () => {
+    let policy: BotPolicy = { default: 'hide', allow: ['@AlertsBot'] };
+    let black: string[] = [];
+    const hub = new MessageHub(500, undefined, { bots: () => policy, blacklist: () => black });
+    hub.push(msg(1, EVM, { author: 'Rick', isBot: true, chatId: 'a', chatName: '#a' }));
+    hub.push(msg(2, EVM, { author: 'alertsbot', isBot: true, chatId: 'b', chatName: '#b' }));
+    const [rick, alerts] = hub.hello().messages;
+    expect(rick.hidden).toBe(true);
+    expect(alerts.hidden).toBe(false);
+    expect(hub.hello().tokens[0]).toMatchObject({ seen: 1, calledIn: ['#b'], firstCaller: { author: 'alertsbot' } });
+    expect(hub.bots()).toEqual([
+      { name: 'alertsbot', avatar: undefined, source: 'discord', count: 1, lastTs: 2, chats: ['#b'], hidden: false },
+      { name: 'Rick', avatar: undefined, source: 'discord', count: 1, lastTs: 1, chats: ['#a'], hidden: true },
+    ]);
+    policy = { default: 'show', allow: [] };
+    black = ['rick'];
+    hub.rebuild();
+    expect(hub.hello().messages.map((m) => m.hidden)).toEqual([true, false]);
+    policy = { default: 'show', allow: [] };
+    black = [];
+    hub.rebuild();
+    expect(hub.hello().messages.map((m) => m.hidden)).toEqual([false, false]);
+    expect(hub.hello().tokens[0].seen).toBe(2);
   });
 
   it('round-trips a snapshot', () => {
@@ -234,6 +259,9 @@ describe('MessageHub', () => {
     const hub2 = new MessageHub(500);
     hub2.load(snap);
     expect(hub2.hello().messages).toEqual(hub.hello().messages);
+    const hub3 = new MessageHub(500, undefined, { blacklist: () => ['a'] });
+    hub3.load(snap);
+    expect(hub3.hello().messages.every((m) => m.hidden)).toBe(true);
     expect(hub2.hello().tokens).toEqual(hub.hello().tokens);
     hub2.push(msg(3, EVM, { chatId: 'b' }));
     expect(hub2.hello().messages.at(-1)?.repeat).toBe(true);

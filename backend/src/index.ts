@@ -22,6 +22,7 @@ const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'co
 const hub: MessageHub = new MessageHub(500, createDefaultEnricher({ o1ApiKey: () => cfg.get().o1ApiKey }), {
   cove: (): CoveOptions => ({ amounts: cfg.get().cove.amounts, affiliateId: svc.affiliateId() }),
   blacklist: () => cfg.get().blacklist,
+  bots: () => cfg.get().bots,
   favorites: () => cfg.get().favorites,
 });
 

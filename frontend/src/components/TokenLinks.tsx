@@ -32,7 +32,7 @@ export function TokenLinks({
       )}
       {links.map(([icon, label, url]) =>
         url ? (
-          <a key={icon} className="token-link" href={url} target="_blank" rel="noreferrer" title={label}>
+          <a key={icon} className={`token-link token-link-${icon}`} href={url} target="_blank" rel="noreferrer" title={label}>
             <Icon name={icon} />
           </a>
         ) : null,

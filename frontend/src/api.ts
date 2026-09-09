@@ -9,11 +9,25 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return data as T;
 }
 
+export interface BotPolicy {
+  default: 'hide' | 'show';
+  allow: string[];
+}
+export interface BotSeen {
+  name: string;
+  avatar?: string;
+  source: 'discord' | 'telegram';
+  count: number;
+  lastTs: number;
+  chats: string[];
+  hidden: boolean;
+}
 export interface MaskedConfig {
   discord: { hasToken: boolean; watch: string[] };
   telegram: { apiId: number | null; hasApiHash: boolean; hasSession: boolean; watch: string[] };
   cove: { amounts: number[] };
   blacklist: string[];
+  bots: BotPolicy;
   favorites: string[];
   pingTelegram: boolean;
   hasO1Key: boolean;
@@ -55,6 +69,9 @@ export const api = {
   setCove: (amounts: number[]) => req('PUT', '/cove', { amounts }),
   setBlacklist: (names: string[]) => req('PUT', '/blacklist', { names }),
   blacklistAdd: (name: string) => req('POST', '/blacklist/add', { name }),
+  bots: () => req<BotSeen[]>('GET', '/bots'),
+  setBots: (policy: BotPolicy) => req('PUT', '/bots', policy),
+  botShow: (name: string, show: boolean) => req('POST', '/bots/show', { name, show }),
   favoriteToggle: (name: string) => req<{ favorite: boolean }>('POST', '/favorites/toggle', { name }),
   setFavorites: (names: string[]) => req('PUT', '/favorites', { names }),
   setPings: (telegram: boolean) => req('PUT', '/pings', { telegram }),

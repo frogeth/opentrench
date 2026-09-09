@@ -2,8 +2,26 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { copyText } from '../format';
 
-/** "⋯" next to a name: favorite, copy name, open original, and (behind a confirm) blacklist the caller. */
-export function AuthorMenu({ author, link, favorite = false }: { author: string; link?: string; favorite?: boolean }) {
+/**
+ * "⋯" next to a name. People: favorite, copy, open, and (behind a confirm) blacklist.
+ * Bots: show/hide this bot (the bot policy in settings decides the default).
+ * Anyone hidden: unhide.
+ */
+export function AuthorMenu({
+  author,
+  link,
+  favorite = false,
+  bot = false,
+  hidden = false,
+  onChanged,
+}: {
+  author: string;
+  link?: string;
+  favorite?: boolean;
+  bot?: boolean;
+  hidden?: boolean;
+  onChanged?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
@@ -42,14 +60,34 @@ export function AuthorMenu({ author, link, favorite = false }: { author: string;
       </button>
       {open && (
         <div className="amenu-pop">
-          <button
-            onClick={() => {
-              void api.favoriteToggle(author).catch(() => {});
-              close();
-            }}
-          >
-            {favorite ? '👑 Unfavorite caller' : '👑 Favorite caller (pings on first calls)'}
-          </button>
+          {bot ? (
+            <button
+              onClick={() => {
+                void api.botShow(author, hidden).then(onChanged).catch(() => {});
+                close();
+              }}
+            >
+              {hidden ? '🤖 Show this bot (counts its calls)' : '🤖 Hide this bot'}
+            </button>
+          ) : hidden ? (
+            <button
+              onClick={() => {
+                void api.botShow(author, true).then(onChanged).catch(() => {});
+                close();
+              }}
+            >
+              Unblock caller
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                void api.favoriteToggle(author).then(onChanged).catch(() => {});
+                close();
+              }}
+            >
+              {favorite ? '👑 Unfavorite caller' : '👑 Favorite caller (pings on first calls)'}
+            </button>
+          )}
           <button
             onClick={() => {
               void copyText(author);
@@ -63,7 +101,7 @@ export function AuthorMenu({ author, link, favorite = false }: { author: string;
               Open original
             </a>
           )}
-          {!confirm ? (
+          {bot || hidden ? null : !confirm ? (
             <button className="amenu-danger" onClick={() => setConfirm(true)}>
               Blacklist caller…
             </button>
@@ -73,7 +111,7 @@ export function AuthorMenu({ author, link, favorite = false }: { author: string;
               <button
                 className="amenu-danger"
                 onClick={() => {
-                  void api.blacklistAdd(author).catch(() => {});
+                  void api.blacklistAdd(author).then(onChanged).catch(() => {});
                   close();
                 }}
               >

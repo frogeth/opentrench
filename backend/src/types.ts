@@ -45,7 +45,10 @@ export interface FeedMessage {
   chatName: string;
   author: string;
   avatar?: string;
+  /** the author is a bot user (raw fact from the platform) */
   isBot: boolean;
+  /** set by the hub: blacklisted, or a bot the bot policy does not allow. Hidden posts never count as calls. */
+  hidden?: boolean;
   text: string;
   ts: number;
   contracts: Contract[];
@@ -119,6 +122,23 @@ export interface TokenInfo {
 export type DiscordState = 'disconnected' | 'connecting' | 'connected' | 'auth_error';
 export type TelegramState = 'disconnected' | 'connecting' | 'connected' | 'needs_login' | 'auth_error';
 export type LoginStep = 'idle' | 'code' | 'password' | 'done';
+
+export interface BotPolicy {
+  default: 'hide' | 'show';
+  /** bot names (case-insensitive, leading @ ignored) shown and counted even when the default hides bots */
+  allow: string[];
+}
+
+/** A bot the hub has seen, for the bot manager in settings. */
+export interface BotSeen {
+  name: string;
+  avatar?: string;
+  source: Source;
+  count: number;
+  lastTs: number;
+  chats: string[];
+  hidden: boolean;
+}
 
 export interface Status {
   discord: DiscordState;

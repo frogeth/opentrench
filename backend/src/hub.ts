@@ -4,6 +4,8 @@ import type { TokenFetcher } from './enrich.js';
 import { buildCoveLinks, type CoveOptions } from './cove.js';
 import type { ExtractedMeta } from './links.js';
 import type {
+  BotPolicy,
+  BotSeen,
   DiscordState,
   FeedMessage,
   LoginStep,
@@ -51,6 +53,8 @@ export interface HubOptions {
   retryDelaysMs?: number[];
   cove?: () => CoveOptions;
   blacklist?: () => string[];
+  /** bot policy: hide all bots except `allow`, or show all bots except the blacklist */
+  bots?: () => BotPolicy;
   favorites?: () => string[];
 }
 
@@ -70,6 +74,7 @@ export class MessageHub extends EventEmitter {
   private retryDelays: number[];
   private cove: () => CoveOptions;
   private blacklist: () => string[];
+  private botPolicy: () => BotPolicy;
   private favorites: () => string[];
 
   constructor(
@@ -81,6 +86,7 @@ export class MessageHub extends EventEmitter {
     this.retryDelays = opts.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
     this.cove = opts.cove ?? (() => ({ amounts: [25, 50, 100] }));
     this.blacklist = opts.blacklist ?? (() => []);
+    this.botPolicy = opts.bots ?? (() => ({ default: 'hide', allow: [] }));
     this.favorites = opts.favorites ?? (() => []);
   }
 
@@ -125,14 +131,44 @@ export class MessageHub extends EventEmitter {
     return this.blacklist().some((b) => normName(b) === name);
   }
 
+  isAllowedBot(author: string): boolean {
+    const name = normName(author);
+    return this.botPolicy().allow.some((b) => normName(b) === name);
+  }
+
+  /** Blacklisted callers, and bots the policy does not allow, are hidden and never count. */
+  isHidden(msg: Pick<FeedMessage, 'author' | 'isBot'>): boolean {
+    if (this.isBlacklisted(msg.author)) return true;
+    if (!msg.isBot) return false;
+    return !(this.botPolicy().default === 'show' || this.isAllowedBot(msg.author));
+  }
+
+  /** Every bot seen in the buffer, newest first, with its current visibility. */
+  bots(): BotSeen[] {
+    const byName = new Map<string, BotSeen>();
+    for (let i = this.buffer.length - 1; i >= 0; i--) {
+      const m = this.buffer[i];
+      if (!m.isBot) continue;
+      const key = normName(m.author);
+      let b = byName.get(key);
+      if (!b) {
+        b = { name: m.author, avatar: m.avatar, source: m.source, count: 0, lastTs: m.ts, chats: [], hidden: this.isHidden(m) };
+        byName.set(key, b);
+      }
+      b.count++;
+      if (!b.chats.includes(m.chatName)) b.chats.push(m.chatName);
+    }
+    return [...byName.values()];
+  }
+
   /**
    * Update token state for one message. Bots and blacklisted callers are
    * hidden (flagged isBot) and never create or count a call; their links
    * still enrich tokens humans already called.
    */
   private register(msg: FeedMessage, meta: ExtractedMeta | undefined, live: boolean): void {
-    const blocked = msg.isBot || this.isBlacklisted(msg.author);
-    if (blocked) msg.isBot = true;
+    const blocked = this.isHidden(msg);
+    msg.hidden = blocked;
     let anyNew = false;
     for (const c of msg.contracts) {
       let t = this.tokens.get(c.address);
@@ -176,16 +212,17 @@ export class MessageHub extends EventEmitter {
         t.lastCallTs = Math.max(t.lastCallTs ?? 0, msg.ts);
         anyNew = true;
       }
-      if (meta) applyMeta(t, meta, msg.isBot);
+      if (meta) applyMeta(t, meta, blocked);
       if (live) this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
     }
     msg.repeat = msg.contracts.length > 0 && !anyNew;
   }
 
   /**
-   * Re-derive every token from the message buffer (after the blacklist
-   * changes). Enrichment and link metadata survive; call counts, first
-   * callers and repeat flags are recomputed.
+   * Re-derive every token from the message buffer (after the blacklist or
+   * bot policy changes). Enrichment and link metadata survive; call counts,
+   * first callers, repeat and hidden flags are recomputed, and clients get a
+   * fresh hello so hidden rows appear/disappear live.
    */
   rebuild(): void {
     const old = this.tokens;
@@ -199,7 +236,7 @@ export class MessageHub extends EventEmitter {
       for (const k of META_KEYS) if (o[k]) t[k] = o[k];
       this.applyBuy(t);
     }
-    this.emit('event', { type: 'tokens', tokens: this.hello().tokens } satisfies ServerEvent);
+    this.emit('event', this.hello());
     this.changed();
   }
 
@@ -295,6 +332,7 @@ export class MessageHub extends EventEmitter {
   load(snap: Snapshot | undefined, now = Date.now()): void {
     if (!snap || snap.version !== 1) return;
     this.buffer = (snap.messages ?? []).slice(-this.cap);
+    for (const m of this.buffer) m.hidden = this.isHidden(m); // policy may have changed since the snapshot
     this.tokens = new Map((snap.tokens ?? []).map((t) => [t.address, t]));
     this.tokenChats = new Map(Object.entries(snap.tokenChats ?? {}).map(([a, ids]) => [a, new Set(ids)]));
     for (const t of this.tokens.values()) {

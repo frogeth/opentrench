@@ -62,6 +62,7 @@ export function MessageRow({
   discord = false,
   autoChart = false,
   chartProvider = 'basedbot',
+  onAuthorChanged,
 }: {
   m: FeedMessage;
   tokens: Record<string, TokenInfo>;
@@ -73,11 +74,13 @@ export function MessageRow({
   discord?: boolean;
   autoChart?: boolean;
   chartProvider?: import('../format').ChartProvider;
+  /** a menu action changed favorites / bot policy / blacklist: reload config */
+  onAuthorChanged?: () => void;
 }) {
   const fav = !m.isBot && isFavorite(favorites, m.author);
   return (
     <div
-      className={`row row-${m.source}${m.repeat ? ' row-repeat' : ''}${m.isBot ? ' row-bot' : ''}${fav ? ' row-fav' : ''}${
+      className={`row row-${m.source}${m.repeat ? ' row-repeat' : ''}${m.isBot ? ' row-bot' : ''}${m.hidden ? ' row-hidden' : ''}${fav ? ' row-fav' : ''}${
         discord ? ' row-discord' : ''
       }${continued ? ' row-continued' : ''}`}
     >
@@ -91,7 +94,8 @@ export function MessageRow({
         <div className="row-meta">
           <span className="author">{m.author}</span>
           {m.isBot && <span className="bot-tag">bot</span>}
-          {!m.isBot && <AuthorMenu author={m.author} link={m.link} favorite={fav} />}
+          {m.hidden && <span className="bot-tag hidden-tag">hidden</span>}
+          <AuthorMenu author={m.author} link={m.link} favorite={fav} bot={m.isBot} hidden={!!m.hidden} onChanged={onAuthorChanged} />
           <span className="time">
             {m.link ? (
               <a href={m.link} target="_blank" rel="noreferrer">

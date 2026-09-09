@@ -38,6 +38,8 @@ export function useFeed() {
           setTokens((t) => ({ ...t, [ev.token.address]: ev.token }));
         } else if (ev.type === 'tokens') {
           setTokens(Object.fromEntries(ev.tokens.map((t) => [t.address, t])));
+        } else if (ev.type === 'msg') {
+          setMessages((m) => m.map((x) => (x.id === ev.msgId ? { ...x, ...ev.patch } : x)));
         } else if (ev.type === 'reactions') {
           setMessages((m) => m.map((x) => (x.id === ev.msgId ? { ...x, reactions: ev.reactions } : x)));
         } else if (ev.type === 'ping') setPing(ev);

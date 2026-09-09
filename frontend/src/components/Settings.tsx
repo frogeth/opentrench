@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { api, type MaskedConfig } from '../api';
+import { api, type BotSeen, type MaskedConfig } from '../api';
 import type { Status } from '../types';
 import { Logo } from './Logo';
+import { Avatar } from './Avatar';
 
 type Tab = 'accounts' | 'feed' | 'trading';
 
@@ -98,6 +99,7 @@ export function Settings({
                 </label>
               </section>
               <FavoritesSection cfg={cfg} onChange={reload} />
+              <BotsSection cfg={cfg} onChange={reload} />
               <BlacklistSection cfg={cfg} onChange={reload} />
             </>
           )}
@@ -411,6 +413,100 @@ function FavoritesSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () =
             </button>
           </span>
         ))}
+      </div>
+      {err && <div className="err">{err}</div>}
+    </section>
+  );
+}
+
+function BotsSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
+  const [bots, setBots] = useState<BotSeen[]>([]);
+  const [name, setName] = useState('');
+  const { busy, err, run } = useAsync();
+  const loadBots = () => api.bots().then(setBots).catch(() => {});
+  useEffect(() => {
+    void loadBots();
+  }, [cfg]);
+  const hide = cfg.bots.default === 'hide';
+  const seen = new Set(bots.map((b) => b.name.replace(/^@/, '').toLowerCase()));
+  const unseenAllowed = cfg.bots.allow.filter((n) => !seen.has(n.replace(/^@/, '').toLowerCase()));
+  const setShow = (n: string, show: boolean) =>
+    run(async () => {
+      await api.botShow(n, show);
+      onChange();
+    });
+  return (
+    <section>
+      <h2>Bots</h2>
+      <div className="row-inline">
+        <span className="seg">
+          <button
+            className={hide ? 'active' : ''}
+            disabled={busy}
+            onClick={() => run(async () => {
+              await api.setBots({ default: 'hide', allow: cfg.bots.allow });
+              onChange();
+            })}
+          >
+            Hide bots
+          </button>
+          <button
+            className={!hide ? 'active' : ''}
+            disabled={busy}
+            onClick={() => run(async () => {
+              await api.setBots({ default: 'show', allow: cfg.bots.allow });
+              onChange();
+            })}
+          >
+            Show bots
+          </button>
+        </span>
+      </div>
+      <div className="hint">
+        {hide ? 'Bots are hidden unless you turn them on below.' : 'Bots show unless you turn them off below.'} Shown bots
+        count as callers; hidden ones only feed links into tokens.
+      </div>
+      <div className="botlist">
+        {bots.length === 0 && unseenAllowed.length === 0 && <span className="hint">No bots seen yet.</span>}
+        {bots.map((b) => (
+          <div key={b.name} className={`botrow${b.hidden ? ' botrow-hidden' : ''}`}>
+            <Avatar src={b.avatar} name={b.name} size={22} />
+            <span className="botrow-name">
+              <b>{b.name}</b>
+              <span title={b.chats.join('\n')}>{b.chats.join(', ')}</span>
+            </span>
+            <span className="botrow-count">{b.count} posts</span>
+            <button className={`mini ${b.hidden ? 'off' : 'on'}`} disabled={busy} onClick={() => setShow(b.name, b.hidden)}>
+              {b.hidden ? 'hidden' : 'shown ✓'}
+            </button>
+          </div>
+        ))}
+        {unseenAllowed.map((n) => (
+          <div key={n} className="botrow">
+            <Avatar name={n} size={22} />
+            <span className="botrow-name">
+              <b>{n}</b>
+              <span>allowed, not seen yet</span>
+            </span>
+            <span className="botrow-count" />
+            <button className="mini on" disabled={busy} onClick={() => setShow(n, false)}>
+              shown ✓
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="row-inline" style={{ marginTop: 8 }}>
+        <input placeholder="allow a bot by name, e.g. @AlertsBot" value={name} onChange={(e) => setName(e.target.value)} />
+        <button
+          disabled={busy || !name.trim()}
+          onClick={() => {
+            const n = name.trim();
+            setName('');
+            void setShow(n, true);
+          }}
+        >
+          Allow
+        </button>
       </div>
       {err && <div className="err">{err}</div>}
     </section>

@@ -272,10 +272,10 @@ export default function App() {
   }, [view, channels, cfg, watched]);
 
   const chatMsgs = useMemo(() => {
-    if (view.preview) return (previewMsgs ?? []).filter((m) => (showBots || !m.isBot) && matchesQuery(q, m, tokens));
+    if (view.preview) return (previewMsgs ?? []).filter((m) => (showBots || !m.hidden) && matchesQuery(q, m, tokens));
     return messages.filter(
       (m) =>
-        (showBots || !m.isBot) &&
+        (showBots || !m.hidden) &&
         (showRepeats || !m.repeat) &&
         (watched.length === 0 || watchedNames.has(m.chatName)) &&
         (!scope || scope.has(m.chatName)) &&
@@ -443,7 +443,7 @@ export default function App() {
             <>
               {focused && <Logo source={focused.source} size={12} />}
               <label>
-                <input type="checkbox" checked={showBots} onChange={(e) => setShowBots(e.target.checked)} /> bots
+                <input type="checkbox" checked={showBots} onChange={(e) => setShowBots(e.target.checked)} /> hidden
               </label>
               <label>
                 <input type="checkbox" checked={showRepeats} onChange={(e) => setShowRepeats(e.target.checked)} />{' '}
@@ -491,6 +491,7 @@ export default function App() {
               discord={!!focused}
               autoChart={autoChart}
               chartProvider={chartProvider}
+              onAuthorChanged={reloadLists}
             />
           ))}
         </Column>

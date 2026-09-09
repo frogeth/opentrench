@@ -122,6 +122,36 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services): Rou
       });
     }),
   );
+  r.get('/bots', wrap(() => hub.bots()));
+  r.put(
+    '/bots',
+    wrap((req) => {
+      const raw: unknown[] = Array.isArray(req.body?.allow) ? req.body.allow : [];
+      cfg.update((c) => {
+        if (req.body?.default === 'show' || req.body?.default === 'hide') c.bots.default = req.body.default;
+        c.bots.allow = [...new Set(raw.map((n) => String(n).trim()).filter(Boolean))].slice(0, 500);
+      });
+      hub.rebuild();
+    }),
+  );
+  // Show or hide one bot, whatever the default is: showing = allow-list it and drop it from the
+  // blacklist; hiding = drop it from the allow list and, when bots show by default, blacklist it.
+  r.post(
+    '/bots/show',
+    wrap((req) => {
+      const name = String(req.body?.name ?? '').trim();
+      if (!name) throw new Error('name required');
+      const show = !!req.body?.show;
+      const same = (a: string, b: string) => a.replace(/^@/, '').toLowerCase() === b.replace(/^@/, '').toLowerCase();
+      cfg.update((c) => {
+        c.bots.allow = c.bots.allow.filter((b) => !same(b, name));
+        c.blacklist = c.blacklist.filter((b) => !same(b, name));
+        if (show && c.bots.default === 'hide') c.bots.allow.push(name);
+        if (!show && c.bots.default === 'show') c.blacklist.push(name);
+      });
+      hub.rebuild();
+    }),
+  );
   r.post(
     '/blacklist/add',
     wrap((req) => {

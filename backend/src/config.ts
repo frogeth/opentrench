@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { BotPolicy } from './types.js';
 
 export interface Config {
   discord: { token?: string; watch: string[] };
@@ -7,6 +8,8 @@ export interface Config {
   cove: { amounts: number[] };
   /** caller names (case-insensitive, leading @ ignored) whose posts never count as calls */
   blacklist: string[];
+  /** bots: hide everything except `allow`, or show everything except the blacklist */
+  bots: BotPolicy;
   /** callers whose first-time calls ping you */
   favorites: string[];
   /** send pings to your own Telegram "Saved Messages" */
@@ -17,7 +20,7 @@ export interface Config {
   railOrder: string[];
 }
 
-const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [], favorites: [], pingTelegram: true, railOrder: [] };
+const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [], bots: { default: 'hide', allow: [] }, favorites: [], pingTelegram: true, railOrder: [] };
 
 export class ConfigStore {
   private cfg: Config;
@@ -47,6 +50,7 @@ export class ConfigStore {
       },
       cove: { amounts: this.cfg.cove.amounts },
       blacklist: this.cfg.blacklist,
+      bots: this.cfg.bots,
       favorites: this.cfg.favorites,
       pingTelegram: this.cfg.pingTelegram,
       hasO1Key: !!this.cfg.o1ApiKey,
@@ -63,6 +67,10 @@ export class ConfigStore {
         cove: { amounts: Array.isArray(raw.cove?.amounts) ? raw.cove.amounts.map(Number) : DEFAULT.cove.amounts },
         blacklist: Array.isArray(raw.blacklist) ? raw.blacklist.map(String) : [],
         favorites: Array.isArray(raw.favorites) ? raw.favorites.map(String) : [],
+        bots: {
+          default: raw.bots?.default === 'show' ? 'show' : 'hide',
+          allow: Array.isArray(raw.bots?.allow) ? raw.bots.allow.map(String) : [],
+        },
         pingTelegram: raw.pingTelegram !== false,
         o1ApiKey: typeof raw.o1ApiKey === 'string' && raw.o1ApiKey.trim() ? raw.o1ApiKey.trim() : undefined,
         railOrder: Array.isArray(raw.railOrder) ? raw.railOrder.map(String) : [],
