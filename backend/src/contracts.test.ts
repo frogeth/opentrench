@@ -8,7 +8,7 @@ const SOL_SIG =
 
 describe('detectContracts', () => {
   it('finds an EVM address', () => {
-    expect(detectContracts(`ape ${EVM} now`)).toEqual([{ chain: 'evm', address: EVM }]);
+    expect(detectContracts(`ape ${EVM} now`)).toEqual([{ chain: 'evm', address: EVM.toLowerCase() }]);
   });
   it('finds a Solana address', () => {
     expect(detectContracts(`CA: ${SOL}`)).toEqual([{ chain: 'sol', address: SOL }]);
@@ -16,7 +16,7 @@ describe('detectContracts', () => {
   it('finds both and keeps order', () => {
     expect(detectContracts(`${SOL} and ${EVM}`)).toEqual([
       { chain: 'sol', address: SOL },
-      { chain: 'evm', address: EVM },
+      { chain: 'evm', address: EVM.toLowerCase() },
     ]);
   });
   it('dedupes within a message (EVM case-insensitive)', () => {

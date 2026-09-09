@@ -16,50 +16,94 @@ import type {
 } from './types.js';
 
 const META_KEYS = ['website', 'twitter', 'telegram', 'name', 'symbol'] as const;
-const DATA_KEYS = ['priceUsd', 'marketCap', 'liquidity', 'change24h', 'imageUrl', 'network', 'pairAddress', 'chartUrl', 'embedUrl', 'explorerUrl'] as const;
+const DATA_KEYS = [
+  'priceUsd',
+  'marketCap',
+  'liquidity',
+  'change24h',
+  'imageUrl',
+  'network',
+  'pairAddress',
+  'chartUrl',
+  'embedUrl',
+  'explorerUrl',
+] as const;
 const MAX_TOKENS = 2000;
 /** Re-fetch a token that came back without a price (fresh pair not indexed yet). */
 const DEFAULT_RETRY_DELAYS_MS = [60_000, 300_000];
+/** After a restart, tokens this young with no price get another enrichment pass. */
+const REENRICH_MAX_AGE_MS = 60 * 60 * 1000;
 
+export interface Snapshot {
+  version: 1;
+  messages: FeedMessage[];
+  tokens: TokenInfo[];
+  tokenChats: Record<string, string[]>;
+}
+
+export interface HubOptions {
+  retryDelaysMs?: number[];
+  cove?: () => CoveOptions;
+  blacklist?: () => string[];
+}
+
+function normName(n: string): string {
+  return n.trim().replace(/^@/, '').toLowerCase();
+}
+
+/**
+ * Events: 'event' (ServerEvent for websocket clients), 'changed' (state worth persisting).
+ */
 export class MessageHub extends EventEmitter {
   private buffer: FeedMessage[] = [];
   private tokens = new Map<string, TokenInfo>();
   /** address -> chat ids that have posted it */
   private tokenChats = new Map<string, Set<string>>();
   private status: Status = { discord: 'disconnected', telegram: 'disconnected', loginStep: 'idle', error: {} };
-
   private retryDelays: number[];
   private cove: () => CoveOptions;
+  private blacklist: () => string[];
 
   constructor(
     private cap = 500,
     private fetcher?: TokenFetcher,
-    opts: { retryDelaysMs?: number[]; cove?: () => CoveOptions } = {},
+    opts: HubOptions = {},
   ) {
     super();
     this.retryDelays = opts.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
     this.cove = opts.cove ?? (() => ({ amounts: [25, 50, 100] }));
+    this.blacklist = opts.blacklist ?? (() => []);
   }
 
-  /** Rebuild every token's buy links (after the Cove settings change). */
-  recomputeBuyLinks(): void {
-    for (const t of this.tokens.values()) {
-      this.applyBuy(t);
-      this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
-    }
-  }
-
-  private applyBuy(t: TokenInfo): void {
-    const network = t.network ?? (t.chain === 'sol' ? 'solana' : undefined);
-    t.buy = buildCoveLinks(network, t.address, this.cove());
-  }
+  // ---------- ingest ----------
 
   push(msg: FeedMessage, meta?: ExtractedMeta): void {
     msg.contracts = detectContracts(msg.text);
+    this.register(msg, meta, true);
+    this.buffer.push(msg);
+    if (this.buffer.length > this.cap) this.buffer.splice(0, this.buffer.length - this.cap);
+    this.emit('event', { type: 'message', msg } satisfies ServerEvent);
+    this.changed();
+  }
+
+  isBlacklisted(author: string): boolean {
+    const name = normName(author);
+    return this.blacklist().some((b) => normName(b) === name);
+  }
+
+  /**
+   * Update token state for one message. Bots and blacklisted callers are
+   * hidden (flagged isBot) and never create or count a call; their links
+   * still enrich tokens humans already called.
+   */
+  private register(msg: FeedMessage, meta: ExtractedMeta | undefined, live: boolean): void {
+    const blocked = msg.isBot || this.isBlacklisted(msg.author);
+    if (blocked) msg.isBot = true;
     let anyNew = false;
     for (const c of msg.contracts) {
       let t = this.tokens.get(c.address);
       if (!t) {
+        if (blocked) continue;
         t = {
           chain: c.chain,
           address: c.address,
@@ -84,23 +128,43 @@ export class MessageHub extends EventEmitter {
           this.tokens.delete(oldest);
           this.tokenChats.delete(oldest);
         }
-        this.enrich(t);
+        if (live) this.enrich(t);
       }
       const chats = this.tokenChats.get(c.address)!;
-      if (!chats.has(msg.chatId)) {
+      if (!blocked && !chats.has(msg.chatId)) {
         chats.add(msg.chatId);
         t.seen = chats.size;
         t.calledIn.push(msg.chatName);
         anyNew = true;
       }
       if (meta) applyMeta(t, meta, msg.isBot);
-      this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
+      if (live) this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
     }
     msg.repeat = msg.contracts.length > 0 && !anyNew;
-    this.buffer.push(msg);
-    if (this.buffer.length > this.cap) this.buffer.splice(0, this.buffer.length - this.cap);
-    this.emit('event', { type: 'message', msg } satisfies ServerEvent);
   }
+
+  /**
+   * Re-derive every token from the message buffer (after the blacklist
+   * changes). Enrichment and link metadata survive; call counts, first
+   * callers and repeat flags are recomputed.
+   */
+  rebuild(): void {
+    const old = this.tokens;
+    this.tokens = new Map();
+    this.tokenChats = new Map();
+    for (const m of this.buffer) this.register(m, undefined, false);
+    for (const [addr, t] of this.tokens) {
+      const o = old.get(addr);
+      if (!o) continue;
+      for (const k of DATA_KEYS) if (o[k] !== undefined) (t as any)[k] = o[k];
+      for (const k of META_KEYS) if (o[k]) t[k] = o[k];
+      this.applyBuy(t);
+    }
+    this.emit('event', { type: 'tokens', tokens: this.hello().tokens } satisfies ServerEvent);
+    this.changed();
+  }
+
+  // ---------- reactions ----------
 
   /** Replace a buffered message's reactions (Telegram sends full counts). */
   setReactions(msgId: string, reactions: Reaction[]): void {
@@ -108,6 +172,7 @@ export class MessageHub extends EventEmitter {
     if (!m) return;
     m.reactions = reactions.filter((r) => r.count > 0);
     this.emit('event', { type: 'reactions', msgId, reactions: m.reactions } satisfies ServerEvent);
+    this.changed();
   }
 
   /** Adjust one reaction's count (Discord sends add/remove deltas). */
@@ -120,7 +185,10 @@ export class MessageHub extends EventEmitter {
     else if (delta > 0) list.push({ ...reaction, count: delta });
     m.reactions = list.filter((r) => r.count > 0);
     this.emit('event', { type: 'reactions', msgId, reactions: m.reactions } satisfies ServerEvent);
+    this.changed();
   }
+
+  // ---------- status ----------
 
   setStatus(source: 'discord', state: DiscordState, error?: string): void;
   setStatus(source: 'telegram', state: TelegramState, error?: string): void;
@@ -149,6 +217,51 @@ export class MessageHub extends EventEmitter {
     };
   }
 
+  // ---------- buy links ----------
+
+  /** Rebuild every token's buy links (after the Cove settings change). */
+  recomputeBuyLinks(): void {
+    for (const t of this.tokens.values()) {
+      this.applyBuy(t);
+      this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
+    }
+    this.changed();
+  }
+
+  private applyBuy(t: TokenInfo): void {
+    const network = t.network ?? (t.chain === 'sol' ? 'solana' : undefined);
+    t.buy = buildCoveLinks(network, t.address, this.cove());
+  }
+
+  // ---------- persistence ----------
+
+  snapshot(): Snapshot {
+    return {
+      version: 1,
+      messages: this.buffer,
+      tokens: [...this.tokens.values()],
+      tokenChats: Object.fromEntries([...this.tokenChats].map(([a, s]) => [a, [...s]])),
+    };
+  }
+
+  load(snap: Snapshot | undefined, now = Date.now()): void {
+    if (!snap || snap.version !== 1) return;
+    this.buffer = (snap.messages ?? []).slice(-this.cap);
+    this.tokens = new Map((snap.tokens ?? []).map((t) => [t.address, t]));
+    this.tokenChats = new Map(Object.entries(snap.tokenChats ?? {}).map(([a, ids]) => [a, new Set(ids)]));
+    for (const t of this.tokens.values()) {
+      if (!this.tokenChats.has(t.address)) this.tokenChats.set(t.address, new Set());
+      this.applyBuy(t);
+      if (t.priceUsd === undefined && now - t.firstSeenTs < REENRICH_MAX_AGE_MS) this.enrich(t);
+    }
+  }
+
+  private changed(): void {
+    this.emit('changed');
+  }
+
+  // ---------- enrichment ----------
+
   private enrich(t: TokenInfo, attempt = 0): void {
     if (!this.fetcher) return;
     this.fetcher(t.address, t.chain)
@@ -160,6 +273,7 @@ export class MessageHub extends EventEmitter {
           for (const k of META_KEYS) if (info[k] && !live[k]) live[k] = info[k];
           this.applyBuy(live);
           this.emit('event', { type: 'token', token: { ...live } } satisfies ServerEvent);
+          this.changed();
         }
         if (live.priceUsd === undefined && attempt < this.retryDelays.length) {
           setTimeout(() => this.enrich(t, attempt + 1), this.retryDelays[attempt]);

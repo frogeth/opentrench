@@ -50,7 +50,12 @@ authors, chats, tickers and addresses across all columns.
 - Replies show the quoted message above the text; reactions show as pills
   under it and update live (Discord custom emoji render as images).
 - Bot posts and repeat posts (a contract already posted in that same chat) are
-  hidden by default. Toggles in the Chats column bring them back. Filter matches text, author, chat, ticker and name.
+  hidden by default. Toggles in the Chats column bring them back. Bots never
+  create or count a call.
+- **Blacklist** a caller with the 🚫 next to their name (or in Settings):
+  they're treated like a bot from then on and the call list is rebuilt.
+- Messages, calls, counts and reactions **persist across restarts** in
+  `backend/state.json` (written a couple of seconds after each change). Filter matches text, author, chat, ticker and name.
 
 ## Setup (in the browser, ⚙ top right)
 

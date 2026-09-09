@@ -3,3 +3,5 @@ dist/
 backend/config.json
 .env
 .DS_Store
+backend/state.json
+backend/state.json.tmp

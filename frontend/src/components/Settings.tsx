@@ -17,6 +17,7 @@ export function Settings({ status, onClose }: { status: Status; onClose: () => v
       {cfg && <DiscordSection cfg={cfg} status={status} onChange={reload} />}
       {cfg && <TelegramSection cfg={cfg} status={status} onChange={reload} />}
       {cfg && <CoveSection cfg={cfg} onChange={reload} />}
+      {cfg && <BlacklistSection cfg={cfg} onChange={reload} />}
     </aside>
   );
 }
@@ -272,6 +273,50 @@ function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
       >
         Save
       </button>
+      {err && <div className="err">{err}</div>}
+    </section>
+  );
+}
+
+function BlacklistSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
+  const [name, setName] = useState('');
+  const { busy, err, run } = useAsync();
+  const remove = (n: string) =>
+    run(async () => {
+      await api.setBlacklist(cfg.blacklist.filter((x) => x !== n));
+      onChange();
+    });
+  return (
+    <section>
+      <h2>Blacklisted callers</h2>
+      <div className="hint">
+        Their posts are hidden like bots and never create or count a call. Links they post still enrich tokens. Use the 🚫
+        next to any name in the feed, or add one here.
+      </div>
+      <input placeholder="name, e.g. Rick or @lanternbot" value={name} onChange={(e) => setName(e.target.value)} />
+      <button
+        disabled={busy || !name.trim()}
+        onClick={() =>
+          run(async () => {
+            await api.blacklistAdd(name.trim());
+            setName('');
+            onChange();
+          })
+        }
+      >
+        Add
+      </button>
+      <div className="picker">
+        {cfg.blacklist.length === 0 && <div className="hint">Nobody blacklisted.</div>}
+        {cfg.blacklist.map((n) => (
+          <label key={n}>
+            <button className="mini" disabled={busy} onClick={() => remove(n)} title="remove">
+              ✕
+            </button>{' '}
+            {n}
+          </label>
+        ))}
+      </div>
       {err && <div className="err">{err}</div>}
     </section>
   );

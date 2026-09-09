@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { MessageHub } from './hub.js';
 import type { FeedMessage, ServerEvent, TokenInfo } from './types.js';
 
-const EVM = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+const EVM = '0xdac17f958d2ee523a2206206994597c13d831ec7';
 const SOL = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
 
 function msg(i: number, text = 'hi', extra: Partial<FeedMessage> = {}): FeedMessage {
@@ -107,8 +107,8 @@ describe('MessageHub', () => {
     });
     const events: ServerEvent[] = [];
     hub.on('event', (e) => events.push(e));
-    hub.push(msg(1, EVM, { isBot: true }), { website: 'https://rick.example' });
-    hub.push(msg(2, EVM));
+    hub.push(msg(1, EVM));
+    hub.push(msg(2, EVM, { isBot: true }), { website: 'https://rick.example' });
     await new Promise((r) => setTimeout(r, 0));
     expect(calls).toEqual([EVM]);
     const t = hub.hello().tokens[0];
@@ -190,6 +190,54 @@ describe('MessageHub', () => {
     hub.setReactions('discord:1', [{ key: '👍', name: '👍', count: 3 }, { key: '❤', name: '❤', count: 0 }]);
     expect(hub.hello().messages[0].reactions).toEqual([{ key: '👍', name: '👍', count: 3 }]);
     expect(events.filter((e) => e.type === 'reactions')).toHaveLength(6);
+  });
+
+  it('bots and blacklisted callers never create or count a call, but still feed metadata', () => {
+    const hub = new MessageHub(500, undefined, { blacklist: () => ['Rick', '@lanternbot'] });
+    const events: ServerEvent[] = [];
+    hub.on('event', (e) => events.push(e));
+    hub.push(msg(1, EVM, { author: 'Rick', chatId: 'a' }), { website: 'https://rick.example' });
+    expect(hub.hello().tokens).toEqual([]);
+    expect((events.at(-1) as any).msg.isBot).toBe(true);
+    hub.push(msg(2, EVM, { author: 'LanternBot', isBot: true, chatId: 'b' }));
+    expect(hub.hello().tokens).toEqual([]);
+    hub.push(msg(3, EVM, { author: 'human', chatId: 'c', chatName: '#c' }));
+    hub.push(msg(4, EVM, { author: '@LanternBot', chatId: 'd' }), { twitter: 'https://x.com/t' });
+    const [t] = hub.hello().tokens;
+    expect(t).toMatchObject({ seen: 1, calledIn: ['#c'], firstCaller: { author: 'human' }, twitter: 'https://x.com/t' });
+    expect(t.website).toBeUndefined();
+  });
+
+  it('rebuilds calls from the buffer when the blacklist changes, keeping enrichment', async () => {
+    let list: string[] = [];
+    const hub = new MessageHub(500, async () => ({ priceUsd: 2, network: 'base' }), { blacklist: () => list });
+    hub.push(msg(1, EVM, { author: 'Rick', chatId: 'a', chatName: '#a' }));
+    hub.push(msg(2, EVM, { author: 'human', chatId: 'b', chatName: '#b' }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(hub.hello().tokens[0]).toMatchObject({ seen: 2, firstCaller: { author: 'Rick' }, priceUsd: 2 });
+    list = ['rick'];
+    const events: ServerEvent[] = [];
+    hub.on('event', (e) => events.push(e));
+    hub.rebuild();
+    expect(hub.hello().tokens[0]).toMatchObject({ seen: 1, calledIn: ['#b'], firstCaller: { author: 'human' }, priceUsd: 2 });
+    expect(hub.hello().messages[0].isBot).toBe(true);
+    expect(events.map((e) => e.type)).toEqual(['tokens']);
+  });
+
+  it('round-trips a snapshot', () => {
+    const hub = new MessageHub(500);
+    hub.push(msg(1, `${EVM} ${SOL}`, { chatId: 'a', chatName: '#a' }));
+    hub.push(msg(2, EVM, { chatId: 'b', chatName: '#b' }));
+    hub.applyReactionDelta('discord:2', { key: '🔥', name: '🔥' }, 1);
+    const snap = JSON.parse(JSON.stringify(hub.snapshot()));
+    const hub2 = new MessageHub(500);
+    hub2.load(snap);
+    expect(hub2.hello().messages).toEqual(hub.hello().messages);
+    expect(hub2.hello().tokens).toEqual(hub.hello().tokens);
+    hub2.push(msg(3, EVM, { chatId: 'b' }));
+    expect(hub2.hello().messages.at(-1)?.repeat).toBe(true);
+    hub2.push(msg(4, EVM, { chatId: 'c', chatName: '#c' }));
+    expect(hub2.hello().tokens[0].seen).toBe(3);
   });
 
   it('survives a failing fetcher', async () => {

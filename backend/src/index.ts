@@ -9,6 +9,7 @@ import { defaultEnricher } from './enrich.js';
 import { Services } from './services.js';
 import { createApi } from './api.js';
 import { attachWs } from './ws.js';
+import { StateStore } from './store.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..'); // backend/ (parent of src/ or dist/)
@@ -16,7 +17,19 @@ const PORT = Number(process.env.PORT ?? 3210);
 const HOST = '127.0.0.1';
 
 const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'config.json'));
-const hub = new MessageHub(500, defaultEnricher, { cove: () => cfg.get().cove });
+const hub = new MessageHub(500, defaultEnricher, {
+  cove: () => cfg.get().cove,
+  blacklist: () => cfg.get().blacklist,
+});
+const store = new StateStore(process.env.TRENCHFEED_STATE ?? path.join(root, 'state.json'));
+hub.load(store.load());
+hub.on('changed', () => store.schedule(() => hub.snapshot()));
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => {
+    store.flush();
+    process.exit(0);
+  });
+}
 const svc = new Services(cfg, hub);
 
 const app = express();

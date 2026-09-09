@@ -98,4 +98,5 @@ export type ServerEvent =
   | { type: 'message'; msg: FeedMessage }
   | { type: 'token'; token: TokenInfo }
   | { type: 'reactions'; msgId: string; reactions: Reaction[] }
+  | { type: 'tokens'; tokens: TokenInfo[] }
   | { type: 'status'; status: Status };

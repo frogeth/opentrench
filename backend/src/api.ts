@@ -35,6 +35,29 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services): Rou
     }),
   );
   r.get('/config', wrap(() => cfg.masked()));
+  r.get('/watched', wrap(() => svc.watchedChats()));
+  r.put(
+    '/blacklist',
+    wrap((req) => {
+      const raw: unknown[] = Array.isArray(req.body?.names) ? req.body.names : [];
+      const names: string[] = raw.map((n) => String(n).trim()).filter(Boolean).slice(0, 500);
+      cfg.update((c) => {
+        c.blacklist = [...new Set(names)];
+      });
+      hub.rebuild();
+    }),
+  );
+  r.post(
+    '/blacklist/add',
+    wrap((req) => {
+      const name = String(req.body?.name ?? '').trim();
+      if (!name) throw new Error('name required');
+      cfg.update((c) => {
+        if (!c.blacklist.some((b) => b.toLowerCase() === name.toLowerCase())) c.blacklist.push(name);
+      });
+      hub.rebuild();
+    }),
+  );
 
   r.put(
     '/discord/token',

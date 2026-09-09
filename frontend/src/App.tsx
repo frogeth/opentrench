@@ -5,6 +5,7 @@ import { CallCard } from './components/CallCard';
 import { MessageRow } from './components/MessageRow';
 import { Settings } from './components/Settings';
 import { Logo } from './components/Logo';
+import { api, type WatchedChat } from './api';
 import type { FeedMessage, Source, Status, TokenInfo } from './types';
 
 function Pill({ label, state }: { label: string; state: string }) {
@@ -44,6 +45,10 @@ export default function App() {
   const [showBots, setShowBots] = useState(false);
   const [showRepeats, setShowRepeats] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [watched, setWatched] = useState<WatchedChat[]>([]);
+  useEffect(() => {
+    api.watched().then(setWatched).catch(() => {});
+  }, [status.discord, status.telegram]);
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 15_000);
     return () => window.clearInterval(id);
@@ -54,13 +59,14 @@ export default function App() {
 
   const chats = useMemo(() => {
     const m = new Map<string, { count: number; source: Source }>();
+    for (const w of watched) m.set(w.name, { count: 0, source: w.source });
     for (const msg of messages) {
       const e = m.get(msg.chatName) ?? { count: 0, source: msg.source };
       e.count++;
       m.set(msg.chatName, e);
     }
-    return [...m.entries()].sort((a, b) => b[1].count - a[1].count);
-  }, [messages]);
+    return [...m.entries()].sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]));
+  }, [messages, watched]);
 
   const callers = useMemo(() => {
     const s = new Set<string>();
@@ -132,7 +138,7 @@ export default function App() {
           >
             <Logo source={source} size={11} />
             <span className="tab-name">{name}</span>
-            <span className="tab-count">{count}</span>
+            {count > 0 && <span className="tab-count">{count}</span>}
           </button>
         ))}
       </div>

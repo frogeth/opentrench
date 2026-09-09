@@ -3,6 +3,7 @@ import { fmtTime } from '../format';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 import { TokenChip } from './TokenChip';
+import { api } from '../api';
 
 export function MessageRow({ m, tokens }: { m: FeedMessage; tokens: Record<string, TokenInfo> }) {
   return (
@@ -12,6 +13,15 @@ export function MessageRow({ m, tokens }: { m: FeedMessage; tokens: Record<strin
         <div className="row-meta">
           <span className="author">{m.author}</span>
           {m.isBot && <span className="bot-tag">bot</span>}
+          {!m.isBot && (
+            <button
+              className="block"
+              title={`blacklist ${m.author} (never counts as a caller)`}
+              onClick={() => void api.blacklistAdd(m.author).catch(() => {})}
+            >
+              🚫
+            </button>
+          )}
           <span className="time">
             {m.link ? (
               <a href={m.link} target="_blank" rel="noreferrer">

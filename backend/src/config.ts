@@ -5,9 +5,11 @@ export interface Config {
   discord: { token?: string; watch: string[] };
   telegram: { apiId?: number; apiHash?: string; session?: string; watch: string[] };
   cove: { affiliateId?: string; amounts: number[] };
+  /** caller names (case-insensitive, leading @ ignored) whose posts never count as calls */
+  blacklist: string[];
 }
 
-const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] } };
+const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [] };
 
 export class ConfigStore {
   private cfg: Config;
@@ -36,6 +38,7 @@ export class ConfigStore {
         watch: this.cfg.telegram.watch,
       },
       cove: { affiliateId: this.cfg.cove.affiliateId ?? '', amounts: this.cfg.cove.amounts },
+      blacklist: this.cfg.blacklist,
     };
   }
 
@@ -46,6 +49,7 @@ export class ConfigStore {
         discord: { ...DEFAULT.discord, ...raw.discord },
         telegram: { ...DEFAULT.telegram, ...raw.telegram },
         cove: { ...DEFAULT.cove, ...raw.cove },
+        blacklist: Array.isArray(raw.blacklist) ? raw.blacklist.map(String) : [],
       };
     } catch {
       return structuredClone(DEFAULT);

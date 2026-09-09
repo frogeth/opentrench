@@ -21,7 +21,7 @@ export function detectContracts(text: string): Contract[] {
     const key = 'evm:' + m[0].toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    found.push({ index: m.index ?? 0, c: { chain: 'evm', address: m[0] } });
+    found.push({ index: m.index ?? 0, c: { chain: 'evm', address: m[0].toLowerCase() } });
   }
   for (const m of text.matchAll(SOL_RE)) {
     if (!isSolanaPubkey(m[0])) continue;
