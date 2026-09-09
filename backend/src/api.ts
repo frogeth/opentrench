@@ -123,6 +123,16 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services): Rou
     }),
   );
   r.get('/telegram/dialogs', wrap(() => svc.listTelegramDialogs()));
+  r.get('/telegram/media/:chatId/:msgId', async (req, res) => {
+    const chatId = String(req.params.chatId ?? '');
+    const msgId = Number(req.params.msgId);
+    if (!/^-?\d+$/.test(chatId) || !Number.isInteger(msgId) || !svc.telegram) return res.status(404).end();
+    const got = await svc.telegram.getMedia(chatId, msgId, req.query.thumb !== undefined);
+    if (!got) return res.status(404).end();
+    res.setHeader('content-type', got.mime);
+    res.setHeader('cache-control', 'private, max-age=86400');
+    res.send(got.buf);
+  });
   r.get('/telegram/avatar/:id', async (req, res) => {
     const id = String(req.params.id ?? '');
     if (!/^-?\d+$/.test(id) || !svc.telegram) return res.status(404).end();

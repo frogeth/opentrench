@@ -16,13 +16,19 @@ export interface MaskedConfig {
   blacklist: string[];
 }
 export interface WatchedChat {
+  id: string;
   name: string;
   source: 'discord' | 'telegram';
+  avatar?: string;
 }
 export interface DiscordChannel {
   id: string;
   name: string;
+  guildId: string;
   guildName: string;
+  guildIcon?: string;
+  category?: string;
+  position: number;
 }
 export interface TelegramDialog {
   id: string;

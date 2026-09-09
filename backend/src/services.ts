@@ -4,17 +4,32 @@ import { DiscordGateway, type DiscordChannel } from './discord/gateway.js';
 import { discordReaction, normalizeDiscord } from './discord/normalize.js';
 import { TelegramWrapper, type TelegramDialog } from './telegram/client.js';
 import { extractLinks, type ExtractedMeta } from './links.js';
+import { createPreviewer, type Previewer } from './previews.js';
 import type { FeedMessage, Reaction } from './types.js';
 
 export class Services {
   discord?: DiscordGateway;
   telegram?: TelegramWrapper;
   private discordChannels = new Map<string, DiscordChannel>();
+  private previewer: Previewer;
 
   constructor(
     private cfg: ConfigStore,
     private hub: MessageHub,
-  ) {}
+    previewer?: Previewer,
+  ) {
+    this.previewer = previewer ?? createPreviewer();
+  }
+
+  /** Fetch tweet previews the platform didn't unfurl, then patch the message. */
+  private addPreviews(m: FeedMessage): void {
+    const have = (m.previews ?? []).map((p) => p.url);
+    this.previewer(m.text, have)
+      .then((extra) => {
+        if (extra.length) this.hub.patch(m.id, { previews: [...(m.previews ?? []), ...extra] });
+      })
+      .catch(() => {});
+  }
 
   // ---- Discord ----
 
@@ -35,10 +50,11 @@ export class Services {
     gw.on('message', (d) => {
       const id = String(d.channel_id);
       if (!this.cfg.get().discord.watch.includes(id)) return;
-      const ch = this.discordChannels.get(id) ?? { id, name: id, guildName: '?' };
+      const ch = this.discordChannels.get(id) ?? { id, name: id, guildId: '?', guildName: '?', position: 0 };
       try {
         const msg = normalizeDiscord(d, ch);
         this.hub.push(msg, extractLinks(msg.text, []));
+        this.addPreviews(msg);
       } catch (e) {
         console.warn('[discord] dropped message', e);
       }
@@ -83,6 +99,7 @@ export class Services {
     tg.on('message', (m: FeedMessage, meta: ExtractedMeta) => {
       if (!this.cfg.get().telegram.watch.includes(m.chatId)) return;
       this.hub.push(m, meta);
+      this.addPreviews(m);
     });
     tg.on('reactions', (msgId: string, reactions: Reaction[]) => this.hub.setReactions(msgId, reactions));
     tg.on('self', () => this.hub.recomputeBuyLinks());
@@ -95,16 +112,18 @@ export class Services {
   }
 
   /** Every watched chat by display name, for the tab row (even before it has messages). */
-  async watchedChats(): Promise<{ name: string; source: 'discord' | 'telegram' }[]> {
-    const out: { name: string; source: 'discord' | 'telegram' }[] = [];
+  async watchedChats(): Promise<{ id: string; name: string; source: 'discord' | 'telegram'; avatar?: string }[]> {
+    const out: { id: string; name: string; source: 'discord' | 'telegram'; avatar?: string }[] = [];
     const cfg = this.cfg.get();
     for (const id of cfg.discord.watch) {
       const ch = this.discordChannels.get(id);
-      if (ch) out.push({ name: `#${ch.name} (${ch.guildName})`, source: 'discord' });
+      if (ch) out.push({ id, name: `#${ch.name} (${ch.guildName})`, source: 'discord', avatar: ch.guildIcon });
     }
     if (cfg.telegram.watch.length) {
       const dialogs = await this.listTelegramDialogs().catch(() => [] as TelegramDialog[]);
-      for (const d of dialogs) if (cfg.telegram.watch.includes(d.id)) out.push({ name: d.title, source: 'telegram' });
+      for (const d of dialogs)
+        if (cfg.telegram.watch.includes(d.id))
+          out.push({ id: d.id, name: d.title, source: 'telegram', avatar: `/api/telegram/avatar/${d.id}` });
     }
     return out;
   }

@@ -1,11 +1,66 @@
-import type { FeedMessage, TokenInfo } from '../types';
+import { useState } from 'react';
+import type { FeedMessage, LinkPreview, MediaItem, TokenInfo } from '../types';
 import { fmtTime } from '../format';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 import { TokenChip } from './TokenChip';
+import { Icon } from './Icon';
 import { api } from '../api';
 
-export function MessageRow({ m, tokens }: { m: FeedMessage; tokens: Record<string, TokenInfo> }) {
+const isVideoFile = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url);
+
+function Media({ item }: { item: MediaItem }) {
+  // Anything that fails to load (expired CDN link, unsupported format) disappears instead of leaving a box.
+  const [broken, setBroken] = useState(false);
+  if (broken) return null;
+  const fail = () => setBroken(true);
+  if (item.kind === 'video') {
+    return (
+      <video className="media-video" src={item.url} poster={item.poster} controls preload="metadata" playsInline onError={fail} />
+    );
+  }
+  if (item.kind === 'gif' && isVideoFile(item.url)) {
+    return <video className="media-gif" src={item.url} poster={item.poster} autoPlay loop muted playsInline onError={fail} />;
+  }
+  if (item.kind === 'sticker') {
+    return isVideoFile(item.url) ? (
+      <video className="media-sticker" src={item.url} autoPlay loop muted playsInline onError={fail} />
+    ) : (
+      <img className="media-sticker" src={item.url} alt="" loading="lazy" onError={fail} />
+    );
+  }
+  return (
+    <a href={item.url} target="_blank" rel="noreferrer">
+      <img className={item.kind === 'gif' ? 'media-gif' : 'media-img'} src={item.url} alt="" loading="lazy" onError={fail} />
+    </a>
+  );
+}
+
+function Preview({ p }: { p: LinkPreview }) {
+  return (
+    <a className={`preview preview-${p.site}`} href={p.url} target="_blank" rel="noreferrer">
+      <div className="preview-head">
+        {p.avatar && <img className="preview-avatar" src={p.avatar} alt="" loading="lazy" />}
+        {p.site === 'x' && <Icon name="x" size={12} />}
+        {p.author && <b>{p.author}</b>}
+        {p.handle && <span className="muted">@{p.handle}</span>}
+        {!p.author && p.title && <b>{p.title}</b>}
+      </div>
+      {p.text && <div className="preview-text">{p.text}</div>}
+      {p.image && <img className="preview-img" src={p.image} alt="" loading="lazy" />}
+    </a>
+  );
+}
+
+export function MessageRow({
+  m,
+  tokens,
+  onSelect,
+}: {
+  m: FeedMessage;
+  tokens: Record<string, TokenInfo>;
+  onSelect?: (address: string) => void;
+}) {
   return (
     <div className={`row row-${m.source}${m.repeat ? ' row-repeat' : ''}${m.isBot ? ' row-bot' : ''}`}>
       <Avatar src={m.avatar} name={m.author} />
@@ -31,8 +86,9 @@ export function MessageRow({ m, tokens }: { m: FeedMessage; tokens: Record<strin
               fmtTime(m.ts)
             )}
           </span>
-          <span className="chat-tag">
-            <Logo source={m.source} size={11} /> {m.chatName}
+          <span className="chat-tag" title={m.chatName}>
+            {m.chatAvatar ? <Avatar src={m.chatAvatar} name={m.chatName} size={14} /> : <Logo source={m.source} size={11} />}
+            <span className="chat-tag-name">{m.chatName}</span>
           </span>
         </div>
         {m.replyTo && (
@@ -40,15 +96,31 @@ export function MessageRow({ m, tokens }: { m: FeedMessage; tokens: Record<strin
             <span className="reply-arrow">↩</span> <b>{m.replyTo.author}</b> {m.replyTo.text}
           </div>
         )}
-        <div className="row-text">
-          {m.text}
-          {m.hasAttachment && (
-            <span className="attach" title="has attachment">
-              {' '}
-              📎
-            </span>
-          )}
-        </div>
+        {m.text && (
+          <div className="row-text">
+            {m.text}
+            {m.hasAttachment && !m.media?.length && (
+              <span className="attach" title="has attachment">
+                {' '}
+                📎
+              </span>
+            )}
+          </div>
+        )}
+        {m.media && m.media.length > 0 && (
+          <div className="media">
+            {m.media.map((x) => (
+              <Media key={x.url} item={x} />
+            ))}
+          </div>
+        )}
+        {m.previews && m.previews.length > 0 && (
+          <div className="previews">
+            {m.previews.map((p) => (
+              <Preview key={p.url} p={p} />
+            ))}
+          </div>
+        )}
         {m.reactions && m.reactions.length > 0 && (
           <div className="reactions">
             {m.reactions.map((r) => (
@@ -61,7 +133,7 @@ export function MessageRow({ m, tokens }: { m: FeedMessage; tokens: Record<strin
         {m.contracts.length > 0 && (
           <div className="row-contracts">
             {m.contracts.map((c) => (
-              <TokenChip key={c.chain + c.address} c={c} t={tokens[c.address]} />
+              <TokenChip key={c.chain + c.address} c={c} t={tokens[c.address]} onSelect={onSelect} />
             ))}
           </div>
         )}

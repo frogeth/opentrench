@@ -164,6 +164,15 @@ export class MessageHub extends EventEmitter {
     this.changed();
   }
 
+  /** Merge late-arriving fields (link previews) into a buffered message. */
+  patch(msgId: string, patch: Partial<FeedMessage>): void {
+    const m = this.buffer.find((x) => x.id === msgId);
+    if (!m) return;
+    Object.assign(m, patch);
+    this.emit('event', { type: 'msg', msgId, patch } satisfies ServerEvent);
+    this.changed();
+  }
+
   // ---------- reactions ----------
 
   /** Replace a buffered message's reactions (Telegram sends full counts). */

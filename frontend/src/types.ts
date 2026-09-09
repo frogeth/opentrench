@@ -19,6 +19,23 @@ export interface ReplyContext {
   text: string;
 }
 
+export interface MediaItem {
+  kind: 'image' | 'gif' | 'video' | 'sticker';
+  url: string;
+  poster?: string;
+}
+
+export interface LinkPreview {
+  url: string;
+  site: 'x' | 'web';
+  title?: string;
+  author?: string;
+  handle?: string;
+  text?: string;
+  image?: string;
+  avatar?: string;
+}
+
 export interface FeedMessage {
   id: string;
   source: Source;
@@ -36,6 +53,9 @@ export interface FeedMessage {
   hasAttachment: boolean;
   replyTo?: ReplyContext;
   reactions?: Reaction[];
+  chatAvatar?: string;
+  media?: MediaItem[];
+  previews?: LinkPreview[];
 }
 
 export interface BuyLinks {
@@ -99,4 +119,5 @@ export type ServerEvent =
   | { type: 'token'; token: TokenInfo }
   | { type: 'reactions'; msgId: string; reactions: Reaction[] }
   | { type: 'tokens'; tokens: TokenInfo[] }
+  | { type: 'msg'; msgId: string; patch: Partial<FeedMessage> }
   | { type: 'status'; status: Status };

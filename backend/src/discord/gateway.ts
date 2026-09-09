@@ -12,7 +12,11 @@ export type WsFactory = (url: string) => WsLike;
 export interface DiscordChannel {
   id: string;
   name: string;
+  guildId: string;
   guildName: string;
+  guildIcon?: string;
+  category?: string;
+  position: number;
 }
 
 const GATEWAY_HOST = 'wss://gateway.discord.gg';
@@ -251,8 +255,21 @@ export class DiscordGateway extends EventEmitter {
 }
 
 function extractChannels(g: any): DiscordChannel[] {
+  const guildId = String(g.id);
   const guildName = g.properties?.name ?? g.name ?? 'Unknown';
-  return (g.channels ?? [])
-    .filter((c: any) => c.type === 0 || c.type === 5)
-    .map((c: any) => ({ id: String(c.id), name: String(c.name), guildName }));
+  const icon = g.properties?.icon ?? g.icon;
+  const guildIcon = icon ? `https://cdn.discordapp.com/icons/${guildId}/${icon}.png?size=64` : undefined;
+  const all: any[] = g.channels ?? [];
+  const cats = new Map<string, string>(all.filter((c) => c.type === 4).map((c) => [String(c.id), String(c.name)]));
+  return all
+    .filter((c) => c.type === 0 || c.type === 5)
+    .map((c) => ({
+      id: String(c.id),
+      name: String(c.name),
+      guildId,
+      guildName,
+      guildIcon,
+      category: c.parent_id ? cats.get(String(c.parent_id)) : undefined,
+      position: Number(c.position ?? 0),
+    }));
 }

@@ -24,11 +24,13 @@ npm run dev
 
 ## What the feed does
 
-Three columns, like a trading dashboard: **Calls** (one card per contract,
-newest first, with who called it first), **Chats** (the merged message
-stream), and **Callers** (only messages from people who have posted a CA).
-The tab row filters everything to one chat; the search box matches text,
-authors, chats, tickers and addresses across all columns.
+Two equal panels: **Calls** (one card per contract, newest first, with who
+called it first) and **Chats** (the merged message stream). The tab row lists
+every watched chat with its photo and filters both panels to one chat; the
+Discord / Telegram buttons at its left open a channel browser (server rail,
+channels by category, add / remove from feed). Clicking a ticker under a
+message jumps to and flashes its card in Calls. The search box matches text,
+authors, chats, tickers and addresses.
 
 - Newest on top. Discord and Telegram merged, with each platform's logo and the
   poster's avatar.
@@ -49,6 +51,9 @@ authors, chats, tickers and addresses across all columns.
   Ethereum, Base, BNB, Robinhood Chain, MegaETH, Solana.
 - Replies show the quoted message above the text; reactions show as pills
   under it and update live (Discord custom emoji render as images).
+- Images, GIFs, videos and stickers render inline (Telegram media is fetched
+  through your session and served locally). X/Twitter links get a preview
+  card from the platform's own unfurl, or from the public fxtwitter API.
 - Bot posts and repeat posts (a contract already posted in that same chat) are
   hidden by default. Toggles in the Chats column bring them back. Bots never
   create or count a call.

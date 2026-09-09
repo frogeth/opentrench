@@ -5,7 +5,7 @@ import { StringSession } from 'telegram/sessions/index.js';
 import { NewMessage, Raw, type NewMessageEvent } from 'telegram/events/index.js';
 import { Api } from 'telegram/tl/index.js';
 import { getPeerId } from 'telegram/Utils.js';
-import type { FeedMessage, LoginStep, TelegramState } from '../types.js';
+import type { FeedMessage, LinkPreview, LoginStep, MediaItem, TelegramState } from '../types.js';
 import { mapTelegramReactions, normalizeTelegram, type TelegramPlain } from './normalize.js';
 import { extractLinks, type ExtractedMeta, type LinkIn } from '../links.js';
 
@@ -26,6 +26,50 @@ const FATAL_AUTH = [
 const HEALTH_INTERVAL_MS = 30_000;
 const STEP_WAIT_MS = 20_000;
 const AVATAR_CACHE_MAX = 500;
+const MEDIA_MSG_MAX = 300;
+const MEDIA_BYTES_MAX = 120 * 1024 * 1024;
+const MEDIA_ITEM_MAX = 25 * 1024 * 1024;
+
+function hasAttr(doc: any, cls: string): boolean {
+  return (doc?.attributes ?? []).some((a: any) => a?.className === cls);
+}
+
+/** Classify a message's media into what the feed can render. undefined = nothing renderable. */
+export function classifyMedia(media: any, url: string): MediaItem[] {
+  if (!media) return [];
+  if (media.className === 'MessageMediaPhoto' && media.photo) return [{ kind: 'image', url }];
+  if (media.className === 'MessageMediaDocument' && media.document) {
+    const doc = media.document;
+    const mime = String(doc.mimeType ?? '');
+    if (Number(doc.size ?? 0) > MEDIA_ITEM_MAX) return [];
+    if (hasAttr(doc, 'DocumentAttributeSticker')) {
+      if (mime === 'application/x-tgsticker') return []; // lottie animation, no static render
+      return [{ kind: 'sticker', url }];
+    }
+    if (hasAttr(doc, 'DocumentAttributeAnimated') || mime === 'image/gif') return [{ kind: 'gif', url, poster: `${url}?thumb=1` }];
+    if (hasAttr(doc, 'DocumentAttributeVideo') || mime.startsWith('video/')) return [{ kind: 'video', url, poster: `${url}?thumb=1` }];
+    if (mime.startsWith('image/')) return [{ kind: 'image', url }];
+  }
+  return [];
+}
+
+/** Telegram's own link preview (web page) → our card. */
+export function webpagePreview(media: any, imageUrl: string): LinkPreview | undefined {
+  const w = media?.className === 'MessageMediaWebPage' ? media.webpage : undefined;
+  if (!w || w.className !== 'WebPage' || !w.url) return undefined;
+  const url = String(w.url);
+  const isX = /^https?:\/\/(?:www\.)?(?:x|twitter)\.com\//i.test(url);
+  const m = /^(.*?)\s*\(@([A-Za-z0-9_]+)\)\s*$/.exec(String(w.author ?? w.title ?? ''));
+  return {
+    url,
+    site: isX ? 'x' : 'web',
+    title: w.siteName ? String(w.siteName) : undefined,
+    author: m ? m[1] : w.author ? String(w.author) : w.title ? String(w.title) : undefined,
+    handle: m ? m[2] : undefined,
+    text: w.description ? String(w.description) : undefined,
+    image: w.photo ? imageUrl : undefined,
+  };
+}
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -63,6 +107,10 @@ export class TelegramWrapper extends EventEmitter {
   private stepWaiters: ((s: LoginStep) => void)[] = [];
   private healthTimer?: ReturnType<typeof setInterval>;
   private avatars = new Map<string, Buffer | null>();
+  /** `${chatId}:${msgId}` -> gramjs message, for later media download */
+  private mediaMsgs = new Map<string, any>();
+  private mediaBytes = new Map<string, { buf: Buffer; mime: string }>();
+  private mediaBytesTotal = 0;
   state: TelegramState = 'disconnected';
   step: LoginStep = 'idle';
   /** Logged-in account's Telegram user id (set once connected). */
@@ -179,6 +227,48 @@ export class TelegramWrapper extends EventEmitter {
     return buf;
   }
 
+  /** Media bytes for a message (photo/gif/video/sticker, or the link-preview photo), cached. */
+  async getMedia(chatId: string, msgId: number, thumb: boolean): Promise<{ buf: Buffer; mime: string } | null> {
+    const key = `${chatId}:${msgId}${thumb ? ':t' : ''}`;
+    const hit = this.mediaBytes.get(key);
+    if (hit) return hit;
+    const client = this.client;
+    if (!client || this.state !== 'connected') return null;
+    try {
+      let msg: any = this.mediaMsgs.get(`${chatId}:${msgId}`);
+      if (!msg) {
+        const got = await client.getMessages(bigInt(chatId), { ids: [msgId] });
+        msg = got?.[0];
+      }
+      if (!msg?.media) return null;
+      const media = msg.media;
+      let target: any = msg;
+      let mime = 'application/octet-stream';
+      if (media.className === 'MessageMediaWebPage') {
+        if (!media.webpage?.photo) return null;
+        target = media.webpage.photo;
+        mime = 'image/jpeg';
+      } else if (media.className === 'MessageMediaPhoto') mime = 'image/jpeg';
+      else if (media.className === 'MessageMediaDocument') mime = String(media.document?.mimeType ?? mime);
+      const opts: any = thumb && media.className === 'MessageMediaDocument' ? { thumb: 0 } : {};
+      if (thumb) mime = 'image/jpeg';
+      const res = await client.downloadMedia(target, opts);
+      if (!Buffer.isBuffer(res) || res.length === 0) return null;
+      const entry = { buf: res, mime };
+      this.mediaBytes.set(key, entry);
+      this.mediaBytesTotal += res.length;
+      while (this.mediaBytesTotal > MEDIA_BYTES_MAX && this.mediaBytes.size > 1) {
+        const oldest = this.mediaBytes.keys().next().value!;
+        this.mediaBytesTotal -= this.mediaBytes.get(oldest)!.buf.length;
+        this.mediaBytes.delete(oldest);
+      }
+      return entry;
+    } catch (e: any) {
+      console.warn('[telegram] media failed', key, e?.message ?? e);
+      return null;
+    }
+  }
+
   async stop(): Promise<void> {
     await this.teardown();
     this.setState('disconnected');
@@ -242,6 +332,13 @@ export class TelegramWrapper extends EventEmitter {
           replyTo = { author: rName, text: String(r.message ?? '').trim() || (r.media ? '📎 media' : '') };
         }
       }
+      const mediaUrl = `/api/telegram/media/${chatId}/${m.id}`;
+      const media = classifyMedia(m.media, mediaUrl);
+      const preview = webpagePreview(m.media, `${mediaUrl}?thumb=1`);
+      if (m.media && (media.length || preview?.image)) {
+        this.mediaMsgs.set(`${chatId}:${m.id}`, m);
+        if (this.mediaMsgs.size > MEDIA_MSG_MAX) this.mediaMsgs.delete(this.mediaMsgs.keys().next().value!);
+      }
       const plain: TelegramPlain = {
         id: m.id,
         chatId,
@@ -252,9 +349,11 @@ export class TelegramWrapper extends EventEmitter {
         isBot: sender?.bot === true,
         text,
         date: m.date,
-        hasMedia: !!m.media,
+        hasMedia: !!m.media && m.media.className !== 'MessageMediaWebPage',
         replyTo,
         reactions: mapTelegramReactions((m.reactions as any)?.results),
+        media,
+        previews: preview ? [preview] : [],
       };
       const meta: ExtractedMeta = extractLinks(text, entityLinks(text, m.entities as any[] | undefined));
       this.emit('message', normalizeTelegram(plain) satisfies FeedMessage, meta);

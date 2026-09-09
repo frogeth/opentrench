@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { discordReaction, normalizeDiscord } from './normalize.js';
+import { discordMedia, discordPreviews, discordReaction, normalizeDiscord } from './normalize.js';
 
 const payload = {
   id: '111',
@@ -30,7 +30,41 @@ describe('normalizeDiscord', () => {
       repeat: false,
       link: 'https://discord.com/channels/333/222/111',
       hasAttachment: true,
+      media: [],
+      previews: [],
     });
+  });
+  it('extracts media from attachments, gif embeds, stickers and bare links', () => {
+    const d = {
+      content: 'lol https://media.discordapp.net/attachments/1/2/thing.gif?ex=1 and https://i.imgur.com/a.png',
+      attachments: [
+        { url: 'https://cdn.discordapp.com/attachments/1/2/pic.png', proxy_url: 'https://media.discordapp.net/attachments/1/2/pic.png', content_type: 'image/png' },
+        { url: 'https://cdn.discordapp.com/attachments/1/2/clip.mp4', content_type: 'video/mp4' },
+        { url: 'https://cdn.discordapp.com/attachments/1/2/doc.pdf', content_type: 'application/pdf' },
+      ],
+      embeds: [{ type: 'gifv', url: 'https://tenor.com/view/x', video: { url: 'https://media.tenor.com/x.mp4' }, thumbnail: { url: 'https://media.tenor.com/x.png' } }],
+      sticker_items: [{ id: '9', name: 'pepe', format_type: 1 }, { id: '10', name: 'lot', format_type: 3 }, { id: '11', name: 'g', format_type: 4 }],
+    };
+    expect(discordMedia(d)).toEqual([
+      { kind: 'image', url: 'https://media.discordapp.net/attachments/1/2/pic.png' },
+      { kind: 'video', url: 'https://cdn.discordapp.com/attachments/1/2/clip.mp4' },
+      { kind: 'gif', url: 'https://media.tenor.com/x.mp4', poster: 'https://media.tenor.com/x.png' },
+      { kind: 'sticker', url: 'https://media.discordapp.net/stickers/9.png?size=160' },
+      { kind: 'sticker', url: 'https://media.discordapp.net/stickers/11.gif?size=160' },
+      { kind: 'gif', url: 'https://media.discordapp.net/attachments/1/2/thing.gif?ex=1' },
+      { kind: 'image', url: 'https://i.imgur.com/a.png' },
+    ]);
+  });
+  it('turns a tweet embed into a preview', () => {
+    const d = {
+      embeds: [
+        { type: 'rich', url: 'https://x.com/jack/status/20', description: 'just setting up my twttr', author: { name: 'jack (@jack)', icon_url: 'https://pbs/av.jpg' }, thumbnail: { url: 'https://pbs/img.jpg' } },
+        { type: 'rich', url: 'https://example.com', description: 'not a tweet' },
+      ],
+    };
+    expect(discordPreviews(d)).toEqual([
+      { url: 'https://x.com/jack/status/20', site: 'x', author: 'jack', handle: 'jack', text: 'just setting up my twttr', image: 'https://pbs/img.jpg', avatar: 'https://pbs/av.jpg' },
+    ]);
   });
   it('falls back through nick -> global_name -> username', () => {
     expect(normalizeDiscord({ ...payload, member: undefined }, { name: 'a', guildName: 'g' }).author).toBe('Degen');

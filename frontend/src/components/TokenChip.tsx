@@ -5,7 +5,7 @@ import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
 
 /** Compact token strip shown under a chat message. */
-export function TokenChip({ c, t }: { c: Contract; t?: TokenInfo }) {
+export function TokenChip({ c, t, onSelect }: { c: Contract; t?: TokenInfo; onSelect?: (address: string) => void }) {
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const copy = async () => {
@@ -18,9 +18,12 @@ export function TokenChip({ c, t }: { c: Contract; t?: TokenInfo }) {
     <div className={`chip chip-${c.chain}${showChart ? ' chip-open' : ''}`}>
       <div className="chip-row">
         {t?.imageUrl && <img className="chip-img" src={t.imageUrl} alt="" loading="lazy" />}
-        <button className="chip-sym" onClick={copy} title={`${c.address}\nclick to copy`}>
-          {copied ? 'copied' : (t?.symbol ?? shortAddr(c.address))}
+        <button className="chip-sym" onClick={() => onSelect?.(c.address)} title={`${c.address}\nclick to show in Calls`}>
+          {t?.symbol ?? shortAddr(c.address)}
         </button>
+        <span className="chip-addr" onClick={copy} title="click to copy">
+          {copied ? 'copied' : shortAddr(c.address)}
+        </span>
         <span className={`net net-${t?.network ?? c.chain}`}>{netLabel(t?.network, c.chain)}</span>
         {hasPrice && money(t?.marketCap) && <span className="muted">MC {money(t?.marketCap)}</span>}
         {hasPrice && t?.change24h !== undefined && (

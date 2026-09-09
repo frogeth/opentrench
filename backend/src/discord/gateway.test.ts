@@ -48,9 +48,10 @@ const READY = {
     guilds: [
       {
         id: 'g1',
-        properties: { name: 'Guild One' },
+        properties: { name: 'Guild One', icon: 'ic0n' },
         channels: [
-          { id: 'c1', name: 'alpha', type: 0 },
+          { id: 'cat', name: 'CALLS', type: 4 },
+          { id: 'c1', name: 'alpha', type: 0, parent_id: 'cat', position: 3 },
           { id: 'c2', name: 'voice', type: 2 },
           { id: 'c3', name: 'news', type: 5 },
         ],
@@ -85,8 +86,8 @@ describe('DiscordGateway', () => {
     ws.recv({ op: 10, d: { heartbeat_interval: 1000 } });
     ws.recv(READY);
     expect(channels).toEqual([
-      { id: 'c1', name: 'alpha', guildName: 'Guild One' },
-      { id: 'c3', name: 'news', guildName: 'Guild One' },
+      { id: 'c1', name: 'alpha', guildId: 'g1', guildName: 'Guild One', guildIcon: 'https://cdn.discordapp.com/icons/g1/ic0n.png?size=64', category: 'CALLS', position: 3 },
+      { id: 'c3', name: 'news', guildId: 'g1', guildName: 'Guild One', guildIcon: 'https://cdn.discordapp.com/icons/g1/ic0n.png?size=64', category: undefined, position: 0 },
     ]);
     expect(states.at(-1)).toBe('connected');
   });

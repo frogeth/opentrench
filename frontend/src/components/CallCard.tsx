@@ -8,7 +8,7 @@ import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
 import { api } from '../api';
 
-export function CallCard({ t, now }: { t: TokenInfo; now: number }) {
+export function CallCard({ t, now, selected = false }: { t: TokenInfo; now: number; selected?: boolean }) {
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const hasPrice = t.priceUsd !== undefined;
@@ -21,7 +21,7 @@ export function CallCard({ t, now }: { t: TokenInfo; now: number }) {
   const c = t.firstCaller;
 
   return (
-    <div className={`call call-${t.chain}${showChart ? ' call-open' : ''}`}>
+    <div id={`call-${t.address}`} className={`call call-${t.chain}${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}`}>
       <div className="call-row">
         {t.imageUrl ? (
           <img className="call-img" src={t.imageUrl} alt="" loading="lazy" />

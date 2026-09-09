@@ -30,6 +30,9 @@ describe('normalizeTelegram', () => {
       repeat: false,
       link: 'https://t.me/alphagrp/42',
       hasAttachment: true,
+      chatAvatar: '/api/telegram/avatar/-1001234',
+      media: [],
+      previews: [],
     });
   });
   it('maps reactions, skipping zero counts', () => {
