@@ -6,6 +6,7 @@ import express from 'express';
 import { ConfigStore } from './config.js';
 import { MessageHub } from './hub.js';
 import { defaultEnricher } from './enrich.js';
+import type { CoveOptions } from './cove.js';
 import { Services } from './services.js';
 import { createApi } from './api.js';
 import { attachWs } from './ws.js';
@@ -17,10 +18,11 @@ const PORT = Number(process.env.PORT ?? 3210);
 const HOST = '127.0.0.1';
 
 const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'config.json'));
-const hub = new MessageHub(500, defaultEnricher, {
-  cove: () => cfg.get().cove,
+const hub: MessageHub = new MessageHub(500, defaultEnricher, {
+  cove: (): CoveOptions => ({ amounts: cfg.get().cove.amounts, affiliateId: svc.affiliateId() }),
   blacklist: () => cfg.get().blacklist,
 });
+const svc: Services = new Services(cfg, hub);
 const store = new StateStore(process.env.TRENCHFEED_STATE ?? path.join(root, 'state.json'));
 hub.load(store.load());
 hub.on('changed', () => store.schedule(() => hub.snapshot()));
@@ -30,7 +32,6 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
     process.exit(0);
   });
 }
-const svc = new Services(cfg, hub);
 
 const app = express();
 app.use('/api', createApi(cfg, hub, svc));

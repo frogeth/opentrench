@@ -246,17 +246,15 @@ function TelegramSection({ cfg, status, onChange }: { cfg: MaskedConfig; status:
 }
 
 function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
-  const [affiliate, setAffiliate] = useState(cfg.cove.affiliateId);
   const [amounts, setAmounts] = useState(cfg.cove.amounts.join(', '));
   const { busy, err, run } = useAsync();
   return (
     <section>
       <h2>Buy buttons (Cove)</h2>
       <div className="hint">
-        One-click buys open t.me/cove_trading_bot with the token and amount prefilled. Optional affiliate
-        Telegram ID for referral credit.
+        One-click buys open t.me/cove_trading_bot with the token and amount prefilled. Referral credit goes to
+        your logged-in Telegram account automatically.
       </div>
-      <input placeholder="affiliate telegram id (optional)" value={affiliate} onChange={(e) => setAffiliate(e.target.value)} />
       <input placeholder="amounts in USD, e.g. 25, 50, 100" value={amounts} onChange={(e) => setAmounts(e.target.value)} />
       <button
         disabled={busy}
@@ -266,7 +264,7 @@ function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
               .split(/[,\s]+/)
               .map(Number)
               .filter((n) => Number.isFinite(n) && n > 0);
-            await api.setCove(affiliate.trim(), list);
+            await api.setCove(list);
             onChange();
           })
         }

@@ -12,7 +12,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 export interface MaskedConfig {
   discord: { hasToken: boolean; watch: string[] };
   telegram: { apiId: number | null; hasApiHash: boolean; hasSession: boolean; watch: string[] };
-  cove: { affiliateId: string; amounts: number[] };
+  cove: { amounts: number[] };
   blacklist: string[];
 }
 export interface WatchedChat {
@@ -42,7 +42,7 @@ export const api = {
   tgLogout: () => req('POST', '/telegram/logout'),
   telegramDialogs: () => req<TelegramDialog[]>('GET', '/telegram/dialogs'),
   setTelegramWatch: (ids: string[]) => req('PUT', '/telegram/watch', { ids }),
-  setCove: (affiliateId: string, amounts: number[]) => req('PUT', '/cove', { affiliateId, amounts }),
+  setCove: (amounts: number[]) => req('PUT', '/cove', { amounts }),
   setBlacklist: (names: string[]) => req('PUT', '/blacklist', { names }),
   blacklistAdd: (name: string) => req('POST', '/blacklist/add', { name }),
   watched: () => req<WatchedChat[]>('GET', '/watched'),

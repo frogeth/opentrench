@@ -4,7 +4,7 @@ import path from 'node:path';
 export interface Config {
   discord: { token?: string; watch: string[] };
   telegram: { apiId?: number; apiHash?: string; session?: string; watch: string[] };
-  cove: { affiliateId?: string; amounts: number[] };
+  cove: { amounts: number[] };
   /** caller names (case-insensitive, leading @ ignored) whose posts never count as calls */
   blacklist: string[];
 }
@@ -37,7 +37,7 @@ export class ConfigStore {
         hasSession: !!this.cfg.telegram.session,
         watch: this.cfg.telegram.watch,
       },
-      cove: { affiliateId: this.cfg.cove.affiliateId ?? '', amounts: this.cfg.cove.amounts },
+      cove: { amounts: this.cfg.cove.amounts },
       blacklist: this.cfg.blacklist,
     };
   }
@@ -48,7 +48,7 @@ export class ConfigStore {
       return {
         discord: { ...DEFAULT.discord, ...raw.discord },
         telegram: { ...DEFAULT.telegram, ...raw.telegram },
-        cove: { ...DEFAULT.cove, ...raw.cove },
+        cove: { amounts: Array.isArray(raw.cove?.amounts) ? raw.cove.amounts.map(Number) : DEFAULT.cove.amounts },
         blacklist: Array.isArray(raw.blacklist) ? raw.blacklist.map(String) : [],
       };
     } catch {

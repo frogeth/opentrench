@@ -57,6 +57,11 @@ export class Services {
     );
   }
 
+  /** Cove affiliate = the logged-in Telegram account, same id used in the user's other bots. */
+  affiliateId(): string | undefined {
+    return this.telegram?.selfId;
+  }
+
   // ---- Telegram ----
 
   async startTelegram(): Promise<void> {
@@ -80,6 +85,7 @@ export class Services {
       this.hub.push(m, meta);
     });
     tg.on('reactions', (msgId: string, reactions: Reaction[]) => this.hub.setReactions(msgId, reactions));
+    tg.on('self', () => this.hub.recomputeBuyLinks());
     this.telegram = tg;
     await tg.connect();
   }

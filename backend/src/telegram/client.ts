@@ -65,6 +65,8 @@ export class TelegramWrapper extends EventEmitter {
   private avatars = new Map<string, Buffer | null>();
   state: TelegramState = 'disconnected';
   step: LoginStep = 'idle';
+  /** Logged-in account's Telegram user id (set once connected). */
+  selfId?: string;
 
   constructor(
     private apiId: number,
@@ -193,6 +195,15 @@ export class TelegramWrapper extends EventEmitter {
 
   private onAuthorized(client: TelegramClient): void {
     this.client = client;
+    client
+      .getMe()
+      .then((me: any) => {
+        if (me?.id) {
+          this.selfId = String(me.id);
+          this.emit('self', this.selfId);
+        }
+      })
+      .catch((e: any) => console.warn('[telegram] getMe failed', e?.message ?? e));
     client.addEventHandler((ev: NewMessageEvent) => {
       void this.onNewMessage(ev);
     }, new NewMessage({}));
