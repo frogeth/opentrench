@@ -110,6 +110,7 @@ export class MessageHub extends EventEmitter {
           seen: 0,
           calledIn: [],
           firstSeenTs: msg.ts,
+          lastCallTs: msg.ts,
           firstCaller: {
             author: msg.author,
             avatar: msg.avatar,
@@ -135,6 +136,7 @@ export class MessageHub extends EventEmitter {
         chats.add(msg.chatId);
         t.seen = chats.size;
         t.calledIn.push(msg.chatName);
+        t.lastCallTs = Math.max(t.lastCallTs ?? 0, msg.ts);
         anyNew = true;
       }
       if (meta) applyMeta(t, meta, msg.isBot);
@@ -260,6 +262,7 @@ export class MessageHub extends EventEmitter {
     this.tokenChats = new Map(Object.entries(snap.tokenChats ?? {}).map(([a, ids]) => [a, new Set(ids)]));
     for (const t of this.tokens.values()) {
       if (!this.tokenChats.has(t.address)) this.tokenChats.set(t.address, new Set());
+      if (t.lastCallTs === undefined) t.lastCallTs = t.firstSeenTs;
       this.applyBuy(t);
       if (t.priceUsd === undefined && now - t.firstSeenTs < REENRICH_MAX_AGE_MS) this.enrich(t);
     }

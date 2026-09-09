@@ -21,7 +21,13 @@ export function CallCard({ t, now, selected = false }: { t: TokenInfo; now: numb
   const c = t.firstCaller;
 
   return (
-    <div id={`call-${t.address}`} className={`call call-${t.chain}${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}`}>
+    <div
+      id={`call-${t.address}`}
+      className={`call call-${t.chain}${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${
+        t.seen >= 3 ? ' call-hot-3' : t.seen === 2 ? ' call-hot-2' : ''
+      }`}
+    >
+      {t.seen >= 2 && <span key={t.lastCallTs} className="call-pulse" />}
       <div className="call-row">
         {t.imageUrl ? (
           <img className="call-img" src={t.imageUrl} alt="" loading="lazy" />
@@ -35,7 +41,11 @@ export function CallCard({ t, now, selected = false }: { t: TokenInfo; now: numb
             </button>
             {t.name && t.name !== t.symbol && <span className="call-name">{t.name}</span>}
             <span className={`net net-${t.network ?? t.chain}`}>{label}</span>
-            <span className="call-seen" title={t.calledIn.length ? `called in:\n${t.calledIn.join('\n')}` : undefined}>
+            <span
+              className={`call-seen${t.seen >= 2 ? ' call-seen-hot' : ''}`}
+              title={t.calledIn.length ? `called in:\n${t.calledIn.join('\n')}` : undefined}
+            >
+              {t.seen >= 2 ? '🔥 ' : ''}
               {t.seen}×
             </span>
           </div>

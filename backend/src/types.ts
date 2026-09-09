@@ -83,6 +83,8 @@ export interface TokenInfo {
   /** names of those chats, in order of first post */
   calledIn: string[];
   firstSeenTs: number;
+  /** when the most recent chat called it (drives Calls ordering) */
+  lastCallTs: number;
   name?: string;
   symbol?: string;
   priceUsd?: number;

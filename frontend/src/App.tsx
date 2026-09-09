@@ -98,7 +98,7 @@ export default function App() {
     () =>
       Object.values(tokens)
         .filter((t) => (!chatFilter || t.calledIn.includes(chatFilter)) && tokenMatches(q, t))
-        .sort((a, b) => b.firstSeenTs - a.firstSeenTs),
+        .sort((a, b) => (b.lastCallTs ?? b.firstSeenTs) - (a.lastCallTs ?? a.firstSeenTs)),
     [tokens, q, chatFilter],
   );
 

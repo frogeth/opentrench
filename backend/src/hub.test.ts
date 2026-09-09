@@ -82,9 +82,9 @@ describe('MessageHub', () => {
       [SOL, 1],
       [EVM, 2],
     ]);
-    expect(hub.hello().tokens.map((t) => [t.address, t.seen, t.calledIn, t.firstSeenTs])).toEqual([
-      [EVM, 2, ['#a', 'B group'], 1],
-      [SOL, 1, ['B group'], 3],
+    expect(hub.hello().tokens.map((t) => [t.address, t.seen, t.calledIn, t.firstSeenTs, t.lastCallTs])).toEqual([
+      [EVM, 2, ['#a', 'B group'], 1, 3],
+      [SOL, 1, ['B group'], 3, 3],
     ]);
   });
 
