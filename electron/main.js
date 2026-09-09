@@ -97,6 +97,7 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#0a0c0f',
     title: 'opentrench',
+    ...(app.isPackaged ? {} : { icon: path.join(__dirname, 'build', 'icon.png') }),
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 14 },
     webPreferences: { contextIsolation: true, sandbox: true },
