@@ -9,7 +9,8 @@
     "start": "electron .",
     "prepare-backend": "node scripts/prepare-backend.js",
     "dist": "npm run prepare-backend && electron-builder --mac dmg --publish never",
-    "dist:win": "npm run prepare-backend && electron-builder --win nsis --x64 --publish never"
+    "dist:win": "npm run prepare-backend && electron-builder --win nsis --x64 --publish never",
+    "release": "scripts/release.sh"
   },
   "devDependencies": {
     "electron": "^33.2.1",
@@ -22,7 +23,8 @@
       "output": "dist"
     },
     "files": [
-      "main.js"
+      "main.js",
+      "entitlements.mac.plist"
     ],
     "extraResources": [
       {
@@ -38,9 +40,27 @@
     "mac": {
       "category": "public.app-category.finance",
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
-      "darkModeSupport": true
+      "darkModeSupport": true,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
+      "notarize": false
     },
     "electronVersion": "33.4.11",
     "win": {
@@ -57,10 +77,18 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "frogeth",
+        "repo": "opentrench",
+        "releaseType": "release"
+      }
+    ]
   },
   "dependencies": {
-    "app-builder-bin": "^4.2.0"
+    "electron-updater": "^6.3.9"
   },
   "author": "moussaboussi"
 }

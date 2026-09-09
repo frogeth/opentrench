@@ -105,6 +105,21 @@ npm run desktop:dist   # build a .dmg into electron/dist/
 npm run dist:win -w electron   # Windows installer (.exe), built from macOS
 ```
 
+### Updates
+
+The app checks GitHub Releases (frogeth/opentrench) on launch and hourly, and
+there's "Check for Updates…" in the app menu. Windows installs updates
+silently on quit. macOS can self-update only when the build is signed and
+notarized (Developer ID cert in the keychain + `APPLE_ID`,
+`APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` in the environment when
+releasing); an unsigned Mac build shows a "download the new version" dialog
+instead. Cut a release with:
+
+```bash
+npm run release -w electron            # patch bump, build mac + win, upload
+npm run release -w electron -- minor   # or: major, or an explicit version
+```
+
 Windows builds are unsigned too: SmartScreen shows "Windows protected your
 PC" on first run → More info → Run anyway. Each user connects their own
 Discord and Telegram accounts on first launch.

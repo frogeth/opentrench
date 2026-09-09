@@ -1,5 +1,5 @@
 // opentrench desktop: runs the backend with Electron's bundled Node and opens a window on it.
-const { app, BrowserWindow, shell, nativeTheme } = require('electron');
+const { app, BrowserWindow, shell, nativeTheme, dialog, Menu } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -7,6 +7,7 @@ const http = require('node:http');
 
 const PORT = Number(process.env.TRENCHFEED_PORT ?? 3210);
 const URL = `http://127.0.0.1:${PORT}`;
+const RELEASES_URL = 'https://github.com/frogeth/opentrench/releases/latest';
 let child = null;
 let win = null;
 
@@ -18,10 +19,9 @@ function paths() {
   return { packaged, backendDir, entry, data, config: path.join(data, 'config.json'), state: path.join(data, 'state.json') };
 }
 
-/** First run from the repo: adopt the dev checkout's config/state so no re-login is needed. */
+/** First run: adopt the old trenchfeed app-data folder, or (from the repo) the dev checkout's files. */
 function adoptDevFiles(p) {
   fs.mkdirSync(p.data, { recursive: true });
-  // Renamed from trenchfeed: adopt the old app-data folder once.
   const old = path.join(path.dirname(p.data), 'trenchfeed');
   for (const f of ['config.json', 'state.json']) {
     const to = path.join(p.data, f);
@@ -119,13 +119,117 @@ function createWindow() {
   win.on('closed', () => (win = null));
 }
 
+// ---------- auto-update (GitHub Releases) ----------
+// Windows: downloads silently, installs on quit (or now, if you say so).
+// macOS: the same once the app is signed + notarized; an unsigned build can only
+// point you at the release page, which is what the fallback below does.
+let updater = null;
+let updateReady = null;
+let checking = false;
+
+function setupUpdater() {
+  if (!app.isPackaged) return;
+  try {
+    const { autoUpdater } = require('electron-updater');
+    updater = autoUpdater;
+  } catch (e) {
+    console.warn('[update] electron-updater unavailable', e?.message);
+    return;
+  }
+  updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = true;
+  updater.logger = console;
+  updater.on('update-available', (info) => console.log('[update] available', info?.version));
+  updater.on('update-not-available', () => {
+    if (checking) dialog.showMessageBox({ message: `opentrench ${app.getVersion()} is up to date.`, buttons: ['OK'] });
+    checking = false;
+  });
+  updater.on('update-downloaded', async (info) => {
+    updateReady = info?.version ?? 'new';
+    checking = false;
+    const { response } = await dialog.showMessageBox(win ?? undefined, {
+      type: 'info',
+      message: `opentrench ${updateReady} is ready`,
+      detail: 'Restart now to install it, or it installs the next time you quit.',
+      buttons: ['Restart now', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response === 0) {
+      stopBackend();
+      updater.quitAndInstall();
+    }
+  });
+  updater.on('error', async (err) => {
+    const msg = String(err?.message ?? err);
+    console.warn('[update] error', msg);
+    // Unsigned macOS builds cannot self-update: offer the download page instead.
+    if (process.platform === 'darwin' && /sign|code signature|Squirrel/i.test(msg)) {
+      const { response } = await dialog.showMessageBox(win ?? undefined, {
+        type: 'info',
+        message: 'A newer opentrench is available',
+        detail: 'This copy is not signed, so it cannot update itself. Download the new version and drag it over the old one.',
+        buttons: ['Open download page', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      if (response === 0) shell.openExternal(RELEASES_URL);
+    } else if (checking) {
+      dialog.showMessageBox({ type: 'warning', message: 'Update check failed', detail: msg, buttons: ['OK'] });
+    }
+    checking = false;
+  });
+  const check = () => updater.checkForUpdates().catch(() => {});
+  setTimeout(check, 4000);
+  setInterval(check, 60 * 60 * 1000);
+}
+
+function checkForUpdatesNow() {
+  if (!updater) {
+    dialog.showMessageBox({ message: 'Updates only work in the packaged app.', buttons: ['OK'] });
+    return;
+  }
+  checking = true;
+  updater.checkForUpdates().catch(() => {});
+}
+
+function buildMenu() {
+  const template = [
+    ...(process.platform === 'darwin'
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' },
+              { label: 'Check for Updates…', click: checkForUpdatesNow },
+              { type: 'separator' },
+              { role: 'services' },
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' },
+            ],
+          },
+        ]
+      : [{ label: 'File', submenu: [{ label: 'Check for Updates…', click: checkForUpdatesNow }, { type: 'separator' }, { role: 'quit' }] }]),
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 app.whenReady().then(async () => {
+  buildMenu();
   try {
     await startBackend();
   } catch (e) {
     console.error('[desktop]', e);
   }
   createWindow();
+  setupUpdater();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
