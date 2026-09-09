@@ -24,8 +24,13 @@ app.use('/api', createApi(cfg, hub, svc));
 
 const dist = path.resolve(root, '..', 'frontend', 'dist');
 if (fs.existsSync(dist)) {
-  app.use(express.static(dist));
-  app.get('*', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
+  // Hashed assets can be cached forever; the HTML shell must never be, or a
+  // rebuild keeps showing the old UI until a hard refresh.
+  app.use(express.static(dist, { index: false, maxAge: '1y', immutable: true }));
+  app.get('*', (_req, res) => {
+    res.setHeader('cache-control', 'no-store');
+    res.sendFile(path.join(dist, 'index.html'));
+  });
 }
 
 const server = http.createServer(app);
