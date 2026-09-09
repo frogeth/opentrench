@@ -63,7 +63,14 @@ export function TokenChip({
             <span className="chip-addr" onClick={copy} title="click to copy">
               {copied ? 'copied' : shortAddr(c.address)}
             </span>
+            {showChart && (
+              <span className={`chip-seen${hot ? ' hot' : ''}`}>
+                {hot ? '🔥 ' : ''}
+                {t?.seen ?? 1}×
+              </span>
+            )}
           </div>
+          {!showChart && (
           <div className="chip-line chip-stats">
             {hasPrice ? (
               <>
@@ -88,6 +95,7 @@ export function TokenChip({
               {t?.seen ?? 1}×
             </span>
           </div>
+          )}
         </div>
         <div className="chip-actions">
           <TokenLinks t={t} showChart={showChart} onToggleChart={() => setShowChart((s) => !s)} canChart={!!embed} />

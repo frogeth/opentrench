@@ -103,14 +103,24 @@ const BASEDBOT_SLUG: Record<string, string> = {
   arbitrum: 'arbitrum',
 };
 
+/** Candle size that fills the chart for a token of this age: fresh launches get 1m, older ones 15m. */
+export function chartInterval(pairCreatedAt: number | undefined, now = Date.now()): number {
+  if (!pairCreatedAt) return 15;
+  const ageMin = (now - pairCreatedAt) / 60_000;
+  if (ageMin < 90) return 1;
+  if (ageMin < 12 * 60) return 5;
+  return 15;
+}
+
 export function chartEmbedUrl(
-  t: { network?: string; address: string; embedUrl?: string } | undefined,
+  t: { network?: string; address: string; embedUrl?: string; pairCreatedAt?: number } | undefined,
   provider: ChartProvider,
+  now = Date.now(),
 ): string | undefined {
   if (!t) return undefined;
   if (provider === 'basedbot') {
     const slug = t.network ? BASEDBOT_SLUG[t.network] : undefined;
-    if (slug) return `https://basedbot.app/embed/token/${slug}/${t.address}?interval=15`;
+    if (slug) return `https://basedbot.app/embed/token/${slug}/${t.address}?interval=${chartInterval(t.pairCreatedAt, now)}`;
   }
   return t.embedUrl;
 }
