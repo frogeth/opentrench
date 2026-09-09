@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { copyText } from '../format';
 
-/** "⋯" next to a name: copy name, open original, and (behind a confirm) blacklist the caller. */
-export function AuthorMenu({ author, link }: { author: string; link?: string }) {
+/** "⋯" next to a name: favorite, copy name, open original, and (behind a confirm) blacklist the caller. */
+export function AuthorMenu({ author, link, favorite = false }: { author: string; link?: string; favorite?: boolean }) {
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
@@ -42,6 +42,14 @@ export function AuthorMenu({ author, link }: { author: string; link?: string }) 
       </button>
       {open && (
         <div className="amenu-pop">
+          <button
+            onClick={() => {
+              void api.favoriteToggle(author).catch(() => {});
+              close();
+            }}
+          >
+            {favorite ? '👑 Unfavorite caller' : '👑 Favorite caller (pings on first calls)'}
+          </button>
           <button
             onClick={() => {
               void copyText(author);

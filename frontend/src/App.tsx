@@ -8,6 +8,7 @@ import { Browser } from './components/Browser';
 import { Logo } from './components/Logo';
 import { Avatar } from './components/Avatar';
 import { api, type WatchedChat } from './api';
+import { beep } from './format';
 import type { FeedMessage, Source, Status, TokenInfo } from './types';
 
 function Pill({ label, state }: { label: string; state: string }) {
@@ -42,7 +43,7 @@ function tokenMatches(q: string, t: TokenInfo): boolean {
 type Panel = { kind: 'settings' } | { kind: 'browser'; source: Source } | null;
 
 export default function App() {
-  const { messages, tokens, status, wsOpen } = useFeed();
+  const { messages, tokens, status, wsOpen, ping } = useFeed();
   const [panel, setPanel] = useState<Panel>(null);
   const [query, setQuery] = useState('');
   const [chatFilter, setChatFilter] = useState<string | null>(null);
@@ -52,6 +53,52 @@ export default function App() {
   const [now, setNow] = useState(Date.now());
   const [watched, setWatched] = useState<WatchedChat[]>([]);
   const tabsRef = useRef<HTMLDivElement>(null);
+  const [notify, setNotify] = useState<NotificationPermission>(() =>
+    typeof Notification === 'undefined' ? 'denied' : Notification.permission,
+  );
+  const [sound, setSound] = useState(() => {
+    try {
+      return localStorage.getItem('trenchfeed.sound') !== 'off';
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    if (!ping) return;
+    const label = ping.token.symbol ? `$${ping.token.symbol}` : ping.token.address.slice(0, 8);
+    if (sound) beep();
+    if (notify === 'granted') {
+      try {
+        const n = new Notification(`👑 ${ping.msg.author} called ${label}`, {
+          body: `${ping.msg.chatName}\n${ping.token.address}`,
+          icon: ping.token.imageUrl ?? ping.msg.avatar,
+          tag: ping.token.address,
+        });
+        n.onclick = () => {
+          window.focus();
+          setSelected(ping.token.address);
+          n.close();
+        };
+      } catch {
+        /* notifications unavailable */
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ping]);
+  const askNotify = () => {
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'granted') {
+      const next = !sound;
+      setSound(next);
+      try {
+        localStorage.setItem('trenchfeed.sound', next ? 'on' : 'off');
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    void Notification.requestPermission().then(setNotify);
+  };
 
   useEffect(() => {
     api.watched().then(setWatched).catch(() => {});
@@ -127,6 +174,18 @@ export default function App() {
           <Pill label="telegram" state={status.telegram} />
           {!wsOpen && <span className="pill pill-disconnected">server: offline</span>}
         </div>
+        <button
+          className={`gear bell${notify === 'granted' ? ' on' : ''}`}
+          onClick={askNotify}
+          title={
+            notify === 'granted'
+              ? `pings on · sound ${sound ? 'on' : 'off'} (click to toggle sound)`
+              : 'enable desktop pings for favorite callers'
+          }
+        >
+          {notify === 'granted' ? (sound ? '🔔' : '🔕') : '🔔'}
+          {notify !== 'granted' && <span className="bell-off">off</span>}
+        </button>
         <button className="gear" onClick={() => togglePanel({ kind: 'settings' })} title="settings">
           ⚙
         </button>
@@ -182,7 +241,7 @@ export default function App() {
         <Column title="Calls" count={calls.length} className="col-calls">
           {calls.length === 0 && <div className="empty">No contracts seen yet.</div>}
           {calls.map((t) => (
-            <CallCard key={t.address} t={t} now={now} selected={selected === t.address} />
+            <CallCard key={t.address} t={t} now={now} selected={selected === t.address} favorites={status.favorites} />
           ))}
         </Column>
         <Column
@@ -205,7 +264,7 @@ export default function App() {
             <div className="empty">No messages yet. Use the Discord / Telegram buttons above to add chats.</div>
           )}
           {chatMsgs.map((m) => (
-            <MessageRow key={m.id} m={m} tokens={tokens} onSelect={select} />
+            <MessageRow key={m.id} m={m} tokens={tokens} onSelect={select} favorites={status.favorites} />
           ))}
         </Column>
         {panel?.kind === 'settings' && <Settings status={status} onClose={() => setPanel(null)} />}

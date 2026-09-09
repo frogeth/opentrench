@@ -269,6 +269,12 @@ export class TelegramWrapper extends EventEmitter {
     }
   }
 
+  /** Message your own "Saved Messages" (phone ping without any bot). */
+  async sendSelf(text: string): Promise<void> {
+    if (!this.client || this.state !== 'connected') return;
+    await this.client.sendMessage('me', { message: text, linkPreview: false });
+  }
+
   async stop(): Promise<void> {
     await this.teardown();
     this.setState('disconnected');

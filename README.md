@@ -45,6 +45,16 @@ authors, chats, tickers and addresses.
 - "called N×" counts how many different chats have posted a contract since
   the server started (hover to see which). Repeats inside the same chat don't
   count.
+- **Call cards** show the caller (with a 👑 if favorited), age, live market
+  cap, token image with chain badge, ticker, token age, price, a buys/sells
+  bar, volume, market cap, ATH since first call, liquidity, Cove buttons and
+  a Telegram **share** button. Market numbers refresh every minute for tokens
+  called in the last 24h. A token called by a second chat glows and jumps to
+  the top; three or more chats turns it red.
+- **Favorite callers** (⋯ next to a name → 👑) ping you when they post a
+  contract nobody has called yet: a desktop notification with a sound (enable
+  with the 🔔 in the top bar) and a message to your own Telegram Saved
+  Messages (toggle in Settings).
 - **Buy buttons** open Cove (t.me/cove_trading_bot) with the token and a USD
   amount prefilled, same deep-link format frogr uses. Amounts and an optional
   affiliate Telegram ID live in Settings → Buy buttons. Supported chains:

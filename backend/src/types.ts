@@ -89,8 +89,15 @@ export interface TokenInfo {
   symbol?: string;
   priceUsd?: number;
   marketCap?: number;
+  /** highest market cap seen since the first call */
+  athMarketCap?: number;
   liquidity?: number;
   change24h?: number;
+  volume24h?: number;
+  buys24h?: number;
+  sells24h?: number;
+  /** pair creation time (ms) — the token's age */
+  pairCreatedAt?: number;
   imageUrl?: string;
   /** dexscreener-style chain id: ethereum | base | bsc | solana | robinhood | … */
   network?: string;
@@ -113,6 +120,8 @@ export interface Status {
   telegram: TelegramState;
   loginStep: LoginStep;
   error: { discord?: string; telegram?: string };
+  /** favorite callers (crown + pings) */
+  favorites: string[];
 }
 
 export type ServerEvent =
@@ -122,4 +131,5 @@ export type ServerEvent =
   | { type: 'reactions'; msgId: string; reactions: Reaction[] }
   | { type: 'tokens'; tokens: TokenInfo[] }
   | { type: 'msg'; msgId: string; patch: Partial<FeedMessage> }
+  | { type: 'ping'; token: TokenInfo; msg: FeedMessage }
   | { type: 'status'; status: Status };

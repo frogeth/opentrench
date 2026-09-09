@@ -17,6 +17,7 @@ export function Settings({ status, onClose }: { status: Status; onClose: () => v
       {cfg && <DiscordSection cfg={cfg} status={status} onChange={reload} />}
       {cfg && <TelegramSection cfg={cfg} status={status} onChange={reload} />}
       {cfg && <CoveSection cfg={cfg} onChange={reload} />}
+      {cfg && <FavoritesSection cfg={cfg} onChange={reload} />}
       {cfg && <BlacklistSection cfg={cfg} onChange={reload} />}
     </aside>
   );
@@ -312,6 +313,69 @@ function BlacklistSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () =
               ✕
             </button>{' '}
             {n}
+          </label>
+        ))}
+      </div>
+      {err && <div className="err">{err}</div>}
+    </section>
+  );
+}
+
+function FavoritesSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
+  const [name, setName] = useState('');
+  const { busy, err, run } = useAsync();
+  return (
+    <section>
+      <h2>Favorite callers &amp; pings</h2>
+      <div className="hint">
+        Favorites get a 👑 and ping you when they post a contract nobody has called yet: a desktop notification
+        (enable with the 🔔 in the top bar) and a message to your own Telegram Saved Messages.
+      </div>
+      <label>
+        <input
+          type="checkbox"
+          checked={cfg.pingTelegram}
+          disabled={busy}
+          onChange={(e) =>
+            run(async () => {
+              await api.setPings(e.target.checked);
+              onChange();
+            })
+          }
+        />{' '}
+        Telegram Saved Messages ping
+      </label>
+      <input placeholder="add a caller name" value={name} onChange={(e) => setName(e.target.value)} />
+      <button
+        disabled={busy || !name.trim()}
+        onClick={() =>
+          run(async () => {
+            await api.favoriteToggle(name.trim());
+            setName('');
+            onChange();
+          })
+        }
+      >
+        Add favorite
+      </button>
+      <div className="picker">
+        {cfg.favorites.length === 0 && <div className="hint">No favorites yet. Use ⋯ next to any name.</div>}
+        {cfg.favorites.map((n) => (
+          <label key={n}>
+            <button
+              className="mini"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await api.setFavorites(cfg.favorites.filter((x) => x !== n));
+                  onChange();
+                })
+              }
+              title="remove"
+            >
+              ✕
+            </button>{' '}
+            👑 {n}
           </label>
         ))}
       </div>

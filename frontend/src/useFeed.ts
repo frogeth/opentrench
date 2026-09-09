@@ -12,8 +12,10 @@ export function useFeed() {
     telegram: 'disconnected',
     loginStep: 'idle',
     error: {},
+    favorites: [],
   });
   const [wsOpen, setWsOpen] = useState(false);
+  const [ping, setPing] = useState<Extract<ServerEvent, { type: 'ping' }> | null>(null);
 
   useEffect(() => {
     let ws: WebSocket | undefined;
@@ -38,7 +40,8 @@ export function useFeed() {
           setTokens(Object.fromEntries(ev.tokens.map((t) => [t.address, t])));
         } else if (ev.type === 'reactions') {
           setMessages((m) => m.map((x) => (x.id === ev.msgId ? { ...x, reactions: ev.reactions } : x)));
-        } else if (ev.type === 'status') setStatus(ev.status);
+        } else if (ev.type === 'ping') setPing(ev);
+        else if (ev.type === 'status') setStatus(ev.status);
       };
       ws.onclose = () => {
         setWsOpen(false);
@@ -53,5 +56,5 @@ export function useFeed() {
     };
   }, []);
 
-  return { messages, tokens, status, wsOpen };
+  return { messages, tokens, status, wsOpen, ping };
 }

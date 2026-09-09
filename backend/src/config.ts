@@ -7,9 +7,13 @@ export interface Config {
   cove: { amounts: number[] };
   /** caller names (case-insensitive, leading @ ignored) whose posts never count as calls */
   blacklist: string[];
+  /** callers whose first-time calls ping you */
+  favorites: string[];
+  /** send pings to your own Telegram "Saved Messages" */
+  pingTelegram: boolean;
 }
 
-const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [] };
+const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [], favorites: [], pingTelegram: true };
 
 export class ConfigStore {
   private cfg: Config;
@@ -39,6 +43,8 @@ export class ConfigStore {
       },
       cove: { amounts: this.cfg.cove.amounts },
       blacklist: this.cfg.blacklist,
+      favorites: this.cfg.favorites,
+      pingTelegram: this.cfg.pingTelegram,
     };
   }
 
@@ -50,6 +56,8 @@ export class ConfigStore {
         telegram: { ...DEFAULT.telegram, ...raw.telegram },
         cove: { amounts: Array.isArray(raw.cove?.amounts) ? raw.cove.amounts.map(Number) : DEFAULT.cove.amounts },
         blacklist: Array.isArray(raw.blacklist) ? raw.blacklist.map(String) : [],
+        favorites: Array.isArray(raw.favorites) ? raw.favorites.map(String) : [],
+        pingTelegram: raw.pingTelegram !== false,
       };
     } catch {
       return structuredClone(DEFAULT);

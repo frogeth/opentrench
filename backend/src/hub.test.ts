@@ -53,6 +53,7 @@ describe('MessageHub', () => {
       telegram: 'connected',
       loginStep: 'idle',
       error: { discord: 'bad token' },
+      favorites: [],
     });
     expect(events.map((e) => e.type)).toEqual(['status', 'status']);
   });
@@ -238,6 +239,28 @@ describe('MessageHub', () => {
     expect(hub2.hello().messages.at(-1)?.repeat).toBe(true);
     hub2.push(msg(4, EVM, { chatId: 'c', chatName: '#c' }));
     expect(hub2.hello().tokens[0].seen).toBe(3);
+  });
+
+  it('pings when a favorite caller posts a contract for the first time', () => {
+    const hub = new MessageHub(500, undefined, { favorites: () => ['@Alpha_Andy'] });
+    const pings: any[] = [];
+    hub.on('event', (e) => e.type === 'ping' && pings.push(e));
+    hub.push(msg(1, EVM, { author: 'nobody', chatId: 'a' }));
+    hub.push(msg(2, EVM, { author: 'alpha_andy', chatId: 'b' })); // already called → no ping
+    hub.push(msg(3, SOL, { author: 'Alpha_Andy', chatId: 'b' }));
+    expect(pings.map((p) => [p.token.address, p.msg.id])).toEqual([[SOL, 'discord:3']]);
+    expect(hub.getStatus().favorites).toEqual(['@Alpha_Andy']);
+  });
+
+  it('updates market numbers and tracks ATH', () => {
+    const hub = new MessageHub(500);
+    hub.push(msg(1, EVM));
+    hub.updateMarket(EVM, { marketCap: 100, volume24h: 5, buys24h: 3, sells24h: 1 });
+    hub.updateMarket(EVM, { marketCap: 250 });
+    hub.updateMarket(EVM, { marketCap: 90 });
+    expect(hub.hello().tokens[0]).toMatchObject({ marketCap: 90, athMarketCap: 250, volume24h: 5, buys24h: 3, sells24h: 1 });
+    expect(hub.activeTokens(60_000, 1000)).toHaveLength(1);
+    expect(hub.activeTokens(60_000, 10_000_000)).toHaveLength(0);
   });
 
   it('survives a failing fetcher', async () => {

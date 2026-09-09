@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapDexscreener } from './dexscreener.js';
+import { fetchDexscreenerBatch, mapDexscreener } from './dexscreener.js';
 
 const ADDR = '0x777777780838C00038ecD48F63f3C37669322Bc8';
 const pair = (liq: number, extra: Record<string, unknown> = {}) => ({
@@ -12,6 +12,9 @@ const pair = (liq: number, extra: Record<string, unknown> = {}) => ({
   marketCap: 268911,
   liquidity: { usd: liq },
   priceChange: { h24: -2.9 },
+  volume: { h24: 46881.8 },
+  txns: { h24: { buys: 12, sells: 7 } },
+  pairCreatedAt: 1700000000000,
   ...extra,
 });
 
@@ -40,6 +43,10 @@ describe('mapDexscreener', () => {
       marketCap: 268911,
       liquidity: 5000,
       change24h: -2.9,
+      volume24h: 46881.8,
+      buys24h: 12,
+      sells24h: 7,
+      pairCreatedAt: 1700000000000,
       network: 'ethereum',
       pairAddress: 'pair5000',
       chartUrl: 'https://dexscreener.com/ethereum/pair5000',
@@ -60,6 +67,19 @@ describe('mapDexscreener', () => {
   it('returns undefined when there are no pairs', () => {
     expect(mapDexscreener({ pairs: null }, ADDR)).toBeUndefined();
     expect(mapDexscreener({ pairs: [] }, ADDR)).toBeUndefined();
+  });
+
+  it('batches many addresses in one request', async () => {
+    const urls: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      urls.push(url);
+      return { ok: true, json: async () => ({ pairs: [pair(9), { ...pair(3), baseToken: { address: 'So1', name: 'S', symbol: 'S' } }] }) } as any;
+    }) as unknown as typeof fetch;
+    const got = await fetchDexscreenerBatch([ADDR, 'So1', '0xnothing'], fetchImpl);
+    expect(urls[0]).toBe(`https://api.dexscreener.com/latest/dex/tokens/${ADDR},So1,0xnothing`);
+    expect([...got.keys()]).toEqual([ADDR, 'So1']);
+    expect(got.get(ADDR)?.liquidity).toBe(9);
+    expect(got.get('So1')?.symbol).toBe('S');
   });
 
   it('falls back to fdv when marketCap is missing', () => {

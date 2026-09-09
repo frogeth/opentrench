@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FeedMessage, LinkPreview, MediaItem, TokenInfo } from '../types';
-import { fmtTime } from '../format';
+import { fmtTime, isFavorite } from '../format';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 import { TokenChip } from './TokenChip';
@@ -56,19 +56,22 @@ export function MessageRow({
   m,
   tokens,
   onSelect,
+  favorites = [],
 }: {
   m: FeedMessage;
   tokens: Record<string, TokenInfo>;
   onSelect?: (address: string) => void;
+  favorites?: string[];
 }) {
+  const fav = !m.isBot && isFavorite(favorites, m.author);
   return (
-    <div className={`row row-${m.source}${m.repeat ? ' row-repeat' : ''}${m.isBot ? ' row-bot' : ''}`}>
-      <Avatar src={m.avatar} name={m.author} />
+    <div className={`row row-${m.source}${m.repeat ? ' row-repeat' : ''}${m.isBot ? ' row-bot' : ''}${fav ? ' row-fav' : ''}`}>
+      <Avatar src={m.avatar} name={m.author} crown={fav} />
       <div className="row-main">
         <div className="row-meta">
           <span className="author">{m.author}</span>
           {m.isBot && <span className="bot-tag">bot</span>}
-          {!m.isBot && <AuthorMenu author={m.author} link={m.link} />}
+          {!m.isBot && <AuthorMenu author={m.author} link={m.link} favorite={fav} />}
           <span className="time">
             {m.link ? (
               <a href={m.link} target="_blank" rel="noreferrer">

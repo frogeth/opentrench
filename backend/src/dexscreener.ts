@@ -1,6 +1,8 @@
 import type { TokenInfo } from './types.js';
 
 const API = 'https://api.dexscreener.com/latest/dex/tokens/';
+/** Dexscreener accepts up to 30 comma-separated addresses per call. */
+export const BATCH_MAX = 30;
 const TIMEOUT_MS = 8000;
 
 function num(v: unknown): number | undefined {
@@ -32,6 +34,14 @@ export function mapDexscreener(json: any, address: string): Partial<TokenInfo> |
   if (liq !== undefined) out.liquidity = liq;
   const ch = num(best.priceChange?.h24);
   if (ch !== undefined) out.change24h = ch;
+  const vol = num(best.volume?.h24);
+  if (vol !== undefined) out.volume24h = vol;
+  const buys = num(best.txns?.h24?.buys);
+  if (buys !== undefined) out.buys24h = buys;
+  const sells = num(best.txns?.h24?.sells);
+  if (sells !== undefined) out.sells24h = sells;
+  const created = num(best.pairCreatedAt);
+  if (created !== undefined) out.pairCreatedAt = created;
   if (best.chainId) out.network = String(best.chainId);
   if (best.pairAddress) out.pairAddress = String(best.pairAddress);
   if (best.url) out.chartUrl = String(best.url);
@@ -56,6 +66,29 @@ export async function fetchDexscreener(
     const res = await fetchImpl(API + encodeURIComponent(address), { signal: ctl.signal });
     if (!res.ok) throw new Error(`dexscreener ${res.status}`);
     return mapDexscreener(await res.json(), address);
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** One request for many tokens; returns only those that have a pair. Keys are the addresses as passed. */
+export async function fetchDexscreenerBatch(
+  addresses: string[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<Map<string, Partial<TokenInfo>>> {
+  const out = new Map<string, Partial<TokenInfo>>();
+  if (addresses.length === 0) return out;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetchImpl(API + addresses.slice(0, BATCH_MAX).map(encodeURIComponent).join(','), { signal: ctl.signal });
+    if (!res.ok) throw new Error(`dexscreener ${res.status}`);
+    const json = await res.json();
+    for (const a of addresses) {
+      const info = mapDexscreener(json, a);
+      if (info) out.set(a, info);
+    }
+    return out;
   } finally {
     clearTimeout(t);
   }

@@ -6,6 +6,7 @@ import express from 'express';
 import { ConfigStore } from './config.js';
 import { MessageHub } from './hub.js';
 import { defaultEnricher } from './enrich.js';
+import { BATCH_MAX, fetchDexscreenerBatch } from './dexscreener.js';
 import type { CoveOptions } from './cove.js';
 import { Services } from './services.js';
 import { createApi } from './api.js';
@@ -21,7 +22,23 @@ const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'co
 const hub: MessageHub = new MessageHub(500, defaultEnricher, {
   cove: (): CoveOptions => ({ amounts: cfg.get().cove.amounts, affiliateId: svc.affiliateId() }),
   blacklist: () => cfg.get().blacklist,
+  favorites: () => cfg.get().favorites,
 });
+
+// Live market numbers: every minute, refresh tokens called in the last 24h (30 per request).
+const REFRESH_MS = 60_000;
+const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
+setInterval(() => {
+  const active = hub.activeTokens(ACTIVE_WINDOW_MS).slice(0, BATCH_MAX * 4);
+  for (let i = 0; i < active.length; i += BATCH_MAX) {
+    const chunk = active.slice(i, i + BATCH_MAX);
+    fetchDexscreenerBatch(chunk.map((t) => t.address))
+      .then((got) => {
+        for (const [addr, info] of got) hub.updateMarket(addr, info);
+      })
+      .catch((e) => console.warn('[refresh] dexscreener failed', e?.message ?? e));
+  }
+}, REFRESH_MS).unref();
 const svc: Services = new Services(cfg, hub);
 const store = new StateStore(process.env.TRENCHFEED_STATE ?? path.join(root, 'state.json'));
 hub.load(store.load());

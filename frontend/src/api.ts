@@ -14,6 +14,8 @@ export interface MaskedConfig {
   telegram: { apiId: number | null; hasApiHash: boolean; hasSession: boolean; watch: string[] };
   cove: { amounts: number[] };
   blacklist: string[];
+  favorites: string[];
+  pingTelegram: boolean;
 }
 export interface WatchedChat {
   id: string;
@@ -51,5 +53,8 @@ export const api = {
   setCove: (amounts: number[]) => req('PUT', '/cove', { amounts }),
   setBlacklist: (names: string[]) => req('PUT', '/blacklist', { names }),
   blacklistAdd: (name: string) => req('POST', '/blacklist/add', { name }),
+  favoriteToggle: (name: string) => req<{ favorite: boolean }>('POST', '/favorites/toggle', { name }),
+  setFavorites: (names: string[]) => req('PUT', '/favorites', { names }),
+  setPings: (telegram: boolean) => req('PUT', '/pings', { telegram }),
   watched: () => req<WatchedChat[]>('GET', '/watched'),
 };

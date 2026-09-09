@@ -19,6 +19,26 @@ export class Services {
     previewer?: Previewer,
   ) {
     this.previewer = previewer ?? createPreviewer();
+    hub.on('event', (e) => {
+      if (e.type === 'ping') void this.ping(e.token, e.msg);
+    });
+  }
+
+  /** Favorite caller posted a new contract: DM yourself on Telegram (if enabled + connected). */
+  private async ping(t: import('./types.js').TokenInfo, m: FeedMessage): Promise<void> {
+    if (!this.cfg.get().pingTelegram || !this.telegram) return;
+    const label = t.symbol ? `$${t.symbol}` : t.address.slice(0, 6) + '…';
+    const lines = [
+      `🔔 ${m.author} called ${label} in ${m.chatName}`,
+      t.address,
+      ...(m.link ? [m.link] : []),
+      ...(t.buy?.panel ? [`Cove: ${t.buy.panel}`] : []),
+    ];
+    try {
+      await this.telegram.sendSelf(lines.join('\n'));
+    } catch (e: any) {
+      console.warn('[ping] telegram failed', e?.message ?? e);
+    }
   }
 
   /** Fetch tweet previews the platform didn't unfurl, then patch the message. */

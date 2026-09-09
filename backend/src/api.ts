@@ -46,6 +46,42 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services): Rou
     }),
   );
   r.post(
+    '/favorites/toggle',
+    wrap((req) => {
+      const name = String(req.body?.name ?? '').trim();
+      if (!name) throw new Error('name required');
+      let on = false;
+      cfg.update((c) => {
+        const i = c.favorites.findIndex((f) => f.toLowerCase() === name.toLowerCase());
+        if (i >= 0) c.favorites.splice(i, 1);
+        else {
+          c.favorites.push(name);
+          on = true;
+        }
+      });
+      hub.favoritesChanged();
+      return { favorite: on };
+    }),
+  );
+  r.put(
+    '/favorites',
+    wrap((req) => {
+      const raw: unknown[] = Array.isArray(req.body?.names) ? req.body.names : [];
+      cfg.update((c) => {
+        c.favorites = [...new Set(raw.map((n) => String(n).trim()).filter(Boolean))].slice(0, 500);
+      });
+      hub.favoritesChanged();
+    }),
+  );
+  r.put(
+    '/pings',
+    wrap((req) => {
+      cfg.update((c) => {
+        c.pingTelegram = !!req.body?.telegram;
+      });
+    }),
+  );
+  r.post(
     '/blacklist/add',
     wrap((req) => {
       const name = String(req.body?.name ?? '').trim();

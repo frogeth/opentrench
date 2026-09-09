@@ -21,6 +21,10 @@ const DATA_KEYS = [
   'marketCap',
   'liquidity',
   'change24h',
+  'volume24h',
+  'buys24h',
+  'sells24h',
+  'pairCreatedAt',
   'imageUrl',
   'network',
   'pairAddress',
@@ -45,6 +49,7 @@ export interface HubOptions {
   retryDelaysMs?: number[];
   cove?: () => CoveOptions;
   blacklist?: () => string[];
+  favorites?: () => string[];
 }
 
 function normName(n: string): string {
@@ -59,10 +64,11 @@ export class MessageHub extends EventEmitter {
   private tokens = new Map<string, TokenInfo>();
   /** address -> chat ids that have posted it */
   private tokenChats = new Map<string, Set<string>>();
-  private status: Status = { discord: 'disconnected', telegram: 'disconnected', loginStep: 'idle', error: {} };
+  private status: Status = { discord: 'disconnected', telegram: 'disconnected', loginStep: 'idle', error: {}, favorites: [] };
   private retryDelays: number[];
   private cove: () => CoveOptions;
   private blacklist: () => string[];
+  private favorites: () => string[];
 
   constructor(
     private cap = 500,
@@ -73,6 +79,32 @@ export class MessageHub extends EventEmitter {
     this.retryDelays = opts.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
     this.cove = opts.cove ?? (() => ({ amounts: [25, 50, 100] }));
     this.blacklist = opts.blacklist ?? (() => []);
+    this.favorites = opts.favorites ?? (() => []);
+  }
+
+  isFavorite(author: string): boolean {
+    const name = normName(author);
+    return this.favorites().some((f) => normName(f) === name);
+  }
+
+  /** Push the favorites list to clients (crowns) after it changes. */
+  favoritesChanged(): void {
+    this.emitStatus();
+  }
+
+  /** Tokens called within `windowMs`, for the market refresh loop. */
+  activeTokens(windowMs: number, now = Date.now()): TokenInfo[] {
+    return [...this.tokens.values()].filter((t) => now - t.lastCallTs < windowMs);
+  }
+
+  /** Live market numbers from the refresh loop; tracks ATH since first call. */
+  updateMarket(address: string, info: Partial<TokenInfo>): void {
+    const t = this.tokens.get(address);
+    if (!t) return;
+    for (const k of DATA_KEYS) if (info[k] !== undefined) (t as any)[k] = info[k];
+    if (t.marketCap !== undefined) t.athMarketCap = Math.max(t.athMarketCap ?? 0, t.marketCap);
+    this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
+    this.changed();
   }
 
   // ---------- ingest ----------
@@ -129,7 +161,10 @@ export class MessageHub extends EventEmitter {
           this.tokens.delete(oldest);
           this.tokenChats.delete(oldest);
         }
-        if (live) this.enrich(t);
+        if (live) {
+          this.enrich(t);
+          if (this.isFavorite(msg.author)) this.emit('event', { type: 'ping', token: { ...t }, msg } satisfies ServerEvent);
+        }
       }
       const chats = this.tokenChats.get(c.address)!;
       if (!blocked && !chats.has(msg.chatId)) {
@@ -216,7 +251,7 @@ export class MessageHub extends EventEmitter {
   }
 
   getStatus(): Status {
-    return structuredClone(this.status);
+    return { ...structuredClone(this.status), favorites: [...this.favorites()] };
   }
 
   hello(): Extract<ServerEvent, { type: 'hello' }> {
@@ -283,6 +318,7 @@ export class MessageHub extends EventEmitter {
         if (info) {
           for (const k of DATA_KEYS) if (info[k] !== undefined) (live as any)[k] = info[k];
           for (const k of META_KEYS) if (info[k] && !live[k]) live[k] = info[k];
+          if (live.marketCap !== undefined) live.athMarketCap = Math.max(live.athMarketCap ?? 0, live.marketCap);
           this.applyBuy(live);
           this.emit('event', { type: 'token', token: { ...live } } satisfies ServerEvent);
           this.changed();

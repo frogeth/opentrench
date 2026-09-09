@@ -56,3 +56,37 @@ export async function copyText(text: string): Promise<void> {
     /* clipboard unavailable */
   }
 }
+
+export function normName(n: string): string {
+  return n.trim().replace(/^@/, '').toLowerCase();
+}
+
+export function isFavorite(favorites: string[], author: string): boolean {
+  const n = normName(author);
+  return favorites.some((f) => normName(f) === n);
+}
+
+export function telegramShareUrl(address: string, label: string): string {
+  return `https://t.me/share/url?url=${encodeURIComponent(address)}&text=${encodeURIComponent(label)}`;
+}
+
+/** Short beep with the Web Audio API — no asset needed. */
+export function beep(): void {
+  try {
+    const ctx = new AudioContext();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(880, ctx.currentTime);
+    o.frequency.setValueAtTime(1175, ctx.currentTime + 0.12);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+    o.connect(g).connect(ctx.destination);
+    o.start();
+    o.stop(ctx.currentTime + 0.4);
+    o.onended = () => void ctx.close();
+  } catch {
+    /* no audio */
+  }
+}
