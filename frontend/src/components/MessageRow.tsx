@@ -7,7 +7,7 @@ import { TokenChip } from './TokenChip';
 import { Icon } from './Icon';
 import { AuthorMenu } from './AuthorMenu';
 
-const isVideoFile = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url);
+const isVideoFile = (url: string, mime?: string) => (mime ? mime.startsWith('video/') : /\.(mp4|webm|mov)(\?|$)/i.test(url));
 
 function Media({ item }: { item: MediaItem }) {
   // Anything that fails to load (expired CDN link, unsupported format) disappears instead of leaving a box.
@@ -19,11 +19,11 @@ function Media({ item }: { item: MediaItem }) {
       <video className="media-video" src={item.url} poster={item.poster} controls preload="metadata" playsInline onError={fail} />
     );
   }
-  if (item.kind === 'gif' && isVideoFile(item.url)) {
+  if (item.kind === 'gif' && isVideoFile(item.url, item.mime)) {
     return <video className="media-gif" src={item.url} poster={item.poster} autoPlay loop muted playsInline onError={fail} />;
   }
   if (item.kind === 'sticker') {
-    return isVideoFile(item.url) ? (
+    return isVideoFile(item.url, item.mime) ? (
       <video className="media-sticker" src={item.url} autoPlay loop muted playsInline onError={fail} />
     ) : (
       <img className="media-sticker" src={item.url} alt="" loading="lazy" onError={fail} />

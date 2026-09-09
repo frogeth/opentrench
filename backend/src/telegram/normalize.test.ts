@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapTelegramReactions, normalizeTelegram } from './normalize.js';
+import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview } from './normalize.js';
 
 describe('normalizeTelegram', () => {
   it('maps plain fields', () => {
@@ -62,5 +62,39 @@ describe('normalizeTelegram', () => {
     expect(m.link).toBeUndefined();
     expect(m.avatar).toBeUndefined();
     expect(m.isBot).toBe(true);
+  });
+});
+
+describe('classifyMedia', () => {
+  const U = '/api/telegram/media/-1/5';
+  const doc = (mimeType: string, attrs: string[], size = 1000) => ({
+    className: 'MessageMediaDocument',
+    document: { mimeType, size, attributes: attrs.map((className) => ({ className })) },
+  });
+  it('photos are images', () => {
+    expect(classifyMedia({ className: 'MessageMediaPhoto', photo: {} }, U)).toEqual([{ kind: 'image', url: U, mime: 'image/jpeg' }]);
+  });
+  it('webm video stickers keep their video mime', () => {
+    expect(classifyMedia(doc('video/webm', ['DocumentAttributeSticker', 'DocumentAttributeVideo']), U)).toEqual([
+      { kind: 'sticker', url: U, mime: 'video/webm' },
+    ]);
+  });
+  it('lottie stickers fall back to the thumbnail', () => {
+    expect(classifyMedia(doc('application/x-tgsticker', ['DocumentAttributeSticker']), U)).toEqual([
+      { kind: 'sticker', url: `${U}?thumb=1`, mime: 'image/jpeg' },
+    ]);
+  });
+  it('gifs, videos, images, and oversize docs', () => {
+    expect(classifyMedia(doc('video/mp4', ['DocumentAttributeAnimated', 'DocumentAttributeVideo']), U)[0]).toMatchObject({ kind: 'gif', mime: 'video/mp4', poster: `${U}?thumb=1` });
+    expect(classifyMedia(doc('video/mp4', ['DocumentAttributeVideo']), U)[0]).toMatchObject({ kind: 'video' });
+    expect(classifyMedia(doc('image/webp', []), U)[0]).toMatchObject({ kind: 'image', mime: 'image/webp' });
+    expect(classifyMedia(doc('video/mp4', ['DocumentAttributeVideo'], 99_000_000), U)).toEqual([]);
+    expect(classifyMedia(undefined, U)).toEqual([]);
+  });
+  it('maps a web page preview', () => {
+    expect(
+      webpagePreview({ className: 'MessageMediaWebPage', webpage: { className: 'WebPage', url: 'https://x.com/a/status/1', siteName: 'X', author: 'Jack (@jack)', description: 'hi', photo: {} } }, `${U}?thumb=1`),
+    ).toEqual({ url: 'https://x.com/a/status/1', site: 'x', title: 'X', author: 'Jack', handle: 'jack', text: 'hi', image: `${U}?thumb=1` });
+    expect(webpagePreview({ className: 'MessageMediaWebPage', webpage: { className: 'WebPagePending' } }, U)).toBeUndefined();
   });
 });

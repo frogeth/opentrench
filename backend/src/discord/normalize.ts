@@ -31,7 +31,7 @@ export function discordMedia(d: any): MediaItem[] {
     const url = String(a.proxy_url ?? a.url ?? '');
     if (!url) continue;
     if (ct.startsWith('image/') || ct.startsWith('video/') || /\.(gif|png|jpe?g|webp|mp4|webm|mov)$/i.test(url.split('?')[0]))
-      add({ kind: kindForUrl(url, ct), url });
+      add({ kind: kindForUrl(url, ct), url, ...(ct ? { mime: ct.split(';')[0] } : {}) });
   }
   for (const e of d.embeds ?? []) {
     if (e.type === 'gifv' && (e.video?.proxy_url || e.video?.url)) {

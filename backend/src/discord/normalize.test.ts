@@ -46,8 +46,8 @@ describe('normalizeDiscord', () => {
       sticker_items: [{ id: '9', name: 'pepe', format_type: 1 }, { id: '10', name: 'lot', format_type: 3 }, { id: '11', name: 'g', format_type: 4 }],
     };
     expect(discordMedia(d)).toEqual([
-      { kind: 'image', url: 'https://media.discordapp.net/attachments/1/2/pic.png' },
-      { kind: 'video', url: 'https://cdn.discordapp.com/attachments/1/2/clip.mp4' },
+      { kind: 'image', url: 'https://media.discordapp.net/attachments/1/2/pic.png', mime: 'image/png' },
+      { kind: 'video', url: 'https://cdn.discordapp.com/attachments/1/2/clip.mp4', mime: 'video/mp4' },
       { kind: 'gif', url: 'https://media.tenor.com/x.mp4', poster: 'https://media.tenor.com/x.png' },
       { kind: 'sticker', url: 'https://media.discordapp.net/stickers/9.png?size=160' },
       { kind: 'sticker', url: 'https://media.discordapp.net/stickers/11.gif?size=160' },

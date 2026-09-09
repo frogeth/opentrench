@@ -5,8 +5,8 @@ import { StringSession } from 'telegram/sessions/index.js';
 import { NewMessage, Raw, type NewMessageEvent } from 'telegram/events/index.js';
 import { Api } from 'telegram/tl/index.js';
 import { getPeerId } from 'telegram/Utils.js';
-import type { FeedMessage, LinkPreview, LoginStep, MediaItem, TelegramState } from '../types.js';
-import { mapTelegramReactions, normalizeTelegram, type TelegramPlain } from './normalize.js';
+import type { FeedMessage, LoginStep, TelegramState } from '../types.js';
+import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, type TelegramPlain } from './normalize.js';
 import { extractLinks, type ExtractedMeta, type LinkIn } from '../links.js';
 
 export interface TelegramDialog {
@@ -28,75 +28,6 @@ const STEP_WAIT_MS = 20_000;
 const AVATAR_CACHE_MAX = 500;
 const MEDIA_MSG_MAX = 300;
 const MEDIA_BYTES_MAX = 120 * 1024 * 1024;
-const MEDIA_ITEM_MAX = 25 * 1024 * 1024;
-
-function hasAttr(doc: any, cls: string): boolean {
-  return (doc?.attributes ?? []).some((a: any) => a?.className === cls);
-}
-
-/** Classify a message's media into what the feed can render. undefined = nothing renderable. */
-export function classifyMedia(media: any, url: string): MediaItem[] {
-  if (!media) return [];
-  if (media.className === 'MessageMediaPhoto' && media.photo) return [{ kind: 'image', url }];
-  if (media.className === 'MessageMediaDocument' && media.document) {
-    const doc = media.document;
-    const mime = String(doc.mimeType ?? '');
-    if (Number(doc.size ?? 0) > MEDIA_ITEM_MAX) return [];
-    if (hasAttr(doc, 'DocumentAttributeSticker')) {
-      if (mime === 'application/x-tgsticker') return []; // lottie animation, no static render
-      return [{ kind: 'sticker', url }];
-    }
-    if (hasAttr(doc, 'DocumentAttributeAnimated') || mime === 'image/gif') return [{ kind: 'gif', url, poster: `${url}?thumb=1` }];
-    if (hasAttr(doc, 'DocumentAttributeVideo') || mime.startsWith('video/')) return [{ kind: 'video', url, poster: `${url}?thumb=1` }];
-    if (mime.startsWith('image/')) return [{ kind: 'image', url }];
-  }
-  return [];
-}
-
-/** Telegram's own link preview (web page) → our card. */
-export function webpagePreview(media: any, imageUrl: string): LinkPreview | undefined {
-  const w = media?.className === 'MessageMediaWebPage' ? media.webpage : undefined;
-  if (!w || w.className !== 'WebPage' || !w.url) return undefined;
-  const url = String(w.url);
-  const isX = /^https?:\/\/(?:www\.)?(?:x|twitter)\.com\//i.test(url);
-  const m = /^(.*?)\s*\(@([A-Za-z0-9_]+)\)\s*$/.exec(String(w.author ?? w.title ?? ''));
-  return {
-    url,
-    site: isX ? 'x' : 'web',
-    title: w.siteName ? String(w.siteName) : undefined,
-    author: m ? m[1] : w.author ? String(w.author) : w.title ? String(w.title) : undefined,
-    handle: m ? m[2] : undefined,
-    text: w.description ? String(w.description) : undefined,
-    image: w.photo ? imageUrl : undefined,
-  };
-}
-
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (v: T) => void;
-  reject: (e: Error) => void;
-}
-function deferred<T>(): Deferred<T> {
-  let resolve!: (v: T) => void;
-  let reject!: (e: Error) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
-/** Telegram entity links: the visible label (often an emoji) plus the hidden URL. */
-function entityLinks(text: string, entities: any[] | undefined): LinkIn[] {
-  const out: LinkIn[] = [];
-  for (const e of entities ?? []) {
-    const label = text.substr(e.offset ?? 0, e.length ?? 0);
-    if (e.className === 'MessageEntityTextUrl' && e.url) out.push({ label, url: String(e.url) });
-    else if (e.className === 'MessageEntityUrl') out.push({ label, url: label });
-  }
-  return out;
-}
-
 /**
  * Events: 'state' (TelegramState, error?), 'step' (LoginStep), 'session' (string|undefined),
  * 'message' (FeedMessage, ExtractedMeta), 'reactions' (msgId, Reaction[]).

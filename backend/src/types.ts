@@ -23,6 +23,8 @@ export interface MediaItem {
   kind: 'image' | 'gif' | 'video' | 'sticker';
   url: string;
   poster?: string;
+  /** content type when known, so the client picks <img> vs <video> */
+  mime?: string;
 }
 
 export interface LinkPreview {
