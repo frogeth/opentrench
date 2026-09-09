@@ -1,10 +1,11 @@
+import { useState, type DragEvent, type ReactNode } from 'react';
 import type { DiscordChannel, MaskedConfig, TelegramDialog, WatchedChat } from '../api';
 import type { Source } from '../types';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 
 export interface View {
-  /** rail selection: 'all', a Discord server id, or 'telegram' */
+  /** rail selection: 'all', 'g:<guildId>' or 't:<chatId>' */
   rail: string;
   /** focused chat (display name as used in messages) */
   chat?: { name: string; id: string; source: Source };
@@ -16,10 +17,20 @@ export function discordChatName(c: DiscordChannel): string {
   return `#${c.name} (${c.guildName})`;
 }
 
+interface RailItem {
+  key: string; // g:<id> | t:<id>
+  source: Source;
+  id: string;
+  name: string;
+  icon?: string;
+  count: number;
+}
+
 /**
- * The Discord-style left side, for both platforms: a rail with All pinned
- * on top, your Discord servers, one Telegram entry and +; a sidebar listing
- * only what's in your feed for the selected rail item.
+ * The Discord-style left side for both platforms. Rail: ★ All pinned, then
+ * your Discord servers and Telegram chats as icons (each badged with its
+ * platform), draggable to reorder, and +. Pane: only what's in your feed for
+ * the selected rail item; collapsible.
  */
 export function ChannelSidebar({
   view,
@@ -28,8 +39,11 @@ export function ChannelSidebar({
   dialogs,
   watched,
   counts,
+  collapsed,
   onView,
   onAdd,
+  onReorder,
+  onCollapse,
 }: {
   view: View;
   cfg: MaskedConfig | null;
@@ -37,30 +51,116 @@ export function ChannelSidebar({
   dialogs: TelegramDialog[];
   watched: WatchedChat[];
   counts: Map<string, number>;
+  collapsed: boolean;
   onView: (v: View) => void;
   onAdd: () => void;
+  onReorder: (keys: string[]) => void;
+  onCollapse: (hidden: boolean) => void;
 }) {
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [overKey, setOverKey] = useState<string | null>(null);
   const watchedDc = new Set(cfg?.discord.watch ?? []);
   const watchedTg = new Set(cfg?.telegram.watch ?? []);
 
-  const guilds = new Map<string, { id: string; name: string; icon?: string; watched: number }>();
+  // ---- rail items ----
+  const guilds = new Map<string, RailItem>();
   for (const c of channels) {
     if (!watchedDc.has(c.id)) continue;
-    const g = guilds.get(c.guildId) ?? { id: c.guildId, name: c.guildName, icon: c.guildIcon, watched: 0 };
-    g.watched++;
+    const g = guilds.get(c.guildId) ?? { key: `g:${c.guildId}`, source: 'discord', id: c.guildId, name: c.guildName, icon: c.guildIcon, count: 0 };
+    g.count += counts.get(discordChatName(c)) ?? 0;
     guilds.set(c.guildId, g);
   }
-  const guildList = [...guilds.values()].sort((a, b) => a.name.localeCompare(b.name));
-  const tgRows = dialogs
+  const tg: RailItem[] = dialogs
     .filter((d) => watchedTg.has(d.id))
-    .sort((a, b) => (counts.get(b.title) ?? 0) - (counts.get(a.title) ?? 0) || a.title.localeCompare(b.title));
+    .map((d) => ({ key: `t:${d.id}`, source: 'telegram', id: d.id, name: d.title, icon: `/api/telegram/avatar/${d.id}`, count: counts.get(d.title) ?? 0 }));
+  const unordered = [...guilds.values(), ...tg];
+  const order = cfg?.railOrder ?? [];
+  const items = [
+    ...order.map((k) => unordered.find((i) => i.key === k)).filter((i): i is RailItem => !!i),
+    ...unordered.filter((i) => !order.includes(i.key)).sort((a, b) => a.name.localeCompare(b.name)),
+  ];
 
+  const active = items.find((i) => i.key === view.rail);
   const isAll = view.rail === 'all';
-  const isTelegram = view.rail === 'telegram';
-  const guild = isAll || isTelegram ? undefined : guilds.get(view.rail);
 
-  const chanRow = (key: string, active: boolean, onClick: () => void, icon: React.ReactNode, name: string, n: number, src?: Source) => (
-    <button key={key} className={`chan-row on${active ? ' active' : ''}`} onClick={onClick}>
+  // ---- drag & drop reorder ----
+  const onDragStart = (key: string) => (e: DragEvent) => {
+    setDragKey(key);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', key);
+  };
+  const onDragOver = (key: string) => (e: DragEvent) => {
+    e.preventDefault();
+    if (overKey !== key) setOverKey(key);
+  };
+  const onDrop = (key: string) => (e: DragEvent) => {
+    e.preventDefault();
+    const from = dragKey ?? e.dataTransfer.getData('text/plain');
+    setDragKey(null);
+    setOverKey(null);
+    if (!from || from === key) return;
+    const keys = items.map((i) => i.key);
+    const a = keys.indexOf(from);
+    const b = keys.indexOf(key);
+    if (a < 0 || b < 0) return;
+    keys.splice(a, 1);
+    keys.splice(b, 0, from);
+    onReorder(keys);
+  };
+
+  const rail = (
+    <div className="guild-rail">
+      <button className={`guild guild-home${isAll ? ' active' : ''}`} title="All chats" onClick={() => onView({ rail: 'all' })}>
+        ★
+      </button>
+      <button className="rail-collapse" onClick={() => onCollapse(!collapsed)} title={collapsed ? 'show channel list' : 'hide channel list'}>
+        {collapsed ? '»' : '«'}
+      </button>
+      <span className="rail-sep" />
+      {items.map((it) => (
+        <button
+          key={it.key}
+          className={`guild${it.key === view.rail ? ' active' : ''}${overKey === it.key && dragKey && dragKey !== it.key ? ' drop-target' : ''}${
+            dragKey === it.key ? ' dragging' : ''
+          }`}
+          title={`${it.name}${it.count ? ` · ${it.count}` : ''} (drag to reorder)`}
+          draggable
+          onDragStart={onDragStart(it.key)}
+          onDragOver={onDragOver(it.key)}
+          onDragLeave={() => overKey === it.key && setOverKey(null)}
+          onDrop={onDrop(it.key)}
+          onDragEnd={() => {
+            setDragKey(null);
+            setOverKey(null);
+          }}
+          onClick={() =>
+            it.source === 'telegram'
+              ? onView({ rail: it.key, chat: { name: it.name, id: it.id, source: 'telegram' } })
+              : onView({ rail: it.key })
+          }
+        >
+          {it.icon ? (
+            <img src={it.icon} alt="" loading="lazy" draggable={false} />
+          ) : (
+            <span>{it.name.slice(0, 2).toUpperCase()}</span>
+          )}
+          <span className={`guild-src guild-src-${it.source}`}>
+            <Logo source={it.source} size={9} />
+          </span>
+          {it.count > 0 && <span className="guild-n">{it.count > 99 ? '99+' : it.count}</span>}
+        </button>
+      ))}
+      <button className="guild guild-add" onClick={onAdd} title="add servers, channels or chats">
+        +
+      </button>
+    </div>
+  );
+
+  if (collapsed) return <aside className="sidebar sidebar-collapsed">{rail}</aside>;
+
+  // ---- pane ----
+  const row = (key: string, isActive: boolean, onClick: () => void, icon: ReactNode, name: string, n: number, src?: Source) => (
+    <button key={key} className={`chan-row on${isActive ? ' active' : ''}`} onClick={onClick}>
       {icon}
       <span className="chan-row-name">{name}</span>
       {src && <Logo source={src} size={10} />}
@@ -68,40 +168,8 @@ export function ChannelSidebar({
     </button>
   );
 
-  const rail = (
-    <div className="guild-rail">
-      <button className={`guild guild-home${isAll ? ' active' : ''}`} title="All chats" onClick={() => onView({ rail: 'all' })}>
-        ★
-      </button>
-      <span className="rail-sep" />
-      {guildList.map((g) => (
-        <button
-          key={g.id}
-          className={`guild${g.id === guild?.id ? ' active' : ''}`}
-          title={`${g.name} · ${g.watched} in feed`}
-          onClick={() => onView({ rail: g.id })}
-        >
-          {g.icon ? <img src={g.icon} alt="" loading="lazy" /> : <span>{g.name.slice(0, 2).toUpperCase()}</span>}
-          <span className="guild-src">
-            <Logo source="discord" size={9} />
-          </span>
-        </button>
-      ))}
-      <button
-        className={`guild guild-telegram${isTelegram ? ' active' : ''}`}
-        title={`Telegram · ${tgRows.length} in feed`}
-        onClick={() => onView({ rail: 'telegram' })}
-      >
-        <Logo source="telegram" size={22} />
-      </button>
-      <button className="guild guild-add" onClick={onAdd} title="add servers, channels or chats">
-        +
-      </button>
-    </div>
-  );
-
-  let head: React.ReactNode;
-  let list: React.ReactNode;
+  let head: ReactNode;
+  let list: ReactNode;
   if (isAll) {
     head = (
       <>
@@ -123,35 +191,21 @@ export function ChannelSidebar({
             </div>
             {chs.map((c) => {
               const name = discordChatName(c);
-              return chanRow(
-                c.id,
-                view.chat?.id === c.id,
-                () => onView({ rail: 'all', chat: { name, id: c.id, source: 'discord' } }),
-                <span className="chan-hash">#</span>,
-                c.name,
-                counts.get(name) ?? 0,
-              );
+              return row(c.id, view.chat?.id === c.id, () => onView({ rail: 'all', chat: { name, id: c.id, source: 'discord' } }), <span className="chan-hash">#</span>, c.name, counts.get(name) ?? 0);
             })}
           </div>
         ))}
-        {tgRows.length > 0 && (
+        {tg.length > 0 && (
           <div>
             <div className="chan-cat">
               <Logo source="telegram" size={9} /> Telegram
             </div>
-            {tgRows.map((d) =>
-              chanRow(
-                d.id,
-                view.chat?.id === d.id,
-                () => onView({ rail: 'all', chat: { name: d.title, id: d.id, source: 'telegram' } }),
-                <Avatar src={`/api/telegram/avatar/${d.id}`} name={d.title} size={20} />,
-                d.title,
-                counts.get(d.title) ?? 0,
-              ),
+            {tg.map((d) =>
+              row(d.id, view.chat?.id === d.id, () => onView({ rail: 'all', chat: { name: d.name, id: d.id, source: 'telegram' } }), <Avatar src={d.icon} name={d.name} size={20} />, d.name, d.count),
             )}
           </div>
         )}
-        {dc.length === 0 && tgRows.length === 0 && watched.length === 0 && (
+        {dc.length === 0 && tg.length === 0 && watched.length === 0 && (
           <div className="empty">
             Nothing in your feed yet.
             <br />
@@ -162,38 +216,25 @@ export function ChannelSidebar({
         )}
       </>
     );
-  } else if (isTelegram) {
+  } else if (active?.source === 'telegram') {
     head = (
       <>
-        <Logo source="telegram" size={16} /> <b>Telegram</b>
+        <Avatar src={active.icon} name={active.name} size={20} /> <b>{active.name}</b>
+        <Logo source="telegram" size={11} />
       </>
     );
     list = (
       <>
-        {tgRows.map((d) =>
-          chanRow(
-            d.id,
-            view.chat?.id === d.id,
-            () => onView({ rail: 'telegram', chat: { name: d.title, id: d.id, source: 'telegram' } }),
-            <Avatar src={`/api/telegram/avatar/${d.id}`} name={d.title} size={20} />,
-            d.title,
-            counts.get(d.title) ?? 0,
-          ),
-        )}
-        {tgRows.length === 0 && (
-          <div className="empty">
-            No Telegram chats in your feed yet.
-            <br />
-            <button className="link" onClick={onAdd}>
-              + add chats
-            </button>
-          </div>
-        )}
+        {row(active.id, true, () => onView({ rail: active.key, chat: { name: active.name, id: active.id, source: 'telegram' } }), <Avatar src={active.icon} name={active.name} size={20} />, active.name, active.count)}
+        <div className="hint" style={{ padding: '10px 8px' }}>
+          Telegram chats have no channels. Other chats sit on the rail on the left.
+        </div>
       </>
     );
   } else {
+    const gid = active?.id;
     const inGuild = channels
-      .filter((c) => c.guildId === guild?.id && watchedDc.has(c.id))
+      .filter((c) => c.guildId === gid && watchedDc.has(c.id))
       .sort((a, b) => (a.category ?? '').localeCompare(b.category ?? '') || a.position - b.position);
     const cats = new Map<string, DiscordChannel[]>();
     for (const c of inGuild) {
@@ -203,8 +244,8 @@ export function ChannelSidebar({
     }
     head = (
       <>
-        {guild?.icon ? <img className="sidebar-icon" src={guild.icon} alt="" /> : <Logo source="discord" size={16} />}
-        <b>{guild?.name ?? 'Discord'}</b>
+        {active?.icon ? <img className="sidebar-icon" src={active.icon} alt="" /> : <Logo source="discord" size={16} />}
+        <b>{active?.name ?? 'Discord'}</b>
         <Logo source="discord" size={11} />
       </>
     );
@@ -215,14 +256,7 @@ export function ChannelSidebar({
             {cat && <div className="chan-cat">{cat}</div>}
             {chs.map((c) => {
               const name = discordChatName(c);
-              return chanRow(
-                c.id,
-                view.chat?.id === c.id,
-                () => onView({ rail: c.guildId, chat: { name, id: c.id, source: 'discord' } }),
-                <span className="chan-hash">#</span>,
-                c.name,
-                counts.get(name) ?? 0,
-              );
+              return row(c.id, view.chat?.id === c.id, () => onView({ rail: `g:${c.guildId}`, chat: { name, id: c.id, source: 'discord' } }), <span className="chan-hash">#</span>, c.name, counts.get(name) ?? 0);
             })}
           </div>
         ))}
@@ -247,6 +281,9 @@ export function ChannelSidebar({
           {head}
           <button className="sidebar-add" onClick={onAdd} title="add or preview">
             +
+          </button>
+          <button className="sidebar-add" onClick={() => onCollapse(true)} title="hide channel list">
+            «
           </button>
         </div>
         <div className="sidebar-list">{list}</div>

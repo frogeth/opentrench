@@ -13,9 +13,11 @@ export interface Config {
   pingTelegram: boolean;
   /** optional o1.exchange launchpad API key (keys start with o1_launch_) */
   o1ApiKey?: string;
+  /** user-arranged order of rail items: g:<guildId> and t:<chatId> */
+  railOrder: string[];
 }
 
-const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [], favorites: [], pingTelegram: true };
+const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [], favorites: [], pingTelegram: true, railOrder: [] };
 
 export class ConfigStore {
   private cfg: Config;
@@ -48,6 +50,7 @@ export class ConfigStore {
       favorites: this.cfg.favorites,
       pingTelegram: this.cfg.pingTelegram,
       hasO1Key: !!this.cfg.o1ApiKey,
+      railOrder: this.cfg.railOrder,
     };
   }
 
@@ -62,6 +65,7 @@ export class ConfigStore {
         favorites: Array.isArray(raw.favorites) ? raw.favorites.map(String) : [],
         pingTelegram: raw.pingTelegram !== false,
         o1ApiKey: typeof raw.o1ApiKey === 'string' && raw.o1ApiKey.trim() ? raw.o1ApiKey.trim() : undefined,
+        railOrder: Array.isArray(raw.railOrder) ? raw.railOrder.map(String) : [],
       };
     } catch {
       return structuredClone(DEFAULT);

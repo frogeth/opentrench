@@ -65,6 +65,25 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [previewMsgs, setPreviewMsgs] = useState<FeedMessage[] | null>(null);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
+  const [paneHidden, setPaneHidden] = useState(() => {
+    try {
+      return localStorage.getItem('trenchfeed.pane') === 'hidden';
+    } catch {
+      return false;
+    }
+  });
+  const setPane = (hidden: boolean) => {
+    setPaneHidden(hidden);
+    try {
+      localStorage.setItem('trenchfeed.pane', hidden ? 'hidden' : 'shown');
+    } catch {
+      /* ignore */
+    }
+  };
+  const reorderRail = (keys: string[]) => {
+    setCfg((c) => (c ? { ...c, railOrder: keys } : c));
+    void api.setRailOrder(keys).catch(() => {});
+  };
   const tabsRef = useRef<HTMLDivElement>(null);
   const [notify, setNotify] = useState<NotificationPermission>(() =>
     typeof Notification === 'undefined' ? 'denied' : Notification.permission,
@@ -194,8 +213,13 @@ export default function App() {
     if (view.preview) return new Set([view.preview.name]);
     if (view.chat) return new Set([view.chat.name]);
     if (view.rail === 'all') return null;
-    if (view.rail === 'telegram') return new Set(watched.filter((w) => w.source === 'telegram').map((w) => w.name));
-    return new Set(channels.filter((c) => c.guildId === view.rail && cfg?.discord.watch.includes(c.id)).map(discordChatName));
+    if (view.rail.startsWith('t:')) {
+      const id = view.rail.slice(2);
+      const name = watched.find((w) => w.source === 'telegram' && w.id === id)?.name;
+      return name ? new Set([name]) : new Set<string>();
+    }
+    const gid = view.rail.slice(2);
+    return new Set(channels.filter((c) => c.guildId === gid && cfg?.discord.watch.includes(c.id)).map(discordChatName));
   }, [view, channels, cfg, watched]);
 
   const chatMsgs = useMemo(() => {
@@ -231,12 +255,12 @@ export default function App() {
       return;
     }
     const ch = source === 'discord' ? channels.find((c) => c.id === id) : undefined;
-    setView({ rail: source === 'telegram' ? 'telegram' : (ch?.guildId ?? 'all'), chat: { name, id, source } });
+    setView({ rail: source === 'telegram' ? `t:${id}` : ch ? `g:${ch.guildId}` : 'all', chat: { name, id, source } });
   };
 
   const openPreview = (source: Source, id: string, name: string, guildId?: string) => {
     setAddOpen(null);
-    setView({ rail: source === 'telegram' ? 'telegram' : (guildId ?? view.rail), preview: { name, id, source } });
+    setView({ rail: source === 'telegram' ? view.rail : guildId ? `g:${guildId}` : view.rail, preview: { name, id, source } });
   };
 
   const focused = view.preview ?? view.chat;
@@ -244,9 +268,7 @@ export default function App() {
     ? focused.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '')
     : view.rail === 'all'
       ? 'All chats'
-      : view.rail === 'telegram'
-        ? 'Telegram'
-        : 'Server';
+      : 'Server';
   const previewInFeed = view.preview
     ? view.preview.source === 'discord'
       ? cfg?.discord.watch.includes(view.preview.id)
@@ -322,8 +344,11 @@ export default function App() {
           dialogs={dialogs}
           watched={watched}
           counts={chatCounts}
+          collapsed={paneHidden}
           onView={setView}
-          onAdd={() => setAddOpen(view.rail === 'telegram' ? 'telegram' : 'discord')}
+          onAdd={() => setAddOpen(view.rail.startsWith('t:') ? 'telegram' : 'discord')}
+          onReorder={reorderRail}
+          onCollapse={setPane}
         />
         <Column title="Calls" count={calls.length} className="col-calls">
           {calls.length === 0 && (
@@ -395,7 +420,7 @@ export default function App() {
       {addOpen && (
         <AddChatsModal
           initialSource={addOpen}
-          guildId={view.rail !== 'all' && view.rail !== 'telegram' ? view.rail : undefined}
+          guildId={view.rail.startsWith('g:') ? view.rail.slice(2) : undefined}
           cfg={cfg}
           channels={channels}
           dialogs={dialogs}

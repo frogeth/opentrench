@@ -17,6 +17,7 @@ export interface MaskedConfig {
   favorites: string[];
   pingTelegram: boolean;
   hasO1Key: boolean;
+  railOrder: string[];
 }
 export interface WatchedChat {
   id: string;
@@ -58,6 +59,7 @@ export const api = {
   setFavorites: (names: string[]) => req('PUT', '/favorites', { names }),
   setPings: (telegram: boolean) => req('PUT', '/pings', { telegram }),
   setO1Key: (apiKey: string) => req('PUT', '/o1', { apiKey }),
+  setRailOrder: (ids: string[]) => req('PUT', '/rail-order', { ids }),
   watched: () => req<WatchedChat[]>('GET', '/watched'),
   preview: (source: 'discord' | 'telegram', id: string) =>
     req<import('./types').FeedMessage[]>('GET', `/preview/${source}/${encodeURIComponent(id)}`),

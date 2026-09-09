@@ -97,6 +97,15 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services): Rou
     }),
   );
   r.put(
+    '/rail-order',
+    wrap((req) => {
+      const raw: unknown[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      cfg.update((c) => {
+        c.railOrder = [...new Set(raw.map(String).filter((x) => /^[gt]:.+/.test(x)))].slice(0, 500);
+      });
+    }),
+  );
+  r.put(
     '/o1',
     wrap((req) => {
       const key = String(req.body?.apiKey ?? '').trim();

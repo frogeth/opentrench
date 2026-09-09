@@ -302,7 +302,14 @@ b { font-weight: 600; }
 .guild { position: relative; }
 .guild-src { position: absolute; right: -3px; bottom: -3px; width: 16px; height: 16px; border-radius: 50%; background: var(--bg); display: flex; align-items: center; justify-content: center; }
 .guild-home { color: var(--warn); font-size: 18px; }
-.guild-telegram { color: var(--tg); }
+.guild-src-telegram { color: var(--tg); }
+.guild-src-discord { color: var(--dc); }
+.guild-n { position: absolute; top: -4px; right: -4px; background: var(--accent); color: #05140a; font-size: 9px; font-weight: 800; padding: 0 4px; border-radius: 999px; border: 2px solid var(--bg); }
+.guild.dragging { opacity: 0.4; }
+.guild.drop-target { outline: 2px dashed var(--accent); border-radius: 14px; }
+.rail-collapse { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0; line-height: 1; height: 14px; }
+.rail-collapse:hover { color: var(--text); }
+.sidebar-collapsed { flex: 0 0 64px; }
 .guild-add { color: var(--ok); font-size: 20px; }
 .rail-sep { width: 28px; height: 2px; background: var(--line); border-radius: 1px; flex: none; }
 .chan-cat { display: flex; align-items: center; gap: 4px; }

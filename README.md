@@ -25,10 +25,11 @@ npm run dev
 ## What the feed does
 
 One Discord-style layout for both platforms. The rail on the far left has
-**★ All** pinned on top, then your Discord servers (each with a Discord badge),
-one **Telegram** entry, and **+**. The sidebar next to it lists only what's in
-your feed for the selected rail item: channels by category for a server, your
-chats for Telegram, everything (grouped by server / Telegram) for All. Then
+**★ All** pinned on top, then your Discord servers and Telegram chats as icons
+(each badged with its platform's logo, drag to reorder — the order is saved),
+and **+**. The « next to ★ collapses the channel pane. The pane lists only
+what's in your feed for the selected rail item: channels by category for a
+server, everything (grouped by server / Telegram) for All. Then
 **Calls** (one card per contract, newest call first) and **Chats**, both scoped
 to whatever is selected; a focused chat groups messages by author like
 Discord. The tab row under the header is a quick switcher across every watched
