@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import type { FeedMessage, ServerEvent, Status } from './types';
+import type { FeedMessage, ServerEvent, Status, TokenInfo } from './types';
 
 const MAX = 500;
 
 export function useFeed() {
+  /** newest first */
   const [messages, setMessages] = useState<FeedMessage[]>([]);
+  const [tokens, setTokens] = useState<Record<string, TokenInfo>>({});
   const [status, setStatus] = useState<Status>({
     discord: 'disconnected',
     telegram: 'disconnected',
@@ -25,10 +27,14 @@ export function useFeed() {
       ws.onmessage = (e) => {
         const ev = JSON.parse(e.data) as ServerEvent;
         if (ev.type === 'hello') {
-          setMessages(ev.messages);
+          setMessages([...ev.messages].reverse());
+          setTokens(Object.fromEntries(ev.tokens.map((t) => [t.address, t])));
           setStatus(ev.status);
-        } else if (ev.type === 'message') setMessages((m) => [...m.slice(-(MAX - 1)), ev.msg]);
-        else if (ev.type === 'status') setStatus(ev.status);
+        } else if (ev.type === 'message') {
+          setMessages((m) => [ev.msg, ...m].slice(0, MAX));
+        } else if (ev.type === 'token') {
+          setTokens((t) => ({ ...t, [ev.token.address]: ev.token }));
+        } else if (ev.type === 'status') setStatus(ev.status);
       };
       ws.onclose = () => {
         setWsOpen(false);
@@ -43,5 +49,5 @@ export function useFeed() {
     };
   }, []);
 
-  return { messages, status, wsOpen };
+  return { messages, tokens, status, wsOpen };
 }

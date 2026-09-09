@@ -87,6 +87,15 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services): Rou
     }),
   );
   r.get('/telegram/dialogs', wrap(() => svc.listTelegramDialogs()));
+  r.get('/telegram/avatar/:id', async (req, res) => {
+    const id = String(req.params.id ?? '');
+    if (!/^-?\d+$/.test(id) || !svc.telegram) return res.status(404).end();
+    const buf = await svc.telegram.getAvatar(id);
+    if (!buf) return res.status(404).end();
+    res.setHeader('content-type', 'image/jpeg');
+    res.setHeader('cache-control', 'private, max-age=3600');
+    res.send(buf);
+  });
   r.put(
     '/telegram/watch',
     wrap((req) => {

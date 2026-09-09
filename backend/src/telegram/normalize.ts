@@ -5,7 +5,9 @@ export interface TelegramPlain {
   chatId: string;
   chatTitle: string;
   chatUsername?: string;
+  senderId?: string;
   senderName: string;
+  isBot: boolean;
   text: string;
   date: number; // unix seconds
   hasMedia: boolean;
@@ -18,9 +20,12 @@ export function normalizeTelegram(p: TelegramPlain): FeedMessage {
     chatId: p.chatId,
     chatName: p.chatTitle,
     author: p.senderName,
+    avatar: p.senderId ? `/api/telegram/avatar/${p.senderId}` : undefined,
+    isBot: p.isBot,
     text: p.text,
     ts: p.date * 1000,
     contracts: [],
+    repeat: false,
     link: p.chatUsername ? `https://t.me/${p.chatUsername}/${p.id}` : undefined,
     hasAttachment: p.hasMedia,
   };

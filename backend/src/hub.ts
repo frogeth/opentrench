@@ -1,5 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { detectContracts } from './contracts.js';
+import type { TokenFetcher } from './dexscreener.js';
+import type { ExtractedMeta } from './links.js';
 import type {
   DiscordState,
   FeedMessage,
@@ -8,18 +10,42 @@ import type {
   Source,
   Status,
   TelegramState,
+  TokenInfo,
 } from './types.js';
+
+const META_KEYS = ['website', 'twitter', 'telegram', 'name', 'symbol'] as const;
+const MAX_TOKENS = 2000;
 
 export class MessageHub extends EventEmitter {
   private buffer: FeedMessage[] = [];
+  private tokens = new Map<string, TokenInfo>();
   private status: Status = { discord: 'disconnected', telegram: 'disconnected', loginStep: 'idle', error: {} };
 
-  constructor(private cap = 500) {
+  constructor(
+    private cap = 500,
+    private fetcher?: TokenFetcher,
+  ) {
     super();
   }
 
-  push(msg: FeedMessage): void {
+  push(msg: FeedMessage, meta?: ExtractedMeta): void {
     msg.contracts = detectContracts(msg.text);
+    let anyNew = false;
+    for (const c of msg.contracts) {
+      let t = this.tokens.get(c.address);
+      if (!t) {
+        t = { chain: c.chain, address: c.address, seen: 1, firstSeenTs: msg.ts };
+        this.tokens.set(c.address, t);
+        if (this.tokens.size > MAX_TOKENS) this.tokens.delete(this.tokens.keys().next().value!);
+        anyNew = true;
+        this.enrich(t);
+      } else {
+        t.seen++;
+      }
+      if (meta) applyMeta(t, meta, msg.isBot);
+      this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
+    }
+    msg.repeat = msg.contracts.length > 0 && !anyNew;
     this.buffer.push(msg);
     if (this.buffer.length > this.cap) this.buffer.splice(0, this.buffer.length - this.cap);
     this.emit('event', { type: 'message', msg } satisfies ServerEvent);
@@ -43,11 +69,40 @@ export class MessageHub extends EventEmitter {
     return structuredClone(this.status);
   }
 
-  hello(): ServerEvent {
-    return { type: 'hello', status: this.getStatus(), messages: [...this.buffer] };
+  hello(): Extract<ServerEvent, { type: 'hello' }> {
+    return {
+      type: 'hello',
+      status: this.getStatus(),
+      messages: [...this.buffer],
+      tokens: [...this.tokens.values()].map((t) => ({ ...t })),
+    };
+  }
+
+  private enrich(t: TokenInfo): void {
+    if (!this.fetcher) return;
+    this.fetcher(t.address)
+      .then((info) => {
+        if (!info) return;
+        const live = this.tokens.get(t.address);
+        if (!live) return;
+        for (const k of ['priceUsd', 'marketCap', 'liquidity', 'change24h', 'imageUrl', 'chartUrl'] as const) {
+          if (info[k] !== undefined) (live as any)[k] = info[k];
+        }
+        for (const k of META_KEYS) if (info[k] && !live[k]) live[k] = info[k];
+        this.emit('event', { type: 'token', token: { ...live } } satisfies ServerEvent);
+      })
+      .catch((e) => console.warn('[tokens] enrich failed', t.address, e?.message ?? e));
   }
 
   private emitStatus(): void {
     this.emit('event', { type: 'status', status: this.getStatus() } satisfies ServerEvent);
+  }
+}
+
+function applyMeta(t: TokenInfo, meta: ExtractedMeta, override: boolean): void {
+  for (const k of META_KEYS) {
+    const v = meta[k];
+    if (!v) continue;
+    if (override || !t[k]) t[k] = v;
   }
 }

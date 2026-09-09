@@ -3,6 +3,7 @@ import type { MessageHub } from './hub.js';
 import { DiscordGateway, type DiscordChannel } from './discord/gateway.js';
 import { normalizeDiscord } from './discord/normalize.js';
 import { TelegramWrapper, type TelegramDialog } from './telegram/client.js';
+import { extractLinks, type ExtractedMeta } from './links.js';
 import type { FeedMessage } from './types.js';
 
 export class Services {
@@ -36,7 +37,8 @@ export class Services {
       if (!this.cfg.get().discord.watch.includes(id)) return;
       const ch = this.discordChannels.get(id) ?? { id, name: id, guildName: '?' };
       try {
-        this.hub.push(normalizeDiscord(d, ch));
+        const msg = normalizeDiscord(d, ch);
+        this.hub.push(msg, extractLinks(msg.text, []));
       } catch (e) {
         console.warn('[discord] dropped message', e);
       }
@@ -69,9 +71,9 @@ export class Services {
         c.telegram.session = sess;
       }),
     );
-    tg.on('message', (m: FeedMessage) => {
+    tg.on('message', (m: FeedMessage, meta: ExtractedMeta) => {
       if (!this.cfg.get().telegram.watch.includes(m.chatId)) return;
-      this.hub.push(m);
+      this.hub.push(m, meta);
     });
     this.telegram = tg;
     await tg.connect();

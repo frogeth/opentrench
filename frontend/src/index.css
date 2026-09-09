@@ -47,14 +47,19 @@ main { flex: 1; display: flex; min-height: 0; }
 .feed-list { flex: 1; overflow-y: auto; padding: 6px 0; }
 .empty { color: var(--muted); text-align: center; padding: 40px; }
 
-.row { padding: 6px 14px; border-left: 3px solid transparent; }
+.row { display: flex; gap: 10px; padding: 8px 14px; border-left: 3px solid transparent; border-bottom: 1px solid #14161d; }
+.row-main { flex: 1; min-width: 0; }
+.row-repeat { opacity: 0.6; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; flex: none; object-fit: cover; background: var(--line); margin-top: 2px; }
+.avatar-fallback { display: flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 700; font-size: 13px; }
+.logo { flex: none; position: relative; top: 2px; }
+.logo-discord { color: var(--dc); }
+.logo-telegram { color: var(--tg); }
+.bot-tag { font-size: 10px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; }
 .row:hover { background: var(--panel); }
 .row-discord { border-left-color: var(--dc); }
 .row-telegram { border-left-color: var(--tg); }
 .row-meta { display: flex; gap: 8px; align-items: baseline; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
-.badge { font-weight: 700; font-size: 10px; padding: 1px 5px; border-radius: 4px; color: #fff; }
-.badge-discord { background: var(--dc); }
-.badge-telegram { background: var(--tg); }
 .chat { color: var(--text); }
 .author { font-weight: 600; }
 .time a { color: var(--muted); text-decoration: none; }
@@ -62,16 +67,28 @@ main { flex: 1; display: flex; min-height: 0; }
 .row-text { white-space: pre-wrap; word-break: break-word; margin-top: 2px; }
 .row-contracts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 
-.chip {
-  display: inline-flex; gap: 6px; align-items: center;
-  background: var(--panel); border: 1px solid var(--line); color: var(--text);
-  border-radius: 6px; padding: 2px 8px; cursor: pointer;
-  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+.token {
+  display: flex; gap: 10px; align-items: flex-start; min-width: 260px; max-width: 520px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
 }
-.chip-chain { font-weight: 700; font-size: 10px; }
-.chip-sol .chip-chain { color: var(--sol); }
-.chip-evm .chip-chain { color: var(--evm); }
-.chip:hover { border-color: var(--muted); }
+.token-sol { border-left: 3px solid var(--sol); }
+.token-evm { border-left: 3px solid var(--evm); }
+.token-img { width: 36px; height: 36px; border-radius: 8px; flex: none; object-fit: cover; background: var(--bg); }
+.token-img-fallback { display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--muted); }
+.token-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.token-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.token-sym { background: none; border: none; color: var(--text); font-weight: 700; font-size: 14px; padding: 0; cursor: pointer; }
+.token-sym:hover { text-decoration: underline; }
+.token-name { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.token-seen { margin-left: auto; font-size: 11px; color: var(--warn); font-weight: 600; white-space: nowrap; }
+.token-stats { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.token-addr { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; }
+.token-addr:hover { color: var(--text); }
+.token-stats .up { color: var(--ok); }
+.token-stats .down { color: var(--err); }
+.token-links { display: flex; gap: 10px; font-size: 12px; }
+.token-links a { color: var(--tg); text-decoration: none; }
+.token-links a:hover { text-decoration: underline; }
 .jump {
   position: absolute; bottom: 14px; right: 14px;
   background: var(--panel); border: 1px solid var(--line); color: var(--text);

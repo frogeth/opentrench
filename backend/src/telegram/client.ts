@@ -1,9 +1,11 @@
 import { EventEmitter } from 'node:events';
+import bigInt from 'big-integer';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
 import { NewMessage, type NewMessageEvent } from 'telegram/events/index.js';
 import type { FeedMessage, LoginStep, TelegramState } from '../types.js';
 import { normalizeTelegram, type TelegramPlain } from './normalize.js';
+import { extractLinks, type ExtractedMeta, type LinkIn } from '../links.js';
 
 export interface TelegramDialog {
   id: string;
@@ -21,6 +23,7 @@ const FATAL_AUTH = [
 ];
 const HEALTH_INTERVAL_MS = 30_000;
 const STEP_WAIT_MS = 20_000;
+const AVATAR_CACHE_MAX = 500;
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -37,14 +40,27 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
+/** Telegram entity links: the visible label (often an emoji) plus the hidden URL. */
+function entityLinks(text: string, entities: any[] | undefined): LinkIn[] {
+  const out: LinkIn[] = [];
+  for (const e of entities ?? []) {
+    const label = text.substr(e.offset ?? 0, e.length ?? 0);
+    if (e.className === 'MessageEntityTextUrl' && e.url) out.push({ label, url: String(e.url) });
+    else if (e.className === 'MessageEntityUrl') out.push({ label, url: label });
+  }
+  return out;
+}
+
 /**
- * Events: 'state' (TelegramState, error?), 'step' (LoginStep), 'session' (string|undefined), 'message' (FeedMessage).
+ * Events: 'state' (TelegramState, error?), 'step' (LoginStep), 'session' (string|undefined),
+ * 'message' (FeedMessage, ExtractedMeta).
  */
 export class TelegramWrapper extends EventEmitter {
   private client?: TelegramClient;
   private pending: { code?: Deferred<string>; password?: Deferred<string> } = {};
   private stepWaiters: ((s: LoginStep) => void)[] = [];
   private healthTimer?: ReturnType<typeof setInterval>;
+  private avatars = new Map<string, Buffer | null>();
   state: TelegramState = 'disconnected';
   step: LoginStep = 'idle';
 
@@ -142,6 +158,23 @@ export class TelegramWrapper extends EventEmitter {
       }));
   }
 
+  /** Profile photo bytes (JPEG) for a user/chat id, cached. null when none. */
+  async getAvatar(id: string): Promise<Buffer | null> {
+    if (this.avatars.has(id)) return this.avatars.get(id)!;
+    if (!this.client || this.state !== 'connected') return null;
+    let buf: Buffer | null = null;
+    try {
+      const entity = await this.client.getInputEntity(bigInt(id));
+      const res = await this.client.downloadProfilePhoto(entity, { isBig: false });
+      if (Buffer.isBuffer(res) && res.length > 0) buf = res;
+    } catch (e: any) {
+      console.warn('[telegram] avatar failed', id, e?.message ?? e);
+    }
+    if (this.avatars.size >= AVATAR_CACHE_MAX) this.avatars.delete(this.avatars.keys().next().value!);
+    this.avatars.set(id, buf);
+    return buf;
+  }
+
   async stop(): Promise<void> {
     await this.teardown();
     this.setState('disconnected');
@@ -175,17 +208,22 @@ export class TelegramWrapper extends EventEmitter {
       const senderName = sender?.username
         ? `@${sender.username}`
         : [sender?.firstName, sender?.lastName].filter(Boolean).join(' ') || sender?.title || chat?.title || 'unknown';
+      const text = m.message ?? '';
+      const senderId = m.senderId ? String(m.senderId) : undefined;
       const plain: TelegramPlain = {
         id: m.id,
         chatId,
         chatTitle: chat?.title ?? chatId,
         chatUsername: chat?.username ?? undefined,
+        senderId,
         senderName,
-        text: m.message ?? '',
+        isBot: sender?.bot === true,
+        text,
         date: m.date,
         hasMedia: !!m.media,
       };
-      this.emit('message', normalizeTelegram(plain) satisfies FeedMessage);
+      const meta: ExtractedMeta = extractLinks(text, entityLinks(text, m.entities as any[] | undefined));
+      this.emit('message', normalizeTelegram(plain) satisfies FeedMessage, meta);
     } catch (e) {
       console.warn('[telegram] dropped message', e);
     }

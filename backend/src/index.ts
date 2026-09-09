@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { ConfigStore } from './config.js';
 import { MessageHub } from './hub.js';
+import { fetchToken } from './dexscreener.js';
 import { Services } from './services.js';
 import { createApi } from './api.js';
 import { attachWs } from './ws.js';
@@ -15,7 +16,7 @@ const PORT = Number(process.env.PORT ?? 3210);
 const HOST = '127.0.0.1';
 
 const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'config.json'));
-const hub = new MessageHub(500);
+const hub = new MessageHub(500, fetchToken);
 const svc = new Services(cfg, hub);
 
 const app = express();

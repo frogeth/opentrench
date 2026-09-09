@@ -1,7 +1,8 @@
 export type Source = 'discord' | 'telegram';
+export type Chain = 'sol' | 'evm';
 
 export interface Contract {
-  chain: 'sol' | 'evm';
+  chain: Chain;
   address: string;
 }
 
@@ -11,11 +12,33 @@ export interface FeedMessage {
   chatId: string;
   chatName: string;
   author: string;
+  avatar?: string;
+  isBot: boolean;
   text: string;
   ts: number;
   contracts: Contract[];
+  /** true when every contract in this message had already been seen */
+  repeat: boolean;
   link?: string;
   hasAttachment: boolean;
+}
+
+export interface TokenInfo {
+  chain: Chain;
+  address: string;
+  seen: number;
+  firstSeenTs: number;
+  name?: string;
+  symbol?: string;
+  priceUsd?: number;
+  marketCap?: number;
+  liquidity?: number;
+  change24h?: number;
+  imageUrl?: string;
+  chartUrl?: string;
+  website?: string;
+  twitter?: string;
+  telegram?: string;
 }
 
 export type DiscordState = 'disconnected' | 'connecting' | 'connected' | 'auth_error';
@@ -30,6 +53,7 @@ export interface Status {
 }
 
 export type ServerEvent =
-  | { type: 'hello'; status: Status; messages: FeedMessage[] }
+  | { type: 'hello'; status: Status; messages: FeedMessage[]; tokens: TokenInfo[] }
   | { type: 'message'; msg: FeedMessage }
+  | { type: 'token'; token: TokenInfo }
   | { type: 'status'; status: Status };

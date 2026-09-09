@@ -22,6 +22,19 @@ Dev mode with hot reload (`http://localhost:5173`):
 npm run dev
 ```
 
+## What the feed does
+
+- Newest on top. Discord and Telegram merged, with each platform's logo and the
+  poster's avatar.
+- Every contract address becomes a card: ticker, name, price, market cap,
+  liquidity, 24h change, and chart / web / 𝕏 / tg links. Click the ticker or
+  address to copy. Data comes from Rick-style scanner posts (parsed, never
+  shown) and Dexscreener's public API, fetched once per address.
+- "called N×" counts how many times a contract has been posted across all
+  watched chats since the server started.
+- Bot posts and repeat calls are hidden by default. Toggles in the feed bar
+  bring them back. Filter matches text, author, chat, ticker and name.
+
 ## Setup (in the browser, ⚙ top right)
 
 1. **Discord** — paste your user token, save. Then tick the channels to watch.

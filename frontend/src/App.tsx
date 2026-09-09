@@ -13,7 +13,7 @@ function Pill({ label, state }: { label: string; state: string }) {
 }
 
 export default function App() {
-  const { messages, status, wsOpen } = useFeed();
+  const { messages, tokens, status, wsOpen } = useFeed();
   const [open, setOpen] = useState(false);
   const errors = Object.entries(status.error) as [keyof Status['error'], string][];
 
@@ -38,7 +38,7 @@ export default function App() {
         </div>
       )}
       <main>
-        <Feed messages={messages} />
+        <Feed messages={messages} tokens={tokens} />
         {open && <Settings status={status} onClose={() => setOpen(false)} />}
       </main>
     </div>
