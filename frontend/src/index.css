@@ -123,15 +123,16 @@ b { font-weight: 600; }
 .call-mc-now b { color: var(--text); }
 
 /* row 2: image | identity | numbers */
-.call-mid { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; align-items: start; }
-.call-imgwrap { position: relative; width: 64px; height: 64px; }
-.call-img { width: 64px; height: 64px; border-radius: 12px; object-fit: cover; background: var(--bg); display: block; }
+.call-mid { display: grid; grid-template-columns: 80px minmax(0, 1fr) auto; gap: 10px; align-items: start; }
+.call-imgwrap { position: relative; width: 80px; height: 80px; }
+.call-img { width: 80px; height: 80px; border-radius: 12px; object-fit: cover; background: var(--bg); display: block; }
 .call-img-fallback { display: flex; align-items: center; justify-content: center; }
 .net-badge { position: absolute; left: -5px; bottom: -5px; background: #000; box-shadow: 0 0 0 2px var(--panel-2); }
 .net-badge.net-mark { width: 20px; height: 20px; border-radius: 7px; }
 .lp-badge { position: absolute; right: -5px; bottom: -5px; }
 .lp-badge .lp { box-shadow: 0 0 0 2px var(--panel-2); }
-.call-info { min-width: 0; display: grid; grid-template-rows: 20px 18px 22px; gap: 2px; align-content: start; }
+.call-info { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 20px 18px 16px 22px; gap: 1px; align-content: start; }
+.call-info > * { min-width: 0; overflow: hidden; }
 .call-head { display: flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; }
 .call-sym { background: none; border: none; color: var(--text); font-weight: 800; font-size: 15px; padding: 0; cursor: pointer; flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; }
 .call-sym:hover { text-decoration: underline; }
@@ -141,14 +142,15 @@ b { font-weight: 600; }
 .call-addr:hover { color: var(--text); }
 .call-price { overflow: hidden; text-overflow: ellipsis; }
 .call-tx { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 0; overflow: hidden; }
-.call-txn { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; overflow: hidden; }
-.txbar { flex: 1 1 56px; min-width: 0; max-width: 56px; height: 5px; border-radius: 3px; background: rgba(255, 92, 92, 0.6); overflow: hidden; display: inline-block; }
+.call-txn { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
+.txbar { flex: 1 1 auto; min-width: 40px; max-width: 140px; height: 5px; border-radius: 3px; background: rgba(255, 92, 92, 0.6); overflow: hidden; display: inline-block; }
 .txbar-buy { display: block; height: 100%; background: var(--ok); }
-.call-tx .token-links { margin-left: auto; flex: none; }
 .call-tx > .muted, .call-tx > .pending { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* narrow calls column: the explorer link is the first to go so the row never clips */
+.call-links { display: flex; align-items: center; margin-left: -4px; }
+.call-links .token-links { gap: 2px; }
+/* narrow calls column with a wide numbers column: the explorer link is the first to go, never a clipped row */
 .call { container-type: inline-size; }
-@container (max-width: 400px) { .call .token-link-explorer { display: none; } }
+@container (max-width: 400px) { .call-links .token-link-explorer { display: none; } }
 .call-right { display: grid; grid-template-rows: 16px 20px 16px 16px; align-content: start; justify-items: end; font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 72px; }
 .call-kv b { color: var(--text); font-weight: 600; }
 .call-mc { font-size: 12px; }

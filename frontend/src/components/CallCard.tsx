@@ -129,6 +129,8 @@ export function CallCard({
                 {t.priceUsd === undefined && t.marketCap !== undefined ? 'bonding · no pair yet' : hasPrice ? 'no trades yet' : 'no pair yet · retrying'}
               </span>
             )}
+          </div>
+          <div className="call-links">
             <TokenLinks t={t} showChart={showChart} onToggleChart={() => setShowChart((s) => !s)} canChart={!!embed} />
           </div>
         </div>
