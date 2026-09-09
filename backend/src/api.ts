@@ -2,10 +2,26 @@ import { Router, json, type Request, type Response } from 'express';
 import type { ConfigStore } from './config.js';
 import type { MessageHub } from './hub.js';
 import type { Services } from './services.js';
+import { IpfsCache } from './ipfs.js';
 
 export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services): Router {
   const r = Router();
   r.use(json({ limit: '64kb' }));
+  const ipfs = new IpfsCache();
+
+  const serveIpfs = async (req: Request, res: Response) => {
+    const cid = String(req.params.cid ?? '');
+    const rest = (req.params as any)[0];
+    const path = rest ? '/' + String(rest) : '';
+    if (!/^[A-Za-z0-9]{10,}$/.test(cid)) return res.status(404).end();
+    const blob = await ipfs.get(cid, path);
+    if (!blob) return res.status(404).end();
+    res.setHeader('content-type', blob.mime);
+    res.setHeader('cache-control', 'public, max-age=604800, immutable');
+    res.send(blob.buf);
+  };
+  r.get('/ipfs/:cid', serveIpfs);
+  r.get('/ipfs/:cid/*', serveIpfs);
 
   const wrap =
     (fn: (req: Request, res: Response) => Promise<unknown> | unknown) => async (req: Request, res: Response) => {
@@ -71,6 +87,15 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services): Rou
         c.favorites = [...new Set(raw.map((n) => String(n).trim()).filter(Boolean))].slice(0, 500);
       });
       hub.favoritesChanged();
+    }),
+  );
+  r.put(
+    '/o1',
+    wrap((req) => {
+      const key = String(req.body?.apiKey ?? '').trim();
+      cfg.update((c) => {
+        c.o1ApiKey = key || undefined;
+      });
     }),
   );
   r.put(

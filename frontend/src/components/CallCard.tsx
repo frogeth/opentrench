@@ -8,6 +8,7 @@ import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
 import { AuthorMenu } from './AuthorMenu';
 import { ChainBadge } from './ChainBadge';
+import { LaunchpadBadge } from './LaunchpadBadge';
 
 export function CallCard({
   t,
@@ -22,6 +23,7 @@ export function CallCard({
 }) {
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
+  const [imgBroken, setImgBroken] = useState(false);
   const hasPrice = t.priceUsd !== undefined;
   const copy = async () => {
     await copyText(t.address);
@@ -75,14 +77,19 @@ export function CallCard({
       {/* token block */}
       <div className="call-mid">
         <div className="call-imgwrap">
-          {t.imageUrl ? (
-            <img className="call-img" src={t.imageUrl} alt="" loading="lazy" />
+          {t.imageUrl && !imgBroken ? (
+            <img className="call-img" src={t.imageUrl} alt="" loading="lazy" onError={() => setImgBroken(true)} />
           ) : (
             <div className="call-img call-img-fallback">
               <ChainBadge network={t.network} chain={t.chain} size={28} className="net-plain" />
             </div>
           )}
           <ChainBadge network={t.network} chain={t.chain} size={12} className="net-badge" />
+          {t.launchpad && (
+            <span className="lp-badge">
+              <LaunchpadBadge launchpad={t.launchpad} url={t.launchpadUrl} size={14} />
+            </span>
+          )}
         </div>
         <div className="call-info">
           <div className="call-head">

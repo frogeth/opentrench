@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { ConfigStore } from './config.js';
 import { MessageHub } from './hub.js';
-import { defaultEnricher } from './enrich.js';
+import { createDefaultEnricher } from './enrich.js';
 import { BATCH_MAX, fetchDexscreenerBatch } from './dexscreener.js';
 import type { CoveOptions } from './cove.js';
 import { Services } from './services.js';
@@ -19,7 +19,7 @@ const PORT = Number(process.env.PORT ?? 3210);
 const HOST = '127.0.0.1';
 
 const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'config.json'));
-const hub: MessageHub = new MessageHub(500, defaultEnricher, {
+const hub: MessageHub = new MessageHub(500, createDefaultEnricher({ o1ApiKey: () => cfg.get().o1ApiKey }), {
   cove: (): CoveOptions => ({ amounts: cfg.get().cove.amounts, affiliateId: svc.affiliateId() }),
   blacklist: () => cfg.get().blacklist,
   favorites: () => cfg.get().favorites,

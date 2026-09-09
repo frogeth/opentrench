@@ -55,6 +55,12 @@ authors, chats, tickers and addresses.
   contract nobody has called yet: a desktop notification with a sound (enable
   with the 🔔 in the top bar) and a message to your own Telegram Saved
   Messages (toggle in Settings).
+- **Launchpads.** Bankr, Stonks, Pons (read straight off the token contract
+  on Robinhood Chain), pump.fun and letsbonk are detected automatically; o1
+  needs an API key (Settings → Launchpads). The launchpad's logo sits on the
+  token image and links to the launch page, and the launchpad's own token
+  image and socials fill in when no chart site has them yet. IPFS images go
+  through a local gateway-hopping proxy.
 - **Buy buttons** open Cove (t.me/cove_trading_bot) with the token and a USD
   amount prefilled, same deep-link format frogr uses. Amounts and an optional
   affiliate Telegram ID live in Settings → Buy buttons. Supported chains:

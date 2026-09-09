@@ -25,6 +25,8 @@ const DATA_KEYS = [
   'buys24h',
   'sells24h',
   'pairCreatedAt',
+  'launchpad',
+  'launchpadUrl',
   'imageUrl',
   'network',
   'pairAddress',

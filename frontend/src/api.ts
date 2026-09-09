@@ -16,6 +16,7 @@ export interface MaskedConfig {
   blacklist: string[];
   favorites: string[];
   pingTelegram: boolean;
+  hasO1Key: boolean;
 }
 export interface WatchedChat {
   id: string;
@@ -56,5 +57,6 @@ export const api = {
   favoriteToggle: (name: string) => req<{ favorite: boolean }>('POST', '/favorites/toggle', { name }),
   setFavorites: (names: string[]) => req('PUT', '/favorites', { names }),
   setPings: (telegram: boolean) => req('PUT', '/pings', { telegram }),
+  setO1Key: (apiKey: string) => req('PUT', '/o1', { apiKey }),
   watched: () => req<WatchedChat[]>('GET', '/watched'),
 };

@@ -1,30 +1,36 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createEnricher, explorerUrl } from './enrich.js';
 import { mapGeckoTerminal } from './geckoterminal.js';
-import { mapBankr } from './bankr.js';
 
 const A = '0xa419Bb493ed5059f28dfd84348A2F93D70ECf003';
 
 describe('createEnricher', () => {
-  it('uses dexscreener when it has a pair and skips the rest', async () => {
+  it('uses dexscreener when it has a pair and skips geckoterminal; launchpad still adds its badge', async () => {
     const gt = vi.fn();
-    const bankr = vi.fn();
+    const launchpad = vi.fn(async () => ({ launchpad: 'bankr' as const, launchpadUrl: 'https://bankr.bot/launches/x', imageUrl: 'https://ipfs/img', website: 'https://ignored' }));
     const enrich = createEnricher({
       dexscreener: async () => ({ priceUsd: 1, network: 'base', website: 'https://w' }),
       geckoterminal: gt,
-      bankr,
+      launchpad,
     });
     const info = await enrich(A, 'evm');
-    expect(info).toMatchObject({ priceUsd: 1, network: 'base', explorerUrl: `https://basescan.org/token/${A}` });
+    expect(info).toEqual({
+      priceUsd: 1,
+      network: 'base',
+      website: 'https://w',
+      launchpad: 'bankr',
+      launchpadUrl: 'https://bankr.bot/launches/x',
+      imageUrl: 'https://ipfs/img',
+      explorerUrl: `https://basescan.org/token/${A}`,
+    });
     expect(gt).not.toHaveBeenCalled();
-    expect(bankr).not.toHaveBeenCalled();
   });
 
-  it('falls back to geckoterminal, then bankr for socials', async () => {
+  it('falls back to geckoterminal, then the launchpad fills socials and chain', async () => {
     const enrich = createEnricher({
       dexscreener: async () => undefined,
       geckoterminal: async () => ({ name: 'Bitcat', symbol: 'BITCAT', network: 'robinhood' }),
-      bankr: async () => ({ website: 'https://bitcat.example', twitter: 'https://x.com/bitcat', name: 'Other' }),
+      launchpad: async () => ({ launchpad: 'pons' as const, launchpadUrl: 'https://www.ponsfamily.com/launchpad', website: 'https://bitcat.example', twitter: 'https://x.com/bitcat', name: 'Other' }),
       log: () => {},
     });
     const info = await enrich(A, 'evm');
@@ -32,9 +38,28 @@ describe('createEnricher', () => {
       name: 'Bitcat',
       symbol: 'BITCAT',
       network: 'robinhood',
+      launchpad: 'pons',
+      launchpadUrl: 'https://www.ponsfamily.com/launchpad',
       website: 'https://bitcat.example',
       twitter: 'https://x.com/bitcat',
       explorerUrl: `https://robinhoodchain.blockscout.com/token/${A}`,
+    });
+  });
+
+  it('a launchpad alone is enough to build a card for a brand-new launch', async () => {
+    const enrich = createEnricher({
+      dexscreener: async () => undefined,
+      geckoterminal: async () => undefined,
+      launchpad: async () => ({ launchpad: 'stonks' as const, launchpadUrl: 'u', network: 'base', symbol: 'NEW', imageUrl: 'i' }),
+      log: () => {},
+    });
+    expect(await enrich(A, 'evm')).toEqual({
+      launchpad: 'stonks',
+      launchpadUrl: 'u',
+      network: 'base',
+      symbol: 'NEW',
+      imageUrl: 'i',
+      explorerUrl: `https://basescan.org/token/${A}`,
     });
   });
 
@@ -51,12 +76,6 @@ describe('createEnricher', () => {
     expect(logs[0]).toContain('dexscreener failed');
   });
 
-  it('does not call bankr for solana', async () => {
-    const bankr = vi.fn();
-    const enrich = createEnricher({ dexscreener: async () => undefined, bankr, log: () => {} });
-    await enrich('So1', 'sol');
-    expect(bankr).not.toHaveBeenCalled();
-  });
 });
 
 describe('explorerUrl', () => {
@@ -98,29 +117,5 @@ describe('mapGeckoTerminal', () => {
   });
   it('returns undefined without data', () => {
     expect(mapGeckoTerminal('base', { errors: [] })).toBeUndefined();
-  });
-});
-
-describe('mapBankr', () => {
-  it('maps a launch record', () => {
-    expect(
-      mapBankr({
-        tokenAddress: A,
-        tokenName: 'Bitcat',
-        tokenSymbol: 'BITCAT',
-        chain: 'robinhood',
-        websiteUrl: 'https://bitcat.fun',
-        deployer: { walletAddress: '0x1', xUsername: 'deployer' },
-      }),
-    ).toEqual({
-      name: 'Bitcat',
-      symbol: 'BITCAT',
-      network: 'robinhood',
-      website: 'https://bitcat.fun',
-      twitter: 'https://x.com/deployer',
-    });
-  });
-  it('returns undefined for error bodies', () => {
-    expect(mapBankr({ error: 'Token not found' })).toBeUndefined();
   });
 });

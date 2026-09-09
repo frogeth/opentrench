@@ -98,6 +98,9 @@ export interface TokenInfo {
   sells24h?: number;
   /** pair creation time (ms) — the token's age */
   pairCreatedAt?: number;
+  /** launchpad that deployed it: pumpfun | letsbonk | bankr | stonks | pons | o1 */
+  launchpad?: string;
+  launchpadUrl?: string;
   imageUrl?: string;
   /** dexscreener-style chain id: ethereum | base | bsc | solana | robinhood | … */
   network?: string;

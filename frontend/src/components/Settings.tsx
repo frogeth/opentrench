@@ -18,6 +18,7 @@ export function Settings({ status, onClose }: { status: Status; onClose: () => v
       {cfg && <TelegramSection cfg={cfg} status={status} onChange={reload} />}
       {cfg && <CoveSection cfg={cfg} onChange={reload} />}
       {cfg && <FavoritesSection cfg={cfg} onChange={reload} />}
+      {cfg && <LaunchpadSection cfg={cfg} onChange={reload} />}
       {cfg && <BlacklistSection cfg={cfg} onChange={reload} />}
     </aside>
   );
@@ -379,6 +380,39 @@ function FavoritesSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () =
           </label>
         ))}
       </div>
+      {err && <div className="err">{err}</div>}
+    </section>
+  );
+}
+
+function LaunchpadSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
+  const [key, setKey] = useState('');
+  const { busy, err, run } = useAsync();
+  return (
+    <section>
+      <h2>Launchpads</h2>
+      <div className="hint">
+        Bankr, Stonks, Pons, pump.fun and letsbonk are detected automatically and show as a badge on the token image.
+        o1.exchange needs an API key (starts with o1_launch_).
+      </div>
+      <input
+        type="password"
+        placeholder={cfg.hasO1Key ? 'o1 api key (saved)' : 'o1 api key (optional)'}
+        value={key}
+        onChange={(e) => setKey(e.target.value)}
+      />
+      <button
+        disabled={busy || !key}
+        onClick={() =>
+          run(async () => {
+            await api.setO1Key(key.trim());
+            setKey('');
+            onChange();
+          })
+        }
+      >
+        Save o1 key
+      </button>
       {err && <div className="err">{err}</div>}
     </section>
   );

@@ -4,6 +4,7 @@ import { copyText, money, shortAddr } from '../format';
 import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
 import { ChainBadge } from './ChainBadge';
+import { LaunchpadBadge } from './LaunchpadBadge';
 
 /** Compact token strip shown under a chat message. */
 export function TokenChip({ c, t, onSelect }: { c: Contract; t?: TokenInfo; onSelect?: (address: string) => void }) {
@@ -26,6 +27,7 @@ export function TokenChip({ c, t, onSelect }: { c: Contract; t?: TokenInfo; onSe
           {copied ? 'copied' : shortAddr(c.address)}
         </span>
         <ChainBadge network={t?.network} chain={c.chain} size={11} />
+        {t?.launchpad && <LaunchpadBadge launchpad={t.launchpad} url={t.launchpadUrl} size={11} />}
         {hasPrice && money(t?.marketCap) && <span className="muted">MC {money(t?.marketCap)}</span>}
         {hasPrice && t?.change24h !== undefined && (
           <span className={t.change24h >= 0 ? 'up' : 'down'}>

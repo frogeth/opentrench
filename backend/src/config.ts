@@ -11,6 +11,8 @@ export interface Config {
   favorites: string[];
   /** send pings to your own Telegram "Saved Messages" */
   pingTelegram: boolean;
+  /** optional o1.exchange launchpad API key (keys start with o1_launch_) */
+  o1ApiKey?: string;
 }
 
 const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [], favorites: [], pingTelegram: true };
@@ -45,6 +47,7 @@ export class ConfigStore {
       blacklist: this.cfg.blacklist,
       favorites: this.cfg.favorites,
       pingTelegram: this.cfg.pingTelegram,
+      hasO1Key: !!this.cfg.o1ApiKey,
     };
   }
 
@@ -58,6 +61,7 @@ export class ConfigStore {
         blacklist: Array.isArray(raw.blacklist) ? raw.blacklist.map(String) : [],
         favorites: Array.isArray(raw.favorites) ? raw.favorites.map(String) : [],
         pingTelegram: raw.pingTelegram !== false,
+        o1ApiKey: typeof raw.o1ApiKey === 'string' && raw.o1ApiKey.trim() ? raw.o1ApiKey.trim() : undefined,
       };
     } catch {
       return structuredClone(DEFAULT);
