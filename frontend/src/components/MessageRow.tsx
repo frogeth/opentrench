@@ -161,7 +161,7 @@ export function MessageRow({
         {m.contracts.length > 0 && (
           <div className="row-contracts">
             {m.contracts.map((c) => (
-              <TokenChip key={c.chain + c.address} c={c} t={tokens[c.address]} onSelect={onSelect} autoChart={autoChart} chartProvider={chartProvider} />
+              <TokenChip key={c.chain + c.address} c={c} t={tokens[c.address]} onSelect={onSelect} autoChart={autoChart} chartProvider={chartProvider} repeat={m.repeat} />
             ))}
           </div>
         )}

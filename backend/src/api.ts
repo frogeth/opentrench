@@ -164,6 +164,20 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       hub.favoritesChanged();
     }),
   );
+  // Inbox-style "seen" marks on call cards: add/remove addresses, capped to the newest 3000.
+  r.post(
+    '/seen',
+    wrap((req) => {
+      const add: string[] = Array.isArray(req.body?.add) ? req.body.add.map(String).slice(0, 3000) : [];
+      const remove = new Set<string>(Array.isArray(req.body?.remove) ? req.body.remove.map(String) : []);
+      cfg.update((c) => {
+        const next = c.seenTokens.filter((a) => !remove.has(a) && !add.includes(a));
+        next.push(...add);
+        c.seenTokens = next.slice(-3000);
+      });
+      return { count: cfg.get().seenTokens.length };
+    }),
+  );
   r.put(
     '/columns',
     wrap((req) => {

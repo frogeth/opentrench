@@ -14,6 +14,7 @@ export function TokenChip({
   onSelect,
   autoChart = false,
   chartProvider = 'basedbot',
+  repeat = false,
 }: {
   c: Contract;
   t?: TokenInfo;
@@ -21,6 +22,8 @@ export function TokenChip({
   /** open the live chart without a click (only loads while on screen) */
   autoChart?: boolean;
   chartProvider?: ChartProvider;
+  /** this chat already had this contract: badge it instead of dimming the message */
+  repeat?: boolean;
 }) {
   const embed = chartEmbedUrl(t, chartProvider);
   const [copied, setCopied] = useState(false);
@@ -60,6 +63,11 @@ export function TokenChip({
               {t?.symbol ?? shortAddr(c.address)}
             </button>
             {t?.name && t.name !== t.symbol && <span className="chip-name">{t.name}</span>}
+            {repeat && (
+              <span className="chip-repeat" title="already posted in this chat">
+                🔁 repeat
+              </span>
+            )}
             <span className="chip-addr" onClick={copy} title="click to copy">
               {copied ? 'copied' : shortAddr(c.address)}
             </span>

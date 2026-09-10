@@ -29,6 +29,24 @@ export function ColumnEditor({
   const all = chats.length === 0;
   const toggle = (k: string) => setChats((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]));
   const shown = watched.filter((w) => !q || w.name.toLowerCase().includes(q.toLowerCase()));
+  // Group by Discord server ("#chan (Server)") with Telegram chats together at the end.
+  const groups = (() => {
+    const m = new Map<string, WatchedChat[]>();
+    for (const w of shown) {
+      const server = w.source === 'discord' ? (/\(([^)]*)\)\s*$/.exec(w.name)?.[1] ?? 'Discord') : 'Telegram';
+      m.set(server, [...(m.get(server) ?? []), w]);
+    }
+    return [...m.entries()].sort((a, b) => (a[0] === 'Telegram' ? 1 : b[0] === 'Telegram' ? -1 : a[0].localeCompare(b[0])));
+  })();
+  const shortName = (w: WatchedChat) => (w.source === 'discord' ? w.name.replace(/\s*\([^)]*\)\s*$/, '') : w.name);
+  const groupState = (list: WatchedChat[]) => {
+    const n = list.filter((w) => chats.includes(chatKey(w))).length;
+    return n === 0 ? 'none' : n === list.length ? 'all' : 'some';
+  };
+  const toggleGroup = (list: WatchedChat[]) => {
+    const keys = list.map(chatKey);
+    setChats((s) => (groupState(list) === 'all' ? s.filter((k) => !keys.includes(k)) : [...new Set([...s, ...keys])]));
+  };
   const save = () => {
     const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : all ? 'All Chats' : 'Chats');
     onSave({
@@ -105,14 +123,32 @@ export function ColumnEditor({
                 <input type="checkbox" checked={all} onChange={() => setChats([])} /> All watched channels
               </label>
               <input className="modal-search" placeholder="filter…" value={q} onChange={(e) => setQ(e.target.value)} />
-              {shown.map((w) => {
-                const k = chatKey(w);
+              {groups.map(([server, list]) => {
+                const st = groupState(list);
                 return (
-                  <label key={k} className="check coled-chat">
-                    <input type="checkbox" checked={chats.includes(k)} onChange={() => toggle(k)} />
-                    {w.avatar ? <Avatar src={w.avatar} name={w.name} size={16} /> : <Logo source={w.source} size={12} />}
-                    <span className="coled-name">{w.name}</span>
-                  </label>
+                  <div key={server} className="coled-group">
+                    <label className="check coled-group-head">
+                      <input
+                        type="checkbox"
+                        checked={st === 'all'}
+                        ref={(el) => el && (el.indeterminate = st === 'some')}
+                        onChange={() => toggleGroup(list)}
+                      />
+                      <Logo source={server === 'Telegram' ? 'telegram' : 'discord'} size={12} />
+                      <b>{server}</b>
+                      <span className="hint">{list.length}</span>
+                    </label>
+                    {list.map((w) => {
+                      const k = chatKey(w);
+                      return (
+                        <label key={k} className="check coled-chat">
+                          <input type="checkbox" checked={chats.includes(k)} onChange={() => toggle(k)} />
+                          {w.avatar ? <Avatar src={w.avatar} name={w.name} size={16} /> : <Logo source={w.source} size={12} />}
+                          <span className="coled-name">{shortName(w)}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 );
               })}
               {watched.length === 0 && <div className="hint">No watched chats yet. Add some with the + in the rail.</div>}

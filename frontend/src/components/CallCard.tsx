@@ -54,6 +54,8 @@ export function CallCard({
   favorites,
   chartProvider = 'basedbot',
   onOpen,
+  seen = true,
+  onSeen,
 }: {
   t: TokenInfo;
   now: number;
@@ -62,6 +64,9 @@ export function CallCard({
   chartProvider?: ChartProvider;
   /** open the drill-down for this token */
   onOpen?: (address: string) => void;
+  /** inbox-style: false = not looked at yet (card tinted), toggled by the check button */
+  seen?: boolean;
+  onSeen?: (on: boolean) => void;
 }) {
   const embed = chartEmbedUrl(t, chartProvider);
   const [copied, setCopied] = useState(false);
@@ -90,7 +95,7 @@ export function CallCard({
   const nearAth = t.marketCap && t.athMarketCap ? t.marketCap >= t.athMarketCap * 0.95 : false;
 
   return (
-    <div id={`call-${t.address}`} className={`call${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${isNew ? ' call-new' : ''}${hot}`}>
+    <div id={`call-${t.address}`} className={`call${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${isNew ? ' call-new' : ''}${onSeen && !seen ? ' call-unseen' : ''}${hot}`}>
       {t.seen >= 2 && <span key={t.lastCallTs} className="call-pulse" />}
 
       {/* 1 · caller meta */}
@@ -119,6 +124,13 @@ export function CallCard({
           </HoverCard>
         )}
         <span className="call-top-right">
+          {onSeen && (
+            <Tip text={seen ? 'seen · click to mark unseen' : 'mark as seen'}>
+              <button className={`call-check${seen ? ' on' : ''}`} onClick={() => onSeen(!seen)} aria-label={seen ? 'mark unseen' : 'mark seen'}>
+                {seen ? '✓' : ''}
+              </button>
+            </Tip>
+          )}
           {c?.link && (
             <a className="call-jump" href={c.link} target="_blank" rel="noreferrer" title="jump to message">
               <Icon name="chat" size={13} />
@@ -158,7 +170,7 @@ export function CallCard({
             {t.name && t.name !== t.symbol && <span className="call-name">{t.name}</span>}
             <span className="call-line-r">
               {hasPrice && money(t.volume24h) && (
-                <span className="call-kv">
+                <span className="call-kv call-vol">
                   V <b>{money(t.volume24h)}</b>
                 </span>
               )}

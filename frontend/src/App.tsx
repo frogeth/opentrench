@@ -154,6 +154,17 @@ export default function App() {
   };
   const [editing, setEditing] = useState<{ col?: ColumnDef } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  // Inbox-style seen marks (persisted in config; optimistic locally)
+  const seen = useMemo(() => new Set(cfg?.seenTokens ?? []), [cfg?.seenTokens]);
+  const setSeen = (addresses: string[], on: boolean) => {
+    setCfg((c) => {
+      if (!c) return c;
+      const s = new Set(c.seenTokens);
+      for (const a of addresses) (on ? s.add(a) : s.delete(a));
+      return { ...c, seenTokens: [...s] };
+    });
+    void api.markSeen(on ? addresses : [], on ? [] : addresses).catch(() => {});
+  };
   const [liveWidths, setLiveWidths] = useState<Record<string, number>>({});
   const resizeFor = (id: string) => (w: number, done: boolean) => {
     if (!done) {
@@ -529,7 +540,7 @@ export default function App() {
                 )}
                 {allCalls.map((t) => (
                   <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
-                    <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} />
+                    <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
                   </VirtualItem>
                 ))}
               </Column>
@@ -622,12 +633,28 @@ export default function App() {
                 }
                 if (col.type === 'calls') {
                   const list = callsFor(names);
+                  const unseen = list.filter((t) => !seen.has(t.address));
                   return (
-                    <Column key={col.id} title={col.title} subtitle={subtitleFor(col)} kind="calls" count={list.length} className="col-calls" {...actions}>
+                    <Column
+                      key={col.id}
+                      title={col.title}
+                      subtitle={subtitleFor(col)}
+                      kind="calls"
+                      count={list.length}
+                      className="col-calls"
+                      extra={
+                        unseen.length > 0 && (
+                          <button className="seen-all" onClick={() => setSeen(unseen.map((t) => t.address), true)} title="mark every call in this column as seen">
+                            {unseen.length} new · mark seen
+                          </button>
+                        )
+                      }
+                      {...actions}
+                    >
                       {list.length === 0 && <div className="empty">No contracts seen yet.</div>}
                       {list.map((t) => (
                         <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
-                          <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} />
+                          <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
                         </VirtualItem>
                       ))}
                     </Column>

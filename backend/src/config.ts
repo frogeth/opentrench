@@ -62,9 +62,11 @@ export interface Config {
   railOrder: string[];
   /** the column terminal: what each column shows, in order */
   columns: ColumnDef[];
+  /** call cards the user has marked as seen (inbox style); newest last, capped */
+  seenTokens: string[];
 }
 
-const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [], bots: { default: 'hide', allow: [] }, favorites: [], pingTelegram: true, railOrder: [], columns: DEFAULT_COLUMNS.map((c) => ({ ...c })) };
+const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [], bots: { default: 'hide', allow: [] }, favorites: [], pingTelegram: true, railOrder: [], columns: DEFAULT_COLUMNS.map((c) => ({ ...c })), seenTokens: [] };
 
 export class ConfigStore {
   private cfg: Config;
@@ -100,6 +102,7 @@ export class ConfigStore {
       hasO1Key: !!this.cfg.o1ApiKey,
       railOrder: this.cfg.railOrder,
       columns: this.cfg.columns,
+      seenTokens: this.cfg.seenTokens,
     };
   }
 
@@ -120,6 +123,7 @@ export class ConfigStore {
         o1ApiKey: typeof raw.o1ApiKey === 'string' && raw.o1ApiKey.trim() ? raw.o1ApiKey.trim() : undefined,
         railOrder: Array.isArray(raw.railOrder) ? raw.railOrder.map(String) : [],
         columns: sanitizeColumns(raw.columns),
+        seenTokens: Array.isArray(raw.seenTokens) ? raw.seenTokens.map(String).slice(-3000) : [],
       };
     } catch {
       return structuredClone(DEFAULT);

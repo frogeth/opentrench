@@ -69,6 +69,7 @@ export interface MaskedConfig {
   hasO1Key: boolean;
   railOrder: string[];
   columns: ColumnDef[];
+  seenTokens: string[];
 }
 export interface WatchedChat {
   id: string;
@@ -114,6 +115,7 @@ export const api = {
   setPings: (telegram: boolean) => req('PUT', '/pings', { telegram }),
   setO1Key: (apiKey: string) => req('PUT', '/o1', { apiKey }),
   setRailOrder: (ids: string[]) => req('PUT', '/rail-order', { ids }),
+  markSeen: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/seen', { add, remove }),
   setColumns: (columns: ColumnDef[]) => req<ColumnDef[]>('PUT', '/columns', { columns }),
   watched: () => req<WatchedChat[]>('GET', '/watched'),
   tickers: () => req<{ sym: string; usd: number; change24h: number }[]>('GET', '/tickers'),

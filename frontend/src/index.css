@@ -173,7 +173,9 @@ b { font-weight: 600; }
 .call-name { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .call-kv { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .call-kv b { color: var(--text); font-weight: 600; }
-.call-kv.call-mc b { color: var(--text); }
+.call-kv.call-mc b { color: var(--gold); }
+.call-kv.call-vol { font-size: 11px; }
+.call-kv.call-vol b { color: var(--muted); font-weight: 500; }
 .call-sub { font-size: 12px; color: var(--dim); }
 .call-sub .call-age-tok { flex: none; }
 .call-addr { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; flex: none; color: var(--dim); font-size: 11px; }
@@ -205,7 +207,8 @@ b { font-weight: 600; }
 /* ---------- chat rows (middle/right) ---------- */
 .row { display: flex; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--line); border-radius: 8px; transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1); }
 .row:hover { background: var(--hover); }
-.row-repeat { opacity: 0.6; }
+/* repeats are badged on the token strip, not dimmed */
+.row-repeat { opacity: 1; }
 .row-main { flex: 1; min-width: 0; }
 .row-meta { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--muted); }
 .author { color: var(--text); font-weight: 600; font-size: 13px; }
@@ -699,3 +702,18 @@ b { font-weight: 600; }
 .sound { display: inline-flex; align-items: center; gap: 5px; justify-content: center; background: var(--bg); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 12px; cursor: pointer; }
 .sound:hover { color: var(--text); border-color: var(--muted); }
 .sound.active { color: var(--accent); border-color: var(--accent); background: rgba(65, 200, 146, 0.1); }
+
+/* ---------- seen marks, repeat badge, grouped channel picker ---------- */
+.call-unseen { background: #0e161a; box-shadow: inset 3px 0 0 #2a3a44; }
+.call-unseen.call-hot-2 { box-shadow: inset 3px 0 0 var(--ok); }
+.call-unseen.call-hot-3 { box-shadow: inset 3px 0 0 var(--err); }
+.call-check { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--muted); background: transparent; color: #041a10; font-size: 10px; font-weight: 800; line-height: 1; cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.call-check:hover { border-color: var(--accent); }
+.call-check.on { background: var(--accent); border-color: var(--accent); }
+.seen-all { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 2px 8px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.seen-all:hover { color: var(--text); border-color: var(--accent); }
+.chip-repeat { font-size: 10px; color: var(--gold); border: 1px solid rgba(242, 195, 102, 0.45); border-radius: 4px; padding: 0 5px; white-space: nowrap; flex: none; }
+.coled-group { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; }
+.coled-group-head { display: flex; align-items: center; gap: 6px; padding: 4px 0 2px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+.coled-group-head b { font-size: 12px; }
+.coled-group .coled-chat { padding-left: 18px; }
