@@ -1,5 +1,5 @@
-import { entitiesToMarkdown, describe, it, expect } from 'vitest';
-import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview } from './normalize.js';
+import { describe, it, expect } from 'vitest';
+import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, entitiesToMarkdown } from './normalize.js';
 
 describe('normalizeTelegram', () => {
   it('maps plain fields', () => {
