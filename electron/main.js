@@ -125,6 +125,22 @@ function createWindow() {
 // Windows: downloads silently, installs on quit (or now, if you say so).
 // macOS: the same once the app is signed + notarized; an unsigned build can only
 // point you at the release page, which is what the fallback below does.
+/** The GitHub release body as plain bullet text (markdown stripped), capped for a dialog. */
+function releaseNotesText(info) {
+  let raw = info?.releaseNotes;
+  if (Array.isArray(raw)) raw = raw.map((n) => n?.note ?? '').join('\n');
+  if (typeof raw !== 'string' || !raw.trim()) return '';
+  const text = raw
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/^\s*[-*]\s+/gm, '• ')
+    .replace(/\*\*/g, '')
+    .replace(/`/g, '')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+  return text.length > 900 ? `${text.slice(0, 900).replace(/\s+\S*$/, '')}…` : text;
+}
+
 let updater = null;
 let updateReady = null;
 let checking = false;
@@ -149,17 +165,20 @@ function setupUpdater() {
   updater.on('update-downloaded', async (info) => {
     updateReady = info?.version ?? 'new';
     checking = false;
+    const notes = releaseNotesText(info);
     const { response } = await dialog.showMessageBox(win ?? undefined, {
       type: 'info',
       message: `opentrench ${updateReady} is ready`,
-      detail: 'Restart now to install it, or it installs the next time you quit.',
-      buttons: ['Restart now', 'Later'],
+      detail: `${notes ? `What's new:\n${notes}\n\n` : ''}Restart now to install it, or it installs the next time you quit.`,
+      buttons: ['Restart now', 'Later', 'Full notes'],
       defaultId: 0,
       cancelId: 1,
     });
     if (response === 0) {
       stopBackend();
       updater.quitAndInstall();
+    } else if (response === 2) {
+      shell.openExternal(`https://github.com/frogeth/opentrench/releases/tag/v${updateReady}`);
     }
   });
   updater.on('error', async (err) => {

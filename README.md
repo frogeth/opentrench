@@ -8,7 +8,7 @@ addresses highlighted and copyable. Runs entirely on your machine.
 
 **Community:** questions, feature requests and release news in the
 [opentrench Discord](https://discord.gg/6ByE8fPNN). New here? Start with
-[Getting started](docs/getting-started.md).
+[Getting started](docs/getting-started.md). What changed: [CHANGELOG](CHANGELOG.md).
 
 ## Screenshots
 

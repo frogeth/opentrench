@@ -23,9 +23,25 @@ if [ -z "${APPLE_ID:-}" ] && ! xcrun notarytool history --keychain-profile "$PRO
 fi
 [ -n "${APPLE_ID:-}" ] || export APPLE_KEYCHAIN_PROFILE="$PROFILE"
 
+# Patch notes are mandatory: the Unreleased section of CHANGELOG.md becomes this version's notes.
+NOTES_BODY=$(node -e '
+  const s = require("fs").readFileSync("../CHANGELOG.md", "utf8");
+  const m = /## Unreleased\n([\s\S]*?)(?=\n## |$)/.exec(s);
+  process.stdout.write(m ? m[1].trim() : "");
+')
+if [ -z "$NOTES_BODY" ]; then
+  echo "!! CHANGELOG.md has an empty 'Unreleased' section — write the patch notes first" >&2
+  exit 1
+fi
 npm version "$BUMP" --no-git-tag-version >/dev/null
 VERSION=$(node -p "require('./package.json').version")
 echo "==> opentrench v$VERSION (signed, notarized)"
+node -e '
+  const fs = require("fs"); const v = process.argv[1]; const d = new Date().toISOString().slice(0, 10);
+  fs.writeFileSync("../CHANGELOG.md", fs.readFileSync("../CHANGELOG.md", "utf8").replace("## Unreleased\n", `## Unreleased\n\n## v${v} — ${d}\n`));
+' "$VERSION"
+NOTES_FILE=$(mktemp)
+printf "%s\n" "$NOTES_BODY" > "$NOTES_FILE"
 ( cd .. && npm run build )
 npm run prepare-backend
 # Publish as a DRAFT so the updater never sees a half-uploaded release, then flip it live
@@ -35,7 +51,8 @@ echo "==> verifying assets"
 for want in latest.yml latest-mac.yml "opentrench-Setup-$VERSION.exe" "opentrench-$VERSION-arm64-mac.zip" "opentrench-$VERSION-mac.zip"; do
   gh release view "v$VERSION" --repo frogeth/opentrench --json assets --jq '.assets[].name' | grep -qx "$want" || { echo "!! missing asset $want — release left as draft" >&2; exit 1; }
 done
-gh release edit "v$VERSION" --repo frogeth/opentrench --draft=false --latest
+gh release edit "v$VERSION" --repo frogeth/opentrench --title "opentrench v$VERSION" --notes-file "$NOTES_FILE" --draft=false --latest
+rm -f "$NOTES_FILE"
 echo "==> release is live"
 
 APP=$(ls -d dist/mac-arm64/*.app 2>/dev/null | head -1 || true)
@@ -44,5 +61,5 @@ if [ -n "$APP" ]; then
   spctl --assess --type execute -vv "$APP"
 fi
 
-( cd .. && git add electron/package.json package-lock.json && git commit -qm "release: opentrench v$VERSION" && git tag -f "v$VERSION" && git push && git push --force origin "v$VERSION" )
+( cd .. && git add electron/package.json package-lock.json CHANGELOG.md && git commit -qm "release: opentrench v$VERSION" && git tag -f "v$VERSION" && git push && git push --force origin "v$VERSION" )
 echo "==> published https://github.com/frogeth/opentrench/releases/tag/v$VERSION"
