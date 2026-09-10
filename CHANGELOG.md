@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.1.16 — 2026-09-10
+
 - Cove panels keep their links and formatting: positions, Sell 100%, Move, Hide and Switch to bulk sell are clickable and act inside the app.
 
 ## v0.1.15 — 2026-09-10
