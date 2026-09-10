@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.1.15 — 2026-09-10
+
 - Cove: alerts the bot deletes (Close, or expired) disappear from the Cove column too, instead of erroring when pressed.
 
 ## v0.1.14 — 2026-09-10
