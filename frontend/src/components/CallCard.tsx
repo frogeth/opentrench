@@ -124,13 +124,6 @@ export function CallCard({
           </HoverCard>
         )}
         <span className="call-top-right">
-          {onSeen && (
-            <Tip text={seen ? 'seen · click to mark unseen' : 'mark as seen'}>
-              <button className={`call-check${seen ? ' on' : ''}`} onClick={() => onSeen(!seen)} aria-label={seen ? 'mark unseen' : 'mark seen'}>
-                {seen ? '✓' : ''}
-              </button>
-            </Tip>
-          )}
           {c?.link && (
             <a className="call-jump" href={c.link} target="_blank" rel="noreferrer" title="jump to message">
               <Icon name="chat" size={13} />
@@ -140,6 +133,13 @@ export function CallCard({
           {mult !== undefined && (
             <Tip text={`${money(mcAt)} at call → ${money(t.marketCap)} now`}>
               <span className={`call-mult${mult >= 1 ? ' up' : ' down'}`}>{fmtX(mult)}</span>
+            </Tip>
+          )}
+          {onSeen && (
+            <Tip text={seen ? 'seen · click to mark unseen' : 'mark as seen'}>
+              <button className={`call-check${seen ? ' on' : ''}`} onClick={() => onSeen(!seen)} aria-label={seen ? 'mark unseen' : 'mark seen'}>
+                {seen ? '✓' : ''}
+              </button>
             </Tip>
           )}
         </span>
