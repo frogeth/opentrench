@@ -8,6 +8,7 @@ import { ChatFeed } from './components/ChatFeed';
 import { ColumnEditor, chatKey } from './components/ColumnEditor';
 import { CallersList } from './components/CallersColumn';
 import { Composer, type SendTarget } from './components/Composer';
+import { ShareModal } from './components/ShareModal';
 import { VirtualItem } from './components/Virtual';
 import { Settings } from './components/Settings';
 import { ChannelSidebar, discordChatName, type View } from './components/ChannelSidebar';
@@ -210,6 +211,8 @@ export default function App() {
     setRevealed((s) => (s.has(id) ? s : new Set([...s, id])));
     return true;
   };
+  const [share, setShare] = useState<{ address: string; symbol?: string } | null>(null);
+  const openShare = (address: string, symbol?: string) => setShare({ address, symbol });
   // Reactions: what you added this session (the platform stream brings the counts back)
   const [myReactions, setMyReactions] = useState<Set<string>>(() => new Set());
   const react = (m: FeedMessage, key: string, name: string, on: boolean) => {
@@ -639,7 +642,7 @@ export default function App() {
                 )}
                 {allCalls.map((t) => (
                   <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
-                    <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
+                    <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
                   </VirtualItem>
                 ))}
               </Column>
@@ -760,7 +763,7 @@ export default function App() {
                       {list.length === 0 && <div className="empty">No contracts seen yet.</div>}
                       {list.map((t) => (
                         <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
-                          <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
+                          <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
                         </VirtualItem>
                       ))}
                     </Column>
@@ -850,7 +853,8 @@ export default function App() {
           </div>
         </div>
       )}
-      {openToken && tokens[openToken] && <TokenModal t={tokens[openToken]} now={now} favorites={status.favorites} onClose={() => setOpenToken(null)} />}
+      {openToken && tokens[openToken] && <TokenModal t={tokens[openToken]} now={now} favorites={status.favorites} onClose={() => setOpenToken(null)} onShare={openShare} />}
+      {share && <ShareModal address={share.address} symbol={share.symbol} watched={watched} channels={channels} canSend={canSend} onClose={() => setShare(null)} />}
       {settingsOpen && (
         <Settings
           status={status}

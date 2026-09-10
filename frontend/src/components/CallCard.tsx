@@ -54,6 +54,7 @@ export function CallCard({
   favorites,
   chartProvider = 'basedbot',
   onOpen,
+  onShare,
   seen = true,
   onSeen,
 }: {
@@ -64,6 +65,8 @@ export function CallCard({
   chartProvider?: ChartProvider;
   /** open the drill-down for this token */
   onOpen?: (address: string) => void;
+  /** open the share-to-chats dialog */
+  onShare?: (address: string, symbol?: string) => void;
   /** inbox-style: false = not looked at yet (card tinted), toggled by the check button */
   seen?: boolean;
   onSeen?: (on: boolean) => void;
@@ -224,9 +227,15 @@ export function CallCard({
       <div className="call-bottom">
         {t.security ? <SecurityStrip s={t.security} compact /> : <span className="call-pending">holder data pending…</span>}
         <BuyRow buy={t.buy} />
-        <a className="share" href={telegramShareUrl(t.address, shareLabel)} target="_blank" rel="noreferrer" title="share CA on Telegram">
-          <Icon name="telegram" size={12} />
-        </a>
+        {onShare ? (
+          <button className="share" onClick={() => onShare(t.address, t.symbol)} title="share the CA to chats in your feed">
+            <Icon name="send" size={12} />
+          </button>
+        ) : (
+          <a className="share" href={telegramShareUrl(t.address, shareLabel)} target="_blank" rel="noreferrer" title="share CA on Telegram">
+            <Icon name="telegram" size={12} />
+          </a>
+        )}
       </div>
 
       {showChart && embed && (

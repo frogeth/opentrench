@@ -36,7 +36,7 @@ const serverOf = (c: CallRecord) => {
  * Token drill-down: header like the call card, server chips, a candlestick
  * chart (market cap axis) with every call pinned on it, and the callers list.
  */
-export function TokenModal({ t, now, favorites, onClose }: { t: TokenInfo; now: number; favorites: string[]; onClose: () => void }) {
+export function TokenModal({ t, now, favorites, onClose, onShare }: { t: TokenInfo; now: number; favorites: string[]; onClose: () => void; onShare?: (address: string, symbol?: string) => void }) {
   const [interval, setInterval_] = useState<Interval>('5m');
   const [server, setServer] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('recent');
@@ -162,9 +162,15 @@ export function TokenModal({ t, now, favorites, onClose }: { t: TokenInfo; now: 
           {t.security ? <SecurityStrip s={t.security} /> : <span className="hint">holder data pending…</span>}
           <div className="tmodal-buy">
             <BuyRow buy={t.buy} compact />
-            <a className="share" href={telegramShareUrl(t.address, t.symbol ? `$${t.symbol}` : t.address)} target="_blank" rel="noreferrer">
-              <Icon name="telegram" size={13} /> share
-            </a>
+            {onShare ? (
+              <button className="share" onClick={() => onShare(t.address, t.symbol)} title="share the CA to chats in your feed">
+                <Icon name="send" size={13} /> share
+              </button>
+            ) : (
+              <a className="share" href={telegramShareUrl(t.address, t.symbol ? `$${t.symbol}` : t.address)} target="_blank" rel="noreferrer">
+                <Icon name="telegram" size={13} /> share
+              </a>
+            )}
           </div>
         </div>
 
