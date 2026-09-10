@@ -8,7 +8,7 @@ import { MessageHub } from './hub.js';
 import { createSecurityFetcher } from './security.js';
 import { createHoverFetchers } from './hover.js';
 import { createDefaultEnricher } from './enrich.js';
-import { BATCH_MAX, fetchDexscreenerBatch } from './dexscreener.js';
+import { createMarketRefresher } from './refresh.js';
 import type { CoveOptions } from './cove.js';
 import { Services } from './services.js';
 import { createApi } from './api.js';
@@ -32,16 +32,14 @@ const hub: MessageHub = new MessageHub(500, createDefaultEnricher({ o1ApiKey: ()
 // Live market numbers: every minute, refresh tokens called in the last 24h (30 per request).
 const REFRESH_MS = 60_000;
 const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
+const refreshMarket = createMarketRefresher(
+  (addr, info) => hub.updateMarket(addr, info),
+  (m) => console.warn('[refresh]', m),
+);
 setInterval(() => {
-  const active = hub.activeTokens(ACTIVE_WINDOW_MS).slice(0, BATCH_MAX * 4);
-  for (let i = 0; i < active.length; i += BATCH_MAX) {
-    const chunk = active.slice(i, i + BATCH_MAX);
-    fetchDexscreenerBatch(chunk.map((t) => t.address))
-      .then((got) => {
-        for (const [addr, info] of got) hub.updateMarket(addr, info);
-      })
-      .catch((e) => console.warn('[refresh] dexscreener failed', e?.message ?? e));
-  }
+  // newest calls first so a burst of new tokens never starves the ones people are watching
+  const active = hub.activeTokens(ACTIVE_WINDOW_MS).sort((a, b) => b.lastCallTs - a.lastCallTs);
+  void refreshMarket(active);
 }, REFRESH_MS).unref();
 // Holder security moves slowly: refresh every 10 minutes for tokens called in the last 6h.
 setInterval(() => {

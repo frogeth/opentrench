@@ -21,6 +21,39 @@ const GT_TO_NETWORK: Record<string, string> = { eth: 'ethereum' };
 export function networkFromGt(slug: string): string {
   return GT_TO_NETWORK[slug] ?? slug;
 }
+/** dexscreener-style chain id -> GT slug */
+export function gtSlugFor(network: string): string {
+  for (const [slug, net] of Object.entries(GT_TO_NETWORK)) if (net === network) return slug;
+  return network;
+}
+
+/** Market numbers for up to 30 tokens of one network in one (spaced) request; keys are the addresses as passed. */
+export async function fetchGeckoTerminalMulti(
+  slug: string,
+  addresses: string[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<Map<string, Partial<TokenInfo>>> {
+  const out = new Map<string, Partial<TokenInfo>>();
+  if (addresses.length === 0) return out;
+  const json = await getJson(`${API}/networks/${slug}/tokens/multi/${addresses.slice(0, 30).map(encodeURIComponent).join(',')}`, fetchImpl);
+  const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+  for (const a of addresses) {
+    const row = rows.find((r) => String(r?.attributes?.address ?? '').toLowerCase() === a.toLowerCase());
+    const at = row?.attributes;
+    if (!at) continue;
+    const info: Partial<TokenInfo> = {};
+    const price = num(at.price_usd);
+    if (price !== undefined) info.priceUsd = price;
+    const mc = num(at.market_cap_usd) ?? num(at.fdv_usd);
+    if (mc !== undefined) info.marketCap = mc;
+    const vol = num(at.volume_usd?.h24);
+    if (vol !== undefined) info.volume24h = vol;
+    const liq = num(at.total_reserve_in_usd);
+    if (liq !== undefined) info.liquidity = liq;
+    if (Object.keys(info).length) out.set(a, info);
+  }
+  return out;
+}
 
 function num(v: unknown): number | undefined {
   const n = typeof v === 'string' ? Number(v) : (v as number);

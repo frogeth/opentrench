@@ -71,6 +71,35 @@ export async function fetchDexscreener(
   }
 }
 
+/**
+ * Per-chain batch: one pair per token, up to 30 tokens, so every token in the
+ * request gets an answer (the chain-less endpoint caps the *pairs* at 30 and
+ * silently drops tokens once a few busy ones have used the quota).
+ */
+export async function fetchDexscreenerChain(
+  chainId: string,
+  addresses: string[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<Map<string, Partial<TokenInfo>>> {
+  const out = new Map<string, Partial<TokenInfo>>();
+  if (addresses.length === 0) return out;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetchImpl(`https://api.dexscreener.com/tokens/v1/${chainId}/${addresses.slice(0, BATCH_MAX).map(encodeURIComponent).join(',')}`, { signal: ctl.signal });
+    if (!res.ok) throw new Error(`dexscreener ${res.status}`);
+    const json = await res.json();
+    const pairs = Array.isArray(json) ? json : Array.isArray(json?.pairs) ? json.pairs : [];
+    for (const a of addresses) {
+      const info = mapDexscreener({ pairs }, a);
+      if (info) out.set(a, info);
+    }
+    return out;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 /** One request for many tokens; returns only those that have a pair. Keys are the addresses as passed. */
 export async function fetchDexscreenerBatch(
   addresses: string[],
