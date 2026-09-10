@@ -14,6 +14,8 @@ export interface ColumnDef {
   window?: '24h' | '7d' | '30d';
   /** play a sound when a new call lands in this column */
   alert?: { on: boolean; sound: string };
+  /** per-column filters (shape owned by the UI; values are strings, numbers, booleans or string arrays) */
+  filters?: Record<string, string | number | boolean | string[]>;
 }
 
 export const DEFAULT_COLUMNS: ColumnDef[] = [
@@ -39,6 +41,18 @@ export function sanitizeColumns(raw: unknown): ColumnDef[] {
     if (['24h', '7d', '30d'].includes((r as any).window)) col.window = (r as any).window;
     const al = (r as any).alert;
     if (al && typeof al === 'object') col.alert = { on: !!al.on, sound: String(al.sound ?? 'ping').slice(0, 20) || 'ping' };
+    const f = (r as any).filters;
+    if (f && typeof f === 'object' && !Array.isArray(f)) {
+      const out: NonNullable<ColumnDef['filters']> = {};
+      for (const [k, v] of Object.entries(f).slice(0, 60)) {
+        if (!/^[a-zA-Z0-9_]{1,40}$/.test(k)) continue;
+        if (typeof v === 'string') out[k] = v.slice(0, 200);
+        else if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+        else if (typeof v === 'boolean') out[k] = v;
+        else if (Array.isArray(v)) out[k] = v.map(String).map((x) => x.slice(0, 80)).slice(0, 300);
+      }
+      if (Object.keys(out).length) col.filters = out;
+    }
     out.push(col);
   }
   return out.length ? out : DEFAULT_COLUMNS.map((c) => ({ ...c }));

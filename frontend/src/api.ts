@@ -45,6 +45,36 @@ export interface XProfile {
   website?: string;
   verified?: boolean;
 }
+/** Per-column filters. Every field optional; absent = no constraint. Numbers are minimums/maximums in USD, %, minutes or counts. */
+export interface ColumnFilters {
+  // callers (both types)
+  showOnly?: string[];
+  muted?: string[];
+  // chat columns
+  search?: string;
+  excludeBots?: boolean;
+  contractsOnly?: boolean;
+  // calls columns
+  chains?: string[];
+  launchpads?: string[];
+  must?: string[]; // website | twitter | telegram | social | image | devSold | lpLocked
+  mcMin?: number; mcMax?: number;
+  liqMin?: number; liqMax?: number;
+  volMin?: number; volMax?: number;
+  mcLiqMin?: number; mcLiqMax?: number;
+  multMin?: number; multMax?: number;
+  holdersMin?: number; holdersMax?: number;
+  ageMin?: number; ageMax?: number; // minutes
+  txMin?: number; txMax?: number;
+  buysMin?: number; buysMax?: number;
+  sellsMin?: number; sellsMax?: number;
+  top10Min?: number; top10Max?: number;
+  snipersMin?: number; snipersMax?: number;
+  insidersMin?: number; insidersMax?: number;
+  bundlersMin?: number; bundlersMax?: number;
+  devMin?: number; devMax?: number;
+  callsMin?: number; callsMax?: number;
+}
 export interface ColumnDef {
   id: string;
   type: 'calls' | 'chat' | 'callers';
@@ -57,6 +87,7 @@ export interface ColumnDef {
   window?: '24h' | '7d' | '30d';
   /** play a sound when a new call lands in this column */
   alert?: { on: boolean; sound: string };
+  filters?: ColumnFilters;
 }
 export interface MaskedConfig {
   discord: { hasToken: boolean; watch: string[] };

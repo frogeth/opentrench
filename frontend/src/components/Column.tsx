@@ -24,6 +24,7 @@ export function Column({
   alertOn,
   onAlert,
   fill = false,
+  filtered = false,
 }: {
   title: string;
   subtitle?: string;
@@ -48,6 +49,8 @@ export function Column({
   onAlert?: () => void;
   /** the last column: stretches over whatever the others leave */
   fill?: boolean;
+  /** filters set on this column (lights the funnel) */
+  filtered?: boolean;
 }) {
   return (
     <section
@@ -78,6 +81,11 @@ export function Column({
             {onAlert && (
               <button className={`col-btn${alertOn ? ' col-btn-on' : ''}`} onClick={onAlert} title={alertOn ? 'Alerts on — click to mute (sound in ✎)' : 'Alert on new calls here'} aria-label="Edit alerts">
                 <Icon name="bell" size={14} />
+              </button>
+            )}
+            {onEdit && (
+              <button className={`col-btn${filtered ? ' col-btn-on' : ''}`} onClick={onEdit} title={filtered ? 'Filters on — click to edit' : 'Filter this column'} aria-label="Filter column">
+                <Icon name="filter" size={14} />
               </button>
             )}
             {onEdit && (

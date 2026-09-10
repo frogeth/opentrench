@@ -16,6 +16,7 @@ import { Avatar } from './components/Avatar';
 import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
 import { beep, type ChartProvider } from './format';
 import { playSound } from './sounds';
+import { filtersActive, messagePasses, tokenPasses } from './filters';
 import type { FeedMessage, Source, Status, TokenInfo } from './types';
 
 function Pill({ label, state }: { label: string; state: string }) {
@@ -401,7 +402,7 @@ export default function App() {
   const inScope = (name: string, names: Set<string> | null) => (!scope || scope.has(name)) && (!names || names.has(name));
 
   /** Messages for a chat column (chronological); the focused/preview view ignores column filters. */
-  const chatMsgsFor = (names: Set<string> | null) => {
+  const chatMsgsFor = (names: Set<string> | null, f?: ColumnDef['filters']) => {
     if (view.preview) return (previewMsgs ?? []).filter((m) => (showBots || !m.hidden) && matchesQuery(q, m, tokens));
     return messages.filter(
       (m) =>
@@ -409,14 +410,22 @@ export default function App() {
         (showRepeats || !m.repeat) &&
         (watched.length === 0 || watchedNames.has(m.chatName)) &&
         inScope(m.chatName, names) &&
+        messagePasses(m, f) &&
         matchesQuery(q, m, tokens),
     );
   };
-  const callsFor = (names: Set<string> | null) =>
+  const callsFor = (names: Set<string> | null, f?: ColumnDef['filters']) =>
     Object.values(tokens)
-      .filter((t) => t.calledIn.some((c) => inScope(c, names)) && tokenMatches(q, t))
+      .filter((t) => t.calledIn.some((c) => inScope(c, names)) && tokenPasses(t, f, now) && tokenMatches(q, t))
       .sort((a, b) => (b.lastCallTs ?? b.firstSeenTs) - (a.lastCallTs ?? a.firstSeenTs));
   const allCalls = useMemo(() => callsFor(null), [tokens, q, scope]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Names seen in the feed, most active first, for the caller pickers. */
+  const knownCallers = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const m of messages) if (!m.hidden) n.set(m.author, (n.get(m.author) ?? 0) + 1);
+    for (const t of Object.values(tokens)) for (const c of t.calls) n.set(c.author, (n.get(c.author) ?? 0) + 3);
+    return [...n.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k).slice(0, 400);
+  }, [messages, tokens]);
   const scopeLabel = view.preview ? 'preview' : view.rail === 'all' ? 'All channels' : view.chat ? 'this channel' : 'this server';
   const subtitleFor = (col: ColumnDef) => (view.rail !== 'all' || view.chat ? scopeLabel : col.chats.length === 0 ? 'All channels' : `${col.chats.length} channel${col.chats.length === 1 ? '' : 's'}`);
 
@@ -628,6 +637,7 @@ export default function App() {
                       }
                     : {}),
                   drag: dragFor(col.id),
+                  filtered: filtersActive(col.filters),
                   width: liveWidths[col.id] ?? col.width,
                   onResize: last ? undefined : resizeFor(col.id),
                   fill: last,
@@ -640,7 +650,7 @@ export default function App() {
                   );
                 }
                 if (col.type === 'calls') {
-                  const list = callsFor(names);
+                  const list = callsFor(names, col.filters);
                   const unseen = list.filter((t) => !seen.has(t.address));
                   return (
                     <Column
@@ -668,7 +678,7 @@ export default function App() {
                     </Column>
                   );
                 }
-                const msgs = chatMsgsFor(names);
+                const msgs = chatMsgsFor(names, col.filters);
                 return (
                   <ChatFeed
                     key={col.id}
@@ -712,6 +722,8 @@ export default function App() {
         <ColumnEditor
           col={editing.col}
           watched={watched}
+          channels={channels}
+          callers={knownCallers}
           onClose={() => setEditing(null)}
           onSave={(c) => {
             const exists = columns.some((x) => x.id === c.id);
