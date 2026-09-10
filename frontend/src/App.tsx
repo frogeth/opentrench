@@ -6,6 +6,8 @@ import { Tickers } from './components/Tickers';
 import { CallCard } from './components/CallCard';
 import { ChatFeed } from './components/ChatFeed';
 import { ColumnEditor, chatKey } from './components/ColumnEditor';
+import { CallersList } from './components/CallersColumn';
+import { VirtualItem } from './components/Virtual';
 import { Settings } from './components/Settings';
 import { ChannelSidebar, discordChatName, type View } from './components/ChannelSidebar';
 import { AddChatsModal } from './components/AddChatsModal';
@@ -151,6 +153,24 @@ export default function App() {
   };
   const [editing, setEditing] = useState<{ col?: ColumnDef } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const [liveWidths, setLiveWidths] = useState<Record<string, number>>({});
+  const resizeFor = (id: string) => (w: number, done: boolean) => {
+    if (!done) {
+      setLiveWidths((m) => ({ ...m, [id]: w }));
+      return;
+    }
+    setLiveWidths((m) => {
+      const { [id]: _drop, ...rest } = m;
+      return rest;
+    });
+    saveColumns(
+      columns.map((c) => {
+        if (c.id !== id) return c;
+        const { width: _old, ...rest } = c;
+        return w ? { ...rest, width: w } : rest;
+      }),
+    );
+  };
   const [dragCol, setDragCol] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<string | null>(null);
   const dragFor = (id: string) => ({
@@ -475,7 +495,9 @@ export default function App() {
                   <div className="empty">{view.preview ? 'Previewing — add this chat to track its calls.' : 'No contracts seen yet.'}</div>
                 )}
                 {allCalls.map((t) => (
-                  <CallCard key={t.address} t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} />
+                  <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
+                    <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} />
+                  </VirtualItem>
                 ))}
               </Column>
               <ChatFeed
@@ -543,14 +565,25 @@ export default function App() {
                   onEdit: () => setEditing({ col }),
                   onRemove: () => setConfirmRemove(col.id),
                   drag: dragFor(col.id),
+                  width: liveWidths[col.id] ?? col.width,
+                  onResize: resizeFor(col.id),
                 };
+                if (col.type === 'callers') {
+                  return (
+                    <Column key={col.id} title={col.title} subtitle={`${col.window ?? '7d'} · ${subtitleFor(col)}`} kind="callers" className="col-callers" {...actions}>
+                      <CallersList tokens={tokens} window={col.window ?? '7d'} inScope={(name) => inScope(name, names)} now={now} favorites={status.favorites} onSearch={setQuery} />
+                    </Column>
+                  );
+                }
                 if (col.type === 'calls') {
                   const list = callsFor(names);
                   return (
                     <Column key={col.id} title={col.title} subtitle={subtitleFor(col)} kind="calls" count={list.length} className="col-calls" {...actions}>
                       {list.length === 0 && <div className="empty">No contracts seen yet.</div>}
                       {list.map((t) => (
-                        <CallCard key={t.address} t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} />
+                        <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
+                          <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} />
+                        </VirtualItem>
                       ))}
                     </Column>
                   );

@@ -19,11 +19,13 @@ export function Column({
   onEdit,
   onRemove,
   drag,
+  width,
+  onResize,
 }: {
   title: string;
   subtitle?: string;
   count?: number;
-  kind?: 'calls' | 'chat';
+  kind?: 'calls' | 'chat' | 'callers';
   extra?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -34,9 +36,18 @@ export function Column({
   onRemove?: () => void;
   /** drag-to-reorder wiring from the parent */
   drag?: { onDragStart: (e: DragEvent) => void; onDragOver: (e: DragEvent) => void; onDrop: (e: DragEvent) => void; dragging?: boolean; over?: boolean };
+  /** fixed width (px); unset shares the row */
+  width?: number;
+  /** drag the right edge: called with the live width, and once more with `done` on release (0 = reset) */
+  onResize?: (width: number, done: boolean) => void;
 }) {
   return (
-    <section className={`col ${className}${drag?.dragging ? ' col-dragging' : ''}${drag?.over ? ' col-over' : ''}`} onDragOver={drag?.onDragOver} onDrop={drag?.onDrop}>
+    <section
+      className={`col ${className}${drag?.dragging ? ' col-dragging' : ''}${drag?.over ? ' col-over' : ''}${width ? ' col-fixed' : ''}`}
+      style={width ? { flex: `0 0 ${width}px`, width } : undefined}
+      onDragOver={drag?.onDragOver}
+      onDrop={drag?.onDrop}
+    >
       <div className="col-head">
         {drag && (
           <span className="col-grip" draggable onDragStart={drag.onDragStart} title="drag to reorder" aria-label="Drag to reorder">
@@ -44,8 +55,8 @@ export function Column({
           </span>
         )}
         {kind && (
-          <span className="col-kind" title={kind === 'calls' ? 'calls column' : 'chat column'}>
-            <Icon name={kind === 'calls' ? 'calls' : 'chat'} size={14} />
+          <span className="col-kind" title={`${kind} column`}>
+            <Icon name={kind === 'calls' ? 'calls' : kind === 'callers' ? 'people' : 'chat'} size={14} />
           </span>
         )}
         <div className="col-title">
@@ -73,6 +84,28 @@ export function Column({
         {children}
       </div>
       {footer}
+      {onResize && (
+        <div
+          className="col-resize"
+          title="drag to resize · double-click to reset"
+          onDoubleClick={() => onResize(0, true)}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            const col = (e.currentTarget as HTMLElement).parentElement!;
+            const startX = e.clientX;
+            const startW = col.getBoundingClientRect().width;
+            const clamp = (x: number) => Math.max(320, Math.min(1600, Math.round(startW + x - startX)));
+            const move = (ev: PointerEvent) => onResize(clamp(ev.clientX), false);
+            const up = (ev: PointerEvent) => {
+              window.removeEventListener('pointermove', move);
+              window.removeEventListener('pointerup', up);
+              onResize(clamp(ev.clientX), true);
+            };
+            window.addEventListener('pointermove', move);
+            window.addEventListener('pointerup', up);
+          }}
+        />
+      )}
     </section>
   );
 }

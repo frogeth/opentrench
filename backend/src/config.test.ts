@@ -9,5 +9,9 @@ describe('columns', () => {
       { id: 'a', type: 'calls', title: 'Alpha', chats: ['discord:1'] },
     ]);
     expect(sanitizeColumns([{ id: 'c', type: 'weird' }])).toEqual([{ id: 'c', type: 'chat', title: 'Chats', chats: [] }]);
+    expect(sanitizeColumns([{ id: 'k', type: 'callers', width: 500.4, window: '7d' }, { id: 'w', type: 'calls', width: 10, window: 'x' }])).toEqual([
+      { id: 'k', type: 'callers', title: 'Top Callers', chats: [], width: 500, window: '7d' },
+      { id: 'w', type: 'calls', title: 'Calls', chats: [] },
+    ]);
   });
 });

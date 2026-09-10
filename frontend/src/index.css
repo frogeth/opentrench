@@ -661,3 +661,23 @@ b { font-weight: 600; }
 .coled-chat { display: flex; align-items: center; gap: 8px; }
 .coled-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .coled-all { font-weight: 600; }
+
+/* ---------- resize handle, callers column, virtual slots ---------- */
+.col-resize { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 5; }
+.col-resize:hover, .col-resize:active { background: rgba(65, 200, 146, 0.35); }
+.col-fixed { flex-grow: 0 !important; }
+.vitem { min-width: 0; }
+.callers-head, .caller-row { display: grid; grid-template-columns: minmax(0, 1fr) 40px 52px 52px 52px 44px 44px; gap: 6px; align-items: center; padding: 6px 12px; font-size: 12px; }
+.callers-head { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 1; }
+.callers-head span:not(:first-child), .caller-row > span:not(:first-child) { text-align: right; white-space: nowrap; }
+.caller-row { border-bottom: 1px solid var(--line); cursor: pointer; transition: filter 0.15s; }
+.caller-row:hover { filter: brightness(1.15); background: var(--hover); }
+.caller-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.caller-who b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.caller-rank { width: 18px; flex: none; text-align: right; color: var(--dim); font-size: 11px; }
+.caller-top .caller-rank { color: var(--gold); font-weight: 700; }
+.gold { color: var(--gold); font-weight: 600; }
+.col-callers .hc-anchor { display: block; }
+/* grouped rows in the plain (non-focused) chat columns */
+.row-continued { padding-top: 1px; padding-bottom: 1px; border-bottom: none; }
+.row-continued + .row:not(.row-continued) { margin-top: 4px; }

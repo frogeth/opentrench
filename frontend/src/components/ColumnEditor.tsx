@@ -20,13 +20,14 @@ export function ColumnEditor({
   const [type, setType] = useState<ColumnDef['type']>(col?.type ?? 'chat');
   const [title, setTitle] = useState(col?.title ?? '');
   const [chats, setChats] = useState<string[]>(col?.chats ?? []);
+  const [win, setWin] = useState<NonNullable<ColumnDef['window']>>(col?.window ?? '7d');
   const [q, setQ] = useState('');
   const all = chats.length === 0;
   const toggle = (k: string) => setChats((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]));
   const shown = watched.filter((w) => !q || w.name.toLowerCase().includes(q.toLowerCase()));
   const save = () => {
-    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : all ? 'All Chats' : 'Chats');
-    onSave({ id: col?.id ?? `c${Date.now().toString(36)}`, type, title: t, chats });
+    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : all ? 'All Chats' : 'Chats');
+    onSave({ ...(col ?? {}), id: col?.id ?? `c${Date.now().toString(36)}`, type, title: t, chats, ...(type === 'callers' ? { window: win } : {}) });
   };
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -47,11 +48,26 @@ export function ColumnEditor({
               <button className={type === 'chat' ? 'active' : ''} onClick={() => setType('chat')}>
                 Chat
               </button>
+              <button className={type === 'callers' ? 'active' : ''} onClick={() => setType('callers')}>
+                Top Callers
+              </button>
             </span>
           </label>
+          {type === 'callers' && (
+            <label className="coled-row">
+              <span>Window</span>
+              <span className="seg">
+                {(['24h', '7d', '30d'] as const).map((w) => (
+                  <button key={w} className={win === w ? 'active' : ''} onClick={() => setWin(w)}>
+                    {w}
+                  </button>
+                ))}
+              </span>
+            </label>
+          )}
           <label className="coled-row">
             <span>Title</span>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : 'All Chats'} maxLength={40} />
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : 'All Chats'} maxLength={40} />
           </label>
           <div className="coled-row coled-chats">
             <span>Channels</span>

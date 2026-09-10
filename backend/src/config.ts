@@ -5,9 +5,13 @@ import type { BotPolicy } from './types.js';
 /** One column of the terminal. `chats` are `<source>:<id>` keys of watched chats; empty = every watched chat. */
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat';
+  type: 'calls' | 'chat' | 'callers';
   title: string;
   chats: string[];
+  /** fixed width in px (drag-resized); unset = share the space */
+  width?: number;
+  /** callers leaderboard window */
+  window?: '24h' | '7d' | '30d';
 }
 
 export const DEFAULT_COLUMNS: ColumnDef[] = [
@@ -22,12 +26,16 @@ export function sanitizeColumns(raw: unknown): ColumnDef[] {
   for (const r of raw.slice(0, 8)) {
     if (!r || typeof r !== 'object') continue;
     const id = String((r as any).id ?? '').trim().slice(0, 40);
-    const type = (r as any).type === 'calls' ? 'calls' : 'chat';
-    const title = String((r as any).title ?? '').trim().slice(0, 40) || (type === 'calls' ? 'Calls' : 'Chats');
+    const type = (r as any).type === 'calls' ? 'calls' : (r as any).type === 'callers' ? 'callers' : 'chat';
+    const title = String((r as any).title ?? '').trim().slice(0, 40) || (type === 'calls' ? 'Calls' : type === 'callers' ? 'Top Callers' : 'Chats');
     const chats = Array.isArray((r as any).chats) ? (r as any).chats.map(String).filter((k: string) => /^(discord|telegram):/.test(k)).slice(0, 200) : [];
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    out.push({ id, type, title, chats });
+    const col: ColumnDef = { id, type, title, chats };
+    const w = Number((r as any).width);
+    if (Number.isFinite(w) && w >= 320 && w <= 1600) col.width = Math.round(w);
+    if (['24h', '7d', '30d'].includes((r as any).window)) col.window = (r as any).window;
+    out.push(col);
   }
   return out.length ? out : DEFAULT_COLUMNS.map((c) => ({ ...c }));
 }

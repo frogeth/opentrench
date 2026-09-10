@@ -47,10 +47,14 @@ export interface XProfile {
 }
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat';
+  type: 'calls' | 'chat' | 'callers';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
+  /** fixed width in px (drag-resized); unset = share the space */
+  width?: number;
+  /** callers leaderboard window */
+  window?: '24h' | '7d' | '30d';
 }
 export interface MaskedConfig {
   discord: { hasToken: boolean; watch: string[] };

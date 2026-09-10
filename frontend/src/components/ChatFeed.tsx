@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import type { FeedMessage, TokenInfo } from '../types';
 import type { ChartProvider } from '../format';
 import { MessageRow } from './MessageRow';
+import { VirtualItem } from './Virtual';
 
 /** Discord-style grouping: hide the header when the message just above (in display order) is the same author within 5 min. */
 export function continued(list: FeedMessage[], i: number): boolean {
@@ -70,19 +71,20 @@ export function ChatFeed({
       {head}
       {shown.length === 0 && empty}
       {shown.map((m, i) => (
+        <VirtualItem key={m.id} id={`msg:${m.id}`} estimate={m.contracts.length ? 140 : 52}>
         <MessageRow
-          key={m.id}
           m={m}
           tokens={tokens}
           onSelect={onSelect}
           favorites={favorites}
-          continued={!!discord && continued(shown, i)}
+          continued={continued(shown, i)}
           discord={!!discord}
           autoChart={autoChart}
           compactEmbeds={compactEmbeds}
           chartProvider={chartProvider}
           onAuthorChanged={onAuthorChanged}
         />
+        </VirtualItem>
       ))}
     </>
   );
