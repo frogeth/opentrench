@@ -55,6 +55,8 @@ export interface ColumnDef {
   width?: number;
   /** callers leaderboard window */
   window?: '24h' | '7d' | '30d';
+  /** play a sound when a new call lands in this column */
+  alert?: { on: boolean; sound: string };
 }
 export interface MaskedConfig {
   discord: { hasToken: boolean; watch: string[] };

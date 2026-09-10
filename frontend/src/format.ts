@@ -1,3 +1,4 @@
+import { playSound } from './sounds';
 export function money(n?: number): string | null {
   if (n === undefined || !Number.isFinite(n)) return null;
   const abs = Math.abs(n);
@@ -72,23 +73,7 @@ export function telegramShareUrl(address: string, label: string): string {
 
 /** Short beep with the Web Audio API — no asset needed. */
 export function beep(): void {
-  try {
-    const ctx = new AudioContext();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(880, ctx.currentTime);
-    o.frequency.setValueAtTime(1175, ctx.currentTime + 0.12);
-    g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-    o.connect(g).connect(ctx.destination);
-    o.start();
-    o.stop(ctx.currentTime + 0.4);
-    o.onended = () => void ctx.close();
-  } catch {
-    /* no audio */
-  }
+  playSound('chirp');
 }
 
 export type ChartProvider = 'basedbot' | 'dexscreener';

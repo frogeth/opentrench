@@ -15,6 +15,7 @@ import { Logo } from './components/Logo';
 import { Avatar } from './components/Avatar';
 import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
 import { beep, type ChartProvider } from './format';
+import { playSound } from './sounds';
 import type { FeedMessage, Source, Status, TokenInfo } from './types';
 
 function Pill({ label, state }: { label: string; state: string }) {
@@ -257,6 +258,38 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ping]);
+
+  // Per-column alerts: a new call (message with a contract, not a repeat) in a column's channels plays its sound.
+  const alerted = useRef<{ lastId: string | null; lastPlay: number }>({ lastId: null, lastPlay: 0 });
+  useEffect(() => {
+    const newest = messages[0];
+    if (!newest) return;
+    const first = alerted.current.lastId === null;
+    const prevId = alerted.current.lastId;
+    alerted.current.lastId = newest.id;
+    if (first) return; // initial load: nothing to announce
+    // walk the messages that arrived since the last one we saw (newest first)
+    const fresh: FeedMessage[] = [];
+    for (const m of messages) {
+      if (m.id === prevId) break;
+      fresh.push(m);
+      if (fresh.length > 20) break;
+    }
+    const now = Date.now();
+    let played = false;
+    for (const m of fresh) {
+      if (m.hidden || m.repeat || m.contracts.length === 0 || now - m.ts > 60_000) continue;
+      for (const col of columns) {
+        if (!col.alert?.on || col.type === 'callers' || !inScope(m.chatName, namesFor(col))) continue;
+        if (!played && now - alerted.current.lastPlay > 1200) {
+          playSound(col.alert.sound);
+          alerted.current.lastPlay = now;
+          played = true;
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
 
   // Preview: fetch recent history for a chat that isn't in the feed.
   useEffect(() => {
@@ -564,6 +597,16 @@ export default function App() {
                 const actions = {
                   onEdit: () => setEditing({ col }),
                   onRemove: () => setConfirmRemove(col.id),
+                  ...(col.type !== 'callers'
+                    ? {
+                        alertOn: !!col.alert?.on,
+                        onAlert: () => {
+                          const next = { on: !col.alert?.on, sound: col.alert?.sound ?? 'ping' };
+                          if (next.on) playSound(next.sound);
+                          saveColumns(columns.map((c) => (c.id === col.id ? { ...c, alert: next } : c)));
+                        },
+                      }
+                    : {}),
                   drag: dragFor(col.id),
                   width: liveWidths[col.id] ?? col.width,
                   onResize: resizeFor(col.id),

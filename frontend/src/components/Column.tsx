@@ -21,6 +21,8 @@ export function Column({
   drag,
   width,
   onResize,
+  alertOn,
+  onAlert,
 }: {
   title: string;
   subtitle?: string;
@@ -40,6 +42,9 @@ export function Column({
   width?: number;
   /** drag the right edge: called with the live width, and once more with `done` on release (0 = reset) */
   onResize?: (width: number, done: boolean) => void;
+  /** per-column sound alert state; the bell toggles it */
+  alertOn?: boolean;
+  onAlert?: () => void;
 }) {
   return (
     <section
@@ -65,8 +70,13 @@ export function Column({
         </div>
         {count !== undefined && <span className="col-count">{count}</span>}
         <div className="col-extra">{extra}</div>
-        {(onEdit || onRemove) && (
+        {(onEdit || onRemove || onAlert) && (
           <div className="col-actions">
+            {onAlert && (
+              <button className={`col-btn${alertOn ? ' col-btn-on' : ''}`} onClick={onAlert} title={alertOn ? 'Alerts on — click to mute (sound in ✎)' : 'Alert on new calls here'} aria-label="Edit alerts">
+                <Icon name="bell" size={14} />
+              </button>
+            )}
             {onEdit && (
               <button className="col-btn" onClick={onEdit} title="Edit column" aria-label="Edit column">
                 <Icon name="pencil" size={14} />

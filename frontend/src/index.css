@@ -682,3 +682,13 @@ b { font-weight: 600; }
 /* grouped rows in the plain (non-focused) chat columns */
 .row-continued { padding-top: 1px; padding-bottom: 1px; border-bottom: none; }
 .row-continued + .row:not(.row-continued) { margin-top: 4px; }
+
+/* ---------- per-column alerts ---------- */
+.col-btn-on { color: var(--accent); }
+.col-btn-on:hover { color: var(--accent); }
+.coled-alert { align-items: start; }
+.coled-alert-body { display: flex; flex-direction: column; gap: 8px; }
+.sound-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.sound { display: inline-flex; align-items: center; gap: 5px; justify-content: center; background: var(--bg); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 12px; cursor: pointer; }
+.sound:hover { color: var(--text); border-color: var(--muted); }
+.sound.active { color: var(--accent); border-color: var(--accent); background: rgba(65, 200, 146, 0.1); }

@@ -12,6 +12,8 @@ export interface ColumnDef {
   width?: number;
   /** callers leaderboard window */
   window?: '24h' | '7d' | '30d';
+  /** play a sound when a new call lands in this column */
+  alert?: { on: boolean; sound: string };
 }
 
 export const DEFAULT_COLUMNS: ColumnDef[] = [
@@ -35,6 +37,8 @@ export function sanitizeColumns(raw: unknown): ColumnDef[] {
     const w = Number((r as any).width);
     if (Number.isFinite(w) && w >= 320 && w <= 1600) col.width = Math.round(w);
     if (['24h', '7d', '30d'].includes((r as any).window)) col.window = (r as any).window;
+    const al = (r as any).alert;
+    if (al && typeof al === 'object') col.alert = { on: !!al.on, sound: String(al.sound ?? 'ping').slice(0, 20) || 'ping' };
     out.push(col);
   }
   return out.length ? out : DEFAULT_COLUMNS.map((c) => ({ ...c }));

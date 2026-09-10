@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type { ColumnDef, WatchedChat } from '../api';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
+import { Icon } from './Icon';
+import { SOUNDS, playSound } from '../sounds';
 
 export const chatKey = (w: { source: string; id: string }) => `${w.source}:${w.id}`;
 
@@ -21,13 +23,23 @@ export function ColumnEditor({
   const [title, setTitle] = useState(col?.title ?? '');
   const [chats, setChats] = useState<string[]>(col?.chats ?? []);
   const [win, setWin] = useState<NonNullable<ColumnDef['window']>>(col?.window ?? '7d');
+  const [alertOn, setAlertOn] = useState(col?.alert?.on ?? false);
+  const [sound, setSound] = useState(col?.alert?.sound ?? 'ping');
   const [q, setQ] = useState('');
   const all = chats.length === 0;
   const toggle = (k: string) => setChats((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]));
   const shown = watched.filter((w) => !q || w.name.toLowerCase().includes(q.toLowerCase()));
   const save = () => {
     const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : all ? 'All Chats' : 'Chats');
-    onSave({ ...(col ?? {}), id: col?.id ?? `c${Date.now().toString(36)}`, type, title: t, chats, ...(type === 'callers' ? { window: win } : {}) });
+    onSave({
+      ...(col ?? {}),
+      id: col?.id ?? `c${Date.now().toString(36)}`,
+      type,
+      title: t,
+      chats,
+      ...(type === 'callers' ? { window: win } : {}),
+      ...(type !== 'callers' ? { alert: { on: alertOn, sound } } : {}),
+    });
   };
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -69,6 +81,23 @@ export function ColumnEditor({
             <span>Title</span>
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : 'All Chats'} maxLength={40} />
           </label>
+          {type !== 'callers' && (
+            <div className="coled-row coled-alert">
+              <span>Alert</span>
+              <div className="coled-alert-body">
+                <label className="check">
+                  <input type="checkbox" checked={alertOn} onChange={(e) => setAlertOn(e.target.checked)} /> Play a sound when a new call lands in this column
+                </label>
+                <div className="sound-grid">
+                  {SOUNDS.map((s) => (
+                    <button key={s} className={`sound${sound === s ? ' active' : ''}`} onClick={() => { setSound(s); playSound(s); }} title={`use “${s}”`}>
+                      <Icon name="play" size={10} /> {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
           <div className="coled-row coled-chats">
             <span>Channels</span>
             <div className="coled-list">
