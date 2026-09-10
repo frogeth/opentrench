@@ -95,7 +95,17 @@ export class Services {
     if (source === 'discord') {
       const token = this.cfg.get().discord.token;
       if (!token) throw new Error('discord not connected');
-      await sendChannelMessage(token, chatId, text, replyTo);
+      const d = await sendChannelMessage(token, chatId, text, replyTo);
+      // echo into the feed now; the gateway's own copy is deduplicated by id
+      if (d?.id && this.cfg.get().discord.watch.includes(chatId)) {
+        const ch = this.discordChannels.get(chatId) ?? { id: chatId, name: chatId, guildId: '?', guildName: '?', position: 0 };
+        try {
+          const msg = normalizeDiscord(d, ch);
+          this.hub.push(msg, extractLinks(msg.text, []));
+        } catch (e: any) {
+          console.warn('[discord] could not echo sent message', e?.message ?? e);
+        }
+      }
       return;
     }
     if (!this.telegram) throw new Error('telegram not connected');

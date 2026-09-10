@@ -298,6 +298,13 @@ describe('MessageHub', () => {
     expect(events.map((e) => e.type)).toEqual(['token']);
   });
 
+  it('ignores a message whose id is already in the buffer', () => {
+    const hub = new MessageHub(500);
+    hub.push(msg(1, 'hello'));
+    hub.push(msg(1, 'hello again'));
+    expect(hub.hello().messages).toHaveLength(1);
+  });
+
   it('round-trips a snapshot', () => {
     const hub = new MessageHub(500);
     hub.push(msg(1, `${EVM} ${SOL}`, { chatId: 'a', chatName: '#a' }));

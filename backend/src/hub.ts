@@ -137,6 +137,7 @@ export class MessageHub extends EventEmitter {
   // ---------- ingest ----------
 
   push(msg: FeedMessage, meta?: ExtractedMeta): void {
+    if (this.buffer.some((m) => m.id === msg.id)) return; // already have it (e.g. our own send echoed twice)
     msg.contracts = detectContracts(msg.text);
     this.register(msg, meta, true);
     this.buffer.push(msg);

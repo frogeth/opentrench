@@ -10,7 +10,7 @@ export async function sendChannelMessage(
   content: string,
   replyToId?: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<{ id: string }> {
+): Promise<any> {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), 10_000);
   try {
@@ -26,8 +26,7 @@ export async function sendChannelMessage(
       const txt = await res.text().catch(() => '');
       throw new Error(`discord send ${res.status}${txt ? `: ${txt.slice(0, 160)}` : ''}`);
     }
-    const json: any = await res.json();
-    return { id: String(json?.id ?? '') };
+    return await res.json();
   } finally {
     clearTimeout(t);
   }

@@ -230,7 +230,16 @@ export class TelegramWrapper extends EventEmitter {
   /** Send a message to a chat you are in, optionally as a reply. */
   async send(chatId: string, text: string, replyTo?: number): Promise<void> {
     if (!this.client || this.state !== 'connected') throw new Error('telegram not connected');
-    await this.client.sendMessage(bigInt(chatId), { message: text, replyTo, linkPreview: true });
+    const sent: any = await this.client.sendMessage(bigInt(chatId), { message: text, replyTo, linkPreview: true });
+    // Show it in the feed immediately; the update stream may or may not echo our own sends.
+    if (sent?.className === 'Message') {
+      try {
+        const { msg, meta } = await this.toFeed(sent, chatId);
+        this.emit('message', msg, meta);
+      } catch (e: any) {
+        console.warn('[telegram] could not echo sent message', e?.message ?? e);
+      }
+    }
   }
 
   /** Set (or clear) your reaction on a message. Telegram keeps one reaction per user by default. */

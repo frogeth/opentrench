@@ -73,6 +73,17 @@ export default function App() {
   };
   const [showBots, setShowBotsState] = useState(() => pref('trenchfeed.showHidden', false));
   const [showRepeats, setShowRepeatsState] = useState(() => pref('trenchfeed.showRepeats', true));
+  const [showMedia, setShowMediaState] = useState(() => pref('trenchfeed.showMedia', true));
+  const setShowMedia = (f: boolean | ((v: boolean) => boolean)) =>
+    setShowMediaState((v) => {
+      const n = typeof f === 'function' ? f(v) : f;
+      try {
+        localStorage.setItem('trenchfeed.showMedia', n ? 'on' : 'off');
+      } catch {}
+      return n;
+    });
+  /** a message that is only a picture / gif / sticker / video (or a bare media link) */
+  const mediaOnly = (m: FeedMessage) => !!m.media?.length && (m.text.trim() === '' || /^https?:\S+$/.test(m.text.trim()));
   const setShowBots = (f: boolean | ((v: boolean) => boolean)) =>
     setShowBotsState((v) => {
       const n = typeof f === 'function' ? f(v) : f;
@@ -475,6 +486,7 @@ export default function App() {
         revealed.has(m.id) ||
         ((showBots || !m.hidden) &&
           (showRepeats || !m.repeat) &&
+          (showMedia || !mediaOnly(m)) &&
           (watched.length === 0 || watchedNames.has(m.chatName)) &&
           inScope(m.chatName, names) &&
           messagePasses(m, f) &&
@@ -524,6 +536,9 @@ export default function App() {
       </button>
       <button className={`hdr-toggle${showRepeats ? ' on' : ''}`} onClick={() => setShowRepeats((v) => !v)} title={showRepeats ? 'showing repeat contracts' : 'show repeat contracts'}>
         repeats
+      </button>
+      <button className={`hdr-toggle${showMedia ? ' on' : ''}`} onClick={() => setShowMedia((v) => !v)} title={showMedia ? 'showing media-only messages (gifs, stickers, images)' : 'hiding media-only messages'}>
+        media
       </button>
     </>
   );
