@@ -453,12 +453,12 @@ export default function App() {
 
   const FeedToggles = () => (
     <>
-      <label>
-        <input type="checkbox" checked={showBots} onChange={(e) => setShowBots(e.target.checked)} /> hidden
-      </label>
-      <label>
-        <input type="checkbox" checked={showRepeats} onChange={(e) => setShowRepeats(e.target.checked)} /> repeats
-      </label>
+      <button className={`hdr-toggle${showBots ? ' on' : ''}`} onClick={() => setShowBots((v) => !v)} title={showBots ? 'showing hidden bots and blocked callers' : 'show hidden bots and blocked callers'}>
+        hidden
+      </button>
+      <button className={`hdr-toggle${showRepeats ? ' on' : ''}`} onClick={() => setShowRepeats((v) => !v)} title={showRepeats ? 'showing repeat contracts' : 'show repeat contracts'}>
+        repeats
+      </button>
     </>
   );
   const focused = view.preview ?? view.chat;

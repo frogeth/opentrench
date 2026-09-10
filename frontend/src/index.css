@@ -780,3 +780,9 @@ b { font-weight: 600; }
 .fed-foot > button.primary { background: var(--accent); color: #041a10; border-color: var(--accent); font-weight: 700; }
 .fed-foot > button.primary:hover { background: #4fd9a1; }
 @media (max-width: 900px) { .fed-body { grid-template-columns: 1fr; overflow-y: auto; } .fed-left { border-right: none; border-bottom: 1px solid var(--line); } .fed-cols { grid-template-columns: 1fr; } }
+
+/* ---------- header toggles (hidden / repeats) ---------- */
+.col-extra { gap: 4px; }
+.hdr-toggle { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 2px 9px; font-size: 11px; cursor: pointer; line-height: 16px; white-space: nowrap; transition: color 0.15s, border-color 0.15s, background 0.15s; }
+.hdr-toggle:hover { color: var(--text); border-color: var(--muted); }
+.hdr-toggle.on { color: var(--accent); border-color: rgba(65, 200, 146, 0.6); background: rgba(65, 200, 146, 0.1); }
