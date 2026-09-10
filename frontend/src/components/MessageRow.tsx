@@ -65,6 +65,7 @@ export function MessageRow({
   compactEmbeds = true,
   chartProvider = 'basedbot',
   onAuthorChanged,
+  onReply,
 }: {
   m: FeedMessage;
   tokens: Record<string, TokenInfo>;
@@ -79,6 +80,8 @@ export function MessageRow({
   chartProvider?: import('../format').ChartProvider;
   /** a menu action changed favorites / bot policy / blacklist: reload config */
   onAuthorChanged?: () => void;
+  /** start a reply to this message in the column's composer */
+  onReply?: (m: FeedMessage) => void;
 }) {
   const fav = !m.isBot && isFavorite(favorites, m.author);
   return (
@@ -99,6 +102,11 @@ export function MessageRow({
           {m.isBot && <span className="bot-tag">bot</span>}
           {m.hidden && <span className="bot-tag hidden-tag">hidden</span>}
           <AuthorMenu author={m.author} link={m.link} favorite={fav} bot={m.isBot} hidden={!!m.hidden} onChanged={onAuthorChanged} />
+          {onReply && (
+            <button className="row-reply" onClick={() => onReply(m)} title="reply" aria-label="reply">
+              <Icon name="reply" size={12} />
+            </button>
+          )}
           <span className="time">
             {m.link ? (
               <a href={m.link} target="_blank" rel="noreferrer">

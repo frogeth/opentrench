@@ -786,3 +786,33 @@ b { font-weight: 600; }
 .hdr-toggle { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 2px 9px; font-size: 11px; cursor: pointer; line-height: 16px; white-space: nowrap; transition: color 0.15s, border-color 0.15s, background 0.15s; }
 .hdr-toggle:hover { color: var(--text); border-color: var(--muted); }
 .hdr-toggle.on { color: var(--accent); border-color: rgba(65, 200, 146, 0.6); background: rgba(65, 200, 146, 0.1); }
+
+/* ---------- composer & replies ---------- */
+.composer { flex: none; border-top: 1px solid var(--line); background: var(--bg); padding: 6px 10px 6px; display: flex; flex-direction: column; gap: 4px; }
+.composer-reply { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); padding: 2px 4px; min-width: 0; }
+.composer-reply b { color: var(--text); }
+.composer-reply-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+.composer-reply button { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0 4px; }
+.composer-reply button:hover { color: var(--err); }
+.composer-row { display: flex; align-items: flex-end; gap: 6px; }
+.composer-target { flex: none; max-width: 160px; background: var(--chrome); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 12px; }
+.composer-target-fixed { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.composer textarea { flex: 1; min-width: 0; resize: none; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 13px; line-height: 1.35; max-height: 120px; }
+.composer textarea:focus { outline: none; border-color: var(--muted); }
+.composer textarea:disabled { color: var(--dim); background: var(--bg); }
+.composer-send { flex: none; width: 34px; height: 34px; border-radius: 8px; border: none; background: var(--accent); color: #041a10; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.composer-send:disabled { background: var(--panel-2); color: var(--dim); cursor: default; }
+.composer-foot { display: flex; gap: 10px; font-size: 10px; min-height: 12px; padding: 0 2px; }
+.composer-warn { color: var(--gold); }
+.composer-foot .err { color: var(--err); }
+.row-reply { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0 4px; opacity: 0; display: inline-flex; border-radius: 4px; }
+.row:hover .row-reply { opacity: 0.7; }
+.row-reply:hover { opacity: 1 !important; color: var(--text); background: var(--panel-2); }
+.send-toggle { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.send-warn { border: 1px solid rgba(242, 102, 130, 0.5); background: rgba(242, 102, 130, 0.06); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.send-warn p { margin: 0; color: #d5d9e2; }
+.send-warn label { display: flex; align-items: center; gap: 8px; }
+.send-warn input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+.send-warn code { background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+.send-warn .danger { background: var(--err); color: #000; border: none; border-radius: 6px; padding: 6px 12px; font-weight: 700; cursor: pointer; }
+.send-warn .danger:disabled { opacity: 0.4; cursor: default; }

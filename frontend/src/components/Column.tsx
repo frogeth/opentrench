@@ -25,6 +25,7 @@ export function Column({
   onAlert,
   fill = false,
   filtered = false,
+  composer,
 }: {
   title: string;
   subtitle?: string;
@@ -51,6 +52,8 @@ export function Column({
   fill?: boolean;
   /** filters set on this column (lights the funnel) */
   filtered?: boolean;
+  /** message box under the body (chat columns) */
+  composer?: ReactNode;
 }) {
   return (
     <section
@@ -104,6 +107,7 @@ export function Column({
       <div className="col-body" ref={bodyRef} onScroll={onScroll}>
         {children}
       </div>
+      {composer}
       {footer}
       {onResize && (
         <div

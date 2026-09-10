@@ -227,6 +227,12 @@ export class TelegramWrapper extends EventEmitter {
     }
   }
 
+  /** Send a message to a chat you are in, optionally as a reply. */
+  async send(chatId: string, text: string, replyTo?: number): Promise<void> {
+    if (!this.client || this.state !== 'connected') throw new Error('telegram not connected');
+    await this.client.sendMessage(bigInt(chatId), { message: text, replyTo, linkPreview: true });
+  }
+
   /** Message your own "Saved Messages" (phone ping without any bot). */
   async sendSelf(text: string): Promise<void> {
     if (!this.client || this.state !== 'connected') return;

@@ -185,8 +185,73 @@ function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: 
           </div>
         </>
       )}
+      {cfg.discord.hasToken && <DiscordSendToggle cfg={cfg} onChange={onChange} />}
       {err && <div className="err">{err}</div>}
     </section>
+  );
+}
+
+/** Sending on Discord is the risky half of using a user token: off by default, typed acknowledgement to enable. */
+function DiscordSendToggle({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
+  const [warn, setWarn] = useState(false);
+  const [ack, setAck] = useState('');
+  const { busy, err, run } = useAsync();
+  const on = cfg.discord.canSend;
+  return (
+    <div className="send-toggle">
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={on}
+          disabled={busy}
+          onChange={(e) => {
+            if (e.target.checked) setWarn(true);
+            else
+              void run(async () => {
+                await api.setDiscordSend(false);
+                onChange();
+              });
+          }}
+        />{' '}
+        Send messages and replies from opentrench
+      </label>
+      <div className="hint">{on ? 'On. A composer sits under every chat column; the app never sends anything you did not type.' : 'Off. Chat columns are read-only on Discord.'}</div>
+      {warn && (
+        <div className="send-warn">
+          <b>Before you turn this on</b>
+          <p>
+            opentrench reads Discord with your own account token, which Discord's terms forbid. Reading is rarely noticed. <b>Sending is different:</b> posting through a
+            token is exactly what Discord's automation checks look for, and accounts do get banned for it — sometimes without warning and with no appeal.
+          </p>
+          <p>
+            The app limits you to one message a second per channel and only ever sends what you typed, but that does not make it allowed. If this account matters to
+            you, keep this off or use an alt.
+          </p>
+          <label>
+            Type <code>I understand</code> to enable:
+            <input value={ack} onChange={(e) => setAck(e.target.value)} placeholder="I understand" autoFocus />
+          </label>
+          <div className="row-inline">
+            <button
+              className="danger"
+              disabled={busy || ack.trim().toLowerCase() !== 'i understand'}
+              onClick={() =>
+                run(async () => {
+                  await api.setDiscordSend(true, ack);
+                  setWarn(false);
+                  setAck('');
+                  onChange();
+                })
+              }
+            >
+              Enable sending on Discord
+            </button>
+            <button onClick={() => setWarn(false)}>Keep it off</button>
+          </div>
+        </div>
+      )}
+      {err && <div className="err">{err}</div>}
+    </div>
   );
 }
 
@@ -290,6 +355,25 @@ function TelegramAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status:
           >
             Log out
           </button>
+        </div>
+      )}
+      {status.telegram === 'connected' && (
+        <div className="send-toggle">
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={cfg.telegram.canSend}
+              disabled={busy}
+              onChange={(e) =>
+                run(async () => {
+                  await api.setTelegramSend(e.target.checked);
+                  onChange();
+                })
+              }
+            />{' '}
+            Send messages and replies from opentrench
+          </label>
+          <div className="hint">Telegram allows this. A composer sits under every chat column; only what you type is sent.</div>
         </div>
       )}
       {err && <div className="err">{err}</div>}

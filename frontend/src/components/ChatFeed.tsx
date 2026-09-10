@@ -30,6 +30,7 @@ export function ChatFeed({
   head,
   empty,
   render,
+  onReply,
 }: {
   /** chronological (oldest first) */
   msgs: FeedMessage[];
@@ -46,6 +47,7 @@ export function ChatFeed({
   empty?: ReactNode;
   /** renders the column chrome around the body */
   render: (body: ReactNode, bodyRef: React.RefObject<HTMLDivElement>, onScroll: () => void, footer: ReactNode) => ReactNode;
+  onReply?: (m: FeedMessage) => void;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const [atEnd, setAtEnd] = useState(true);
@@ -83,6 +85,7 @@ export function ChatFeed({
           compactEmbeds={compactEmbeds}
           chartProvider={chartProvider}
           onAuthorChanged={onAuthorChanged}
+          onReply={onReply}
         />
         </VirtualItem>
       ))}

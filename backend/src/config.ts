@@ -60,8 +60,9 @@ export function sanitizeColumns(raw: unknown): ColumnDef[] {
 }
 
 export interface Config {
-  discord: { token?: string; watch: string[] };
-  telegram: { apiId?: number; apiHash?: string; session?: string; watch: string[] };
+  /** `send`: the user explicitly enabled composing messages from the app (Discord: after the ToS warning) */
+  discord: { token?: string; watch: string[]; send?: boolean };
+  telegram: { apiId?: number; apiHash?: string; session?: string; watch: string[]; send?: boolean };
   cove: { amounts: number[] };
   /** caller names (case-insensitive, leading @ ignored) whose posts never count as calls */
   blacklist: string[];
@@ -102,12 +103,13 @@ export class ConfigStore {
   /** Tokens/sessions replaced with booleans, safe to send to the UI. */
   masked() {
     return {
-      discord: { hasToken: !!this.cfg.discord.token, watch: this.cfg.discord.watch },
+      discord: { hasToken: !!this.cfg.discord.token, watch: this.cfg.discord.watch, canSend: !!this.cfg.discord.send },
       telegram: {
         apiId: this.cfg.telegram.apiId ?? null,
         hasApiHash: !!this.cfg.telegram.apiHash,
         hasSession: !!this.cfg.telegram.session,
         watch: this.cfg.telegram.watch,
+        canSend: !!this.cfg.telegram.send,
       },
       cove: { amounts: this.cfg.cove.amounts },
       blacklist: this.cfg.blacklist,

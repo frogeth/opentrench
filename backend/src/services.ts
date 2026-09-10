@@ -5,7 +5,7 @@ import { discordReaction, normalizeDiscord } from './discord/normalize.js';
 import { TelegramWrapper, type TelegramDialog } from './telegram/client.js';
 import { extractLinks, type ExtractedMeta } from './links.js';
 import { createPreviewer, type Previewer } from './previews.js';
-import { fetchChannelHistory } from './discord/rest.js';
+import { fetchChannelHistory, sendChannelMessage } from './discord/rest.js';
 import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction } from './types.js';
 
@@ -90,6 +90,18 @@ export class Services {
   }
 
   /** Recent messages of any chat (newest first) without adding it to the feed. Not persisted. */
+  /** Compose a message as the user. Sending must be enabled per platform in config; the API checks that. */
+  async send(source: 'discord' | 'telegram', chatId: string, text: string, replyTo?: string): Promise<void> {
+    if (source === 'discord') {
+      const token = this.cfg.get().discord.token;
+      if (!token) throw new Error('discord not connected');
+      await sendChannelMessage(token, chatId, text, replyTo);
+      return;
+    }
+    if (!this.telegram) throw new Error('telegram not connected');
+    await this.telegram.send(chatId, text, replyTo ? Number(replyTo) : undefined);
+  }
+
   async preview(source: 'discord' | 'telegram', id: string, limit = 50): Promise<FeedMessage[]> {
     let msgs: FeedMessage[] = [];
     if (source === 'discord') {

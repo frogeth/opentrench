@@ -3,6 +3,36 @@ const API = 'https://discord.com/api/v10';
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
 
+/** Post a message as the user (self-bot: this is the riskier half of the ToS problem; gated in the API). */
+export async function sendChannelMessage(
+  token: string,
+  channelId: string,
+  content: string,
+  replyToId?: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ id: string }> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 10_000);
+  try {
+    const body: Record<string, unknown> = { content, nonce: Date.now().toString(), tts: false, flags: 0 };
+    if (replyToId) body.message_reference = { channel_id: channelId, message_id: replyToId };
+    const res = await fetchImpl(`${API}/channels/${encodeURIComponent(channelId)}/messages`, {
+      method: 'POST',
+      signal: ctl.signal,
+      headers: { authorization: token, 'user-agent': USER_AGENT, accept: 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`discord send ${res.status}${txt ? `: ${txt.slice(0, 160)}` : ''}`);
+    }
+    const json: any = await res.json();
+    return { id: String(json?.id ?? '') };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export async function fetchChannelHistory(
   token: string,
   channelId: string,

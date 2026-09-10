@@ -3,6 +3,7 @@ import type { HoverFetchers } from './hover.js';
 import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
 
 const ohlcvCache = new Map<string, { at: number; v: unknown }>();
+const lastSend = new Map<string, number>();
 let tickers: { at: number; v: { sym: string; usd: number; change24h: number }[] } | undefined;
 import { sanitizeColumns } from './config.js';
 import type { ConfigStore } from './config.js';
@@ -256,6 +257,52 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     }),
   );
 
+  // Sending is opt-in per platform. Discord requires the typed acknowledgement of the ToS risk.
+  r.put(
+    '/discord/send',
+    wrap((req) => {
+      const enabled = !!req.body?.enabled;
+      if (enabled && String(req.body?.confirm ?? '').trim().toLowerCase() !== 'i understand') throw new Error('type "I understand" to enable sending on Discord');
+      cfg.update((c) => {
+        c.discord.send = enabled;
+      });
+      return { canSend: enabled };
+    }),
+  );
+  r.put(
+    '/telegram/send',
+    wrap((req) => {
+      const enabled = !!req.body?.enabled;
+      cfg.update((c) => {
+        c.telegram.send = enabled;
+      });
+      return { canSend: enabled };
+    }),
+  );
+  r.post(
+    '/send',
+    wrap(async (req) => {
+      const source = req.body?.source === 'telegram' ? 'telegram' : 'discord';
+      const chatId = String(req.body?.chatId ?? '').trim();
+      const text = String(req.body?.text ?? '').replace(/\r\n/g, '\n').trim();
+      const replyTo = req.body?.replyTo ? String(req.body.replyTo) : undefined;
+      if (!chatId || !text) throw new Error('chat and text required');
+      const c = cfg.get();
+      if (source === 'discord' && !c.discord.send) throw new Error('sending on Discord is off (Settings → Accounts)');
+      if (source === 'telegram' && !c.telegram.send) throw new Error('sending on Telegram is off (Settings → Accounts)');
+      const max = source === 'discord' ? 2000 : 4096;
+      if (text.length > max) throw new Error(`too long: ${text.length} / ${max} characters`);
+      const watched = source === 'discord' ? c.discord.watch : c.telegram.watch;
+      if (!watched.includes(chatId)) throw new Error('you can only send to chats in your feed');
+      // one message per second per chat, typed by a human: the app itself never looks like a bot
+      const key = `${source}:${chatId}`;
+      const last = lastSend.get(key) ?? 0;
+      if (Date.now() - last < 1000) throw new Error('slow down — one message per second per chat');
+      lastSend.set(key, Date.now());
+      await svc.send(source, chatId, text, replyTo);
+      return { ok: true };
+    }),
+  );
   r.put(
     '/discord/token',
     wrap((req) => {

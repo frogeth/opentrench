@@ -90,8 +90,8 @@ export interface ColumnDef {
   filters?: ColumnFilters;
 }
 export interface MaskedConfig {
-  discord: { hasToken: boolean; watch: string[] };
-  telegram: { apiId: number | null; hasApiHash: boolean; hasSession: boolean; watch: string[] };
+  discord: { hasToken: boolean; watch: string[]; canSend: boolean };
+  telegram: { apiId: number | null; hasApiHash: boolean; hasSession: boolean; watch: string[]; canSend: boolean };
   cove: { amounts: number[] };
   blacklist: string[];
   bots: BotPolicy;
@@ -146,6 +146,9 @@ export const api = {
   setPings: (telegram: boolean) => req('PUT', '/pings', { telegram }),
   setO1Key: (apiKey: string) => req('PUT', '/o1', { apiKey }),
   setRailOrder: (ids: string[]) => req('PUT', '/rail-order', { ids }),
+  setDiscordSend: (enabled: boolean, confirm = '') => req<{ canSend: boolean }>('PUT', '/discord/send', { enabled, confirm }),
+  setTelegramSend: (enabled: boolean) => req<{ canSend: boolean }>('PUT', '/telegram/send', { enabled }),
+  send: (source: 'discord' | 'telegram', chatId: string, text: string, replyTo?: string) => req<{ ok: true }>('POST', '/send', { source, chatId, text, replyTo }),
   markSeen: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/seen', { add, remove }),
   setColumns: (columns: ColumnDef[]) => req<ColumnDef[]>('PUT', '/columns', { columns }),
   watched: () => req<WatchedChat[]>('GET', '/watched'),

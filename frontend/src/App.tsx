@@ -7,6 +7,7 @@ import { CallCard } from './components/CallCard';
 import { ChatFeed } from './components/ChatFeed';
 import { ColumnEditor, chatKey } from './components/ColumnEditor';
 import { CallersList } from './components/CallersColumn';
+import { Composer, type SendTarget } from './components/Composer';
 import { VirtualItem } from './components/Virtual';
 import { Settings } from './components/Settings';
 import { ChannelSidebar, discordChatName, type View } from './components/ChannelSidebar';
@@ -166,6 +167,19 @@ export default function App() {
     });
     void api.markSeen(on ? addresses : [], on ? [] : addresses).catch(() => {});
   };
+  // Composing: reply state per column, send targets from each column's chats
+  const [replyByCol, setReplyByCol] = useState<Record<string, FeedMessage | undefined>>({});
+  const canSend = { discord: !!cfg?.discord.canSend, telegram: !!cfg?.telegram.canSend } as const;
+  const targetsFor = (names: Set<string> | null): SendTarget[] =>
+    watched.filter((w) => (!names || names.has(w.name)) && (!scope || scope.has(w.name))).map((w) => ({ id: w.id, name: w.name, source: w.source }));
+  const composerFor = (colId: string, names: Set<string> | null) => (
+    <Composer
+      targets={targetsFor(names)}
+      canSend={canSend}
+      reply={replyByCol[colId]}
+      onCancelReply={() => setReplyByCol((r) => ({ ...r, [colId]: undefined }))}
+    />
+  );
   const [liveWidths, setLiveWidths] = useState<Record<string, number>>({});
   const resizeFor = (id: string) => (w: number, done: boolean) => {
     if (!done) {
@@ -573,6 +587,7 @@ export default function App() {
                 chartProvider={chartProvider}
                 onSelect={select}
                 onAuthorChanged={reloadLists}
+                onReply={(m) => setReplyByCol((r) => ({ ...r, focused: m }))}
                 head={
                   view.preview && (
                     <div className="preview-bar">
@@ -613,6 +628,7 @@ export default function App() {
                     onScroll={onScroll}
                     footer={footer}
                     extra={<FeedToggles />}
+                    composer={view.preview ? undefined : composerFor('focused', view.chat ? new Set([view.chat.name]) : null)}
                   >
                     {body}
                   </Column>
@@ -692,6 +708,7 @@ export default function App() {
                     chartProvider={chartProvider}
                     onSelect={select}
                     onAuthorChanged={reloadLists}
+                    onReply={(m) => setReplyByCol((r) => ({ ...r, [col.id]: m }))}
                     empty={<div className="empty">{watched.length === 0 ? 'No chats in your feed yet. Use the + in the rail.' : 'Nothing here yet.'}</div>}
                     render={(body, bodyRef, onScroll, footer) => (
                       <Column
@@ -704,6 +721,7 @@ export default function App() {
                         onScroll={onScroll}
                         footer={footer}
                         extra={<FeedToggles />}
+                        composer={composerFor(col.id, names)}
                         {...actions}
                       >
                         {body}
@@ -761,7 +779,10 @@ export default function App() {
       {settingsOpen && (
         <Settings
           status={status}
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => {
+            setSettingsOpen(false);
+            reloadLists();
+          }}
           chatOrder={chatOrder}
           onChatOrder={setChatOrder}
           autoChart={autoChart}
