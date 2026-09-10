@@ -118,7 +118,7 @@ export function CallersList({
         <span>last</span>
       </div>
       {rows.map((r, i) => (
-        <VirtualItem key={r.key} id={`caller:${r.key}`} estimate={44}>
+        <VirtualItem key={r.key} id={`caller:${r.key}`} estimate={38}>
           <HoverCard width={320} card={<CallerCalls r={r} now={now} />}>
             <div className={`caller-row${i < 3 ? ' caller-top' : ''}`} onClick={() => onSearch(r.name)}>
               <span className="caller-who">
