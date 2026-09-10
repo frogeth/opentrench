@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { EmbedInfo } from '../types';
 import { RichText } from './RichText';
 
@@ -13,8 +14,16 @@ function footerTime(ts: number): string {
   return `${d.toLocaleDateString()} ${time}`;
 }
 
-/** A Discord rich embed, laid out the way Discord does: colour bar, author, title, description, fields grid, media, footer. */
-export function Embed({ e, contracts }: { e: EmbedInfo; contracts: string[] }) {
+/** Bot "call cards" are long; anything with this many fields collapses to one line by default. */
+const COLLAPSE_AT = 3;
+
+/**
+ * A Discord rich embed. Small ones render in full; call-bot cards collapse to
+ * a one-line summary (title · first description line · N fields) until expanded.
+ */
+export function Embed({ e, contracts, compact = true }: { e: EmbedInfo; contracts: string[]; compact?: boolean }) {
+  const collapsible = compact && (e.fields.length >= COLLAPSE_AT || (e.description?.length ?? 0) > 400);
+  const [open, setOpen] = useState(false);
   const title = e.title ? (
     e.url ? (
       <a href={e.url} target="_blank" rel="noreferrer">
@@ -24,6 +33,25 @@ export function Embed({ e, contracts }: { e: EmbedInfo; contracts: string[] }) {
       <RichText text={e.title} contracts={contracts} />
     )
   ) : null;
+
+  if (collapsible && !open) {
+    const firstLine = (e.description ?? '').split('\n').find((l) => l.trim()) ?? '';
+    return (
+      <div className="embed embed-compact" style={e.color ? { borderLeftColor: e.color } : undefined}>
+        {e.thumbnail && <img className="embed-thumb-sm" src={e.thumbnail} alt="" loading="lazy" />}
+        <span className="embed-compact-title">{title ?? (e.author?.name || 'embed')}</span>
+        {firstLine && (
+          <span className="embed-compact-desc">
+            <RichText text={firstLine} contracts={contracts} />
+          </span>
+        )}
+        <button className="embed-toggle" onClick={() => setOpen(true)} title="expand">
+          {e.fields.length > 0 ? `${e.fields.length} fields` : 'more'} ▾
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={`embed${e.thumbnail ? ' embed-has-thumb' : ''}`} style={e.color ? { borderLeftColor: e.color } : undefined}>
       <div className="embed-body">
@@ -39,7 +67,16 @@ export function Embed({ e, contracts }: { e: EmbedInfo; contracts: string[] }) {
             )}
           </div>
         )}
-        {title && <div className="embed-title">{title}</div>}
+        {(title || collapsible) && (
+          <div className="embed-title">
+            {title}
+            {collapsible && (
+              <button className="embed-toggle" onClick={() => setOpen(false)} title="collapse">
+                ▴
+              </button>
+            )}
+          </div>
+        )}
         {e.description && (
           <div className="embed-desc">
             <RichText text={e.description} contracts={contracts} />

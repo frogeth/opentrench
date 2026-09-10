@@ -27,6 +27,40 @@ export function gtSlugFor(network: string): string {
   return network;
 }
 
+export interface Candle {
+  /** unix seconds, bucket open */
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+}
+
+/** GT OHLCV granularity for a UI interval like "5m", "1h", "1d". */
+export function ohlcvPath(interval: string): { timeframe: 'minute' | 'hour' | 'day'; aggregate: number } {
+  const m = /^(\d+)([mhd])$/.exec(interval) ?? ['', '5', 'm'];
+  const n = Number(m[1]);
+  if (m[2] === 'd') return { timeframe: 'day', aggregate: 1 };
+  if (m[2] === 'h') return { timeframe: 'hour', aggregate: [1, 4, 12].includes(n) ? n : 1 };
+  return { timeframe: 'minute', aggregate: [1, 5, 15].includes(n) ? n : 5 };
+}
+
+export function mapOhlcv(json: any): Candle[] {
+  const rows: any[] = Array.isArray(json?.data?.attributes?.ohlcv_list) ? json.data.attributes.ohlcv_list : [];
+  return rows
+    .map((r) => ({ t: Number(r[0]), o: Number(r[1]), h: Number(r[2]), l: Number(r[3]), c: Number(r[4]), v: Number(r[5]) }))
+    .filter((c) => [c.t, c.o, c.h, c.l, c.c].every(Number.isFinite))
+    .sort((a, b) => a.t - b.t);
+}
+
+/** Candles for a pool (oldest first). GT returns newest-first pages of up to 1000. */
+export async function fetchOhlcv(slug: string, pool: string, interval: string, limit = 300, fetchImpl: typeof fetch = fetch): Promise<Candle[]> {
+  const { timeframe, aggregate } = ohlcvPath(interval);
+  const json = await getJson(`${API}/networks/${slug}/pools/${encodeURIComponent(pool)}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${Math.min(1000, limit)}&currency=usd`, fetchImpl);
+  return mapOhlcv(json);
+}
+
 /** Market numbers for up to 30 tokens of one network in one (spaced) request; keys are the addresses as passed. */
 export async function fetchGeckoTerminalMulti(
   slug: string,

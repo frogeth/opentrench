@@ -115,6 +115,10 @@ export class MessageHub extends EventEmitter {
     return [...this.tokens.values()].filter((t) => now - t.lastCallTs < windowMs);
   }
 
+  getToken(address: string): TokenInfo | undefined {
+    return this.tokens.get(address) ?? this.tokens.get(address.toLowerCase());
+  }
+
   /** Live market numbers from the refresh loop; tracks ATH since first call. */
   updateMarket(address: string, info: Partial<TokenInfo>): void {
     const t = this.tokens.get(address);

@@ -101,6 +101,11 @@ export const api = {
   setO1Key: (apiKey: string) => req('PUT', '/o1', { apiKey }),
   setRailOrder: (ids: string[]) => req('PUT', '/rail-order', { ids }),
   watched: () => req<WatchedChat[]>('GET', '/watched'),
+  ohlcv: (address: string, interval: string) =>
+    req<{ candles: { t: number; o: number; h: number; l: number; c: number; v: number }[]; mcPerPrice?: number; reason?: string }>(
+      'GET',
+      `/token/${encodeURIComponent(address)}/ohlcv?interval=${interval}`,
+    ),
   sitePreview: (url: string) => req<SitePreview | null>('GET', `/site-preview?url=${encodeURIComponent(url)}`),
   xProfile: (handle: string) => req<XProfile | null>('GET', `/x-profile/${encodeURIComponent(handle)}`),
   preview: (source: 'discord' | 'telegram', id: string) =>

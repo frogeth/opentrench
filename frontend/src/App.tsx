@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFeed } from './useFeed';
 import { Column } from './components/Column';
+import { TokenModal } from './components/TokenModal';
 import { CallCard } from './components/CallCard';
 import { MessageRow } from './components/MessageRow';
 import { Settings } from './components/Settings';
@@ -59,6 +60,7 @@ export default function App() {
   const [showBots, setShowBots] = useState(false);
   const [showRepeats, setShowRepeats] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [openToken, setOpenToken] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const [watched, setWatched] = useState<WatchedChat[]>([]);
   const [cfg, setCfg] = useState<MaskedConfig | null>(null);
@@ -78,6 +80,21 @@ export default function App() {
     setChatOrderState(o);
     try {
       localStorage.setItem('trenchfeed.chatOrder', o);
+    } catch {
+      /* ignore */
+    }
+  };
+  const [compactEmbeds, setCompactEmbedsState] = useState(() => {
+    try {
+      return localStorage.getItem('trenchfeed.embeds') !== 'full';
+    } catch {
+      return true;
+    }
+  });
+  const setCompactEmbeds = (on: boolean) => {
+    setCompactEmbedsState(on);
+    try {
+      localStorage.setItem('trenchfeed.embeds', on ? 'compact' : 'full');
     } catch {
       /* ignore */
     }
@@ -423,7 +440,7 @@ export default function App() {
             <div className="empty">{view.preview ? 'Previewing — add this chat to track its calls.' : 'No contracts seen yet.'}</div>
           )}
           {calls.map((t) => (
-            <CallCard key={t.address} t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} />
+            <CallCard key={t.address} t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} />
           ))}
         </Column>
         <Column
@@ -490,12 +507,14 @@ export default function App() {
               continued={!!focused && continued(shownMsgs, i)}
               discord={!!focused}
               autoChart={autoChart}
+              compactEmbeds={compactEmbeds}
               chartProvider={chartProvider}
               onAuthorChanged={reloadLists}
             />
           ))}
         </Column>
       </main>
+      {openToken && tokens[openToken] && <TokenModal t={tokens[openToken]} now={now} favorites={status.favorites} onClose={() => setOpenToken(null)} />}
       {settingsOpen && (
         <Settings
           status={status}
@@ -504,6 +523,8 @@ export default function App() {
           onChatOrder={setChatOrder}
           autoChart={autoChart}
           onAutoChart={setAutoChart}
+          compactEmbeds={compactEmbeds}
+          onCompactEmbeds={setCompactEmbeds}
           chartProvider={chartProvider}
           onChartProvider={setChartProvider}
         />

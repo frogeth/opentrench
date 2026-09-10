@@ -1,5 +1,8 @@
 import { Router, json, type Request, type Response } from 'express';
 import type { HoverFetchers } from './hover.js';
+import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
+
+const ohlcvCache = new Map<string, { at: number; v: unknown }>();
 import type { ConfigStore } from './config.js';
 import type { MessageHub } from './hub.js';
 import type { Services } from './services.js';
@@ -50,6 +53,28 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     }),
   );
   r.get('/config', wrap(() => cfg.masked()));
+  // Drill-down chart: candles for the token's main pool, cached briefly (GeckoTerminal is 30 req/min).
+  r.get(
+    '/token/:address/ohlcv',
+    wrap(async (req) => {
+      const t = hub.getToken(String(req.params.address));
+      if (!t) throw new Error('unknown token');
+      if (!t.network || !t.pairAddress) return { candles: [], reason: 'no pool known yet' };
+      const interval = /^\d+[mhd]$/.test(String(req.query.interval)) ? String(req.query.interval) : '5m';
+      const key = `${t.address}:${interval}`;
+      const c = ohlcvCache.get(key);
+      if (c && Date.now() - c.at < 30_000) return c.v;
+      const candles = await fetchOhlcv(gtSlugFor(t.network), t.pairAddress, interval, 300);
+      const v = {
+        candles,
+        // scale price → market cap with the supply implied by the latest numbers
+        mcPerPrice: t.marketCap && t.priceUsd ? t.marketCap / t.priceUsd : undefined,
+      };
+      if (ohlcvCache.size > 200) ohlcvCache.delete(ohlcvCache.keys().next().value!);
+      ohlcvCache.set(key, { at: Date.now(), v });
+      return v;
+    }),
+  );
   // Hover cards: fetched on demand, cached in memory, never stored.
   r.get(
     '/site-preview',

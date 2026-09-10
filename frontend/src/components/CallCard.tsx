@@ -50,12 +50,15 @@ export function CallCard({
   selected = false,
   favorites,
   chartProvider = 'basedbot',
+  onOpen,
 }: {
   t: TokenInfo;
   now: number;
   selected?: boolean;
   favorites: string[];
   chartProvider?: ChartProvider;
+  /** open the drill-down for this token */
+  onOpen?: (address: string) => void;
 }) {
   const embed = chartEmbedUrl(t, chartProvider);
   const [copied, setCopied] = useState(false);
@@ -125,7 +128,7 @@ export function CallCard({
 
       {/* 2 · image | identity | numbers */}
       <div className="call-mid">
-        <div className="call-imgwrap">
+        <div className="call-imgwrap call-imgwrap-open" onClick={() => onOpen?.(t.address)} title="open details">
           {t.imageUrl && !imgBroken ? (
             <img className="call-img" src={t.imageUrl} alt="" loading="lazy" onError={() => setImgBroken(true)} />
           ) : (

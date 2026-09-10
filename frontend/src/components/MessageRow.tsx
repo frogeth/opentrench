@@ -62,6 +62,7 @@ export function MessageRow({
   continued = false,
   discord = false,
   autoChart = false,
+  compactEmbeds = true,
   chartProvider = 'basedbot',
   onAuthorChanged,
 }: {
@@ -74,6 +75,7 @@ export function MessageRow({
   /** Discord-style presentation (focused channel view) */
   discord?: boolean;
   autoChart?: boolean;
+  compactEmbeds?: boolean;
   chartProvider?: import('../format').ChartProvider;
   /** a menu action changed favorites / bot policy / blacklist: reload config */
   onAuthorChanged?: () => void;
@@ -131,7 +133,7 @@ export function MessageRow({
           </div>
         )}
         {m.embeds?.map((e, i) => (
-          <Embed key={i} e={e} contracts={m.contracts.map((c) => c.address)} />
+          <Embed key={i} e={e} contracts={m.contracts.map((c) => c.address)} compact={compactEmbeds} />
         ))}
         {m.media && m.media.length > 0 && (
           <div className="media">

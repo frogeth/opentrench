@@ -14,6 +14,8 @@ export function Settings({
   onChatOrder,
   autoChart,
   onAutoChart,
+  compactEmbeds,
+  onCompactEmbeds,
   chartProvider,
   onChartProvider,
 }: {
@@ -23,6 +25,8 @@ export function Settings({
   onChatOrder: (o: 'bottom' | 'top') => void;
   autoChart: boolean;
   onAutoChart: (on: boolean) => void;
+  compactEmbeds: boolean;
+  onCompactEmbeds: (on: boolean) => void;
   chartProvider: 'basedbot' | 'dexscreener';
   onChartProvider: (p: 'basedbot' | 'dexscreener') => void;
 }) {
@@ -97,6 +101,14 @@ export function Settings({
                   <input type="checkbox" checked={autoChart} onChange={(e) => onAutoChart(e.target.checked)} /> Open the
                   live chart under every contract in Chats (only loads while on screen)
                 </label>
+              </section>
+              <section>
+                <h2>Bot embeds</h2>
+                <label className="check">
+                  <input type="checkbox" checked={compactEmbeds} onChange={(e) => onCompactEmbeds(e.target.checked)} /> Collapse
+                  call-bot cards (Captain Hook, Rick…) to one line; click the chevron to expand one
+                </label>
+                <div className="hint">The call card under the message already shows the token's numbers and holder data.</div>
               </section>
               <FavoritesSection cfg={cfg} onChange={reload} />
               <BotsSection cfg={cfg} onChange={reload} />
