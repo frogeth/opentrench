@@ -91,10 +91,10 @@ describe('normalizeDiscord', () => {
   });
   it('carries reply context from referenced_message', () => {
     const m = normalizeDiscord(
-      { ...payload, referenced_message: { author: { username: 'og', global_name: 'OG' }, content: 'first call' } },
+      { ...payload, referenced_message: { id: '99', author: { username: 'og', global_name: 'OG' }, content: 'first call' } },
       { name: 'a', guildName: 'g' },
     );
-    expect(m.replyTo).toEqual({ author: 'OG', text: 'first call' });
+    expect(m.replyTo).toEqual({ author: 'OG', text: 'first call', id: 'discord:99' });
     expect(normalizeDiscord(payload, { name: 'a', guildName: 'g' }).replyTo).toBeUndefined();
   });
   it('maps unicode and custom reactions', () => {

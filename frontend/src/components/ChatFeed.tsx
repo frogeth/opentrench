@@ -31,6 +31,7 @@ export function ChatFeed({
   empty,
   render,
   onReply,
+  onReveal,
 }: {
   /** chronological (oldest first) */
   msgs: FeedMessage[];
@@ -48,6 +49,8 @@ export function ChatFeed({
   /** renders the column chrome around the body */
   render: (body: ReactNode, bodyRef: React.RefObject<HTMLDivElement>, onScroll: () => void, footer: ReactNode) => ReactNode;
   onReply?: (m: FeedMessage) => void;
+  /** make a hidden/filtered message visible in this column; returns false if it is not in the buffer at all */
+  onReveal?: (id: string) => boolean;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const [atEnd, setAtEnd] = useState(true);
@@ -62,6 +65,26 @@ export function ChatFeed({
     if (!el || !atEnd) return;
     el.scrollTop = order === 'bottom' ? el.scrollHeight : 0;
   }, [shown, order, atEnd]);
+  const jumpTo = (id: string | undefined, fallback: string | undefined) => {
+    const open = () => fallback && window.open(fallback, '_blank', 'noopener');
+    if (!id) return open();
+    const inBuffer = onReveal ? onReveal(id) : true;
+    if (!inBuffer) return open();
+    let tries = 0;
+    const find = () => {
+      const el = bodyRef.current?.querySelector(`[data-key="${CSS.escape(id)}"]`) as HTMLElement | null;
+      if (el) {
+        setAtEnd(false);
+        // instant, and again once the rows around it have mounted and settled their heights
+        el.scrollIntoView({ block: 'center', behavior: 'auto' });
+        window.setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'auto' }), 350);
+        el.classList.add('vitem-flash');
+        window.setTimeout(() => el.classList.remove('vitem-flash'), 2400);
+      } else if (tries++ < 10) window.setTimeout(find, 60);
+      else open();
+    };
+    window.setTimeout(find, 30);
+  };
   const jump = () => {
     const el = bodyRef.current;
     if (!el) return;
@@ -73,7 +96,7 @@ export function ChatFeed({
       {head}
       {shown.length === 0 && empty}
       {shown.map((m, i) => (
-        <VirtualItem key={m.id} id={`msg:${m.id}`} estimate={m.contracts.length ? 140 : 52}>
+        <VirtualItem key={m.id} id={`msg:${m.id}`} domKey={m.id} estimate={m.contracts.length ? 140 : 52}>
         <MessageRow
           m={m}
           tokens={tokens}
@@ -86,6 +109,7 @@ export function ChatFeed({
           chartProvider={chartProvider}
           onAuthorChanged={onAuthorChanged}
           onReply={onReply}
+          onJump={jumpTo}
         />
         </VirtualItem>
       ))}

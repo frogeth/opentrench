@@ -128,7 +128,7 @@ function replyContext(d: any): ReplyContext | undefined {
   const r = d.referenced_message;
   if (!r) return undefined;
   const text = String(r.content ?? '').trim() || (r.attachments?.length ? '📎 attachment' : r.embeds?.length ? '(embed)' : '');
-  return { author: authorName(r.author, r.member), text };
+  return { author: authorName(r.author, r.member), text, ...(r.id ? { id: `discord:${r.id}` } : {}) };
 }
 
 /** Map a gateway emoji object to our reaction identity (no count). */

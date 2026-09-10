@@ -816,3 +816,9 @@ b { font-weight: 600; }
 .send-warn code { background: var(--bg); padding: 1px 5px; border-radius: 4px; }
 .send-warn .danger { background: var(--err); color: #000; border: none; border-radius: 6px; padding: 6px 12px; font-weight: 700; cursor: pointer; }
 .send-warn .danger:disabled { opacity: 0.4; cursor: default; }
+
+/* ---------- jump to the replied-to message ---------- */
+.reply-jump { cursor: pointer; }
+.reply-jump:hover { border-left-color: var(--accent); color: var(--text); }
+.vitem-flash > .row, .vitem-flash { animation: msg-flash 2.4s ease-out; border-radius: 8px; }
+@keyframes msg-flash { 0% { background: rgba(65, 200, 146, 0.22); } 100% { background: transparent; } }

@@ -324,7 +324,7 @@ export class TelegramWrapper extends EventEmitter {
         const rName = rs?.username
           ? `@${rs.username}`
           : [rs?.firstName, rs?.lastName].filter(Boolean).join(' ') || rs?.title || 'unknown';
-        replyTo = { author: rName, text: String(r.message ?? '').trim() || (r.media ? '📎 media' : '') };
+        replyTo = { author: rName, text: String(r.message ?? '').trim() || (r.media ? '📎 media' : ''), id: `telegram:${chatId}:${r.id}` };
       }
     }
     const mediaUrl = `/api/telegram/media/${chatId}/${m.id}`;

@@ -66,6 +66,7 @@ export function MessageRow({
   chartProvider = 'basedbot',
   onAuthorChanged,
   onReply,
+  onJump,
 }: {
   m: FeedMessage;
   tokens: Record<string, TokenInfo>;
@@ -82,6 +83,8 @@ export function MessageRow({
   onAuthorChanged?: () => void;
   /** start a reply to this message in the column's composer */
   onReply?: (m: FeedMessage) => void;
+  /** go to the message this one replies to (feed id + a link to open if it is gone) */
+  onJump?: (id: string | undefined, fallbackLink: string | undefined) => void;
 }) {
   const fav = !m.isBot && isFavorite(favorites, m.author);
   return (
@@ -125,7 +128,16 @@ export function MessageRow({
         </div>
         )}
         {m.replyTo && (
-          <div className="reply" title={m.replyTo.text}>
+          <div
+            className={`reply${onJump ? ' reply-jump' : ''}`}
+            title={onJump ? 'jump to the original message' : m.replyTo.text}
+            onClick={() => {
+              if (!onJump) return;
+              const pid = m.replyTo!.id?.split(':').pop();
+              const fallback = pid && m.link ? m.link.replace(/\/[^/]+$/, `/${pid}`) : undefined;
+              onJump(m.replyTo!.id, fallback);
+            }}
+          >
             <span className="reply-arrow">↩</span> <b>{m.replyTo.author}</b> <RichText text={m.replyTo.text} />
           </div>
         )}

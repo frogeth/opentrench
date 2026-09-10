@@ -167,6 +167,13 @@ export default function App() {
     });
     void api.markSeen(on ? addresses : [], on ? [] : addresses).catch(() => {});
   };
+  // Messages revealed by "jump to reply" even though they are hidden or filtered out
+  const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
+  const revealMessage = (id: string): boolean => {
+    if (!messages.some((m) => m.id === id)) return false;
+    setRevealed((s) => (s.has(id) ? s : new Set([...s, id])));
+    return true;
+  };
   // Composing: reply state per column, send targets from each column's chats
   const [replyByCol, setReplyByCol] = useState<Record<string, FeedMessage | undefined>>({});
   const canSend = { discord: !!cfg?.discord.canSend, telegram: !!cfg?.telegram.canSend } as const;
@@ -421,12 +428,13 @@ export default function App() {
     if (view.preview) return (previewMsgs ?? []).filter((m) => (showBots || !m.hidden) && matchesQuery(q, m, tokens));
     return messages.filter(
       (m) =>
-        (showBots || !m.hidden) &&
-        (showRepeats || !m.repeat) &&
-        (watched.length === 0 || watchedNames.has(m.chatName)) &&
-        inScope(m.chatName, names) &&
-        messagePasses(m, f) &&
-        matchesQuery(q, m, tokens),
+        revealed.has(m.id) ||
+        ((showBots || !m.hidden) &&
+          (showRepeats || !m.repeat) &&
+          (watched.length === 0 || watchedNames.has(m.chatName)) &&
+          inScope(m.chatName, names) &&
+          messagePasses(m, f) &&
+          matchesQuery(q, m, tokens)),
     );
   };
   const callsFor = (names: Set<string> | null, f?: ColumnDef['filters']) =>
@@ -588,6 +596,7 @@ export default function App() {
                 onSelect={select}
                 onAuthorChanged={reloadLists}
                 onReply={(m) => setReplyByCol((r) => ({ ...r, focused: m }))}
+                onReveal={revealMessage}
                 head={
                   view.preview && (
                     <div className="preview-bar">
@@ -709,6 +718,7 @@ export default function App() {
                     onSelect={select}
                     onAuthorChanged={reloadLists}
                     onReply={(m) => setReplyByCol((r) => ({ ...r, [col.id]: m }))}
+                    onReveal={revealMessage}
                     empty={<div className="empty">{watched.length === 0 ? 'No chats in your feed yet. Use the + in the rail.' : 'Nothing here yet.'}</div>}
                     render={(body, bodyRef, onScroll, footer) => (
                       <Column

@@ -7,7 +7,7 @@ const heights = new Map<string, number>();
  * while the slot is near the column's viewport; otherwise a placeholder of
  * the last measured height (or the estimate) keeps the scroll geometry stable.
  */
-export function VirtualItem({ id, estimate, children }: { id: string; estimate: number; children: ReactNode }) {
+export function VirtualItem({ id, estimate, children, domKey }: { id: string; estimate: number; children: ReactNode; /** data-key on the slot for scroll-to */ domKey?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(false);
   useEffect(() => {
@@ -33,7 +33,7 @@ export function VirtualItem({ id, estimate, children }: { id: string; estimate: 
   });
   const h = heights.get(id) ?? estimate;
   return (
-    <div ref={ref} className="vitem" style={near ? undefined : { height: h }}>
+    <div ref={ref} className="vitem" data-key={domKey} style={near ? undefined : { height: h }}>
       {near ? children : null}
     </div>
   );

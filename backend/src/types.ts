@@ -17,6 +17,8 @@ export interface Reaction {
 export interface ReplyContext {
   author: string;
   text: string;
+  /** feed id of the message being replied to (discord:<id> | telegram:<chat>:<id>), when known */
+  id?: string;
 }
 
 export interface MediaItem {
