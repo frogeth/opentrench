@@ -1,4 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
+
+/** A container can claim link clicks (return true = handled, default prevented). The Cove column uses it for the bot's deep links. */
+export const LinkInterceptContext = createContext<((href: string) => boolean) | null>(null);
 import { copyText } from '../format';
 
 // Discord custom emoji on the wire: <:name:id> or <a:name:id> (animated).
@@ -72,8 +75,18 @@ function buildRe(contracts: string[]): RegExp {
 }
 
 function Link({ href, children }: { href: string; children: ReactNode }) {
+  const intercept = useContext(LinkInterceptContext);
   return (
-    <a className="md-link" href={href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+    <a
+      className="md-link"
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (intercept?.(href)) e.preventDefault();
+      }}
+    >
       {children}
     </a>
   );

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { BotMessage } from '../types';
 import { api } from '../api';
-import { RichText } from './RichText';
+import { RichText, LinkInterceptContext } from './RichText';
 import { Icon } from './Icon';
 
 export const COVE_BOT = 'cove_trading_bot';
@@ -85,21 +85,17 @@ export function CoveView({
     }
   };
 
+  // Cove's own deep links (positions, Sell 100%, Move, Hide, bulk sell…) run in-app
+  const intercept = (href: string) => {
+    const m = new RegExp(`^(?:https?://t\\.me/${bot}/?\\?start=|tg://resolve\\?domain=${bot}&start=)([A-Za-z0-9_-]+)`, 'i').exec(href);
+    if (!m) return false;
+    void api.botStart(bot, m[1]).catch((err) => flash(err?.message ?? 'failed'));
+    return true;
+  };
   return (
+    <LinkInterceptContext.Provider value={intercept}>
     <div className="cove">
-      <div
-        className="cove-body"
-        ref={body}
-        onClick={(e) => {
-          // Cove's own deep links (positions, Sell 100%, Move, Hide, bulk sell…) run in-app
-          const a = (e.target as HTMLElement).closest('a.md-link') as HTMLAnchorElement | null;
-          if (!a) return;
-          const m = new RegExp(`^https?://t\\.me/${bot}\\?start=([A-Za-z0-9_-]+)`, 'i').exec(a.href);
-          if (!m) return;
-          e.preventDefault();
-          void api.botStart(bot, m[1]).catch((err) => flash(err?.message ?? 'failed'));
-        }}
-      >
+      <div className="cove-body" ref={body}>
         {!connected && <div className="empty">Telegram isn't connected. Cove runs through your Telegram account (⚙ → Accounts).</div>}
         {connected && state === 'loading' && msgs.length === 0 && <div className="empty">Loading your Cove conversation…</div>}
         {state === 'error' && <div className="empty err">{err}</div>}
@@ -152,5 +148,6 @@ export function CoveView({
         </div>
       </div>
     </div>
+    </LinkInterceptContext.Provider>
   );
 }
