@@ -99,3 +99,45 @@ export function webpagePreview(media: any, imageUrl: string): LinkPreview | unde
     image: w.photo ? imageUrl : undefined,
   };
 }
+
+/**
+ * Telegram formats text with entities (offset/length in UTF-16 units) rather than
+ * markup. Turn the ones we render — text links, bold, code — into the markdown
+ * the UI already understands, so bot panels keep their links and emphasis.
+ */
+export function entitiesToMarkdown(text: string, entities: any[] | undefined): string {
+  if (!entities?.length || !text) return text;
+  const wrap: { start: number; end: number; open: string; close: string }[] = [];
+  for (const e of entities) {
+    const start = Number(e.offset), end = start + Number(e.length);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end > text.length) continue;
+    switch (e.className) {
+      case 'MessageEntityTextUrl':
+        wrap.push({ start, end, open: '[', close: `](${String(e.url)})` });
+        break;
+      case 'MessageEntityBold':
+        wrap.push({ start, end, open: '**', close: '**' });
+        break;
+      case 'MessageEntityCode':
+        wrap.push({ start, end, open: '`', close: '`' });
+        break;
+      default:
+        break;
+    }
+  }
+  if (wrap.length === 0) return text;
+  // outermost first; skip anything that overlaps an already-applied span
+  wrap.sort((a, b) => a.start - b.start || b.end - a.end);
+  const applied: typeof wrap = [];
+  for (const w of wrap) {
+    if (applied.some((a) => w.start < a.end && a.start < w.end)) continue;
+    applied.push(w);
+  }
+  let out = '';
+  let pos = 0;
+  for (const w of applied) {
+    out += text.slice(pos, w.start) + w.open + text.slice(w.start, w.end) + w.close;
+    pos = w.end;
+  }
+  return out + text.slice(pos);
+}

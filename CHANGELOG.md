@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Cove panels keep their links and formatting: positions, Sell 100%, Move, Hide and Switch to bulk sell are clickable and act inside the app.
+
 ## v0.1.15 — 2026-09-10
 
 - Cove: alerts the bot deletes (Close, or expired) disappear from the Cove column too, instead of erroring when pressed.

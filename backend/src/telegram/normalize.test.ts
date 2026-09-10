@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { entitiesToMarkdown, describe, it, expect } from 'vitest';
 import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview } from './normalize.js';
 
 describe('normalizeTelegram', () => {
@@ -96,5 +96,20 @@ describe('classifyMedia', () => {
       webpagePreview({ className: 'MessageMediaWebPage', webpage: { className: 'WebPage', url: 'https://x.com/a/status/1', siteName: 'X', author: 'Jack (@jack)', description: 'hi', photo: {} } }, `${U}?thumb=1`),
     ).toEqual({ url: 'https://x.com/a/status/1', site: 'x', title: 'X', author: 'Jack', handle: 'jack', text: 'hi', image: `${U}?thumb=1` });
     expect(webpagePreview({ className: 'MessageMediaWebPage', webpage: { className: 'WebPagePending' } }, U)).toBeUndefined();
+  });
+});
+
+describe('entitiesToMarkdown', () => {
+  it('turns text links, bold and code into markdown and ignores nested/overlapping spans', () => {
+    const text = '$AERON · mc $260K\nPnL +131% · Sell 100% · Move';
+    const md = entitiesToMarkdown(text, [
+      { className: 'MessageEntityTextUrl', offset: 0, length: 6, url: 'https://t.me/cove_trading_bot?start=p_1' },
+      { className: 'MessageEntityBold', offset: 2, length: 3 }, // nested inside the link: dropped
+      { className: 'MessageEntityTextUrl', offset: 30, length: 9, url: 'https://t.me/cove_trading_bot?start=s_1' },
+      { className: 'MessageEntityCode', offset: 42, length: 4 },
+      { className: 'MessageEntityItalic', offset: 0, length: 1 }, // unsupported: ignored
+    ]);
+    expect(md).toBe('[$AERON](https://t.me/cove_trading_bot?start=p_1) · mc $260K\nPnL +131% · [Sell 100%](https://t.me/cove_trading_bot?start=s_1) · `Move`');
+    expect(entitiesToMarkdown('plain', undefined)).toBe('plain');
   });
 });

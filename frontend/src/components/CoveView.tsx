@@ -87,7 +87,19 @@ export function CoveView({
 
   return (
     <div className="cove">
-      <div className="cove-body" ref={body}>
+      <div
+        className="cove-body"
+        ref={body}
+        onClick={(e) => {
+          // Cove's own deep links (positions, Sell 100%, Move, Hide, bulk sell…) run in-app
+          const a = (e.target as HTMLElement).closest('a.md-link') as HTMLAnchorElement | null;
+          if (!a) return;
+          const m = new RegExp(`^https?://t\\.me/${bot}\\?start=([A-Za-z0-9_-]+)`, 'i').exec(a.href);
+          if (!m) return;
+          e.preventDefault();
+          void api.botStart(bot, m[1]).catch((err) => flash(err?.message ?? 'failed'));
+        }}
+      >
         {!connected && <div className="empty">Telegram isn't connected. Cove runs through your Telegram account (⚙ → Accounts).</div>}
         {connected && state === 'loading' && msgs.length === 0 && <div className="empty">Loading your Cove conversation…</div>}
         {state === 'error' && <div className="empty err">{err}</div>}

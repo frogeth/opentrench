@@ -868,3 +868,6 @@ button.share { cursor: pointer; }
 .col-flash { animation: flash 1.5s ease-out; }
 button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
 .buy-compact button.buy-btn { font-size: 10px; }
+
+.bmsg-text .md-link { color: #4ea3ff; }
+.bmsg-text .md-link:hover { text-decoration: underline; }

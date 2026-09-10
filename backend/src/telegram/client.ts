@@ -6,7 +6,7 @@ import { NewMessage, Raw, type NewMessageEvent } from 'telegram/events/index.js'
 import { Api } from 'telegram/tl/index.js';
 import { getPeerId } from 'telegram/Utils.js';
 import type { BotMessage, FeedMessage, LoginStep, TelegramState } from '../types.js';
-import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, type TelegramPlain } from './normalize.js';
+import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, type TelegramPlain, entitiesToMarkdown } from './normalize.js';
 import { extractLinks, type ExtractedMeta, type LinkIn } from '../links.js';
 
 export interface TelegramDialog {
@@ -276,7 +276,7 @@ export class TelegramWrapper extends EventEmitter {
         ...(b.url ? { url: String(b.url) } : {}),
       })),
     );
-    return { id: Number(m.id), ts: Number(m.date) * 1000, out: !!m.out, text: String(m.message ?? ''), buttons, hasMedia: !!m.media };
+    return { id: Number(m.id), ts: Number(m.date) * 1000, out: !!m.out, text: entitiesToMarkdown(String(m.message ?? ''), m.entities), buttons, hasMedia: !!m.media };
   }
 
   /** Is this update about a bot conversation we relay? Returns the bot username. */
