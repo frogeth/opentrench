@@ -2,6 +2,7 @@ import type { ReactNode, RefObject, UIEvent } from 'react';
 
 export function Column({
   title,
+  subtitle,
   count,
   extra,
   children,
@@ -11,6 +12,7 @@ export function Column({
   footer,
 }: {
   title: string;
+  subtitle?: string;
   count?: number;
   extra?: ReactNode;
   children: ReactNode;
@@ -22,7 +24,10 @@ export function Column({
   return (
     <section className={`col ${className}`}>
       <div className="col-head">
-        <h2>{title}</h2>
+        <div className="col-title">
+          <h2>{title}</h2>
+          {subtitle && <span className="col-sub">{subtitle}</span>}
+        </div>
         {count !== undefined && <span className="col-count">{count}</span>}
         <div className="col-extra">{extra}</div>
       </div>

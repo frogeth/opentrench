@@ -3,6 +3,7 @@ import type { HoverFetchers } from './hover.js';
 import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
 
 const ohlcvCache = new Map<string, { at: number; v: unknown }>();
+let tickers: { at: number; v: { sym: string; usd: number; change24h: number }[] } | undefined;
 import type { ConfigStore } from './config.js';
 import type { MessageHub } from './hub.js';
 import type { Services } from './services.js';
@@ -53,6 +54,29 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     }),
   );
   r.get('/config', wrap(() => cfg.masked()));
+  // Header tickers: CoinGecko simple price, cached a minute (free tier is ~30 req/min).
+  r.get(
+    '/tickers',
+    wrap(async () => {
+      if (tickers && Date.now() - tickers.at < 60_000) return tickers.v;
+      const res = await fetch(
+        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,hyperliquid&vs_currencies=usd&include_24hr_change=true',
+        { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(6000) },
+      );
+      if (!res.ok) throw new Error(`coingecko ${res.status}`);
+      const j: any = await res.json();
+      const v = [
+        ['BTC', 'bitcoin'],
+        ['ETH', 'ethereum'],
+        ['SOL', 'solana'],
+        ['HYPE', 'hyperliquid'],
+      ]
+        .filter(([, id]) => j?.[id]?.usd !== undefined)
+        .map(([sym, id]) => ({ sym, usd: Number(j[id].usd), change24h: Number(j[id].usd_24h_change ?? 0) }));
+      tickers = { at: Date.now(), v };
+      return v;
+    }),
+  );
   // Drill-down chart: candles for the token's main pool, cached briefly (GeckoTerminal is 30 req/min).
   r.get(
     '/token/:address/ohlcv',

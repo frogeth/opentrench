@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { TokenInfo } from '../types';
+import type { CallRecord, TokenInfo } from '../types';
 import { chartEmbedUrl, copyText, isFavorite, money, price, shortAddr, telegramShareUrl, timeAgo, type ChartProvider } from '../format';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
@@ -12,10 +12,9 @@ import { LaunchpadBadge } from './LaunchpadBadge';
 import { HoverCard, Tip } from './HoverCard';
 import { SecurityStrip } from './SecurityStrip';
 
-/**
- * One call. Strict grid so every card has the same shape: caller line,
- * image | identity | numbers, then buys | share. Nothing wraps; long text ellipsizes.
- */
+const chatOf = (c: CallRecord) => c.chatName.replace(/\s*\([^)]*\)\s*$/, '');
+const fmtX = (x: number) => `${x >= 10 ? x.toFixed(0) : x.toFixed(1)}x`;
+
 /** Every counted call, newest first: who, where, MC at the time, when. */
 function CallsList({ t, now }: { t: TokenInfo; now: number }) {
   const calls = [...t.calls].reverse();
@@ -32,7 +31,7 @@ function CallsList({ t, now }: { t: TokenInfo; now: number }) {
             <span className="hc-call-who">
               <b>{c.author}</b>
               <span>
-                <Logo source={c.source} size={9} /> {c.chatName.replace(/\s*\([^)]*\)\s*$/, '')}
+                <Logo source={c.source} size={9} /> {chatOf(c)}
               </span>
             </span>
             <span className="hc-call-mc">{money(c.marketCap) ?? '—'}</span>
@@ -44,6 +43,10 @@ function CallsList({ t, now }: { t: TokenInfo; now: number }) {
   );
 }
 
+/**
+ * One call, three lines in ~150px: caller · channel · age | MC at call · x,
+ * then image | symbol / age · CA / links · holders · TX, then risk chips | buys.
+ */
 export function CallCard({
   t,
   now,
@@ -70,7 +73,9 @@ export function CallCard({
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
-  const c = t.firstCaller;
+  // the call this card represents: the latest one (repeat callers move a token back to the top)
+  const c: CallRecord | undefined = t.calls[t.calls.length - 1] ?? (t.firstCaller ? { ...t.firstCaller } : undefined);
+  const isFirst = t.calls.length <= 1;
   const buys = t.buys24h ?? 0;
   const sells = t.sells24h ?? 0;
   const txTotal = buys + sells;
@@ -79,54 +84,56 @@ export function CallCard({
     c ? ` · called by ${c.author} in ${c.chatName}` : ''
   }`.trim();
   const hot = t.seen >= 3 ? ' call-hot-3' : t.seen === 2 ? ' call-hot-2' : '';
-  const mult = t.marketCap && t.firstCallMarketCap ? t.marketCap / t.firstCallMarketCap : undefined;
+  const isNew = now - t.firstSeenTs < 8000;
+  const mcAt = c?.marketCap ?? t.firstCallMarketCap;
+  const mult = t.marketCap && mcAt ? t.marketCap / mcAt : undefined;
+  const nearAth = t.marketCap && t.athMarketCap ? t.marketCap >= t.athMarketCap * 0.95 : false;
 
   return (
-    <div id={`call-${t.address}`} className={`call${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${hot}`}>
+    <div id={`call-${t.address}`} className={`call${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${isNew ? ' call-new' : ''}${hot}`}>
       {t.seen >= 2 && <span key={t.lastCallTs} className="call-pulse" />}
 
-      {/* 1 · caller line */}
+      {/* 1 · caller meta */}
       <div className="call-top">
         {c ? (
           <>
-            <Avatar src={c.avatar} name={c.author} size={18} crown={isFavorite(favorites, c.author)} />
             <span className="call-who">
+              <Avatar src={c.avatar} name={c.author} size={16} crown={isFavorite(favorites, c.author)} />
               <span className="call-author">{c.author}</span>
               <AuthorMenu author={c.author} link={c.link} favorite={isFavorite(favorites, c.author)} />
-              <Logo source={c.source} size={10} />
-              <span className="call-chat">{c.chatName.replace(/\s*\([^)]*\)\s*$/, '')}</span>
             </span>
+            <span className="call-dot">·</span>
+            <span className="call-chat" title={c.chatName}>
+              <Logo source={c.source} size={10} />
+              {chatOf(c)}
+            </span>
+            <span className="call-dot">·</span>
           </>
-        ) : (
-          <>
-            <span />
-            <span className="call-who" />
-          </>
-        )}
+        ) : null}
         <span className="call-age">{timeAgo(t.lastCallTs ?? t.firstSeenTs, now)}</span>
-        <HoverCard width={300} card={<CallsList t={t} now={now} />}>
-          <span className={`call-seen${t.seen >= 2 ? ' call-seen-hot' : ''}`}>
-            {t.seen >= 2 ? '🔥' : ''}
-            {t.seen}×
-          </span>
-        </HoverCard>
-        <span className="call-mc-now">
-          {mult !== undefined && (
-            <Tip text={`${money(t.firstCallMarketCap)} at first call → ${money(t.marketCap)} now`}>
-              <span className={`call-mult${mult >= 1 ? ' up' : ' down'}`}>{mult >= 10 ? mult.toFixed(0) : mult.toFixed(1)}×</span>
-            </Tip>
+        {isFirst ? (
+          <span className="first-badge">1st</span>
+        ) : (
+          <HoverCard width={300} card={<CallsList t={t} now={now} />}>
+            <span className={`call-seen${t.seen >= 2 ? ' call-seen-hot' : ''}`}>🔥{t.seen}×</span>
+          </HoverCard>
+        )}
+        <span className="call-top-right">
+          {c?.link && (
+            <a className="call-jump" href={c.link} target="_blank" rel="noreferrer" title="jump to message">
+              <Icon name="chat" size={13} />
+            </a>
           )}
-          {hasPrice && money(t.marketCap) ? (
-            <>
-              MC <b>{money(t.marketCap)}</b>
-            </>
-          ) : (
-            ''
+          {money(mcAt) && <span className="call-mcat">MC: {money(mcAt)}</span>}
+          {mult !== undefined && (
+            <Tip text={`${money(mcAt)} at call → ${money(t.marketCap)} now`}>
+              <span className={`call-mult${mult >= 1 ? ' up' : ' down'}`}>{fmtX(mult)}</span>
+            </Tip>
           )}
         </span>
       </div>
 
-      {/* 2 · image | identity | numbers */}
+      {/* 2 · image | info */}
       <div className="call-mid">
         <div className="call-imgwrap call-imgwrap-open" onClick={() => onOpen?.(t.address)} title="open details">
           {t.imageUrl && !imgBroken ? (
@@ -144,87 +151,69 @@ export function CallCard({
           )}
         </div>
         <div className="call-info">
-          <div className="call-head">
+          <div className="call-line">
             <button className="call-sym" onClick={copy} title={`${t.address}\nclick to copy`}>
               {copied ? 'copied' : (t.symbol ?? shortAddr(t.address))}
             </button>
             {t.name && t.name !== t.symbol && <span className="call-name">{t.name}</span>}
+            <span className="call-line-r">
+              {hasPrice && money(t.volume24h) && (
+                <span className="call-kv">
+                  V <b>{money(t.volume24h)}</b>
+                </span>
+              )}
+              <span className="call-kv call-mc">
+                MC <b>{money(t.marketCap) ?? '—'}</b>
+              </span>
+            </span>
           </div>
-          <div className="call-sub">
-            {t.pairCreatedAt && <span title="token age">{timeAgo(t.pairCreatedAt, now)}</span>}
+          <div className="call-line call-sub">
+            {t.pairCreatedAt && <span className="call-age-tok" title="token age">{timeAgo(t.pairCreatedAt, now)}</span>}
+            {t.pairCreatedAt && <span className="call-dot">|</span>}
             <span className="call-addr" onClick={copy} title="click to copy">
               {shortAddr(t.address)} <Icon name="copy" size={10} />
             </span>
             {hasPrice && price(t.priceUsd) && <span className="call-price">{price(t.priceUsd)}</span>}
+            <span className="call-line-r">
+              {money(t.athMarketCap) && <span className={`call-ath${nearAth ? ' near' : ''}`}>ATH: {money(t.athMarketCap)}</span>}
+            </span>
           </div>
-          <div className="call-tx">
-            {txTotal > 0 ? (
-              <Tip text={`24h: ${buys} buys · ${sells} sells`}>
-                <span className="call-txn">
-                  TX {txTotal >= 1000 ? `${(txTotal / 1000).toFixed(1)}K` : txTotal}
-                  <span className="txbar">
-                    <span className="txbar-buy" style={{ width: `${buyPct}%` }} />
-                  </span>
-                </span>
-              </Tip>
-            ) : (
-              <span className={hasPrice ? 'muted' : 'pending'}>
-                {t.priceUsd === undefined && t.marketCap !== undefined ? 'bonding · no pair yet' : hasPrice ? 'no trades yet' : 'no pair yet · retrying'}
-              </span>
-            )}
-          </div>
-          <div className="call-links">
+          <div className="call-line call-links">
             <TokenLinks t={t} showChart={showChart} onToggleChart={() => setShowChart((s) => !s)} canChart={!!embed} />
+            <span className="call-line-r">
+              {t.security?.holders !== undefined && (
+                <Tip text={`${t.security.holders.toLocaleString()} holders`}>
+                  <span className="call-holders">
+                    <Icon name="people" size={11} />
+                    {t.security.holders >= 1e6 ? `${(t.security.holders / 1e6).toFixed(1)}M` : t.security.holders >= 1000 ? `${(t.security.holders / 1000).toFixed(1)}K` : t.security.holders}
+                  </span>
+                </Tip>
+              )}
+              {txTotal > 0 ? (
+                <Tip text={`24h: ${buys} buys · ${sells} sells`}>
+                  <span className="call-txn">
+                    TX {txTotal >= 1000 ? `${(txTotal / 1000).toFixed(1)}K` : txTotal}
+                    <span className="txbar">
+                      <span className="txbar-buy" style={{ width: `${buyPct}%` }} />
+                    </span>
+                  </span>
+                </Tip>
+              ) : (
+                <span className={hasPrice ? 'call-pending' : 'call-pending'}>
+                  {t.priceUsd === undefined && t.marketCap !== undefined ? 'bonding' : hasPrice ? 'no trades' : 'no pair yet'}
+                </span>
+              )}
+            </span>
           </div>
-        </div>
-        <div className="call-right">
-          <span className="call-kv">
-            {hasPrice && money(t.volume24h) ? (
-              <>
-                V <b>{money(t.volume24h)}</b>
-              </>
-            ) : (
-              ' '
-            )}
-          </span>
-          <span className="call-kv call-mc">
-            {hasPrice && money(t.marketCap) ? (
-              <>
-                MC <b>{money(t.marketCap)}</b>
-              </>
-            ) : (
-              <b className="muted">—</b>
-            )}
-          </span>
-          <span className="call-kv call-ath">
-            {hasPrice && money(t.athMarketCap) ? (
-              <>
-                ATH <b>{money(t.athMarketCap)}</b>
-              </>
-            ) : (
-              ' '
-            )}
-          </span>
-          <span className="call-kv">
-            {hasPrice && money(t.liquidity) ? (
-              <>
-                Liq <b>{money(t.liquidity)}</b>
-              </>
-            ) : (
-              ' '
-            )}
-          </span>
         </div>
       </div>
 
-      {/* 3 · holder security (only once we have it) */}
-      {t.security && <SecurityStrip s={t.security} />}
-
-      {/* 4 · buys | share */}
+      {/* 3 · risk chips | buys */}
       <div className="call-bottom">
+        {t.security ? <SecurityStrip s={t.security} compact /> : <span className="call-pending">holder data pending…</span>}
         <BuyRow buy={t.buy} />
         <a className="share" href={telegramShareUrl(t.address, shareLabel)} target="_blank" rel="noreferrer" title="share CA on Telegram">
-          <Icon name="telegram" size={13} /> share
+          <Icon name="telegram" size={12} />
         </a>
       </div>
 

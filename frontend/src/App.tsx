@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFeed } from './useFeed';
 import { Column } from './components/Column';
 import { TokenModal } from './components/TokenModal';
+import { Tickers } from './components/Tickers';
 import { CallCard } from './components/CallCard';
 import { MessageRow } from './components/MessageRow';
 import { Settings } from './components/Settings';
@@ -319,6 +320,7 @@ export default function App() {
     setAtEnd(true);
   };
 
+  const scopeLabel = view.preview ? 'preview' : view.rail === 'all' ? 'All channels' : (view.chat ? 'this channel' : 'this server');
   const calls = useMemo(
     () =>
       Object.values(tokens)
@@ -364,6 +366,7 @@ export default function App() {
     <div className="app">
       <header className="top">
         <div className="brand">opentrench</div>
+        <Tickers />
         <input
           className="search"
           placeholder="Search tokens, CA, callers, chats…"
@@ -435,7 +438,7 @@ export default function App() {
           onReorder={reorderRail}
           onCollapse={setPane}
         />
-        <Column title="Calls" count={calls.length} className="col-calls">
+        <Column title="All Calls" subtitle={scopeLabel} count={calls.length} className="col-calls">
           {calls.length === 0 && (
             <div className="empty">{view.preview ? 'Previewing — add this chat to track its calls.' : 'No contracts seen yet.'}</div>
           )}

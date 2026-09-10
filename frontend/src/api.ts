@@ -101,6 +101,7 @@ export const api = {
   setO1Key: (apiKey: string) => req('PUT', '/o1', { apiKey }),
   setRailOrder: (ids: string[]) => req('PUT', '/rail-order', { ids }),
   watched: () => req<WatchedChat[]>('GET', '/watched'),
+  tickers: () => req<{ sym: string; usd: number; change24h: number }[]>('GET', '/tickers'),
   ohlcv: (address: string, interval: string) =>
     req<{ candles: { t: number; o: number; h: number; l: number; c: number; v: number }[]; mcPerPrice?: number; reason?: string }>(
       'GET',
