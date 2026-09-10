@@ -233,6 +233,18 @@ export class TelegramWrapper extends EventEmitter {
     await this.client.sendMessage(bigInt(chatId), { message: text, replyTo, linkPreview: true });
   }
 
+  /** Set (or clear) your reaction on a message. Telegram keeps one reaction per user by default. */
+  async react(chatId: string, msgId: number, emoticon: string, on: boolean): Promise<void> {
+    if (!this.client || this.state !== 'connected') throw new Error('telegram not connected');
+    await this.client.invoke(
+      new Api.messages.SendReaction({
+        peer: await this.client.getInputEntity(bigInt(chatId)),
+        msgId,
+        reaction: on ? [new Api.ReactionEmoji({ emoticon })] : [],
+      }),
+    );
+  }
+
   /** Message your own "Saved Messages" (phone ping without any bot). */
   async sendSelf(text: string): Promise<void> {
     if (!this.client || this.state !== 'connected') return;

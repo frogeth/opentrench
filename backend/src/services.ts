@@ -5,7 +5,7 @@ import { discordReaction, normalizeDiscord } from './discord/normalize.js';
 import { TelegramWrapper, type TelegramDialog } from './telegram/client.js';
 import { extractLinks, type ExtractedMeta } from './links.js';
 import { createPreviewer, type Previewer } from './previews.js';
-import { fetchChannelHistory, sendChannelMessage } from './discord/rest.js';
+import { fetchChannelHistory, reactMessage, sendChannelMessage } from './discord/rest.js';
 import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction } from './types.js';
 
@@ -100,6 +100,20 @@ export class Services {
     }
     if (!this.telegram) throw new Error('telegram not connected');
     await this.telegram.send(chatId, text, replyTo ? Number(replyTo) : undefined);
+  }
+
+  /** React as the user. Discord custom emoji arrive as `custom:<id>` with a name; unicode as-is. */
+  async react(source: 'discord' | 'telegram', chatId: string, msgId: string, key: string, name: string, on: boolean): Promise<void> {
+    if (source === 'discord') {
+      const token = this.cfg.get().discord.token;
+      if (!token) throw new Error('discord not connected');
+      const emoji = key.startsWith('custom:') ? `${name}:${key.slice(7)}` : key;
+      await reactMessage(token, chatId, msgId, emoji, on);
+      return;
+    }
+    if (!this.telegram) throw new Error('telegram not connected');
+    if (key.startsWith('custom:')) throw new Error('custom emoji reactions need Telegram Premium');
+    await this.telegram.react(chatId, Number(msgId), key, on);
   }
 
   async preview(source: 'discord' | 'telegram', id: string, limit = 50): Promise<FeedMessage[]> {

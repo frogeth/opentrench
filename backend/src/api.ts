@@ -303,6 +303,29 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { ok: true };
     }),
   );
+  r.post(
+    '/react',
+    wrap(async (req) => {
+      const source = req.body?.source === 'telegram' ? 'telegram' : 'discord';
+      const chatId = String(req.body?.chatId ?? '').trim();
+      const msgId = String(req.body?.msgId ?? '').trim();
+      const key = String(req.body?.key ?? '').trim();
+      const name = String(req.body?.name ?? '').trim();
+      const on = req.body?.on !== false;
+      if (!chatId || !msgId || !key) throw new Error('chat, message and emoji required');
+      const c = cfg.get();
+      if (source === 'discord' && !c.discord.send) throw new Error('sending on Discord is off (Settings → Accounts)');
+      if (source === 'telegram' && !c.telegram.send) throw new Error('sending on Telegram is off (Settings → Accounts)');
+      const watched = source === 'discord' ? c.discord.watch : c.telegram.watch;
+      if (!watched.includes(chatId)) throw new Error('you can only react in chats in your feed');
+      const rk = `react:${source}:${chatId}`;
+      const last = lastSend.get(rk) ?? 0;
+      if (Date.now() - last < 400) throw new Error('slow down');
+      lastSend.set(rk, Date.now());
+      await svc.react(source, chatId, msgId, key, name, on);
+      return { ok: true };
+    }),
+  );
   r.put(
     '/discord/token',
     wrap((req) => {

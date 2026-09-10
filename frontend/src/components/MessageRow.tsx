@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import type { FeedMessage, LinkPreview, MediaItem, TokenInfo } from '../types';
+import type { Reaction, FeedMessage, LinkPreview, MediaItem, TokenInfo } from '../types';
 import { fmtTime, isFavorite } from '../format';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 import { TokenChip } from './TokenChip';
 import { Icon } from './Icon';
+
+const QUICK_EMOJI = ['👍', '🔥', '😂', '💀', '🚀', '👀', '💎', '🤝', '❤️', '😭', '🫡', '📈', '📉', '🐐', '🧠', '🤡', '💩', '😮', '🙏', '✅', '❌', '⚡', '🍀', '🎯'];
 import { AuthorMenu } from './AuthorMenu';
 import { RichText } from './RichText';
 import { Embed } from './Embed';
@@ -67,6 +69,8 @@ export function MessageRow({
   onAuthorChanged,
   onReply,
   onJump,
+  onReact,
+  mine,
 }: {
   m: FeedMessage;
   tokens: Record<string, TokenInfo>;
@@ -85,7 +89,12 @@ export function MessageRow({
   onReply?: (m: FeedMessage) => void;
   /** go to the message this one replies to (feed id + a link to open if it is gone) */
   onJump?: (id: string | undefined, fallbackLink: string | undefined) => void;
+  /** toggle your reaction (undefined = reacting is off for this platform) */
+  onReact?: (m: FeedMessage, key: string, name: string, on: boolean) => void;
+  /** reaction keys you have added in this session */
+  mine?: Set<string>;
 }) {
+  const [pick, setPick] = useState(false);
   const fav = !m.isBot && isFavorite(favorites, m.author);
   return (
     <div
@@ -169,13 +178,52 @@ export function MessageRow({
             ))}
           </div>
         )}
-        {m.reactions && m.reactions.length > 0 && (
+        {((m.reactions && m.reactions.length > 0) || onReact) && (
           <div className="reactions">
-            {m.reactions.map((r) => (
-              <span key={r.key} className="reaction" title={r.name}>
-                {r.imageUrl ? <img src={r.imageUrl} alt={r.name} /> : r.name} <span className="reaction-n">{r.count}</span>
+            {[
+              ...(m.reactions ?? []),
+              // reactions you just added that the platform has not echoed back yet
+              ...[...(mine ?? [])]
+                .filter((k) => k.startsWith(`${m.id}:`))
+                .map((k) => k.slice(m.id.length + 1))
+                .filter((key) => !(m.reactions ?? []).some((r) => r.key === key))
+                .map((key): Reaction => ({ key, name: key, count: 1 })),
+            ].map((r) => {
+              const on = !!mine?.has(`${m.id}:${r.key}`);
+              return (
+                <button
+                  key={r.key}
+                  className={`reaction${on ? ' mine' : ''}${onReact ? ' reaction-click' : ''}`}
+                  title={onReact ? (on ? `remove your ${r.name}` : `react with ${r.name}`) : r.name}
+                  onClick={() => onReact?.(m, r.key, r.name, !on)}
+                  disabled={!onReact}
+                >
+                  {r.imageUrl ? <img src={r.imageUrl} alt={r.name} /> : r.name} <span className="reaction-n">{r.count}</span>
+                </button>
+              );
+            })}
+            {onReact && (
+              <span className="react-add-wrap">
+                <button className="reaction react-add" title="add reaction" onClick={() => setPick((p) => !p)}>
+                  ☺+
+                </button>
+                {pick && (
+                  <div className="react-picker" onMouseLeave={() => setPick(false)}>
+                    {QUICK_EMOJI.map((e) => (
+                      <button
+                        key={e}
+                        onClick={() => {
+                          setPick(false);
+                          onReact(m, e, e, !mine?.has(`${m.id}:${e}`));
+                        }}
+                      >
+                        {e}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </span>
-            ))}
+            )}
           </div>
         )}
         {m.contracts.length > 0 && (

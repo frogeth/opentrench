@@ -149,6 +149,8 @@ export const api = {
   setDiscordSend: (enabled: boolean, confirm = '') => req<{ canSend: boolean }>('PUT', '/discord/send', { enabled, confirm }),
   setTelegramSend: (enabled: boolean) => req<{ canSend: boolean }>('PUT', '/telegram/send', { enabled }),
   send: (source: 'discord' | 'telegram', chatId: string, text: string, replyTo?: string) => req<{ ok: true }>('POST', '/send', { source, chatId, text, replyTo }),
+  react: (source: 'discord' | 'telegram', chatId: string, msgId: string, key: string, name: string, on: boolean) =>
+    req<{ ok: true }>('POST', '/react', { source, chatId, msgId, key, name, on }),
   markSeen: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/seen', { add, remove }),
   setColumns: (columns: ColumnDef[]) => req<ColumnDef[]>('PUT', '/columns', { columns }),
   watched: () => req<WatchedChat[]>('GET', '/watched'),

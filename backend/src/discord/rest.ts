@@ -33,6 +33,29 @@ export async function sendChannelMessage(
   }
 }
 
+/** Add or remove the user's reaction. `emoji` is the unicode emoji, or `name:id` for a custom one. */
+export async function reactMessage(
+  token: string,
+  channelId: string,
+  messageId: string,
+  emoji: string,
+  on: boolean,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 10_000);
+  try {
+    const res = await fetchImpl(`${API}/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}/reactions/${encodeURIComponent(emoji)}/@me`, {
+      method: on ? 'PUT' : 'DELETE',
+      signal: ctl.signal,
+      headers: { authorization: token, 'user-agent': USER_AGENT, accept: 'application/json' },
+    });
+    if (!res.ok && res.status !== 204) throw new Error(`discord react ${res.status}`);
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export async function fetchChannelHistory(
   token: string,
   channelId: string,

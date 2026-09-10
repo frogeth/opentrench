@@ -32,6 +32,9 @@ export function ChatFeed({
   render,
   onReply,
   onReveal,
+  onReact,
+  mine,
+  canReact,
 }: {
   /** chronological (oldest first) */
   msgs: FeedMessage[];
@@ -51,8 +54,13 @@ export function ChatFeed({
   onReply?: (m: FeedMessage) => void;
   /** make a hidden/filtered message visible in this column; returns false if it is not in the buffer at all */
   onReveal?: (id: string) => boolean;
+  onReact?: (m: FeedMessage, key: string, name: string, on: boolean) => void;
+  mine?: Set<string>;
+  /** per-platform: reacting allowed? */
+  canReact?: Record<'discord' | 'telegram', boolean>;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
+  const canReactTo = (m: FeedMessage) => !m.id.startsWith('preview') && (!canReact || canReact[m.source]);
   const [atEnd, setAtEnd] = useState(true);
   const shown = useMemo(() => (order === 'bottom' ? [...msgs].reverse() : msgs), [msgs, order]);
   const atEndRef = useRef(true);
@@ -133,6 +141,8 @@ export function ChatFeed({
           onAuthorChanged={onAuthorChanged}
           onReply={onReply}
           onJump={jumpTo}
+          onReact={onReact && canReactTo(m) ? onReact : undefined}
+          mine={mine}
         />
         </VirtualItem>
       ))}

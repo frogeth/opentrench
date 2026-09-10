@@ -199,6 +199,25 @@ export default function App() {
     setRevealed((s) => (s.has(id) ? s : new Set([...s, id])));
     return true;
   };
+  // Reactions: what you added this session (the platform stream brings the counts back)
+  const [myReactions, setMyReactions] = useState<Set<string>>(() => new Set());
+  const react = (m: FeedMessage, key: string, name: string, on: boolean) => {
+    if (!canSend[m.source]) return;
+    const msgId = m.id.split(':').pop()!;
+    const k = `${m.id}:${key}`;
+    setMyReactions((s) => {
+      const n = new Set(s);
+      on ? n.add(k) : n.delete(k);
+      return n;
+    });
+    void api.react(m.source, m.chatId, msgId, key, name, on).catch(() =>
+      setMyReactions((s) => {
+        const n = new Set(s);
+        on ? n.delete(k) : n.add(k);
+        return n;
+      }),
+    );
+  };
   // Composing: reply state per column, send targets from each column's chats
   const [replyByCol, setReplyByCol] = useState<Record<string, FeedMessage | undefined>>({});
   const canSend = { discord: !!cfg?.discord.canSend, telegram: !!cfg?.telegram.canSend } as const;
@@ -622,6 +641,9 @@ export default function App() {
                 onAuthorChanged={reloadLists}
                 onReply={(m) => setReplyByCol((r) => ({ ...r, focused: m }))}
                 onReveal={revealMessage}
+                onReact={canSend.discord || canSend.telegram ? react : undefined}
+                canReact={canSend}
+                mine={myReactions}
                 head={
                   view.preview && (
                     <div className="preview-bar">
@@ -744,6 +766,9 @@ export default function App() {
                     onAuthorChanged={reloadLists}
                     onReply={(m) => setReplyByCol((r) => ({ ...r, [col.id]: m }))}
                     onReveal={revealMessage}
+                    onReact={canSend.discord || canSend.telegram ? react : undefined}
+                    canReact={canSend}
+                    mine={myReactions}
                     empty={<div className="empty">{watched.length === 0 ? 'No chats in your feed yet. Use the + in the rail.' : 'Nothing here yet.'}</div>}
                     render={(body, bodyRef, onScroll, footer) => (
                       <Column

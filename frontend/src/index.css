@@ -822,3 +822,16 @@ b { font-weight: 600; }
 .reply-jump:hover { border-left-color: var(--accent); color: var(--text); }
 .vitem-flash > .row, .vitem-flash { animation: msg-flash 2.4s ease-out; border-radius: 8px; }
 @keyframes msg-flash { 0% { background: rgba(65, 200, 146, 0.22); } 100% { background: transparent; } }
+
+/* ---------- reactions you can click ---------- */
+.reaction-click { cursor: pointer; }
+.reaction-click:hover { border-color: var(--muted); }
+button.reaction { color: var(--text); font: inherit; line-height: inherit; }
+.reaction.mine { border-color: var(--accent); background: rgba(65, 200, 146, 0.12); }
+.reaction.mine .reaction-n { color: var(--accent); }
+.react-add-wrap { position: relative; display: inline-flex; }
+.react-add { opacity: 0; color: var(--muted); }
+.row:hover .react-add, .react-add:focus { opacity: 1; }
+.react-picker { position: absolute; bottom: 24px; left: 0; z-index: 30; display: grid; grid-template-columns: repeat(8, 28px); gap: 2px; padding: 6px; background: #232b3b; border: 1px solid #3d4a66; border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6); }
+.react-picker button { width: 28px; height: 28px; background: none; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; padding: 0; }
+.react-picker button:hover { background: rgba(255, 255, 255, 0.1); }
