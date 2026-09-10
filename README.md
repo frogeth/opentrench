@@ -1,7 +1,14 @@
 # opentrench
 
+[![Discord](https://img.shields.io/badge/Discord-join%20the%20server-5865F2?logo=discord&logoColor=white)](https://discord.gg/6ByE8fPNN)
+[![Latest release](https://img.shields.io/github/v/release/frogeth/opentrench?label=download)](https://github.com/frogeth/opentrench/releases/latest)
+
 One live feed for your Discord channels and Telegram chats, with contract
 addresses highlighted and copyable. Runs entirely on your machine.
+
+**Community:** questions, feature requests and release news in the
+[opentrench Discord](https://discord.gg/6ByE8fPNN). New here? Start with
+[Getting started](docs/getting-started.md).
 
 > **Warning.** The Discord side uses your **own account token** (a self-bot).
 > That is against Discord's Terms of Service and can get the account banned.
