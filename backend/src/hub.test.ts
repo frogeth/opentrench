@@ -280,6 +280,24 @@ describe('MessageHub', () => {
     expect(hub.hello().tokens[0].security).toMatchObject({ top10Pct: 21.2 });
   });
 
+  it('refreshes holder security in one batch per network and emits token events', async () => {
+    const asked: string[] = [];
+    const hub = new MessageHub(500, undefined, {
+      securityBatch: async (network, addrs) => {
+        asked.push(`${network}:${addrs.join('+')}`);
+        return new Map(addrs.map((a) => [a, { source: 'goplus' as const, fetchedAt: 9, top10Pct: 5 }]));
+      },
+    });
+    hub.push(msg(1, EVM, { chatId: 'a', chatName: '#a' }));
+    hub.updateMarket(EVM.toLowerCase(), { network: 'base' });
+    const events: ServerEvent[] = [];
+    hub.on('event', (e) => events.push(e));
+    expect(await hub.refreshSecurity([EVM.toLowerCase()])).toBe(1);
+    expect(asked).toEqual([`base:${EVM.toLowerCase()}`]);
+    expect(hub.hello().tokens[0].security).toMatchObject({ top10Pct: 5, fetchedAt: 9 });
+    expect(events.map((e) => e.type)).toEqual(['token']);
+  });
+
   it('round-trips a snapshot', () => {
     const hub = new MessageHub(500);
     hub.push(msg(1, `${EVM} ${SOL}`, { chatId: 'a', chatName: '#a' }));

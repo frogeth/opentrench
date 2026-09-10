@@ -84,6 +84,49 @@ export function mapRugCheck(r: any, now = Date.now()): TokenSecurity | undefined
 }
 
 export type SecurityFetcher = (network: string, address: string) => Promise<TokenSecurity | undefined>;
+/** Many tokens of one network at once: one GoPlus request per chain, RugCheck one by one (spaced). */
+export type SecurityBatchFetcher = (network: string, addresses: string[]) => Promise<Map<string, TokenSecurity>>;
+
+export function createSecurityBatchFetcher(fetchImpl: typeof fetch = fetch, spacingMs = 400): SecurityBatchFetcher {
+  const get = async (url: string) => {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+    try {
+      const res = await fetchImpl(url, { signal: ctl.signal, headers: { accept: 'application/json', 'user-agent': 'opentrench/1.0' } });
+      if (!res.ok) return undefined;
+      return await res.json();
+    } finally {
+      clearTimeout(t);
+    }
+  };
+  return async (network, addresses) => {
+    const out = new Map<string, TokenSecurity>();
+    if (addresses.length === 0) return out;
+    if (network === 'solana') {
+      for (const a of addresses) {
+        try {
+          const sec = mapRugCheck(await get(`https://api.rugcheck.xyz/v1/tokens/${encodeURIComponent(a)}/report`));
+          if (sec) out.set(a, sec);
+        } catch {
+          /* skip this one */
+        }
+        if (spacingMs) await new Promise((r) => setTimeout(r, spacingMs));
+      }
+      return out;
+    }
+    const chain = GOPLUS_CHAINS[network];
+    if (!chain) return out;
+    for (let i = 0; i < addresses.length; i += 50) {
+      const chunk = addresses.slice(i, i + 50);
+      const json = await get(`https://api.gopluslabs.io/api/v1/token_security/${chain}?contract_addresses=${chunk.map((a) => a.toLowerCase()).join(',')}`);
+      for (const a of chunk) {
+        const sec = mapGoPlus(json?.result?.[a.toLowerCase()]);
+        if (sec) out.set(a, sec);
+      }
+    }
+    return out;
+  };
+}
 
 export function createSecurityFetcher(fetchImpl: typeof fetch = fetch): SecurityFetcher {
   const get = async (url: string) => {

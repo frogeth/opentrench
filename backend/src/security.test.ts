@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GOPLUS_CHAINS, createSecurityFetcher, mapGoPlus, mapRugCheck } from './security.js';
+import { GOPLUS_CHAINS, createSecurityBatchFetcher, createSecurityFetcher, mapGoPlus, mapRugCheck } from './security.js';
 
 describe('security', () => {
   it('maps a GoPlus result: top 10 excludes pools/lockers, dev % and sold flag, taxes', () => {
@@ -67,6 +67,32 @@ describe('security', () => {
       freezable: false,
       score: 12,
     });
+  });
+
+  it('batches an evm chain into one goplus request and walks solana one by one', async () => {
+    const calls: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      calls.push(url);
+      if (url.includes('rugcheck')) return { ok: true, json: async () => ({ totalHolders: url.includes('/A/') ? 1 : 2 }) };
+      return { ok: true, json: async () => ({ result: { '0xa': { holder_count: '10' }, '0xb': { holder_count: '20' } } }) };
+    }) as unknown as typeof fetch;
+    const f = createSecurityBatchFetcher(fetchImpl, 0);
+    const evm = await f('base', ['0xA', '0xb', '0xc']);
+    expect([...evm.entries()].map(([a, s]) => [a, s.holders])).toEqual([
+      ['0xA', 10],
+      ['0xb', 20],
+    ]);
+    const sol = await f('solana', ['A', 'B']);
+    expect([...sol.entries()].map(([a, s]) => [a, s.holders])).toEqual([
+      ['A', 1],
+      ['B', 2],
+    ]);
+    expect(calls).toEqual([
+      `https://api.gopluslabs.io/api/v1/token_security/${GOPLUS_CHAINS.base}?contract_addresses=0xa,0xb,0xc`,
+      'https://api.rugcheck.xyz/v1/tokens/A/report',
+      'https://api.rugcheck.xyz/v1/tokens/B/report',
+    ]);
+    expect((await f('robinhood', ['0xz'])).size).toBe(0);
   });
 
   it('routes solana to rugcheck, known evm chains to goplus, others to nothing', async () => {

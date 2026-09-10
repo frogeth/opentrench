@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { ConfigStore } from './config.js';
 import { MessageHub } from './hub.js';
-import { createSecurityFetcher } from './security.js';
+import { createSecurityBatchFetcher, createSecurityFetcher } from './security.js';
 import { createHoverFetchers } from './hover.js';
 import { createDefaultEnricher } from './enrich.js';
 import { createMarketRefresher } from './refresh.js';
@@ -23,6 +23,7 @@ const HOST = '127.0.0.1';
 const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'config.json'));
 const hub: MessageHub = new MessageHub(500, createDefaultEnricher({ o1ApiKey: () => cfg.get().o1ApiKey }), {
   security: createSecurityFetcher(),
+  securityBatch: createSecurityBatchFetcher(),
   cove: (): CoveOptions => ({ amounts: cfg.get().cove.amounts, affiliateId: svc.affiliateId() }),
   blacklist: () => cfg.get().blacklist,
   bots: () => cfg.get().bots,
@@ -41,12 +42,29 @@ setInterval(() => {
   const active = hub.activeTokens(ACTIVE_WINDOW_MS).sort((a, b) => b.lastCallTs - a.lastCallTs);
   void refreshMarket(active);
 }, REFRESH_MS).unref();
-// Holder security moves slowly: refresh every 10 minutes for tokens called in the last 6h.
+// Holder security, near-live: every minute, refresh what is due. Fresh calls (< 1h) refresh
+// every minute, < 6h every 5 minutes, < 24h every 30 minutes. EVM chains go out as one
+// GoPlus request per chain; Solana is one RugCheck request per token, newest first, 15 per cycle.
+const SEC_TIERS: [number, number][] = [
+  [60 * 60 * 1000, 55 * 1000],
+  [6 * 60 * 60 * 1000, 5 * 60 * 1000 - 5000],
+  [24 * 60 * 60 * 1000, 30 * 60 * 1000 - 5000],
+];
 setInterval(() => {
-  for (const t of hub.activeTokens(6 * 60 * 60 * 1000).slice(0, 40)) {
-    if (!t.security || Date.now() - t.security.fetchedAt > 9 * 60 * 1000) hub.refetchSecurity(t.address);
+  const now = Date.now();
+  const due: string[] = [];
+  let sol = 0;
+  for (const t of hub.activeTokens(24 * 60 * 60 * 1000).sort((a, b) => b.lastCallTs - a.lastCallTs)) {
+    if (!t.network) continue;
+    const age = now - t.lastCallTs;
+    const every = SEC_TIERS.find(([maxAge]) => age < maxAge)?.[1];
+    if (every === undefined) continue;
+    if (t.security && now - t.security.fetchedAt < every) continue;
+    if (t.network === 'solana' && ++sol > 15) continue;
+    due.push(t.address);
   }
-}, 10 * 60 * 1000).unref();
+  if (due.length) void hub.refreshSecurity(due);
+}, 60 * 1000).unref();
 const svc: Services = new Services(cfg, hub);
 const hover = createHoverFetchers();
 const store = new StateStore(process.env.TRENCHFEED_STATE ?? path.join(root, 'state.json'));

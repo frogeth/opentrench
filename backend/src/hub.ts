@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { detectContracts } from './contracts.js';
 import type { TokenFetcher } from './enrich.js';
-import type { SecurityFetcher } from './security.js';
+import type { SecurityBatchFetcher, SecurityFetcher } from './security.js';
 import { buildCoveLinks, type CoveOptions } from './cove.js';
 import type { ExtractedMeta } from './links.js';
 import type {
@@ -61,6 +61,8 @@ export interface HubOptions {
   blacklist?: () => string[];
   /** holder security lookups (GoPlus / RugCheck); optional */
   security?: SecurityFetcher;
+  /** batched refresh of holder security for many tokens of one network */
+  securityBatch?: SecurityBatchFetcher;
   /** bot policy: hide all bots except `allow`, or show all bots except the blacklist */
   bots?: () => BotPolicy;
   favorites?: () => string[];
@@ -83,6 +85,7 @@ export class MessageHub extends EventEmitter {
   private cove: () => CoveOptions;
   private blacklist: () => string[];
   private security?: SecurityFetcher;
+  private securityBatch?: SecurityBatchFetcher;
   private botPolicy: () => BotPolicy;
   private favorites: () => string[];
 
@@ -96,6 +99,7 @@ export class MessageHub extends EventEmitter {
     this.cove = opts.cove ?? (() => ({ amounts: [25, 50, 100] }));
     this.blacklist = opts.blacklist ?? (() => []);
     this.security = opts.security;
+    this.securityBatch = opts.securityBatch;
     this.botPolicy = opts.bots ?? (() => ({ default: 'hide', allow: [] }));
     this.favorites = opts.favorites ?? (() => []);
   }
@@ -432,6 +436,40 @@ export class MessageHub extends EventEmitter {
   }
 
   private securityInFlight = new Set<string>();
+
+  /** Refresh holder security for many tokens, grouped by network, one batched request per EVM chain. */
+  async refreshSecurity(addresses: string[]): Promise<number> {
+    if (!this.securityBatch) {
+      for (const a of addresses) this.refetchSecurity(a);
+      return 0;
+    }
+    const byNet = new Map<string, string[]>();
+    for (const a of addresses) {
+      const t = this.tokens.get(a);
+      if (!t?.network || this.securityInFlight.has(a)) continue;
+      this.securityInFlight.add(a);
+      byNet.set(t.network, [...(byNet.get(t.network) ?? []), a]);
+    }
+    let n = 0;
+    for (const [network, list] of byNet) {
+      try {
+        const got = await this.securityBatch(network, list);
+        for (const [a, sec] of got) {
+          const live = this.tokens.get(a);
+          if (!live) continue;
+          live.security = sec;
+          n++;
+          this.emit('event', { type: 'token', token: { ...live } } satisfies ServerEvent);
+        }
+        if (got.size) this.changed();
+      } catch (e: any) {
+        console.warn('[tokens] security batch failed', network, e?.message ?? e);
+      } finally {
+        for (const a of list) this.securityInFlight.delete(a);
+      }
+    }
+    return n;
+  }
 
   /** Refresh (or first-fetch) holder security for one token, e.g. from the periodic loop. */
   refetchSecurity(address: string): void {
