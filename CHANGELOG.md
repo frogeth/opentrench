@@ -8,7 +8,9 @@ app shows the same text in its update prompt.
 ## Unreleased
 
 - Per-column filters: a funnel in every column header opens the new two-pane editor — channels by server on the left; callers to show or mute, chains, launchpads, must-haves, and min/max ranges for metrics, activity and holder distribution on the right. Chat columns filter by search, bots and callers.
+- The column editor shows every channel ticked when a column follows all channels, with select all / deselect all links.
 - Patch notes: every release carries notes on GitHub (so the Discord webhook posts them) and the update prompt in the app shows what's new, with a button to the full notes.
+- The hidden / repeats toggles in chat column headers are pill buttons that match the new look.
 
 ## v0.1.10 — 2026-09-10
 
