@@ -110,7 +110,12 @@ export function ColumnEditor({
   const set = <K extends keyof ColumnFilters>(k: K, v: ColumnFilters[K]) => setF((s) => ({ ...s, [k]: v }));
   const num = (k: NumKey) => (e: React.ChangeEvent<HTMLInputElement>) => set(k, e.target.value === '' ? undefined : Number(e.target.value));
   const all = chats.length === 0;
-  const toggle = (k: string) => setChats((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]));
+  // "All channels" is stored as an empty list, but shows as every box ticked; unticking one
+  // switches to an explicit list, and ticking the last one back collapses to "all" again.
+  const allKeys = useMemo(() => watched.map(chatKey), [watched]);
+  const selected = all ? allKeys : chats;
+  const commit = (next: string[]) => setChats(allKeys.length > 0 && allKeys.every((k) => next.includes(k)) ? [] : next);
+  const toggle = (k: string) => commit(selected.includes(k) ? selected.filter((x) => x !== k) : [...selected, k]);
 
   // Group by Discord server, channels under their category, Telegram at the end.
   const groups = useMemo(() => {
@@ -127,12 +132,12 @@ export function ColumnEditor({
   }, [watched, channels]);
   const shortName = (w: WatchedChat) => (w.source === 'discord' ? w.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '') : w.name);
   const groupState = (items: { w: WatchedChat }[]) => {
-    const n = items.filter(({ w }) => chats.includes(chatKey(w))).length;
+    const n = items.filter(({ w }) => selected.includes(chatKey(w))).length;
     return n === 0 ? 'none' : n === items.length ? 'all' : 'some';
   };
   const toggleGroup = (items: { w: WatchedChat }[]) => {
     const keys = items.map(({ w }) => chatKey(w));
-    setChats((s) => (groupState(items) === 'all' ? s.filter((k) => !keys.includes(k)) : [...new Set([...s, ...keys])]));
+    commit(groupState(items) === 'all' ? selected.filter((k) => !keys.includes(k)) : [...new Set([...selected, ...keys])]);
   };
 
   const save = () => {
@@ -173,10 +178,10 @@ export function ColumnEditor({
             <div className="fed-label">Feed name</div>
             <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : 'All Chats'} maxLength={40} />
             <div className="fed-label">
-              Channels <span className="muted">({all ? 'all' : `${chats.length} selected`})</span>
+              Channels <span className="muted">({all ? 'all' : `${chats.length} of ${allKeys.length}`})</span>
               {!all && (
-                <button className="fed-link" onClick={() => setChats([])}>
-                  use all
+                <button className="fed-link" onClick={() => setChats([])} title="tick everything">
+                  select all
                 </button>
               )}
             </div>
@@ -204,7 +209,7 @@ export function ColumnEditor({
                           <div key={chatKey(w)}>
                             {showCat && category && <div className="ftree-cat">{category}</div>}
                             <label className="ftree-item">
-                              <input type="checkbox" checked={chats.includes(chatKey(w))} onChange={() => toggle(chatKey(w))} />
+                              <input type="checkbox" checked={selected.includes(chatKey(w))} onChange={() => toggle(chatKey(w))} />
                               {w.source === 'discord' ? <span className="muted">#</span> : w.avatar ? <Avatar src={w.avatar} name={w.name} size={14} /> : <Logo source="telegram" size={12} />}
                               <span className="ftree-name">{shortName(w)}</span>
                             </label>
