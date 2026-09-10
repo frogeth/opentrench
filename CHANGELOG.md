@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- "Latest" lands on the bottom of the last message, and a column pinned to the end stays there as rows load and grow.
+
 - Click a reply quote to jump to the original message: it scrolls into view and flashes. A hidden or filtered original is revealed in place; one that has left the buffer opens on Discord or Telegram.
 
 ## v0.1.12 — 2026-09-10

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { FeedMessage, TokenInfo } from '../types';
 import type { ChartProvider } from '../format';
 import { MessageRow } from './MessageRow';
@@ -55,16 +55,33 @@ export function ChatFeed({
   const bodyRef = useRef<HTMLDivElement>(null);
   const [atEnd, setAtEnd] = useState(true);
   const shown = useMemo(() => (order === 'bottom' ? [...msgs].reverse() : msgs), [msgs, order]);
+  const atEndRef = useRef(true);
   const onScroll = () => {
     const el = bodyRef.current;
     if (!el) return;
-    setAtEnd(order === 'bottom' ? el.scrollHeight - el.scrollTop - el.clientHeight < 60 : el.scrollTop < 60);
+    const end = order === 'bottom' ? el.scrollHeight - el.scrollTop - el.clientHeight < 60 : el.scrollTop < 60;
+    atEndRef.current = end; // synchronously: the resize observer below may run before React re-renders
+    setAtEnd(end);
   };
   useLayoutEffect(() => {
     const el = bodyRef.current;
     if (!el || !atEnd) return;
     el.scrollTop = order === 'bottom' ? el.scrollHeight : 0;
   }, [shown, order, atEnd]);
+  // Rows mount and grow after the fact (windowing, images, charts). While pinned to the reading
+  // end, follow every change in content height so "latest" really is the bottom of the last message.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const inner = el.firstElementChild as HTMLElement | null;
+    if (!inner) return;
+    const ro = new ResizeObserver(() => {
+      if (!atEndRef.current) return;
+      el.scrollTop = order === 'bottom' ? el.scrollHeight : 0;
+    });
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, [order]);
   const jumpTo = (id: string | undefined, fallback: string | undefined) => {
     const open = () => fallback && window.open(fallback, '_blank', 'noopener');
     if (!id) return open();
@@ -74,6 +91,7 @@ export function ChatFeed({
     const find = () => {
       const el = bodyRef.current?.querySelector(`[data-key="${CSS.escape(id)}"]`) as HTMLElement | null;
       if (el) {
+        atEndRef.current = false;
         setAtEnd(false);
         // instant, and again once the rows around it have mounted and settled their heights
         el.scrollIntoView({ block: 'center', behavior: 'auto' });
@@ -88,11 +106,16 @@ export function ChatFeed({
   const jump = () => {
     const el = bodyRef.current;
     if (!el) return;
-    el.scrollTo({ top: order === 'bottom' ? el.scrollHeight : 0, behavior: 'smooth' });
+    atEndRef.current = true;
     setAtEnd(true);
+    // instant, then again as the last rows mount and settle
+    const go = () => (el.scrollTop = order === 'bottom' ? el.scrollHeight : 0);
+    go();
+    window.setTimeout(go, 120);
+    window.setTimeout(go, 400);
   };
   const body = (
-    <>
+    <div className="feed-inner">
       {head}
       {shown.length === 0 && empty}
       {shown.map((m, i) => (
@@ -113,7 +136,7 @@ export function ChatFeed({
         />
         </VirtualItem>
       ))}
-    </>
+    </div>
   );
   const footer = !atEnd && (
     <button className="jump" onClick={jump}>
