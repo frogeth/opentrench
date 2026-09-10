@@ -48,8 +48,14 @@ npm run prepare-backend
 # only once every asset (both manifests included) is on GitHub.
 npx electron-builder --mac --win --x64 --arm64 --publish always
 echo "==> verifying assets"
+# GitHub's asset list can lag the upload by a little; give it up to two minutes.
 for want in latest.yml latest-mac.yml "opentrench-Setup-$VERSION.exe" "opentrench-$VERSION-arm64-mac.zip" "opentrench-$VERSION-mac.zip"; do
-  gh release view "v$VERSION" --repo frogeth/opentrench --json assets --jq '.assets[].name' | grep -qx "$want" || { echo "!! missing asset $want — release left as draft" >&2; exit 1; }
+  ok=false
+  for _ in $(seq 1 24); do
+    if gh release view "v$VERSION" --repo frogeth/opentrench --json assets --jq '.assets[].name' | grep -qx "$want"; then ok=true; break; fi
+    sleep 5
+  done
+  [ "$ok" = true ] || { echo "!! missing asset $want — release left as draft" >&2; exit 1; }
 done
 gh release edit "v$VERSION" --repo frogeth/opentrench --title "opentrench v$VERSION" --notes-file "$NOTES_FILE" --draft=false --latest
 rm -f "$NOTES_FILE"
