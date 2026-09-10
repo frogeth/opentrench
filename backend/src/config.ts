@@ -32,7 +32,8 @@ export function sanitizeColumns(raw: unknown): ColumnDef[] {
     const id = String((r as any).id ?? '').trim().slice(0, 40);
     const type = (r as any).type === 'calls' ? 'calls' : (r as any).type === 'callers' ? 'callers' : 'chat';
     const title = String((r as any).title ?? '').trim().slice(0, 40) || (type === 'calls' ? 'Calls' : type === 'callers' ? 'Top Callers' : 'Chats');
-    const chats = Array.isArray((r as any).chats) ? (r as any).chats.map(String).filter((k: string) => /^(discord|telegram):/.test(k)).slice(0, 200) : [];
+    // empty = every watched chat; the 'none' sentinel = nothing selected (a column being set up)
+    const chats = Array.isArray((r as any).chats) ? (r as any).chats.map(String).filter((k: string) => /^(discord|telegram):/.test(k) || k === 'none').slice(0, 200) : [];
     if (!id || seen.has(id)) continue;
     seen.add(id);
     const col: ColumnDef = { id, type, title, chats };

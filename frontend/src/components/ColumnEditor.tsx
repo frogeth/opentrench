@@ -110,11 +110,16 @@ export function ColumnEditor({
   const set = <K extends keyof ColumnFilters>(k: K, v: ColumnFilters[K]) => setF((s) => ({ ...s, [k]: v }));
   const num = (k: NumKey) => (e: React.ChangeEvent<HTMLInputElement>) => set(k, e.target.value === '' ? undefined : Number(e.target.value));
   const all = chats.length === 0;
-  // "All channels" is stored as an empty list, but shows as every box ticked; unticking one
-  // switches to an explicit list, and ticking the last one back collapses to "all" again.
+  const none = chats.includes('none');
+  // "All channels" is stored as an empty list and shows as every box ticked; "none" is a
+  // sentinel for nothing ticked. Unticking narrows to an explicit list; ticking the last one
+  // back collapses to "all", unticking the last one becomes "none".
   const allKeys = useMemo(() => watched.map(chatKey), [watched]);
-  const selected = all ? allKeys : chats;
-  const commit = (next: string[]) => setChats(allKeys.length > 0 && allKeys.every((k) => next.includes(k)) ? [] : next);
+  const selected = all ? allKeys : none ? [] : chats;
+  const commit = (next: string[]) => {
+    const real = next.filter((k) => k !== 'none');
+    setChats(real.length === 0 ? ['none'] : allKeys.length > 0 && allKeys.every((k) => real.includes(k)) ? [] : real);
+  };
   const toggle = (k: string) => commit(selected.includes(k) ? selected.filter((x) => x !== k) : [...selected, k]);
 
   // Group by Discord server, channels under their category, Telegram at the end.
@@ -142,6 +147,7 @@ export function ColumnEditor({
 
   const save = () => {
     const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : all ? 'All Chats' : 'Chats');
+    if (none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
     const clean: ColumnFilters = {};
     for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== false && !(Array.isArray(v) && v.length === 0) && !(typeof v === 'string' && !v.trim())) (clean as any)[k] = v;
     onSave({
@@ -178,12 +184,19 @@ export function ColumnEditor({
             <div className="fed-label">Feed name</div>
             <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : 'All Chats'} maxLength={40} />
             <div className="fed-label">
-              Channels <span className="muted">({all ? 'all' : `${chats.length} of ${allKeys.length}`})</span>
-              {!all && (
-                <button className="fed-link" onClick={() => setChats([])} title="tick everything">
-                  select all
-                </button>
-              )}
+              Channels <span className="muted">({all ? 'all' : none ? 'none' : `${chats.length} of ${allKeys.length}`})</span>
+              <span className="fed-links">
+                {!all && (
+                  <button className="fed-link" onClick={() => setChats([])} title="tick everything">
+                    select all
+                  </button>
+                )}
+                {!none && (
+                  <button className="fed-link" onClick={() => setChats(['none'])} title="untick everything">
+                    deselect all
+                  </button>
+                )}
+              </span>
             </div>
             <div className="fed-tree">
               {groups.map(([server, g]) => {

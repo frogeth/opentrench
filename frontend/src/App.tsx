@@ -396,6 +396,7 @@ export default function App() {
   /** A column's chat names (null = every watched chat), from its `<source>:<id>` keys. */
   const namesFor = (col: ColumnDef): Set<string> | null => {
     if (col.chats.length === 0) return null;
+    if (col.chats.includes('none')) return new Set<string>();
     const keys = new Set(col.chats);
     return new Set(watched.filter((w) => keys.has(chatKey(w))).map((w) => w.name));
   };
@@ -427,7 +428,7 @@ export default function App() {
     return [...n.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k).slice(0, 400);
   }, [messages, tokens]);
   const scopeLabel = view.preview ? 'preview' : view.rail === 'all' ? 'All channels' : view.chat ? 'this channel' : 'this server';
-  const subtitleFor = (col: ColumnDef) => (view.rail !== 'all' || view.chat ? scopeLabel : col.chats.length === 0 ? 'All channels' : `${col.chats.length} channel${col.chats.length === 1 ? '' : 's'}`);
+  const subtitleFor = (col: ColumnDef) => (view.rail !== 'all' || view.chat ? scopeLabel : col.chats.length === 0 ? 'All channels' : col.chats.includes('none') ? 'No channels' : `${col.chats.length} channel${col.chats.length === 1 ? '' : 's'}`);
 
   const select = (address: string) => {
     if (!tokens[address]) return;
