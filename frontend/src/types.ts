@@ -216,4 +216,5 @@ export type ServerEvent =
   | { type: 'msg'; msgId: string; patch: Partial<FeedMessage> }
   | { type: 'ping'; token: TokenInfo; msg: FeedMessage }
   | { type: 'bot'; bot: string; msg: BotMessage }
+  | { type: 'botDelete'; ids: number[] }
   | { type: 'status'; status: Status };

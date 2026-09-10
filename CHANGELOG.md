@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Cove: alerts the bot deletes (Close, or expired) disappear from the Cove column too, instead of erroring when pressed.
+
 ## v0.1.14 — 2026-09-10
 
 - Cove inside the app: the $25 / $50 / $100 / Cove buttons now open a Cove column (added on first use) that shows the bot's reply through your own Telegram session. Cove's inline buttons work in place, edits update live, and there's a box to type commands. Needs Telegram connected; otherwise the buttons open Telegram as before.

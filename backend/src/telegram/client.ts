@@ -311,12 +311,21 @@ export class TelegramWrapper extends EventEmitter {
   }
 
   /** Press an inline button. Returns whatever the bot answers (toast text, alert, or a url to open). */
-  async botPress(username: string, msgId: number, dataB64: string): Promise<{ message?: string; alert?: boolean; url?: string }> {
+  async botPress(username: string, msgId: number, dataB64: string): Promise<{ message?: string; alert?: boolean; url?: string; gone?: boolean }> {
     const peer = await this.botPeer(username);
-    const res: any = await this.client!.invoke(
-      new Api.messages.GetBotCallbackAnswer({ peer, msgId, data: Buffer.from(dataB64, 'base64') }),
-    );
-    return { message: res?.message ? String(res.message) : undefined, alert: !!res?.alert, url: res?.url ? String(res.url) : undefined };
+    try {
+      const res: any = await this.client!.invoke(
+        new Api.messages.GetBotCallbackAnswer({ peer, msgId, data: Buffer.from(dataB64, 'base64') }),
+      );
+      return { message: res?.message ? String(res.message) : undefined, alert: !!res?.alert, url: res?.url ? String(res.url) : undefined };
+    } catch (e: any) {
+      // the bot already removed that message (Close, or an expired alert)
+      if (/MESSAGE_ID_INVALID/.test(String(e?.errorMessage ?? e?.message ?? ''))) {
+        this.emit('botDelete', [msgId]);
+        return { gone: true };
+      }
+      throw e;
+    }
   }
 
   /** Message your own "Saved Messages" (phone ping without any bot). */
@@ -369,6 +378,11 @@ export class TelegramWrapper extends EventEmitter {
         console.warn('[telegram] bot edit failed', e?.message ?? e);
       }
     }, new Raw({ types: [Api.UpdateEditMessage] }));
+    // Bots delete their alerts (Close, or on their own): drop them from the view too.
+    client.addEventHandler((u: any) => {
+      const ids: number[] = Array.isArray(u?.messages) ? u.messages.map(Number) : [];
+      if (ids.length && this.bots.size) this.emit('botDelete', ids);
+    }, new Raw({ types: [Api.UpdateDeleteMessages] }));
     client.addEventHandler((u: Api.UpdateMessageReactions) => {
       try {
         const peer = getPeerId(u.peer);

@@ -62,6 +62,10 @@ export function CoveView({
     setPressing(k);
     try {
       const r = await api.botPress(bot, m.id, b.data);
+      if (r.gone) {
+        flash('That message was already closed.');
+        return;
+      }
       if (r.url) window.open(r.url, '_blank', 'noopener');
       if (r.message) flash(r.message);
     } catch (e: any) {

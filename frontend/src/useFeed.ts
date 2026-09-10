@@ -59,6 +59,10 @@ export function useFeed() {
         } else if (ev.type === 'reactions') {
           setMessages((m) => m.map((x) => (x.id === ev.msgId ? { ...x, reactions: ev.reactions } : x)));
         } else if (ev.type === 'bot') mergeBot(ev.bot, [ev.msg]);
+        else if (ev.type === 'botDelete') {
+          const gone = new Set(ev.ids);
+          setBotMsgs((all) => Object.fromEntries(Object.entries(all).map(([b, list]) => [b, list.filter((m) => !gone.has(m.id))])));
+        }
         else if (ev.type === 'ping') setPing(ev);
         else if (ev.type === 'status') setStatus(ev.status);
       };
