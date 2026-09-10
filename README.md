@@ -10,6 +10,18 @@ addresses highlighted and copyable. Runs entirely on your machine.
 [opentrench Discord](https://discord.gg/6ByE8fPNN). New here? Start with
 [Getting started](docs/getting-started.md).
 
+## Screenshots
+
+The column terminal: All Calls, All Chats and a Top Callers leaderboard over
+fake chats and callers.
+
+![opentrench terminal](docs/img/terminal.png)
+
+Click a token's image for the drill-down: candles on a market-cap axis with
+every caller pinned where they called, and the full call list.
+
+![token drill-down](docs/img/drilldown.png)
+
 > **Warning.** The Discord side uses your **own account token** (a self-bot).
 > That is against Discord's Terms of Service and can get the account banned.
 > Use at your own risk. The Telegram side uses your own account via the

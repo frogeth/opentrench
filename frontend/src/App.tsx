@@ -237,6 +237,14 @@ export default function App() {
   useEffect(() => {
     if (status.telegram === 'connected') api.telegramDialogs().then(setDialogs).catch(() => {});
   }, [status.telegram]);
+  // #token=<address> opens that token's drill-down once it is known (deep links, screenshots).
+  useEffect(() => {
+    const m = /[#&]token=([^&]+)/.exec(location.hash);
+    if (!m) return;
+    const a = decodeURIComponent(m[1]);
+    const key = tokens[a] ? a : tokens[a.toLowerCase()] ? a.toLowerCase() : null;
+    if (key) setOpenToken(key);
+  }, [Object.keys(tokens).length]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 15_000);
     return () => window.clearInterval(id);
