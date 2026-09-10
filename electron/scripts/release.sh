@@ -28,7 +28,15 @@ VERSION=$(node -p "require('./package.json').version")
 echo "==> opentrench v$VERSION (signed, notarized)"
 ( cd .. && npm run build )
 npm run prepare-backend
+# Publish as a DRAFT so the updater never sees a half-uploaded release, then flip it live
+# only once every asset (both manifests included) is on GitHub.
 npx electron-builder --mac --win --x64 --arm64 --publish always
+echo "==> verifying assets"
+for want in latest.yml latest-mac.yml "opentrench-Setup-$VERSION.exe" "opentrench-$VERSION-arm64-mac.zip" "opentrench-$VERSION-mac.zip"; do
+  gh release view "v$VERSION" --repo frogeth/opentrench --json assets --jq '.assets[].name' | grep -qx "$want" || { echo "!! missing asset $want — release left as draft" >&2; exit 1; }
+done
+gh release edit "v$VERSION" --repo frogeth/opentrench --draft=false --latest
+echo "==> release is live"
 
 APP=$(ls -d dist/mac-arm64/*.app 2>/dev/null | head -1 || true)
 if [ -n "$APP" ]; then

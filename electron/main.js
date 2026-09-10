@@ -177,7 +177,14 @@ function setupUpdater() {
       });
       if (response === 0) shell.openExternal(RELEASES_URL);
     } else if (checking) {
-      dialog.showMessageBox({ type: 'warning', message: 'Update check failed', detail: msg, buttons: ['OK'] });
+      // A release that is still uploading has no manifest yet: say so instead of dumping the stack.
+      const publishing = /latest(-mac)?\.yml/.test(msg) && /404/.test(msg);
+      dialog.showMessageBox({
+        type: publishing ? 'info' : 'warning',
+        message: publishing ? 'A new version is being published right now' : 'Update check failed',
+        detail: publishing ? 'Try again in a few minutes.' : msg.split('\n')[0],
+        buttons: ['OK'],
+      });
     }
     checking = false;
   });

@@ -305,7 +305,14 @@ b { font-weight: 600; }
 .token-link:hover { color: var(--text); border-color: var(--line); background: var(--bg); }
 .token-link.active { color: var(--ok); border-color: var(--ok); }
 .token-link .icon-x { width: 11px; height: 11px; }
-.jump { position: absolute; bottom: 14px; right: 14px; z-index: 2; background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 999px; padding: 6px 12px; cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,0.5); }
+.jump {
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 2;
+  background: var(--accent); color: #041a10; border: none; border-radius: 999px; padding: 8px 18px;
+  font-weight: 700; font-size: 13px; cursor: pointer; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 0 3px rgba(65, 200, 146, 0.25);
+  animation: jump-in 160ms ease-out;
+}
+.jump:hover { background: #4fd9a1; }
+@keyframes jump-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 .col { position: relative; }
 .buy { display: inline-flex; gap: 4px; align-items: center; }
 .buy-btn {
