@@ -1,4 +1,4 @@
-export type IconName = 'chart' | 'live' | 'globe' | 'x' | 'telegram' | 'explorer' | 'copy' | 'search' | 'people' | 'top' | 'dev' | 'insider' | 'sniper' | 'bundle' | 'lock' | 'chat';
+export type IconName = 'chart' | 'live' | 'globe' | 'x' | 'telegram' | 'explorer' | 'copy' | 'search' | 'people' | 'top' | 'dev' | 'insider' | 'sniper' | 'bundle' | 'lock' | 'chat' | 'grip' | 'calls' | 'pencil' | 'close';
 
 // Small inline glyphs. X and Telegram from Simple Icons (CC0); the rest hand-drawn.
 const PATHS: Record<IconName, string> = {
@@ -33,6 +33,14 @@ const PATHS: Record<IconName, string> = {
   bundle: 'M12 2 3 6.5v11L12 22l9-4.5v-11L12 2zm0 2.2 6.4 3.2L12 10.6 5.6 7.4 12 4.2zM5 9.1l6 3v7.3l-6-3V9.1zm8 10.3v-7.3l6-3v7.3l-6 3z',
   // speech bubble = jump to the message
   chat: 'M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 2v11h2v2.3L8.4 16H20V5H4z',
+  // six dots = drag grip
+  grip: 'M9 4a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM9 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM9 16a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4z',
+  // square with a slash = calls column
+  calls: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 2v14h14V5H5zm9.3 2.6 1.4 1.4-7 7-1.4-1.4 7-7z',
+  // pencil = edit
+  pencil: 'M17 3l4 4-11.5 11.5L5 20l1.5-4.5L17 3zm0 2.8L8.1 14.7l-.6 1.8 1.8-.6L18.2 7 17 5.8z',
+  // × = close / remove
+  close: 'M18.3 5.7 12 12l6.3 6.3-1.4 1.4L12 13.4l-6.3 6.3-1.4-1.4L10.6 12 4.3 5.7l1.4-1.4L12 10.6l6.3-6.3 1.4 1.4z',
   // padlock = lp locked
   lock: 'M12 2a5 5 0 0 1 5 5v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3zm0 10a1.5 1.5 0 0 0-.5 2.9V19h1v-2.1A1.5 1.5 0 0 0 12 14z',
 };

@@ -4,6 +4,7 @@ import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
 
 const ohlcvCache = new Map<string, { at: number; v: unknown }>();
 let tickers: { at: number; v: { sym: string; usd: number; change24h: number }[] } | undefined;
+import { sanitizeColumns } from './config.js';
 import type { ConfigStore } from './config.js';
 import type { MessageHub } from './hub.js';
 import type { Services } from './services.js';
@@ -161,6 +162,16 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
         c.favorites = [...new Set(raw.map((n) => String(n).trim()).filter(Boolean))].slice(0, 500);
       });
       hub.favoritesChanged();
+    }),
+  );
+  r.put(
+    '/columns',
+    wrap((req) => {
+      const cols = sanitizeColumns(req.body?.columns);
+      cfg.update((c) => {
+        c.columns = cols;
+      });
+      return cols;
     }),
   );
   r.put(

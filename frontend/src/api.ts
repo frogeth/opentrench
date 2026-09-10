@@ -45,6 +45,13 @@ export interface XProfile {
   website?: string;
   verified?: boolean;
 }
+export interface ColumnDef {
+  id: string;
+  type: 'calls' | 'chat';
+  title: string;
+  /** `<source>:<id>` keys of watched chats; empty = all */
+  chats: string[];
+}
 export interface MaskedConfig {
   discord: { hasToken: boolean; watch: string[] };
   telegram: { apiId: number | null; hasApiHash: boolean; hasSession: boolean; watch: string[] };
@@ -55,6 +62,7 @@ export interface MaskedConfig {
   pingTelegram: boolean;
   hasO1Key: boolean;
   railOrder: string[];
+  columns: ColumnDef[];
 }
 export interface WatchedChat {
   id: string;
@@ -100,6 +108,7 @@ export const api = {
   setPings: (telegram: boolean) => req('PUT', '/pings', { telegram }),
   setO1Key: (apiKey: string) => req('PUT', '/o1', { apiKey }),
   setRailOrder: (ids: string[]) => req('PUT', '/rail-order', { ids }),
+  setColumns: (columns: ColumnDef[]) => req<ColumnDef[]>('PUT', '/columns', { columns }),
   watched: () => req<WatchedChat[]>('GET', '/watched'),
   tickers: () => req<{ sym: string; usd: number; change24h: number }[]>('GET', '/tickers'),
   ohlcv: (address: string, interval: string) =>

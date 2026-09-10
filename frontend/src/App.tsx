@@ -1,16 +1,17 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useFeed } from './useFeed';
 import { Column } from './components/Column';
 import { TokenModal } from './components/TokenModal';
 import { Tickers } from './components/Tickers';
 import { CallCard } from './components/CallCard';
-import { MessageRow } from './components/MessageRow';
+import { ChatFeed } from './components/ChatFeed';
+import { ColumnEditor, chatKey } from './components/ColumnEditor';
 import { Settings } from './components/Settings';
 import { ChannelSidebar, discordChatName, type View } from './components/ChannelSidebar';
 import { AddChatsModal } from './components/AddChatsModal';
 import { Logo } from './components/Logo';
 import { Avatar } from './components/Avatar';
-import { api, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
+import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
 import { beep, type ChartProvider } from './format';
 import type { FeedMessage, Source, Status, TokenInfo } from './types';
 
@@ -43,12 +44,10 @@ function tokenMatches(q: string, t: TokenInfo): boolean {
   );
 }
 
-/** Discord-style grouping: hide the header when the message just above (in display order) is the same author within 5 min. */
-function continued(list: FeedMessage[], i: number): boolean {
-  const above = list[i - 1];
-  const m = list[i];
-  return !!above && above.author === m.author && above.chatName === m.chatName && Math.abs(above.ts - m.ts) < 5 * 60_000 && !m.replyTo;
-}
+const DEFAULT_COLUMNS: ColumnDef[] = [
+  { id: 'calls', type: 'calls', title: 'All Calls', chats: [] },
+  { id: 'chats', type: 'chat', title: 'All Chats', chats: [] },
+];
 
 export type ChatOrder = 'bottom' | 'top';
 
@@ -130,8 +129,6 @@ export default function App() {
       /* ignore */
     }
   };
-  const chatBodyRef = useRef<HTMLDivElement>(null);
-  const [atEnd, setAtEnd] = useState(true);
   const [paneHidden, setPaneHidden] = useState(() => {
     try {
       return localStorage.getItem('trenchfeed.pane') === 'hidden';
@@ -147,6 +144,40 @@ export default function App() {
       /* ignore */
     }
   };
+  const columns: ColumnDef[] = cfg?.columns?.length ? cfg.columns : DEFAULT_COLUMNS;
+  const saveColumns = (next: ColumnDef[]) => {
+    setCfg((c) => (c ? { ...c, columns: next } : c));
+    void api.setColumns(next).catch(() => {});
+  };
+  const [editing, setEditing] = useState<{ col?: ColumnDef } | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const [dragCol, setDragCol] = useState<string | null>(null);
+  const [overCol, setOverCol] = useState<string | null>(null);
+  const dragFor = (id: string) => ({
+    dragging: dragCol === id,
+    over: overCol === id && dragCol !== id,
+    onDragStart: (e: DragEvent) => {
+      e.dataTransfer.setData('text/plain', id);
+      e.dataTransfer.effectAllowed = 'move';
+      setDragCol(id);
+    },
+    onDragOver: (e: DragEvent) => {
+      if (!dragCol) return;
+      e.preventDefault();
+      if (overCol !== id) setOverCol(id);
+    },
+    onDrop: (e: DragEvent) => {
+      e.preventDefault();
+      const from = dragCol;
+      setDragCol(null);
+      setOverCol(null);
+      if (!from || from === id) return;
+      const next = columns.filter((c) => c.id !== from);
+      const at = next.findIndex((c) => c.id === id);
+      next.splice(at, 0, columns.find((c) => c.id === from)!);
+      saveColumns(next);
+    },
+  });
   const reorderRail = (keys: string[]) => {
     setCfg((c) => (c ? { ...c, railOrder: keys } : c));
     void api.setRailOrder(keys).catch(() => {});
@@ -289,45 +320,33 @@ export default function App() {
     return new Set(channels.filter((c) => c.guildId === gid && cfg?.discord.watch.includes(c.id)).map(discordChatName));
   }, [view, channels, cfg, watched]);
 
-  const chatMsgs = useMemo(() => {
+  /** A column's chat names (null = every watched chat), from its `<source>:<id>` keys. */
+  const namesFor = (col: ColumnDef): Set<string> | null => {
+    if (col.chats.length === 0) return null;
+    const keys = new Set(col.chats);
+    return new Set(watched.filter((w) => keys.has(chatKey(w))).map((w) => w.name));
+  };
+  const inScope = (name: string, names: Set<string> | null) => (!scope || scope.has(name)) && (!names || names.has(name));
+
+  /** Messages for a chat column (chronological); the focused/preview view ignores column filters. */
+  const chatMsgsFor = (names: Set<string> | null) => {
     if (view.preview) return (previewMsgs ?? []).filter((m) => (showBots || !m.hidden) && matchesQuery(q, m, tokens));
     return messages.filter(
       (m) =>
         (showBots || !m.hidden) &&
         (showRepeats || !m.repeat) &&
         (watched.length === 0 || watchedNames.has(m.chatName)) &&
-        (!scope || scope.has(m.chatName)) &&
+        inScope(m.chatName, names) &&
         matchesQuery(q, m, tokens),
     );
-  }, [messages, previewMsgs, view.preview, tokens, q, scope, showBots, showRepeats, watched.length, watchedNames]);
-
-  /** What the Chats column renders, in reading order. */
-  const shownMsgs = useMemo(() => (chatOrder === 'bottom' ? [...chatMsgs].reverse() : chatMsgs), [chatMsgs, chatOrder]);
-  const onChatScroll = () => {
-    const el = chatBodyRef.current;
-    if (!el) return;
-    setAtEnd(chatOrder === 'bottom' ? el.scrollHeight - el.scrollTop - el.clientHeight < 60 : el.scrollTop < 60);
   };
-  useLayoutEffect(() => {
-    const el = chatBodyRef.current;
-    if (!el || !atEnd) return;
-    el.scrollTop = chatOrder === 'bottom' ? el.scrollHeight : 0;
-  }, [shownMsgs, chatOrder, atEnd]);
-  const jumpToLatest = () => {
-    const el = chatBodyRef.current;
-    if (!el) return;
-    el.scrollTo({ top: chatOrder === 'bottom' ? el.scrollHeight : 0, behavior: 'smooth' });
-    setAtEnd(true);
-  };
-
-  const scopeLabel = view.preview ? 'preview' : view.rail === 'all' ? 'All channels' : (view.chat ? 'this channel' : 'this server');
-  const calls = useMemo(
-    () =>
-      Object.values(tokens)
-        .filter((t) => (!scope || t.calledIn.some((c) => scope.has(c))) && tokenMatches(q, t))
-        .sort((a, b) => (b.lastCallTs ?? b.firstSeenTs) - (a.lastCallTs ?? a.firstSeenTs)),
-    [tokens, q, scope],
-  );
+  const callsFor = (names: Set<string> | null) =>
+    Object.values(tokens)
+      .filter((t) => t.calledIn.some((c) => inScope(c, names)) && tokenMatches(q, t))
+      .sort((a, b) => (b.lastCallTs ?? b.firstSeenTs) - (a.lastCallTs ?? a.firstSeenTs));
+  const allCalls = useMemo(() => callsFor(null), [tokens, q, scope]); // eslint-disable-line react-hooks/exhaustive-deps
+  const scopeLabel = view.preview ? 'preview' : view.rail === 'all' ? 'All channels' : view.chat ? 'this channel' : 'this server';
+  const subtitleFor = (col: ColumnDef) => (view.rail !== 'all' || view.chat ? scopeLabel : col.chats.length === 0 ? 'All channels' : `${col.chats.length} channel${col.chats.length === 1 ? '' : 's'}`);
 
   const select = (address: string) => {
     if (!tokens[address]) return;
@@ -350,6 +369,16 @@ export default function App() {
     setView({ rail: source === 'telegram' ? view.rail : guildId ? `g:${guildId}` : view.rail, preview: { name, id, source } });
   };
 
+  const FeedToggles = () => (
+    <>
+      <label>
+        <input type="checkbox" checked={showBots} onChange={(e) => setShowBots(e.target.checked)} /> hidden
+      </label>
+      <label>
+        <input type="checkbox" checked={showRepeats} onChange={(e) => setShowRepeats(e.target.checked)} /> repeats
+      </label>
+    </>
+  );
   const focused = view.preview ?? view.chat;
   const title = focused
     ? focused.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '')
@@ -438,85 +467,170 @@ export default function App() {
           onReorder={reorderRail}
           onCollapse={setPane}
         />
-        <Column title="All Calls" subtitle={scopeLabel} count={calls.length} className="col-calls">
-          {calls.length === 0 && (
-            <div className="empty">{view.preview ? 'Previewing — add this chat to track its calls.' : 'No contracts seen yet.'}</div>
-          )}
-          {calls.map((t) => (
-            <CallCard key={t.address} t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} />
-          ))}
-        </Column>
-        <Column
-          title={title}
-          count={chatMsgs.length}
-          className={`col-chats col-discord${focused?.source === 'discord' ? ' col-hash' : ''}`}
-          bodyRef={chatBodyRef}
-          onScroll={onChatScroll}
-          footer={
-            !atEnd && (
-              <button className="jump" onClick={jumpToLatest}>
-                {chatOrder === 'bottom' ? '↓' : '↑'} latest
-              </button>
-            )
-          }
-          extra={
+        <div className="terminal">
+          {focused ? (
             <>
-              {focused && <Logo source={focused.source} size={12} />}
-              <label>
-                <input type="checkbox" checked={showBots} onChange={(e) => setShowBots(e.target.checked)} /> hidden
-              </label>
-              <label>
-                <input type="checkbox" checked={showRepeats} onChange={(e) => setShowRepeats(e.target.checked)} />{' '}
-                repeats
-              </label>
+              <Column title="All Calls" subtitle={scopeLabel} kind="calls" count={allCalls.length} className="col-calls">
+                {allCalls.length === 0 && (
+                  <div className="empty">{view.preview ? 'Previewing — add this chat to track its calls.' : 'No contracts seen yet.'}</div>
+                )}
+                {allCalls.map((t) => (
+                  <CallCard key={t.address} t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} />
+                ))}
+              </Column>
+              <ChatFeed
+                msgs={chatMsgsFor(null)}
+                order={chatOrder}
+                tokens={tokens}
+                favorites={status.favorites}
+                discord
+                autoChart={autoChart}
+                compactEmbeds={compactEmbeds}
+                chartProvider={chartProvider}
+                onSelect={select}
+                onAuthorChanged={reloadLists}
+                head={
+                  view.preview && (
+                    <div className="preview-bar">
+                      <span>
+                        Previewing <b>{view.preview.name}</b> — {previewInFeed ? 'in your feed' : 'not in your feed'}
+                      </span>
+                      {!previewInFeed && (
+                        <button
+                          className="primary"
+                          disabled={busy}
+                          onClick={async () => {
+                            const p = view.preview!;
+                            await toggleWatch(p.source, p.id, true);
+                            setView({ rail: view.rail, chat: { name: p.name, id: p.id, source: p.source } });
+                          }}
+                        >
+                          + add to feed
+                        </button>
+                      )}
+                      <button onClick={() => setView({ rail: view.rail })}>close preview</button>
+                    </div>
+                  )
+                }
+                empty={
+                  view.preview ? (
+                    previewErr ? <div className="empty err">{previewErr}</div> : previewMsgs === null ? <div className="empty">Loading history…</div> : <div className="empty">Nothing here yet.</div>
+                  ) : (
+                    <div className="empty">Nothing here yet.</div>
+                  )
+                }
+                render={(body, bodyRef, onScroll, footer) => (
+                  <Column
+                    title={title}
+                    kind="chat"
+                    count={chatMsgsFor(null).length}
+                    className={`col-chats col-discord${focused?.source === 'discord' ? ' col-hash' : ''}`}
+                    bodyRef={bodyRef}
+                    onScroll={onScroll}
+                    footer={footer}
+                    extra={<FeedToggles />}
+                  >
+                    {body}
+                  </Column>
+                )}
+              />
             </>
-          }
-        >
-          {view.preview && (
-            <div className="preview-bar">
-              <span>
-                Previewing <b>{view.preview.name}</b> — {previewInFeed ? 'in your feed' : 'not in your feed'}
-              </span>
-              {!previewInFeed && (
-                <button
-                  className="primary"
-                  disabled={busy}
-                  onClick={async () => {
-                    const p = view.preview!;
-                    await toggleWatch(p.source, p.id, true);
-                    setView({ rail: view.rail, chat: { name: p.name, id: p.id, source: p.source } });
-                  }}
-                >
-                  + add to feed
-                </button>
-              )}
-              <button onClick={() => setView({ rail: view.rail })}>close preview</button>
-            </div>
+          ) : (
+            <>
+              {columns.map((col) => {
+                const names = namesFor(col);
+                const actions = {
+                  onEdit: () => setEditing({ col }),
+                  onRemove: () => setConfirmRemove(col.id),
+                  drag: dragFor(col.id),
+                };
+                if (col.type === 'calls') {
+                  const list = callsFor(names);
+                  return (
+                    <Column key={col.id} title={col.title} subtitle={subtitleFor(col)} kind="calls" count={list.length} className="col-calls" {...actions}>
+                      {list.length === 0 && <div className="empty">No contracts seen yet.</div>}
+                      {list.map((t) => (
+                        <CallCard key={t.address} t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} />
+                      ))}
+                    </Column>
+                  );
+                }
+                const msgs = chatMsgsFor(names);
+                return (
+                  <ChatFeed
+                    key={col.id}
+                    msgs={msgs}
+                    order={chatOrder}
+                    tokens={tokens}
+                    favorites={status.favorites}
+                    autoChart={autoChart}
+                    compactEmbeds={compactEmbeds}
+                    chartProvider={chartProvider}
+                    onSelect={select}
+                    onAuthorChanged={reloadLists}
+                    empty={<div className="empty">{watched.length === 0 ? 'No chats in your feed yet. Use the + in the rail.' : 'Nothing here yet.'}</div>}
+                    render={(body, bodyRef, onScroll, footer) => (
+                      <Column
+                        title={col.title}
+                        subtitle={subtitleFor(col)}
+                        kind="chat"
+                        count={msgs.length}
+                        className="col-chats"
+                        bodyRef={bodyRef}
+                        onScroll={onScroll}
+                        footer={footer}
+                        extra={<FeedToggles />}
+                        {...actions}
+                      >
+                        {body}
+                      </Column>
+                    )}
+                  />
+                );
+              })}
+              <button className="col-add" onClick={() => setEditing({})} title="Add a column" aria-label="Add a column">
+                +
+              </button>
+            </>
           )}
-          {view.preview && previewMsgs === null && !previewErr && <div className="empty">Loading history…</div>}
-          {previewErr && <div className="empty err">{previewErr}</div>}
-          {!view.preview && chatMsgs.length === 0 && (
-            <div className="empty">
-              {watched.length === 0 ? 'No chats in your feed yet. Use the + in the rail.' : 'Nothing here yet.'}
-            </div>
-          )}
-          {shownMsgs.map((m, i) => (
-            <MessageRow
-              key={m.id}
-              m={m}
-              tokens={tokens}
-              onSelect={select}
-              favorites={status.favorites}
-              continued={!!focused && continued(shownMsgs, i)}
-              discord={!!focused}
-              autoChart={autoChart}
-              compactEmbeds={compactEmbeds}
-              chartProvider={chartProvider}
-              onAuthorChanged={reloadLists}
-            />
-          ))}
-        </Column>
+        </div>
       </main>
+      {editing && (
+        <ColumnEditor
+          col={editing.col}
+          watched={watched}
+          onClose={() => setEditing(null)}
+          onSave={(c) => {
+            const exists = columns.some((x) => x.id === c.id);
+            saveColumns(exists ? columns.map((x) => (x.id === c.id ? c : x)) : [...columns, c]);
+            setEditing(null);
+          }}
+        />
+      )}
+      {confirmRemove && (
+        <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setConfirmRemove(null)}>
+          <div className="modal modal-confirm">
+            <div className="modal-head">
+              <b>Remove column?</b>
+            </div>
+            <div className="modal-body-pad">
+              “{columns.find((c) => c.id === confirmRemove)?.title}” goes away. Your chats and calls stay; you can add it back any time.
+            </div>
+            <div className="modal-foot">
+              <button onClick={() => setConfirmRemove(null)}>Cancel</button>
+              <button
+                className="danger"
+                onClick={() => {
+                  saveColumns(columns.filter((c) => c.id !== confirmRemove));
+                  setConfirmRemove(null);
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {openToken && tokens[openToken] && <TokenModal t={tokens[openToken]} now={now} favorites={status.favorites} onClose={() => setOpenToken(null)} />}
       {settingsOpen && (
         <Settings

@@ -87,9 +87,21 @@ b { font-weight: 600; }
 
 /* ---------- columns ---------- */
 .columns { flex: 1; display: flex; min-height: 0; }
-.col { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--line); }
+.terminal { flex: 1; display: flex; min-width: 0; min-height: 0; overflow-x: auto; overflow-y: hidden; }
+.col { display: flex; flex-direction: column; min-width: 380px; flex: 1 1 0; border-right: 1px solid var(--line); background: var(--bg); }
 .col-calls { flex: 1 1 0; }
-.col-chats { flex: 2 1 0; }
+.col-chats { flex: 1 1 0; }
+.col-dragging { opacity: 0.5; }
+.col-over { box-shadow: inset 3px 0 0 var(--accent); }
+.col-grip { color: var(--muted); cursor: grab; display: inline-flex; padding: 4px; margin-left: -6px; border-radius: 4px; }
+.col-grip:hover { background: rgba(255, 255, 255, 0.1); }
+.col-grip:active { cursor: grabbing; }
+.col-kind { color: var(--muted); display: inline-flex; }
+.col-actions { display: inline-flex; gap: 2px; margin-left: 4px; }
+.col-btn { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; background: none; border: none; color: var(--muted); cursor: pointer; }
+.col-btn:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.col-add { flex: none; width: 44px; margin: 12px; align-self: flex-start; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--chrome); color: var(--text); font-size: 22px; cursor: pointer; }
+.col-add:hover { background: var(--accent); color: #000; border-color: var(--accent); }
 .col-head {
   display: flex; align-items: center; gap: 8px; padding: 0 16px; height: 48px; flex: none;
   border-bottom: 1px solid var(--line); background: var(--bg);
@@ -366,8 +378,8 @@ b { font-weight: 600; }
 .rail-sep { width: 28px; height: 2px; background: var(--line); border-radius: 1px; flex: none; }
 .chan-cat { display: flex; align-items: center; gap: 4px; }
 .link { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 12px; padding: 4px 0; }
-.columns .col-calls { flex: 0 0 380px; }
-.columns .col-chats { flex: 1 1 0; }
+.terminal .col-calls { flex: 1 1 0; }
+.terminal .col-chats { flex: 1 1 0; }
 .preview-bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: rgba(245, 185, 66, 0.1); border-bottom: 1px solid rgba(245, 185, 66, 0.4); font-size: 12px; }
 .preview-bar button { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 11px; }
 .preview-bar button.primary { color: var(--ok); border-color: var(--ok); }
@@ -630,3 +642,22 @@ b { font-weight: 600; }
 .tcall-x.up { color: var(--ok); }
 .tcall-x.down { color: var(--err); }
 @media (max-width: 900px) { .tmodal-body { grid-template-columns: 1fr; } .tmodal-calls { display: none; } }
+
+/* ---------- column editor / confirm ---------- */
+.modal-column { height: auto; max-height: 90vh; width: min(520px, 94vw); }
+.modal-confirm { height: auto; width: min(420px, 94vw); }
+.modal-body-pad { padding: 14px 16px; color: var(--muted); font-size: 13px; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.modal-foot button { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.modal-foot button.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 700; }
+.modal-foot button.danger { color: var(--err); border-color: rgba(242, 102, 130, 0.5); }
+.coled { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; overflow-y: auto; }
+.coled-row { display: grid; grid-template-columns: 80px minmax(0, 1fr); align-items: center; gap: 10px; font-size: 13px; }
+.coled-row > span:first-child { color: var(--muted); }
+.coled-row input[type='text'], .coled-row input:not([type]) { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+.coled-chats { align-items: start; }
+.coled-list { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.coled-list .modal-search { margin: 4px 0; }
+.coled-chat { display: flex; align-items: center; gap: 8px; }
+.coled-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.coled-all { font-weight: 600; }
