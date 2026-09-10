@@ -62,8 +62,33 @@ export default function App() {
   const [addOpen, setAddOpen] = useState<Source | null>(null);
   const [view, setView] = useState<View>({ rail: 'all' });
   const [query, setQuery] = useState('');
-  const [showBots, setShowBots] = useState(false);
-  const [showRepeats, setShowRepeats] = useState(false);
+  // Header toggles, remembered. Repeats show by default: they are real messages, just badged 🔁.
+  const pref = (k: string, d: boolean) => {
+    try {
+      const v = localStorage.getItem(k);
+      return v === null ? d : v === 'on';
+    } catch {
+      return d;
+    }
+  };
+  const [showBots, setShowBotsState] = useState(() => pref('trenchfeed.showHidden', false));
+  const [showRepeats, setShowRepeatsState] = useState(() => pref('trenchfeed.showRepeats', true));
+  const setShowBots = (f: boolean | ((v: boolean) => boolean)) =>
+    setShowBotsState((v) => {
+      const n = typeof f === 'function' ? f(v) : f;
+      try {
+        localStorage.setItem('trenchfeed.showHidden', n ? 'on' : 'off');
+      } catch {}
+      return n;
+    });
+  const setShowRepeats = (f: boolean | ((v: boolean) => boolean)) =>
+    setShowRepeatsState((v) => {
+      const n = typeof f === 'function' ? f(v) : f;
+      try {
+        localStorage.setItem('trenchfeed.showRepeats', n ? 'on' : 'off');
+      } catch {}
+      return n;
+    });
   const [selected, setSelected] = useState<string | null>(null);
   const [openToken, setOpenToken] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
