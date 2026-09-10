@@ -23,6 +23,7 @@ export function Column({
   onResize,
   alertOn,
   onAlert,
+  fill = false,
 }: {
   title: string;
   subtitle?: string;
@@ -45,11 +46,13 @@ export function Column({
   /** per-column sound alert state; the bell toggles it */
   alertOn?: boolean;
   onAlert?: () => void;
+  /** the last column: stretches over whatever the others leave */
+  fill?: boolean;
 }) {
   return (
     <section
       className={`col ${className}${drag?.dragging ? ' col-dragging' : ''}${drag?.over ? ' col-over' : ''}${width ? ' col-fixed' : ''}`}
-      style={width ? { flex: `1 0 ${width}px` } : undefined}
+      style={fill ? { flex: `1 1 ${width ?? 380}px` } : width ? { flex: `0 0 ${width}px` } : undefined}
       onDragOver={drag?.onDragOver}
       onDrop={drag?.onDrop}
     >

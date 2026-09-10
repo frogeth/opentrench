@@ -88,7 +88,7 @@ b { font-weight: 600; }
 /* ---------- columns ---------- */
 .columns { flex: 1; display: flex; min-height: 0; }
 .terminal { flex: 1; display: flex; min-width: 0; min-height: 0; overflow-x: auto; overflow-y: hidden; }
-.col { display: flex; flex-direction: column; min-width: 380px; flex: 1 0 380px; border-right: 1px solid var(--line); background: var(--bg); }
+.col { display: flex; flex-direction: column; min-width: 320px; flex: 1 1 0; border-right: 1px solid var(--line); background: var(--bg); }
 .col-calls { flex: 1 1 0; }
 .col-chats { flex: 1 1 0; }
 .col-dragging { opacity: 0.5; }
@@ -665,8 +665,8 @@ b { font-weight: 600; }
 /* ---------- resize handle, callers column, virtual slots ---------- */
 .col-resize { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 5; }
 .col-resize:hover, .col-resize:active { background: rgba(65, 200, 146, 0.35); }
-/* a resized column keeps its share (flex-basis) but still grows to fill the row */
-.col-fixed { flex-grow: 1; }
+/* a resized column is exactly that wide; the last column always fills the rest */
+.col-fixed { flex-grow: 0; }
 .vitem { min-width: 0; }
 .callers-head, .caller-row { display: grid; grid-template-columns: minmax(0, 1fr) 40px 52px 52px 52px 44px 44px; gap: 6px; align-items: center; padding: 6px 12px; font-size: 12px; }
 .callers-head { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 1; }

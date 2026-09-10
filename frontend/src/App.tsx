@@ -592,8 +592,9 @@ export default function App() {
             </>
           ) : (
             <>
-              {columns.map((col) => {
+              {columns.map((col, i) => {
                 const names = namesFor(col);
+                const last = i === columns.length - 1;
                 const actions = {
                   onEdit: () => setEditing({ col }),
                   onRemove: () => setConfirmRemove(col.id),
@@ -609,7 +610,8 @@ export default function App() {
                     : {}),
                   drag: dragFor(col.id),
                   width: liveWidths[col.id] ?? col.width,
-                  onResize: resizeFor(col.id),
+                  onResize: last ? undefined : resizeFor(col.id),
+                  fill: last,
                 };
                 if (col.type === 'callers') {
                   return (
