@@ -830,8 +830,8 @@ button.reaction { color: var(--text); font: inherit; line-height: inherit; }
 .reaction.mine { border-color: var(--accent); background: rgba(65, 200, 146, 0.12); }
 .reaction.mine .reaction-n { color: var(--accent); }
 .react-add-wrap { position: relative; display: inline-flex; }
-.react-add { opacity: 0; color: var(--muted); }
-.row:hover .react-add, .react-add:focus { opacity: 1; }
+.react-add { font-size: 11px; line-height: 1; }
+.react-picker { bottom: auto; top: 20px; }
 .react-picker { position: absolute; bottom: 24px; left: 0; z-index: 30; display: grid; grid-template-columns: repeat(8, 28px); gap: 2px; padding: 6px; background: #232b3b; border: 1px solid #3d4a66; border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6); }
 .react-picker button { width: 28px; height: 28px; background: none; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; padding: 0; }
 .react-picker button:hover { background: rgba(255, 255, 255, 0.1); }
@@ -848,3 +848,23 @@ button.reaction { color: var(--text); font: inherit; line-height: inherit; }
 .share-count { margin-left: auto; font-size: 11px; }
 .share-modal .fed-foot .fed-link { margin-right: 0; }
 button.share { cursor: pointer; }
+
+/* ---------- Cove tab (bot conversation) ---------- */
+.col-cove .col-body { display: flex; flex-direction: column; overflow: hidden; }
+.cove { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.cove-body { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+.bmsg { max-width: 92%; align-self: flex-start; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px 12px 12px 4px; padding: 8px 10px; }
+.bmsg-out { align-self: flex-end; background: rgba(65, 200, 146, 0.12); border-color: rgba(65, 200, 146, 0.35); border-radius: 12px 12px 4px 12px; }
+.bmsg-text { font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+.bmsg-time { font-size: 10px; color: var(--dim); margin-top: 4px; text-align: right; }
+.bkeys { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.bkey-row { display: flex; gap: 4px; }
+.bkey { flex: 1; min-width: 0; background: var(--chrome); color: var(--text); border: 1px solid var(--line-strong); border-radius: 8px; padding: 6px 8px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bkey:hover { border-color: var(--accent); color: var(--accent); }
+.bkey:disabled { opacity: 0.5; cursor: default; }
+.bkey-url { color: #4ea3ff; }
+.cove-toast { margin: 0 12px 6px; padding: 6px 10px; background: rgba(65, 200, 146, 0.14); border: 1px solid rgba(65, 200, 146, 0.4); border-radius: 8px; font-size: 12px; }
+.cove-composer { border-top: 1px solid var(--line); }
+.col-flash { animation: flash 1.5s ease-out; }
+button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.buy-compact button.buy-btn { font-size: 10px; }

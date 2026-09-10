@@ -90,6 +90,24 @@ export class Services {
   }
 
   /** Recent messages of any chat (newest first) without adding it to the feed. Not persisted. */
+  /** Conversation with a Telegram bot (Cove) through the user's own session. */
+  botHistory(bot: string, limit?: number) {
+    if (!this.telegram) throw new Error('telegram not connected');
+    return this.telegram.botHistory(bot, limit);
+  }
+  botStart(bot: string, payload: string) {
+    if (!this.telegram) throw new Error('telegram not connected');
+    return this.telegram.botStart(bot, payload);
+  }
+  botSend(bot: string, text: string) {
+    if (!this.telegram) throw new Error('telegram not connected');
+    return this.telegram.botSend(bot, text);
+  }
+  botPress(bot: string, msgId: number, data: string) {
+    if (!this.telegram) throw new Error('telegram not connected');
+    return this.telegram.botPress(bot, msgId, data);
+  }
+
   /** Compose a message as the user. Sending must be enabled per platform in config; the API checks that. */
   async send(source: 'discord' | 'telegram', chatId: string, text: string, replyTo?: string): Promise<void> {
     if (source === 'discord') {
@@ -180,6 +198,7 @@ export class Services {
     });
     tg.on('reactions', (msgId: string, reactions: Reaction[]) => this.hub.setReactions(msgId, reactions));
     tg.on('self', () => this.hub.recomputeBuyLinks());
+    tg.on('bot', (bot: string, msg: import('./types.js').BotMessage) => this.hub.emit('event', { type: 'bot', bot, msg }));
     this.telegram = tg;
     await tg.connect();
   }

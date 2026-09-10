@@ -146,7 +146,7 @@ export function ColumnEditor({
   };
 
   const save = () => {
-    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : all ? 'All Chats' : 'Chats');
+    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : all ? 'All Chats' : 'Chats');
     if (none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
     const clean: ColumnFilters = {};
     for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== false && !(Array.isArray(v) && v.length === 0) && !(typeof v === 'string' && !v.trim())) (clean as any)[k] = v;
@@ -157,7 +157,7 @@ export function ColumnEditor({
       title: t,
       chats,
       ...(type === 'callers' ? { window: win } : {}),
-      ...(type !== 'callers' ? { alert: { on: alertOn, sound } } : {}),
+      ...(type === 'calls' || type === 'chat' ? { alert: { on: alertOn, sound } } : {}),
       filters: Object.keys(clean).length ? clean : undefined,
     });
   };
@@ -175,9 +175,9 @@ export function ColumnEditor({
           {/* ---------- left: what & where ---------- */}
           <div className="fed-left">
             <div className="fed-type">
-              {(['chat', 'calls', 'callers'] as const).map((t) => (
+              {(['chat', 'calls', 'callers', 'cove'] as const).map((t) => (
                 <button key={t} className={type === t ? 'active' : ''} onClick={() => setType(t)}>
-                  <Icon name={t === 'chat' ? 'chat' : t === 'calls' ? 'calls' : 'people'} size={13} /> {t === 'chat' ? 'Messages' : t === 'calls' ? 'Calls' : 'Top Callers'}
+                  <Icon name={t === 'chat' ? 'chat' : t === 'calls' ? 'calls' : t === 'callers' ? 'people' : 'send'} size={13} /> {t === 'chat' ? 'Messages' : t === 'calls' ? 'Calls' : t === 'callers' ? 'Top Callers' : 'Cove'}
                 </button>
               ))}
             </div>
@@ -257,7 +257,7 @@ export function ColumnEditor({
                 </div>
               </>
             )}
-            {type !== 'callers' && (
+            {(type === 'calls' || type === 'chat') && (
               <>
                 <NameList title="Show only" hint={type === 'calls' ? 'Only calls by these callers' : 'Only messages from these callers'} value={f.showOnly ?? []} onChange={(v) => set('showOnly', v)} suggestions={callers} />
                 <NameList title="Muted callers" hint={type === 'calls' ? 'Hide calls by these callers' : 'Hide messages from these callers'} value={f.muted ?? []} onChange={(v) => set('muted', v)} suggestions={callers} />
@@ -311,7 +311,7 @@ export function ColumnEditor({
                 </div>
               </div>
             )}
-            {type !== 'callers' && (
+            {(type === 'calls' || type === 'chat') && (
               <div className="fsec">
                 <div className="fsec-title">Alert</div>
                 <label className="check">

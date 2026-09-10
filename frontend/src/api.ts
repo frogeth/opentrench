@@ -77,7 +77,7 @@ export interface ColumnFilters {
 }
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers';
+  type: 'calls' | 'chat' | 'callers' | 'cove';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
@@ -149,6 +149,10 @@ export const api = {
   setDiscordSend: (enabled: boolean, confirm = '') => req<{ canSend: boolean }>('PUT', '/discord/send', { enabled, confirm }),
   setTelegramSend: (enabled: boolean) => req<{ canSend: boolean }>('PUT', '/telegram/send', { enabled }),
   send: (source: 'discord' | 'telegram', chatId: string, text: string, replyTo?: string) => req<{ ok: true }>('POST', '/send', { source, chatId, text, replyTo }),
+  botHistory: (bot: string) => req<import('./types').BotMessage[]>('GET', `/bot/${encodeURIComponent(bot)}/history`),
+  botStart: (bot: string, payload: string) => req<{ ok: true }>('POST', `/bot/${encodeURIComponent(bot)}/start`, { payload }),
+  botSend: (bot: string, text: string) => req<{ ok: true }>('POST', `/bot/${encodeURIComponent(bot)}/send`, { text }),
+  botPress: (bot: string, msgId: number, data: string) => req<{ message?: string; alert?: boolean; url?: string }>('POST', `/bot/${encodeURIComponent(bot)}/press`, { msgId, data }),
   react: (source: 'discord' | 'telegram', chatId: string, msgId: string, key: string, name: string, on: boolean) =>
     req<{ ok: true }>('POST', '/react', { source, chatId, msgId, key, name, on }),
   markSeen: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/seen', { add, remove }),

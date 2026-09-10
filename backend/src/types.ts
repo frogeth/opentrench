@@ -203,6 +203,19 @@ export interface BotSeen {
   hidden: boolean;
 }
 
+/** One message in a conversation with a Telegram bot (Cove), with its inline keyboard. */
+export interface BotMessage {
+  id: number;
+  ts: number;
+  /** sent by us */
+  out: boolean;
+  text: string;
+  /** rows of inline buttons: `data` is a callback (base64), `url` opens a link */
+  buttons: { text: string; data?: string; url?: string }[][];
+  edited?: boolean;
+  hasMedia?: boolean;
+}
+
 export interface Status {
   discord: DiscordState;
   telegram: TelegramState;
@@ -220,4 +233,5 @@ export type ServerEvent =
   | { type: 'tokens'; tokens: TokenInfo[] }
   | { type: 'msg'; msgId: string; patch: Partial<FeedMessage> }
   | { type: 'ping'; token: TokenInfo; msg: FeedMessage }
+  | { type: 'bot'; bot: string; msg: BotMessage }
   | { type: 'status'; status: Status };

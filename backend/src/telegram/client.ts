@@ -5,7 +5,7 @@ import { StringSession } from 'telegram/sessions/index.js';
 import { NewMessage, Raw, type NewMessageEvent } from 'telegram/events/index.js';
 import { Api } from 'telegram/tl/index.js';
 import { getPeerId } from 'telegram/Utils.js';
-import type { FeedMessage, LoginStep, TelegramState } from '../types.js';
+import type { BotMessage, FeedMessage, LoginStep, TelegramState } from '../types.js';
 import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, type TelegramPlain } from './normalize.js';
 import { extractLinks, type ExtractedMeta, type LinkIn } from '../links.js';
 
@@ -254,6 +254,71 @@ export class TelegramWrapper extends EventEmitter {
     );
   }
 
+  // --- bot conversations (Cove) ---
+
+  /** user ids of bots whose DMs we relay, keyed by lowercase username */
+  private bots = new Map<string, string>();
+
+  private async botPeer(username: string): Promise<any> {
+    if (!this.client || this.state !== 'connected') throw new Error('telegram not connected');
+    const entity: any = await this.client.getEntity(username);
+    if (!entity?.bot) throw new Error(`${username} is not a bot`);
+    this.bots.set(username.toLowerCase(), String(entity.id));
+    return entity;
+  }
+
+  private toBotMessage(m: any): BotMessage {
+    const rows = m.replyMarkup?.className === 'ReplyInlineMarkup' ? m.replyMarkup.rows : [];
+    const buttons = rows.map((r: any) =>
+      (r.buttons ?? []).map((b: any) => ({
+        text: String(b.text ?? ''),
+        ...(b.data ? { data: Buffer.from(b.data).toString('base64') } : {}),
+        ...(b.url ? { url: String(b.url) } : {}),
+      })),
+    );
+    return { id: Number(m.id), ts: Number(m.date) * 1000, out: !!m.out, text: String(m.message ?? ''), buttons, hasMedia: !!m.media };
+  }
+
+  /** Is this update about a bot conversation we relay? Returns the bot username. */
+  private botFor(m: any): string | undefined {
+    const uid = m?.peerId?.className === 'PeerUser' ? String(m.peerId.userId) : undefined;
+    if (!uid) return undefined;
+    for (const [name, id] of this.bots) if (id === uid) return name;
+    return undefined;
+  }
+
+  /** Recent messages in the DM with a bot (oldest first). Registers the bot for live relay. */
+  async botHistory(username: string, limit = 40): Promise<BotMessage[]> {
+    const peer = await this.botPeer(username);
+    const msgs: any[] = await this.client!.getMessages(peer, { limit });
+    return msgs
+      .filter((m) => m && m.className === 'Message')
+      .map((m) => this.toBotMessage(m))
+      .sort((a, b) => a.id - b.id);
+  }
+
+  /** The deep-link equivalent: /start <payload> delivered the way Telegram does it. */
+  async botStart(username: string, payload: string): Promise<void> {
+    const peer = await this.botPeer(username);
+    await this.client!.invoke(
+      new Api.messages.StartBot({ bot: peer, peer, randomId: bigInt(Math.floor(Math.random() * 2 ** 52)), startParam: payload }),
+    );
+  }
+
+  async botSend(username: string, text: string): Promise<void> {
+    const peer = await this.botPeer(username);
+    await this.client!.sendMessage(peer, { message: text, linkPreview: false });
+  }
+
+  /** Press an inline button. Returns whatever the bot answers (toast text, alert, or a url to open). */
+  async botPress(username: string, msgId: number, dataB64: string): Promise<{ message?: string; alert?: boolean; url?: string }> {
+    const peer = await this.botPeer(username);
+    const res: any = await this.client!.invoke(
+      new Api.messages.GetBotCallbackAnswer({ peer, msgId, data: Buffer.from(dataB64, 'base64') }),
+    );
+    return { message: res?.message ? String(res.message) : undefined, alert: !!res?.alert, url: res?.url ? String(res.url) : undefined };
+  }
+
   /** Message your own "Saved Messages" (phone ping without any bot). */
   async sendSelf(text: string): Promise<void> {
     if (!this.client || this.state !== 'connected') return;
@@ -286,8 +351,24 @@ export class TelegramWrapper extends EventEmitter {
       })
       .catch((e: any) => console.warn('[telegram] getMe failed', e?.message ?? e));
     client.addEventHandler((ev: NewMessageEvent) => {
+      const bot = this.botFor(ev.message);
+      if (bot) {
+        this.emit('bot', bot, this.toBotMessage(ev.message));
+        return;
+      }
       void this.onNewMessage(ev);
     }, new NewMessage({}));
+    // Bots edit their panel messages in place after a button press: relay edits too.
+    client.addEventHandler((u: any) => {
+      try {
+        const m = u?.message;
+        if (!m || m.className !== 'Message') return;
+        const bot = this.botFor(m);
+        if (bot) this.emit('bot', bot, { ...this.toBotMessage(m), edited: true });
+      } catch (e: any) {
+        console.warn('[telegram] bot edit failed', e?.message ?? e);
+      }
+    }, new Raw({ types: [Api.UpdateEditMessage] }));
     client.addEventHandler((u: Api.UpdateMessageReactions) => {
       try {
         const peer = getPeerId(u.peer);

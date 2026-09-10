@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Cove inside the app: the $25 / $50 / $100 / Cove buttons now open a Cove column (added on first use) that shows the bot's reply through your own Telegram session. Cove's inline buttons work in place, edits update live, and there's a box to type commands. Needs Telegram connected; otherwise the buttons open Telegram as before.
+
 - The share button on a call opens an in-app picker: tick up to six chats across Discord and Telegram and the bare contract address is posted to each, one at a time. Respects the per-platform sending switches; the Telegram share sheet is still there as a fallback.
 
 - Messages you send from the app show up in the chat log immediately on both platforms.

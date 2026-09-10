@@ -303,6 +303,46 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { ok: true };
     }),
   );
+  // Bot conversations (Cove): the user's own session talks to the bot; the UI renders the panels.
+  const BOT_RE = /^[A-Za-z0-9_]{3,32}$/;
+  r.get(
+    '/bot/:bot/history',
+    wrap(async (req) => {
+      const bot = String(req.params.bot);
+      if (!BOT_RE.test(bot)) throw new Error('bad bot');
+      return svc.botHistory(bot, 40);
+    }),
+  );
+  r.post(
+    '/bot/:bot/start',
+    wrap(async (req) => {
+      const bot = String(req.params.bot);
+      const payload = String(req.body?.payload ?? '');
+      if (!BOT_RE.test(bot) || !/^[A-Za-z0-9_-]{1,64}$/.test(payload)) throw new Error('bad start payload');
+      await svc.botStart(bot, payload);
+      return { ok: true };
+    }),
+  );
+  r.post(
+    '/bot/:bot/send',
+    wrap(async (req) => {
+      const bot = String(req.params.bot);
+      const text = String(req.body?.text ?? '').trim();
+      if (!BOT_RE.test(bot) || !text || text.length > 4096) throw new Error('bad message');
+      await svc.botSend(bot, text);
+      return { ok: true };
+    }),
+  );
+  r.post(
+    '/bot/:bot/press',
+    wrap(async (req) => {
+      const bot = String(req.params.bot);
+      const msgId = Number(req.body?.msgId);
+      const data = String(req.body?.data ?? '');
+      if (!BOT_RE.test(bot) || !Number.isFinite(msgId) || !data) throw new Error('bad press');
+      return svc.botPress(bot, msgId, data);
+    }),
+  );
   r.post(
     '/react',
     wrap(async (req) => {

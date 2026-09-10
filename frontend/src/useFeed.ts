@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FeedMessage, ServerEvent, Status, TokenInfo } from './types';
+import type { BotMessage, FeedMessage, ServerEvent, Status, TokenInfo } from './types';
 
 const MAX = 500;
 
@@ -16,6 +16,15 @@ export function useFeed() {
   });
   const [wsOpen, setWsOpen] = useState(false);
   const [ping, setPing] = useState<Extract<ServerEvent, { type: 'ping' }> | null>(null);
+  /** live bot conversations (Cove), keyed by bot username; newest last, edits replace in place */
+  const [botMsgs, setBotMsgs] = useState<Record<string, BotMessage[]>>({});
+  const mergeBot = (bot: string, incoming: BotMessage[]) =>
+    setBotMsgs((all) => {
+      const cur = all[bot] ?? [];
+      const byId = new Map(cur.map((m) => [m.id, m]));
+      for (const m of incoming) byId.set(m.id, { ...(byId.get(m.id) ?? {}), ...m });
+      return { ...all, [bot]: [...byId.values()].sort((a, b) => a.id - b.id).slice(-200) };
+    });
   const boot = useRef<string | null>(null);
 
   useEffect(() => {
@@ -49,7 +58,8 @@ export function useFeed() {
           setMessages((m) => m.map((x) => (x.id === ev.msgId ? { ...x, ...ev.patch } : x)));
         } else if (ev.type === 'reactions') {
           setMessages((m) => m.map((x) => (x.id === ev.msgId ? { ...x, reactions: ev.reactions } : x)));
-        } else if (ev.type === 'ping') setPing(ev);
+        } else if (ev.type === 'bot') mergeBot(ev.bot, [ev.msg]);
+        else if (ev.type === 'ping') setPing(ev);
         else if (ev.type === 'status') setStatus(ev.status);
       };
       ws.onclose = () => {
@@ -65,5 +75,5 @@ export function useFeed() {
     };
   }, []);
 
-  return { messages, tokens, status, wsOpen, ping };
+  return { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot };
 }

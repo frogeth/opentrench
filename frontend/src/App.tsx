@@ -9,6 +9,7 @@ import { ColumnEditor, chatKey } from './components/ColumnEditor';
 import { CallersList } from './components/CallersColumn';
 import { Composer, type SendTarget } from './components/Composer';
 import { ShareModal } from './components/ShareModal';
+import { CoveView, COVE_BOT } from './components/CoveView';
 import { VirtualItem } from './components/Virtual';
 import { Settings } from './components/Settings';
 import { ChannelSidebar, discordChatName, type View } from './components/ChannelSidebar';
@@ -58,7 +59,7 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 export type ChatOrder = 'bottom' | 'top';
 
 export default function App() {
-  const { messages, tokens, status, wsOpen, ping } = useFeed();
+  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState<Source | null>(null);
   const [view, setView] = useState<View>({ rail: 'all' });
@@ -212,6 +213,25 @@ export default function App() {
     return true;
   };
   const [share, setShare] = useState<{ address: string; symbol?: string } | null>(null);
+  // Cove buttons: send the deep link's /start payload through our own Telegram session and show
+  // Cove's reply in a Cove column (added on first use).
+  const [coveFlash, setCoveFlash] = useState<string | null>(null);
+  const onBuy = (url: string) => {
+    const payload = /[?&]start=([A-Za-z0-9_-]+)/.exec(url)?.[1];
+    if (!payload) return window.open(url, '_blank', 'noopener');
+    if (status.telegram !== 'connected') {
+      window.open(url, '_blank', 'noopener');
+      return;
+    }
+    if (!columns.some((c) => c.type === 'cove')) saveColumns([...columns, { id: 'cove', type: 'cove', title: 'Cove', chats: [], width: 420 }]);
+    api
+      .botStart(COVE_BOT, payload)
+      .then(() => {
+        setCoveFlash('cove');
+        window.setTimeout(() => setCoveFlash(null), 1500);
+      })
+      .catch((e) => alert(`Cove: ${e?.message ?? e}`));
+  };
   const openShare = (address: string, symbol?: string) => setShare({ address, symbol });
   // Reactions: what you added this session (the platform stream brings the counts back)
   const [myReactions, setMyReactions] = useState<Set<string>>(() => new Set());
@@ -642,7 +662,7 @@ export default function App() {
                 )}
                 {allCalls.map((t) => (
                   <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
-                    <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
+                    <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} onBuy={onBuy} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
                   </VirtualItem>
                 ))}
               </Column>
@@ -733,6 +753,13 @@ export default function App() {
                   onResize: last ? undefined : resizeFor(col.id),
                   fill: last,
                 };
+                if (col.type === 'cove') {
+                  return (
+                    <Column key={col.id} title={col.title} subtitle={`@${COVE_BOT} · your Telegram`} kind="cove" className={`col-cove${coveFlash ? ' col-flash' : ''}`} {...actions}>
+                      <CoveView bot={COVE_BOT} msgs={botMsgs[COVE_BOT] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} />
+                    </Column>
+                  );
+                }
                 if (col.type === 'callers') {
                   return (
                     <Column key={col.id} title={col.title} subtitle={`${col.window ?? '7d'} · ${subtitleFor(col)}`} kind="callers" className="col-callers" {...actions}>
@@ -763,7 +790,7 @@ export default function App() {
                       {list.length === 0 && <div className="empty">No contracts seen yet.</div>}
                       {list.map((t) => (
                         <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
-                          <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
+                          <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} onBuy={onBuy} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
                         </VirtualItem>
                       ))}
                     </Column>
@@ -853,7 +880,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {openToken && tokens[openToken] && <TokenModal t={tokens[openToken]} now={now} favorites={status.favorites} onClose={() => setOpenToken(null)} onShare={openShare} />}
+      {openToken && tokens[openToken] && <TokenModal t={tokens[openToken]} now={now} favorites={status.favorites} onClose={() => setOpenToken(null)} onShare={openShare} onBuy={onBuy} />}
       {share && <ShareModal address={share.address} symbol={share.symbol} watched={watched} channels={channels} canSend={canSend} onClose={() => setShare(null)} />}
       {settingsOpen && (
         <Settings

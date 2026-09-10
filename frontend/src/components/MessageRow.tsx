@@ -119,6 +119,28 @@ export function MessageRow({
               <Icon name="reply" size={12} />
             </button>
           )}
+          {onReact && (
+            <span className="react-add-wrap">
+              <button className="row-reply react-add" title="add reaction" aria-label="add reaction" onClick={() => setPick((p) => !p)}>
+                ☺+
+              </button>
+              {pick && (
+                <div className="react-picker" onMouseLeave={() => setPick(false)}>
+                  {QUICK_EMOJI.map((e) => (
+                    <button
+                      key={e}
+                      onClick={() => {
+                        setPick(false);
+                        onReact(m, e, e, !mine?.has(`${m.id}:${e}`));
+                      }}
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </span>
+          )}
           <span className="time">
             {m.link ? (
               <a href={m.link} target="_blank" rel="noreferrer">
@@ -178,7 +200,7 @@ export function MessageRow({
             ))}
           </div>
         )}
-        {((m.reactions && m.reactions.length > 0) || onReact) && (
+        {((m.reactions && m.reactions.length > 0) || [...(mine ?? [])].some((k) => k.startsWith(`${m.id}:`))) && (
           <div className="reactions">
             {[
               ...(m.reactions ?? []),
@@ -202,28 +224,6 @@ export function MessageRow({
                 </button>
               );
             })}
-            {onReact && (
-              <span className="react-add-wrap">
-                <button className="reaction react-add" title="add reaction" onClick={() => setPick((p) => !p)}>
-                  ☺+
-                </button>
-                {pick && (
-                  <div className="react-picker" onMouseLeave={() => setPick(false)}>
-                    {QUICK_EMOJI.map((e) => (
-                      <button
-                        key={e}
-                        onClick={() => {
-                          setPick(false);
-                          onReact(m, e, e, !mine?.has(`${m.id}:${e}`));
-                        }}
-                      >
-                        {e}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </span>
-            )}
           </div>
         )}
         {m.contracts.length > 0 && (

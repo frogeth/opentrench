@@ -36,7 +36,7 @@ const serverOf = (c: CallRecord) => {
  * Token drill-down: header like the call card, server chips, a candlestick
  * chart (market cap axis) with every call pinned on it, and the callers list.
  */
-export function TokenModal({ t, now, favorites, onClose, onShare }: { t: TokenInfo; now: number; favorites: string[]; onClose: () => void; onShare?: (address: string, symbol?: string) => void }) {
+export function TokenModal({ t, now, favorites, onClose, onShare, onBuy }: { t: TokenInfo; now: number; favorites: string[]; onClose: () => void; onShare?: (address: string, symbol?: string) => void; onBuy?: (url: string) => void }) {
   const [interval, setInterval_] = useState<Interval>('5m');
   const [server, setServer] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('recent');
@@ -161,7 +161,7 @@ export function TokenModal({ t, now, favorites, onClose, onShare }: { t: TokenIn
         <div className="tmodal-row2">
           {t.security ? <SecurityStrip s={t.security} /> : <span className="hint">holder data pending…</span>}
           <div className="tmodal-buy">
-            <BuyRow buy={t.buy} compact />
+            <BuyRow buy={t.buy} compact onBuy={onBuy} />
             {onShare ? (
               <button className="share" onClick={() => onShare(t.address, t.symbol)} title="share the CA to chats in your feed">
                 <Icon name="send" size={13} /> share

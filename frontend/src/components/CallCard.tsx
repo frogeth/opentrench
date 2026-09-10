@@ -55,6 +55,7 @@ export function CallCard({
   chartProvider = 'basedbot',
   onOpen,
   onShare,
+  onBuy,
   seen = true,
   onSeen,
 }: {
@@ -67,6 +68,8 @@ export function CallCard({
   onOpen?: (address: string) => void;
   /** open the share-to-chats dialog */
   onShare?: (address: string, symbol?: string) => void;
+  /** Cove buttons open the in-app Cove tab */
+  onBuy?: (url: string) => void;
   /** inbox-style: false = not looked at yet (card tinted), toggled by the check button */
   seen?: boolean;
   onSeen?: (on: boolean) => void;
@@ -226,7 +229,7 @@ export function CallCard({
       {/* 3 · risk chips | buys */}
       <div className="call-bottom">
         {t.security ? <SecurityStrip s={t.security} compact /> : <span className="call-pending">holder data pending…</span>}
-        <BuyRow buy={t.buy} />
+        <BuyRow buy={t.buy} onBuy={onBuy} />
         {onShare ? (
           <button className="share" onClick={() => onShare(t.address, t.symbol)} title="share the CA to chats in your feed">
             <Icon name="send" size={12} />
