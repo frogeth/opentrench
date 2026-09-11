@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.3.0 — 2026-09-11
+
 - Chat and J7 columns hold your place: when you're scrolled up (or away for a while), new messages, reconnects and old rows dropping off no longer move what you're reading. "Latest" is still one click away.
 - Paste or drop images into any composer to send them, with the text as the caption. Telegram sends through your session; Discord uploads through your own client via the plugin.
 - Share button on J7 tweets: pick chats in your feed and the tweet link is sent there, with a "sent to …" line under the tweet (Brandzo).
