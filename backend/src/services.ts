@@ -1,6 +1,6 @@
 import type { ConfigStore } from './config.js';
 import type { MessageHub } from './hub.js';
-import { DiscordGateway, type DiscordChannel } from './discord/gateway.js';
+import { DiscordGateway, type DiscordChannel, type DiscordSelf } from './discord/gateway.js';
 import { discordReaction, normalizeDiscord } from './discord/normalize.js';
 import { TelegramWrapper, type TelegramDialog } from './telegram/client.js';
 import { extractLinks, type ExtractedMeta } from './links.js';
@@ -15,6 +15,11 @@ export class Services {
   discord?: DiscordGateway;
   telegram?: TelegramWrapper;
   j7?: J7Client;
+  private discordSelf?: DiscordSelf;
+  /** me, for mention detection in one guild */
+  private meIn(guildId: string) {
+    return this.discordSelf ? { id: this.discordSelf.id, roles: new Set(this.discordSelf.roles.get(guildId) ?? []) } : undefined;
+  }
   private launchWatcher?: ReturnType<typeof createLaunchWatcher>;
   private discordChannels = new Map<string, DiscordChannel>();
   private previewer: Previewer;
@@ -70,6 +75,9 @@ export class Services {
     }
     const gw = new DiscordGateway(token);
     gw.on('state', (s, err) => this.hub.setStatus('discord', s, err));
+    gw.on('self', (me: DiscordSelf) => {
+      this.discordSelf = me;
+    });
     gw.on('channels', (chs: DiscordChannel[]) => {
       for (const c of chs) this.discordChannels.set(c.id, c);
     });
@@ -78,7 +86,7 @@ export class Services {
       if (!this.cfg.get().discord.watch.includes(id)) return;
       const ch = this.discordChannels.get(id) ?? { id, name: id, guildId: '?', guildName: '?', position: 0 };
       try {
-        const msg = normalizeDiscord(d, ch);
+        const msg = normalizeDiscord(d, ch, this.meIn(ch.guildId));
         this.hub.push(msg, extractLinks(msg.text, []));
         this.addPreviews(msg);
       } catch (e) {
@@ -183,7 +191,7 @@ export class Services {
       if (!token) return [];
       const ch = this.discordChannels.get(id) ?? { id, name: id, guildId: '?', guildName: '?', position: 0 };
       const raw = await fetchChannelHistory(token, id, limit);
-      msgs = raw.map((d) => normalizeDiscord(d, ch));
+      msgs = raw.map((d) => normalizeDiscord(d, ch, this.meIn(ch.guildId)));
     } else {
       msgs = (await this.telegram?.history(id, limit)) ?? [];
     }

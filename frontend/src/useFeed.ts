@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BotMessage, FeedMessage, J7Tweet, ServerEvent, Status, TokenInfo } from './types';
+import type { BotMessage, FeedMessage, J7Tweet, Mention, ServerEvent, Status, TokenInfo } from './types';
 
 const MAX = 500;
 
@@ -16,6 +16,9 @@ export function useFeed() {
   });
   const [wsOpen, setWsOpen] = useState(false);
   const [ping, setPing] = useState<Extract<ServerEvent, { type: 'ping' }> | null>(null);
+  /** pings: people who mentioned you, with context that keeps filling in */
+  const [mentions, setMentions] = useState<Mention[]>([]);
+  const markRead = (ids?: string[]) => setMentions((cur) => cur.map((m) => (m.read || (ids && !ids.includes(m.id)) ? m : { ...m, read: true })));
   /** J7Tracker tweets, newest first; updates replace in place */
   const [j7, setJ7] = useState<J7Tweet[]>([]);
   const mergeJ7 = (incoming: J7Tweet[]) =>
@@ -56,6 +59,7 @@ export function useFeed() {
           }
           boot.current = ev.boot ?? boot.current;
           setMessages([...ev.messages].reverse());
+          setMentions(ev.mentions ?? []);
           setTokens(Object.fromEntries(ev.tokens.map((t) => [t.address, t])));
           setStatus(ev.status);
         } else if (ev.type === 'message') {
@@ -69,6 +73,12 @@ export function useFeed() {
         } else if (ev.type === 'reactions') {
           setMessages((m) => m.map((x) => (x.id === ev.msgId ? { ...x, reactions: ev.reactions } : x)));
         } else if (ev.type === 'j7') mergeJ7([ev.tweet]);
+        else if (ev.type === 'mention')
+          setMentions((cur) => {
+            const old = cur.find((m) => m.id === ev.mention.id);
+            const next = { ...ev.mention, read: ev.mention.read || !!old?.read };
+            return old ? cur.map((m) => (m.id === next.id ? next : m)) : [...cur, next].slice(-100);
+          });
         else if (ev.type === 'bot') mergeBot(ev.bot, [ev.msg]);
         else if (ev.type === 'botDelete') {
           const gone = new Set(ev.ids);
@@ -90,5 +100,5 @@ export function useFeed() {
     };
   }, []);
 
-  return { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7 };
+  return { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead };
 }

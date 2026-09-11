@@ -267,6 +267,30 @@ describe('MessageHub', () => {
     expect(hub.hello().tokens[0].seen).toBe(3);
   });
 
+  it('pings: a mention takes the 4 messages before it and collects the next 4 from the same chat', () => {
+    const hub = new MessageHub(500, undefined, {});
+    const events: ServerEvent[] = [];
+    hub.on('event', (e) => events.push(e));
+    for (let i = 1; i <= 6; i++) hub.push(msg(i, `m${i}`, { chatId: 'a', ts: i }));
+    hub.push(msg(7, 'other chat', { chatId: 'b', ts: 7 }));
+    hub.push(msg(8, 'yo @me', { chatId: 'a', ts: 8, mention: 'user' }));
+    let m = hub.mentions();
+    expect(m).toHaveLength(1);
+    expect(m[0].before.map((x) => x.text)).toEqual(['m3', 'm4', 'm5', 'm6']);
+    expect(m[0].after).toEqual([]);
+    expect(m[0].read).toBe(false);
+    hub.push(msg(9, 'reply1', { chatId: 'a', ts: 9 }));
+    hub.push(msg(10, 'elsewhere', { chatId: 'b', ts: 10 }));
+    for (let i = 11; i <= 15; i++) hub.push(msg(i, `r${i}`, { chatId: 'a', ts: i }));
+    m = hub.mentions();
+    expect(m[0].after.map((x) => x.text)).toEqual(['reply1', 'r11', 'r12', 'r13']);
+    expect(events.filter((e) => e.type === 'mention')).toHaveLength(5); // created + 4 follow-ups
+    expect(hub.markMentionsRead(['nope'])).toBe(0);
+    expect(hub.markMentionsRead()).toBe(1);
+    expect(hub.mentions()[0].read).toBe(true);
+    expect(hub.hello().mentions).toHaveLength(1);
+  });
+
   it('records every counted call with the market cap at that moment, and the first-call cap after enrichment', async () => {
     const hub = new MessageHub(500, async () => ({ marketCap: 1000, priceUsd: 1, network: 'base' }));
     hub.push(msg(1, EVM, { author: 'first', chatId: 'a', chatName: '#a' }));

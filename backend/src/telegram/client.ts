@@ -462,6 +462,7 @@ export class TelegramWrapper extends EventEmitter {
       date: m.date,
       hasMedia: !!m.media && m.media.className !== 'MessageMediaWebPage',
       replyTo,
+      mentioned: !!m.mentioned && !m.out,
       reactions: mapTelegramReactions((m.reactions as any)?.results),
       media,
       previews: preview ? [preview] : [],

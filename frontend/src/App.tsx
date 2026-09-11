@@ -12,6 +12,7 @@ import { ShareModal } from './components/ShareModal';
 import { CoveView, COVE_BOT } from './components/CoveView';
 import { CaMenuContext } from './components/RichText';
 import { J7View } from './components/J7View';
+import { PingsPanel } from './components/PingsPanel';
 
 const BOTS = { cove: COVE_BOT, salpha: 'salpha_research_bot' } as const;
 type BotKind = keyof typeof BOTS;
@@ -65,7 +66,7 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 export type ChatOrder = 'bottom' | 'top';
 
 export default function App() {
-  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7 } = useFeed();
+  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState<Source | null>(null);
   const [view, setView] = useState<View>({ rail: 'all' });
@@ -396,6 +397,73 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ping]);
 
+  // Pings window: bottom-left, minimizes to a pill; a fresh ping chirps and pops a notification.
+  const [pingsOpen, setPingsOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('trenchfeed.pings') === 'open';
+    } catch {
+      return false;
+    }
+  });
+  const openPings = (on: boolean) => {
+    setPingsOpen(on);
+    try {
+      localStorage.setItem('trenchfeed.pings', on ? 'open' : 'min');
+    } catch {
+      /* ignore */
+    }
+  };
+  const readMentions = (ids?: string[]) => {
+    markRead(ids);
+    void api.markMentionsRead(ids).catch(() => {});
+  };
+  const mentionSeen = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (mentionSeen.current === null) {
+      mentionSeen.current = new Set(mentions.map((m) => m.id));
+      return;
+    }
+    const nowMs = Date.now();
+    for (const p of mentions) {
+      if (mentionSeen.current.has(p.id)) continue;
+      mentionSeen.current.add(p.id);
+      if (p.read || nowMs - p.msg.ts > 120_000) continue;
+      if (sound) playSound('chirp');
+      if (notify === 'granted') {
+        try {
+          const n = new Notification(`${p.msg.author} pinged you`, { body: `${p.msg.chatName}\n${(p.msg.body ?? p.msg.text).slice(0, 140)}`, icon: p.msg.avatar, tag: `ping:${p.id}` });
+          n.onclick = () => {
+            window.focus();
+            openPings(true);
+            n.close();
+          };
+        } catch {
+          /* notifications unavailable */
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mentions]);
+  /** scroll whichever column shows this message to it (reveals it if a filter hid it) */
+  const jumpToMessage = (id: string) => {
+    revealMessage(id);
+    let tries = 0;
+    const find = () => {
+      const el = document.querySelector(`[data-key="${CSS.escape(id)}"]`) as HTMLElement | null;
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: 'auto' });
+        window.setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'auto' }), 350);
+        el.classList.add('vitem-flash');
+        window.setTimeout(() => el.classList.remove('vitem-flash'), 2400);
+      } else if (tries++ < 12) window.setTimeout(find, 60);
+      else {
+        const m = messages.find((x) => x.id === id);
+        if (m?.link) window.open(m.link, '_blank', 'noopener');
+      }
+    };
+    window.setTimeout(find, 30);
+  };
+
   // Favorited X accounts: a fresh tweet plays the J7 column's sound and posts a notification.
   const j7Seen = useRef<Set<string> | null>(null);
   useEffect(() => {
@@ -655,10 +723,14 @@ export default function App() {
           {notify === 'granted' ? (sound ? '🔔' : '🔕') : '🔔'}
           {notify !== 'granted' && <span className="bell-off">off</span>}
         </button>
+        <button className={`gear pings-btn${pingsOpen ? ' on' : ''}`} onClick={() => openPings(!pingsOpen)} title="pings: who mentioned you">
+          @{mentions.some((m) => !m.read) && <span className="pings-badge">{mentions.filter((m) => !m.read).length}</span>}
+        </button>
         <button className="gear" onClick={() => setSettingsOpen(true)} title="settings">
           ⚙
         </button>
       </header>
+      <PingsPanel mentions={mentions} now={now} open={pingsOpen} canSend={canSend} onOpen={openPings} onRead={readMentions} onJump={jumpToMessage} />
       <div
         className="tabs"
         ref={tabsRef}

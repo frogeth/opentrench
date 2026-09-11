@@ -30,22 +30,26 @@ export interface DeployResult {
   scanned: { pump?: number; pons?: number };
 }
 
-/** 'tweet' when a metadata link points at this exact tweet, 'account' when it points at the author, else undefined. */
-export function matchLink(fields: (string | undefined | null)[], tweetId: string, handle: string): J7Deploy['match'] | undefined {
-  const h = handle.replace(/^@/, '').toLowerCase();
-  let acct = false;
+/** Does one of the token's links point at this exact tweet? (Account links don't count: too loose.) */
+export function linksTweet(fields: (string | undefined | null)[], tweetId: string): boolean {
   for (const raw of fields) {
     if (!raw) continue;
     const s = String(raw).toLowerCase();
-    if (s.includes(`/status/${tweetId}`) || s.includes(`/statuses/${tweetId}`) || s.trim() === tweetId) return 'tweet';
-    if (h && new RegExp(`(?:x|twitter)\\.com/@?${h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[/?#]|$)`).test(s)) acct = true;
+    if (s.includes(`/status/${tweetId}`) || s.includes(`/statuses/${tweetId}`) || s.trim() === tweetId) return true;
   }
-  return acct ? 'account' : undefined;
+  return false;
 }
+
+/** A launch "off a tweet" can't predate it; allow a minute of clock skew. */
+const LAUNCH_SKEW_MS = 60_000;
+export const launchedAfter = (createdAt: number, tweetTs: number) => createdAt >= tweetTs - LAUNCH_SKEW_MS;
+
+type Launch = J7Deploy & { links: string[] };
+const strip = ({ links: _l, ...d }: Launch): J7Deploy => d;
 
 const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : undefined);
 
-export function mapPump(c: any): Omit<J7Deploy, 'match'> & { links: string[] } {
+export function mapPump(c: any): Launch {
   return {
     source: 'pump',
     mint: String(c.mint),
@@ -60,7 +64,7 @@ export function mapPump(c: any): Omit<J7Deploy, 'match'> & { links: string[] } {
   };
 }
 
-export function mapPons(c: any, twitter = ''): Omit<J7Deploy, 'match'> & { links: string[] } {
+export function mapPons(c: any, twitter = ''): Launch {
   return {
     source: 'pons',
     mint: String(c.token),
@@ -87,7 +91,6 @@ export function parsePonsSocials(payload: string): { twitter?: string; telegram?
   }
 }
 
-type Launch = Omit<J7Deploy, 'match'> & { links: string[] };
 
 export function createDeployFinder(fetchImpl: typeof fetch = fetch, ttlMs = 60_000) {
   const cache = new Map<string, { at: number; p: Promise<DeployResult> }>();
@@ -125,8 +128,7 @@ export function createDeployFinder(fetchImpl: typeof fetch = fetch, ttlMs = 60_0
         for (const c of rows) {
           const l = mapPump(c);
           oldest = oldest === undefined ? l.createdAt : Math.min(oldest, l.createdAt);
-          const m = matchLink(l.links, q.tweetId, q.handle);
-          if (m) out.push({ ...l, match: m });
+          if (launchedAfter(l.createdAt, q.since) && linksTweet(l.links, q.tweetId)) out.push(strip(l));
         }
         if (rows.length < 70 || (oldest !== undefined && oldest < floor)) done = true;
       }
@@ -165,8 +167,7 @@ export function createDeployFinder(fetchImpl: typeof fetch = fetch, ttlMs = 60_0
       const batch = picked.slice(i, i + 5);
       const tws = await Promise.all(batch.map((l) => ponsTwitter(l.mint)));
       batch.forEach((l, k) => {
-        const m = matchLink([tws[k], ...l.links], q.tweetId, q.handle);
-        if (m) out.push({ ...l, twitter: tws[k], match: m });
+        if (launchedAfter(l.createdAt, q.since) && linksTweet([tws[k], ...l.links], q.tweetId)) out.push(strip({ ...l, twitter: tws[k] }));
       });
     }
     return oldest;
@@ -181,8 +182,7 @@ export function createDeployFinder(fetchImpl: typeof fetch = fetch, ttlMs = 60_0
       const p = (async () => {
         const deploys: J7Deploy[] = [];
         const [pump, pons] = await Promise.all([scanPump(q, deploys), scanPons(q, deploys)]);
-        // exact-tweet links first, then newest
-        deploys.sort((a, b) => (a.match === b.match ? b.createdAt - a.createdAt : a.match === 'tweet' ? -1 : 1));
+        deploys.sort((a, b) => b.createdAt - a.createdAt);
         const seen = new Set<string>();
         return { deploys: deploys.filter((d) => !seen.has(d.mint) && seen.add(d.mint)), scanned: { pump, pons } };
       })();
@@ -195,7 +195,7 @@ export function createDeployFinder(fetchImpl: typeof fetch = fetch, ttlMs = 60_0
 
 /**
  * Live watcher: while the J7 column is open, poll both launchpads' newest page every few
- * seconds and pair each new launch with the tweet it links (or the account, weakly), both
+ * seconds and pair each new launch with the tweet it links, both
  * ways — a launch that arrives before J7 relays the tweet is matched when the tweet lands.
  */
 export interface LaunchWatcherOpts {
@@ -228,8 +228,7 @@ export function createLaunchWatcher(opts: LaunchWatcherOpts) {
   const pair = (l: Launch, tweets: J7Tweet[]) => {
     for (const t of tweets) {
       if (t.deleted) continue; // the original entry carries the launches; the deleted copy mirrors it
-      const m = matchLink(l.links, tweetIdOf(t), t.author.handle);
-      if (m) opts.onMatch(t.id, { ...l, match: m });
+      if (launchedAfter(l.createdAt, t.ts) && linksTweet(l.links, tweetIdOf(t))) opts.onMatch(t.id, strip(l));
     }
   };
 
@@ -279,10 +278,7 @@ export function createLaunchWatcher(opts: LaunchWatcherOpts) {
     /** a tweet just arrived: pair it with launches we already saw */
     matchTweet(t: J7Tweet) {
       if (t.deleted) return;
-      for (const l of ring) {
-        const m = matchLink(l.links, tweetIdOf(t), t.author.handle);
-        if (m) opts.onMatch(t.id, { ...l, match: m });
-      }
+      for (const l of ring) if (launchedAfter(l.createdAt, t.ts) && linksTweet(l.links, tweetIdOf(t))) opts.onMatch(t.id, strip(l));
     },
     /** for tests */
     _tick: tick,

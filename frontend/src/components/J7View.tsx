@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { J7Deploy, J7Tweet, TokenInfo } from '../types';
 import { api } from '../api';
 import { money, timeAgo } from '../format';
@@ -30,15 +30,12 @@ type DeployState = { loading: boolean; error?: string; deploys?: J7Deploy[]; sca
 
 function DeployRow({ x, now }: { x: J7Deploy; now: number }) {
   return (
-    <div className={`deploy deploy-${x.match}`}>
+    <div className="deploy">
       {x.image ? <img src={x.image} alt="" /> : <span className="deploy-noimg" />}
       <span className="deploy-main">
         <span className="deploy-name">
           <b>{x.symbol || x.name}</b> <span className="muted">{x.name}</span>
           <span className={`deploy-src ${x.source}`}>{x.source === 'pump' ? 'pump.fun' : 'pons'}</span>
-          <span className="deploy-match" title={x.match === 'tweet' ? 'its metadata links this exact tweet' : 'its metadata links this account, not this tweet'}>
-            {x.match === 'tweet' ? 'links tweet' : 'links account'}
-          </span>
         </span>
         <span className="deploy-meta muted">
           launched {timeAgo(x.createdAt, now)} ago{money(x.marketCap) ? ` · MC ${money(x.marketCap)}` : ''} ·{' '}
@@ -107,6 +104,47 @@ export function J7View({
 }) {
   const [onlyMatches, setOnlyMatches] = useState(false);
   const [deploys, setDeploys] = useState<Record<string, DeployState>>({});
+  // "latest" button: the column scrolls (newest on top); count tweets that land while scrolled away
+  const rootRef = useRef<HTMLDivElement>(null);
+  const atTopRef = useRef(true);
+  const [atTop, setAtTop] = useState(true);
+  const [pending, setPending] = useState(0);
+  const seenIds = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const scroller = rootRef.current?.closest('.col-body') as HTMLElement | null;
+    if (!scroller) return;
+    const onScroll = () => {
+      const top = scroller.scrollTop < 40;
+      atTopRef.current = top;
+      setAtTop(top);
+      if (top) setPending(0);
+    };
+    onScroll();
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => scroller.removeEventListener('scroll', onScroll);
+  }, [hasToken]);
+  useEffect(() => {
+    if (seenIds.current === null) {
+      seenIds.current = new Set(tweets.map((t) => t.id));
+      return;
+    }
+    let fresh = 0;
+    for (const t of tweets) {
+      if (seenIds.current.has(t.id)) continue;
+      seenIds.current.add(t.id);
+      fresh++;
+    }
+    if (fresh && !atTopRef.current) setPending((n) => n + fresh);
+  }, [tweets]);
+  const toLatest = () => {
+    const scroller = rootRef.current?.closest('.col-body') as HTMLElement | null;
+    if (!scroller) return;
+    const go = () => (scroller.scrollTop = 0);
+    go();
+    window.setTimeout(go, 120);
+    window.setTimeout(go, 400);
+    setPending(0);
+  };
   useEffect(() => {
     if (!hasToken) return;
     api.j7Recent().then((r) => onLoaded(Array.isArray(r) ? r : [])).catch(() => {});
@@ -135,7 +173,12 @@ export function J7View({
 
   if (!hasToken) return <div className="empty">Paste your J7Tracker session id in ⚙ → Accounts → J7Tracker to stream its feed here.</div>;
   return (
-    <div className="j7">
+    <div className="j7" ref={rootRef}>
+      {!atTop && (
+        <button className="jump" onClick={toLatest}>
+          ↑ {pending > 0 ? `${pending} new` : 'latest'}
+        </button>
+      )}
       <div className="j7-bar">
         <span className={`j7-dot${connected ? ' on' : ''}`} /> {connected ? 'live' : error ?? 'connecting…'}
         <span className="j7-toggles">
@@ -211,7 +254,7 @@ export function J7View({
                 </div>
               )}
               <div className="tweet-actions">
-                <button className={`hdr-toggle${dep && !dep.error ? ' on' : ''}`} onClick={() => findDeploys(t)} title="new launches pair up on their own while this column is open; this scans pump.fun and Pons for older ones linking this tweet">
+                <button className={`hdr-toggle${dep && !dep.error ? ' on' : ''}`} onClick={() => findDeploys(t)} title="new launches pair up on their own while this column is open; this scans pump.fun and Pons for older tokens whose links point at this exact tweet">
                   <Icon name="search" size={10} /> {t.launches?.length ? 'scan for more' : 'scan launches'}
                 </button>
               </div>

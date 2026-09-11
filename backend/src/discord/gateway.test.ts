@@ -76,6 +76,20 @@ describe('DiscordGateway', () => {
     expect(ws.sent.at(-1)).toEqual({ op: 1, d: null });
   });
 
+  it('reports who we are and our roles per guild from READY', () => {
+    const { gw, sockets } = setup();
+    const selves: any[] = [];
+    gw.on('self', (s) => selves.push(s));
+    gw.connect();
+    const ws = sockets[0];
+    ws.fire('open');
+    ws.recv({ op: 10, d: { heartbeat_interval: 1000 } });
+    ws.recv({ ...READY, d: { ...READY.d, user: { id: '42', username: 'me' }, merged_members: [[{ user_id: '42', roles: ['r1', 'r2'] }]] } });
+    expect(selves).toHaveLength(1);
+    expect(selves[0].id).toBe('42');
+    expect(selves[0].roles.get('g1')).toEqual(['r1', 'r2']);
+  });
+
   it('extracts text channels from READY and reports connected', () => {
     const { gw, sockets, states } = setup();
     const channels: any[] = [];

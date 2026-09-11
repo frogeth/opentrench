@@ -34,6 +34,13 @@ const defaultFactory: WsFactory = (url) =>
  * Events: 'state' (DiscordState, error?), 'channels' (DiscordChannel[]), 'message' (raw MESSAGE_CREATE d),
  * 'reaction' (raw MESSAGE_REACTION_ADD/REMOVE d, delta ±1).
  */
+export interface DiscordSelf {
+  id: string;
+  username: string;
+  /** guild id → role ids you hold there */
+  roles: Map<string, string[]>;
+}
+
 export class DiscordGateway extends EventEmitter {
   private ws?: WsLike;
   private seq: number | null = null;
@@ -137,6 +144,15 @@ export class DiscordGateway extends EventEmitter {
         const channels: DiscordChannel[] = [];
         for (const g of d.guilds ?? []) channels.push(...extractChannels(g));
         this.emit('channels', channels);
+        // who we are, and our roles per guild (user-account READY carries merged_members aligned with guilds)
+        if (d.user?.id) {
+          const roles = new Map<string, string[]>();
+          (d.guilds ?? []).forEach((g: any, i: number) => {
+            const me = (d.merged_members?.[i] ?? []).find((m: any) => !m.user_id || String(m.user_id) === String(d.user.id));
+            roles.set(String(g.id), (me?.roles ?? []).map(String));
+          });
+          this.emit('self', { id: String(d.user.id), username: String(d.user.username ?? ''), roles } satisfies DiscordSelf);
+        }
         this.setState('connected');
         break;
       }

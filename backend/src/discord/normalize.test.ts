@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { discordEmbeds, discordMedia, discordPreviews, discordReaction, normalizeDiscord } from './normalize.js';
+import { discordEmbeds, discordMedia, discordMention, discordPreviews, discordReaction, normalizeDiscord } from './normalize.js';
 
 const payload = {
   id: '111',
@@ -156,5 +156,21 @@ describe('normalizeDiscord', () => {
     );
     expect(m.isBot).toBe(false);
     expect(m.author).toBe('Alerts');
+  });
+});
+
+describe('discordMention', () => {
+  const me = { id: '42', roles: new Set(['r1']) };
+  const base = { id: '1', author: { id: '7', username: 'x' }, content: 'hi' };
+  it('direct mention or reply to me → user, @everyone → everyone, my role → role, else nothing', () => {
+    expect(discordMention({ ...base, mentions: [{ id: '42' }] }, me)).toBe('user');
+    expect(discordMention({ ...base, referenced_message: { author: { id: '42' } }, mention_everyone: true }, me)).toBe('user');
+    expect(discordMention({ ...base, mention_everyone: true, mention_roles: ['r1'] }, me)).toBe('everyone');
+    expect(discordMention({ ...base, mention_roles: ['r9', 'r1'] }, me)).toBe('role');
+    expect(discordMention({ ...base, mention_roles: ['r9'] }, me)).toBeUndefined();
+    expect(discordMention({ ...base, mentions: [{ id: '42' }] }, undefined)).toBeUndefined();
+  });
+  it('my own messages never ping me', () => {
+    expect(discordMention({ ...base, author: { id: '42' }, mention_everyone: true }, me)).toBeUndefined();
   });
 });

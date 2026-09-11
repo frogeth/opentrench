@@ -79,10 +79,24 @@ export interface FeedMessage {
   link?: string;
   hasAttachment: boolean;
   replyTo?: ReplyContext;
+  /** this message pinged you: a direct mention or reply, @everyone/@here, or one of your roles */
+  mention?: 'user' | 'everyone' | 'role';
   reactions?: Reaction[];
   chatAvatar?: string;
   media?: MediaItem[];
   previews?: LinkPreview[];
+}
+
+/** Someone pinged you: the message plus a little context either side, gathered as it arrives. */
+export interface Mention {
+  /** the pinged message's id */
+  id: string;
+  msg: FeedMessage;
+  /** up to 4 messages in the same chat right before */
+  before: FeedMessage[];
+  /** up to 4 messages in the same chat after, filled in live */
+  after: FeedMessage[];
+  read: boolean;
 }
 
 export interface BuyLinks {
@@ -250,8 +264,6 @@ export interface J7Deploy {
   createdAt: number;
   marketCap?: number;
   twitter: string;
-  /** links the exact tweet, or just the account */
-  match: 'tweet' | 'account';
   url: string;
 }
 
@@ -267,7 +279,7 @@ export interface Status {
 }
 
 export type ServerEvent =
-  | { type: 'hello'; status: Status; messages: FeedMessage[]; tokens: TokenInfo[]; /** changes on every server start: the page reloads to pick up new assets */ boot: string }
+  | { type: 'hello'; status: Status; messages: FeedMessage[]; tokens: TokenInfo[]; mentions: Mention[]; /** changes on every server start: the page reloads to pick up new assets */ boot: string }
   | { type: 'message'; msg: FeedMessage }
   | { type: 'token'; token: TokenInfo }
   | { type: 'reactions'; msgId: string; reactions: Reaction[] }
@@ -276,5 +288,6 @@ export type ServerEvent =
   | { type: 'ping'; token: TokenInfo; msg: FeedMessage }
   | { type: 'bot'; bot: string; msg: BotMessage }
   | { type: 'j7'; tweet: J7Tweet }
+  | { type: 'mention'; mention: Mention }
   | { type: 'botDelete'; ids: number[] }
   | { type: 'status'; status: Status };

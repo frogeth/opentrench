@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Pings window: a small panel bottom-left (the @ button in the top bar opens it, it minimizes to a pill) lists everyone who pinged you across Discord and Telegram: direct mentions, replies to you, @everyone/@here and your roles. Each ping shows the 4 messages before it, the ping highlighted, and the next 4 as they arrive, so it reads in context. Jump to chat scrolls the column to the message; reply answers from the panel. New pings chirp and post a desktop notification (Brandzo).
+- J7 launches only count when the token's links point at that exact tweet and it launched after the tweet. Account-only links no longer pair.
 - Cove buy buttons now cover every chain in Cove's deep-link table: Tempo, Monad, Story, HyperEVM and Plasma join ETH, Base, BNB, MegaETH, Robinhood and Solana. Arbitrum, Ink and Stable have no published code yet; right-click → Buy on Cove still works there because it sends the bare contract.
 - J7Tracker column: paste your J7 session id in Settings → Accounts and its tweet feed streams natively, newest first, with a strip under each tweet showing the calls it mentions (by contract or $ticker). Click a match to jump to the call; contract addresses in tweets get the usual copy and right-click actions. Unofficial integration, read-only.
 - J7 column shows deleted tweets the way J7 does: the original stays put and a red "deleted" copy lands at the top of the feed.

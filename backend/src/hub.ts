@@ -17,11 +17,15 @@ import type {
   Status,
   TelegramState,
   TokenInfo,
+  Mention,
 } from './types.js';
 
 /** Identifies this server process; the UI reloads when it changes so a restart with a new build never leaves stale assets. */
 const BOOT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+const MENTION_CTX = 4;
+const MENTION_MAX = 100;
+const MENTION_AFTER_MS = 30 * 60_000;
 const MAX_CALLS = 50;
 const META_KEYS = ['website', 'twitter', 'telegram', 'name', 'symbol'] as const;
 const DATA_KEYS = [
@@ -143,7 +147,53 @@ export class MessageHub extends EventEmitter {
     this.buffer.push(msg);
     if (this.buffer.length > this.cap) this.buffer.splice(0, this.buffer.length - this.cap);
     this.emit('event', { type: 'message', msg } satisfies ServerEvent);
+    this.trackMention(msg);
     this.changed();
+  }
+
+  // ---------- pings ----------
+  private mentionList: Mention[] = [];
+
+  /** A ping gets the 4 messages before it from the same chat; later messages there fill in `after`. */
+  private trackMention(msg: FeedMessage, emit = true): void {
+    if (msg.mention) {
+      if (this.mentionList.some((m) => m.id === msg.id)) return;
+      const same = this.buffer.filter((m) => m.chatId === msg.chatId && m.source === msg.source && m.id !== msg.id).sort((a, b) => a.ts - b.ts);
+      const mention: Mention = {
+        id: msg.id,
+        msg,
+        before: same.filter((m) => m.ts <= msg.ts).slice(-MENTION_CTX),
+        after: same.filter((m) => m.ts > msg.ts).slice(0, MENTION_CTX),
+        read: false,
+      };
+      this.mentionList.push(mention);
+      if (this.mentionList.length > MENTION_MAX) this.mentionList.splice(0, this.mentionList.length - MENTION_MAX);
+      if (emit) this.emit('event', { type: 'mention', mention } satisfies ServerEvent);
+      return;
+    }
+    for (const mention of this.mentionList) {
+      const p = mention.msg;
+      if (p.chatId !== msg.chatId || p.source !== msg.source || mention.after.length >= MENTION_CTX) continue;
+      if (msg.ts <= p.ts || msg.ts - p.ts > MENTION_AFTER_MS || mention.after.some((m) => m.id === msg.id)) continue;
+      mention.after.push(msg);
+      mention.after.sort((a, b) => a.ts - b.ts);
+      if (emit) this.emit('event', { type: 'mention', mention } satisfies ServerEvent);
+    }
+  }
+
+  mentions(): Mention[] {
+    return [...this.mentionList];
+  }
+
+  /** Mark pings read; no ids = all of them. */
+  markMentionsRead(ids?: string[]): number {
+    let n = 0;
+    for (const m of this.mentionList) {
+      if (m.read || (ids && !ids.includes(m.id))) continue;
+      m.read = true;
+      n++;
+    }
+    return n;
   }
 
   isBlacklisted(author: string): boolean {
@@ -351,6 +401,7 @@ export class MessageHub extends EventEmitter {
       status: this.getStatus(),
       messages: [...this.buffer],
       tokens: [...this.tokens.values()].map((t) => ({ ...t })),
+      mentions: this.mentions(),
       boot: BOOT_ID,
     };
   }
@@ -386,6 +437,8 @@ export class MessageHub extends EventEmitter {
     if (!snap || snap.version !== 1) return;
     this.buffer = (snap.messages ?? []).slice(-this.cap);
     for (const m of this.buffer) m.hidden = this.isHidden(m); // policy may have changed since the snapshot
+    this.mentionList = [];
+    for (const m of [...this.buffer].sort((a, b) => a.ts - b.ts)) if (m.mention) this.trackMention(m, false);
     this.tokens = new Map((snap.tokens ?? []).map((t) => [t.address, t]));
     this.tokenChats = new Map(Object.entries(snap.tokenChats ?? {}).map(([a, ids]) => [a, new Set(ids)]));
     for (const t of this.tokens.values()) {

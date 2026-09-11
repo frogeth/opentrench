@@ -317,6 +317,15 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { hasToken: !!token };
     }),
   );
+  // Pings: who mentioned you, with context
+  r.get('/mentions', wrap(() => hub.mentions()));
+  r.post(
+    '/mentions/read',
+    wrap((req) => {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : undefined;
+      return { marked: hub.markMentionsRead(ids) };
+    }),
+  );
   r.get('/j7/recent', wrap(() => svc.j7Recent()));
   r.post(
     '/j7/favorites/toggle',

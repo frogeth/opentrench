@@ -12,6 +12,8 @@ export interface TelegramPlain {
   date: number; // unix seconds
   hasMedia: boolean;
   replyTo?: ReplyContext;
+  /** Telegram's own flag: you were mentioned or replied to */
+  mentioned?: boolean;
   reactions?: Reaction[];
   media?: MediaItem[];
   previews?: LinkPreview[];
@@ -46,6 +48,7 @@ export function normalizeTelegram(p: TelegramPlain): FeedMessage {
     link: p.chatUsername ? `https://t.me/${p.chatUsername}/${p.id}` : undefined,
     hasAttachment: p.hasMedia,
     replyTo: p.replyTo,
+    ...(p.mentioned ? { mention: 'user' as const } : {}),
     reactions: p.reactions,
     chatAvatar: `/api/telegram/avatar/${p.chatId}`,
     media: p.media ?? [],

@@ -1,15 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createDeployFinder, createLaunchWatcher, matchLink, parsePonsSocials } from './deploys.js';
+import { createDeployFinder, createLaunchWatcher, linksTweet, parsePonsSocials } from './deploys.js';
 import type { J7Tweet } from './types.js';
 
 const T0 = 1_700_000_000_000;
 
-describe('matchLink', () => {
-  it('spots the exact tweet, then the account, ignoring case and query strings', () => {
-    expect(matchLink(['https://x.com/Elon/status/123?s=20'], '123', 'elon')).toBe('tweet');
-    expect(matchLink(['https://twitter.com/elon'], '123', 'Elon')).toBe('account');
-    expect(matchLink(['https://x.com/elonmusk'], '123', 'elon')).toBeUndefined();
-    expect(matchLink(['https://x.com/other/status/999', undefined], '123', 'elon')).toBeUndefined();
+describe('linksTweet', () => {
+  it('only the exact tweet counts, ignoring case and query strings; account links do not', () => {
+    expect(linksTweet(['https://x.com/Elon/status/123?s=20'], '123')).toBe(true);
+    expect(linksTweet(['https://twitter.com/elon'], '123')).toBe(false);
+    expect(linksTweet(['https://x.com/other/status/999', undefined], '123')).toBe(false);
   });
   it('reads the socials block out of a Pons page payload', () => {
     expect(parsePonsSocials('x,"socials":{"twitter":"https://x.com/a/status/1","telegram":"","discord":""},"deployer"')).toEqual({ twitter: 'https://x.com/a/status/1' });
@@ -47,13 +46,12 @@ const makeFetch = (opts: { ponsDown?: boolean } = {}) =>
   }) as unknown as typeof fetch;
 
 describe('deploy finder', () => {
-  it('walks pump.fun back to the tweet time and reads Pons token pages for socials, exact tweet links first', async () => {
+  it('walks pump.fun back to the tweet time and reads Pons token pages for socials; account-only links are ignored', async () => {
     const f = createDeployFinder(makeFetch(), 1000);
     const r = await f.find({ tweetId: '123', handle: 'elon', since: T0 });
-    expect(r.deploys.map((d) => [d.source, d.mint, d.match])).toEqual([
-      ['pump', 'P5', 'tweet'],
-      ['pons', '0xA1', 'tweet'],
-      ['pump', 'P80', 'account'],
+    expect(r.deploys.map((d) => [d.source, d.mint])).toEqual([
+      ['pump', 'P5'],
+      ['pons', '0xA1'],
     ]);
     expect(r.deploys[1].url).toBe('https://www.ponsfamily.com/launchpad/0xA1');
     expect(r.scanned.pons).toBe(T0 + 20_000);
@@ -91,17 +89,21 @@ describe('launch watcher', () => {
       throw new Error('unexpected ' + u);
     }) as unknown as typeof fetch;
     const tweets: J7Tweet[] = [tweet('1', 'elon')];
-    const matches: [string, string, string][] = [];
-    const w = createLaunchWatcher({ fetchImpl, tweets: () => tweets, onMatch: (id, d) => matches.push([id, d.mint, d.match]) });
+    const matches: [string, string][] = [];
+    const w = createLaunchWatcher({ fetchImpl, tweets: () => tweets, onMatch: (id, d) => matches.push([id, d.mint]) });
     await w._tick(); // priming: OLD links tweet 1 but was already there
     expect(matches).toEqual([]);
     pumpRows = [{ mint: 'NEW', name: 'new', symbol: 'NEW', created_timestamp: Date.now(), twitter: 'https://x.com/elon/status/1' }, ...pumpRows];
     ponsItems = [{ token: '0xB1', name: 'b', symbol: 'B', launchedAt: new Date().toISOString(), description: '' }];
     await w._tick();
-    expect(matches).toEqual([['1', 'NEW', 'tweet']]);
+    expect(matches).toEqual([['1', 'NEW']]);
+    expect((matches[0] as any).links).toBeUndefined();
     // the Pons launch linked tweet 777, which J7 relays a moment later
     w.matchTweet(tweet('777', 'dev'));
-    expect(matches[1]).toEqual(['777', '0xB1', 'tweet']);
+    expect(matches[1]).toEqual(['777', '0xB1']);
+    // a launch older than the tweet is not "off" it
+    w.matchTweet({ ...tweet('777', 'dev'), ts: Date.now() + 10 * 60_000 });
+    expect(matches.length).toBe(2);
     expect(w.ringSize()).toBe(2);
     w.stop();
   });

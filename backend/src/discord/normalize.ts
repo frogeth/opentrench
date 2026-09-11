@@ -144,7 +144,23 @@ export function discordReaction(emoji: any): Omit<Reaction, 'count'> {
   return { key: name, name };
 }
 
-export function normalizeDiscord(d: any, ch: DiscordChannelInfo): FeedMessage {
+/** You, for mention detection: your user id and the role ids you hold in this channel's guild. */
+export interface DiscordMe {
+  id: string;
+  roles: Set<string>;
+}
+
+/** Did this message ping `me`? Direct mention or a reply to me beats @everyone beats a role. */
+export function discordMention(d: any, me: DiscordMe | undefined): FeedMessage['mention'] {
+  if (!me || String(d.author?.id) === me.id) return undefined;
+  if ((d.mentions ?? []).some((u: any) => String(u?.id) === me.id)) return 'user';
+  if (d.referenced_message?.author?.id && String(d.referenced_message.author.id) === me.id) return 'user';
+  if (d.mention_everyone) return 'everyone';
+  if ((d.mention_roles ?? []).some((r: any) => me.roles.has(String(r)))) return 'role';
+  return undefined;
+}
+
+export function normalizeDiscord(d: any, ch: DiscordChannelInfo, me?: DiscordMe): FeedMessage {
   const parts: string[] = [d.content ?? ''];
   for (const e of d.embeds ?? []) {
     if (e.title) parts.push(e.title);
@@ -170,6 +186,7 @@ export function normalizeDiscord(d: any, ch: DiscordChannelInfo): FeedMessage {
     link: d.guild_id ? `https://discord.com/channels/${d.guild_id}/${d.channel_id}/${d.id}` : undefined,
     hasAttachment: (d.attachments?.length ?? 0) > 0,
     replyTo: replyContext(d),
+    mention: discordMention(d, me),
     chatAvatar: ch.guildIcon,
     media: discordMedia(d),
     previews: discordPreviews(d),
