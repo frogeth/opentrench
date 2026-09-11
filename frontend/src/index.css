@@ -64,7 +64,11 @@ b { font-weight: 600; }
 .pill-connecting, .pill-needs_login { color: var(--warn); border-color: var(--warn); }
 .pill-auth_error, .pill-disconnected { color: var(--err); border-color: var(--err); }
 .gear { background: none; border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
-.banner { background: #3a1c1c; color: #ffb3b3; padding: 8px 14px; cursor: pointer; border-bottom: 1px solid var(--err); }
+.banner { background: #3a1c1c; color: #ffb3b3; padding: 6px 14px; cursor: pointer; border-bottom: 1px solid var(--err); }
+.banner-line { display: flex; align-items: center; gap: 10px; }
+.banner-line > span { flex: 1; }
+.banner-x { flex: none; background: none; border: 1px solid rgba(255, 179, 179, 0.4); color: #ffb3b3; border-radius: 6px; width: 22px; height: 22px; line-height: 1; font-size: 14px; cursor: pointer; padding: 0; }
+.banner-x:hover { background: rgba(255, 179, 179, 0.15); }
 
 /* ---------- chat tabs ---------- */
 .tabs {

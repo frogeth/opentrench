@@ -624,6 +624,28 @@ export default function App() {
 
   const q = query.trim().toLowerCase();
   const errors = Object.entries(status.error) as [keyof Status['error'], string][];
+  // Status hints can be dismissed for good (a Telegram-only user doesn't want the Discord nag forever).
+  // Keyed by the exact text so a genuinely different error for the same platform still shows.
+  const [dismissedBanners, setDismissedBanners] = useState<Set<string>>(() => {
+    try {
+      return new Set<string>(JSON.parse(localStorage.getItem('trenchfeed.dismissedBanners') ?? '[]'));
+    } catch {
+      return new Set<string>();
+    }
+  });
+  const dismissBanner = (key: string) => {
+    setDismissedBanners((cur) => {
+      const next = new Set(cur);
+      next.add(key);
+      try {
+        localStorage.setItem('trenchfeed.dismissedBanners', JSON.stringify([...next]));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+  const visibleErrors = errors.filter(([k, v]) => !dismissedBanners.has(`${k}:${v}`));
 
   /** Only chats on the watch list exist in the UI; a removed chat disappears with its messages. */
   const chats = useMemo(() => {
@@ -810,11 +832,24 @@ export default function App() {
         ))}
         {chats.length === 0 && <span className="hint">Add channels with the + in the rail.</span>}
       </div>
-      {errors.length > 0 && (
+      {visibleErrors.length > 0 && (
         <div className="banner" onClick={() => setSettingsOpen(true)}>
-          {errors.map(([k, v]) => (
-            <div key={k}>
-              <b>{k}:</b> {v}
+          {visibleErrors.map(([k, v]) => (
+            <div key={k} className="banner-line">
+              <span>
+                <b>{k}:</b> {v}
+              </span>
+              <button
+                className="banner-x"
+                title="dismiss (won't show again for this message)"
+                aria-label="dismiss"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  dismissBanner(`${k}:${v}`);
+                }}
+              >
+                ×
+              </button>
             </div>
           ))}
         </div>
