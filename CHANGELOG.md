@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Dark form controls. The page never declared `color-scheme: dark`, so every native control the OS draws — dropdowns and their popups, scrollbars, date pickers — rendered light. Settings dropdowns are now styled like the text fields, with a matching chevron, and the people picker's scrollbar is themed.
+
 - Search anyone to favorite. ⚙ → Feed → Favorites now has a people search instead of a blind name field: it lists everyone the feed has seen (including people who only chat and have never called), and when you type it also searches your Discord servers and Telegram groups for members who have not posted at all. Each row shows their calls, messages and where, and one click toggles the crown. Typing a name nothing matches still lets you add it verbatim (alextjh).
 - Browse a chat's member list. The same picker has a chat dropdown: pick any watched Discord channel or Telegram group and it lists that chat's members, so you can crown someone who has never posted. Members already in the feed show their calls and messages; the rest read "hasn't posted here yet". Telegram hides the member list of large channels, and Discord only knows the members its client has loaded.
 
