@@ -317,6 +317,15 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { hasToken: !!token };
     }),
   );
+  // Any contract, called or not: enrichment + security for the drill-down
+  r.get(
+    '/token/:address',
+    wrap(async (req) => {
+      const t = await hub.lookup(String(req.params.address));
+      if (!t) throw new Error('not a contract address');
+      return t;
+    }),
+  );
   // Pings: who mentioned you, with context
   r.get('/mentions', wrap(() => hub.mentions()));
   r.post(

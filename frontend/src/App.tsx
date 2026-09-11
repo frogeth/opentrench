@@ -111,6 +111,23 @@ export default function App() {
     });
   const [selected, setSelected] = useState<string | null>(null);
   const [openToken, setOpenToken] = useState<string | null>(null);
+  // a token nobody called yet, fetched on demand for the drill-down (right-click → Open token)
+  const [lookedUp, setLookedUp] = useState<TokenInfo | null>(null);
+  const [lookingUp, setLookingUp] = useState<string | null>(null);
+  const openAnyToken = (address: string) => {
+    setCaMenu(null);
+    const key = tokens[address] ? address : tokens[address.toLowerCase()] ? address.toLowerCase() : null;
+    if (key) return setOpenToken(key);
+    setLookingUp(address);
+    api
+      .lookupToken(address)
+      .then((t) => {
+        setLookedUp(t);
+        setOpenToken(t.address);
+      })
+      .catch((e) => alert(`Could not load ${address.slice(0, 8)}…: ${e?.message ?? e}`))
+      .finally(() => setLookingUp(null));
+  };
   const [now, setNow] = useState(Date.now());
   const [watched, setWatched] = useState<WatchedChat[]>([]);
   const [cfg, setCfg] = useState<MaskedConfig | null>(null);
@@ -1021,24 +1038,28 @@ export default function App() {
           </div>
         </div>
       )}
-      {openToken && tokens[openToken] && <TokenModal t={tokens[openToken]} now={now} favorites={status.favorites} onClose={() => setOpenToken(null)} onShare={openShare} onBuy={onBuy} />}
+      {openToken && (tokens[openToken] ?? (lookedUp?.address === openToken ? lookedUp : null)) && (
+        <TokenModal
+          t={tokens[openToken] ?? lookedUp!}
+          now={now}
+          favorites={status.favorites}
+          onClose={() => {
+            setOpenToken(null);
+            setLookedUp(null);
+          }}
+          onShare={openShare}
+          onBuy={onBuy}
+        />
+      )}
+      {lookingUp && <div className="lookup-toast">looking up {lookingUp.slice(0, 6)}…{lookingUp.slice(-4)}</div>}
       {share && <ShareModal address={share.address} symbol={share.symbol} watched={watched} channels={channels} canSend={canSend} onClose={() => setShare(null)} />}
       {caMenu && (
         <div className="ca-menu-backdrop" onMouseDown={() => setCaMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCaMenu(null); }}>
           <div className="ca-menu" style={{ left: Math.min(caMenu.x, window.innerWidth - 220), top: Math.min(caMenu.y, window.innerHeight - 130) }} onMouseDown={(e) => e.stopPropagation()}>
             <div className="ca-menu-addr">{caMenu.address.slice(0, 6)}…{caMenu.address.slice(-4)}</div>
-            {(() => {
-              const key = tokens[caMenu.address] ? caMenu.address : tokens[caMenu.address.toLowerCase()] ? caMenu.address.toLowerCase() : null;
-              return key ? (
-                <button onClick={() => { setOpenToken(key); setCaMenu(null); }}>
-                  <Icon name="chart" size={12} /> Open token
-                </button>
-              ) : (
-                <button disabled title="opens once someone calls it">
-                  <Icon name="chart" size={12} /> Open token <span className="muted">· not called yet</span>
-                </button>
-              );
-            })()}
+            <button onClick={() => openAnyToken(caMenu.address)}>
+              <Icon name="chart" size={12} /> Open token
+            </button>
             <button onClick={() => sendToBot('cove', caMenu.address)}>
               <Icon name="send" size={12} /> Buy on Cove
             </button>

@@ -154,6 +154,7 @@ export const api = {
   setTelegramSend: (enabled: boolean) => req<{ canSend: boolean }>('PUT', '/telegram/send', { enabled }),
   send: (source: 'discord' | 'telegram', chatId: string, text: string, replyTo?: string) => req<{ ok: true }>('POST', '/send', { source, chatId, text, replyTo }),
   setJ7Token: (token: string) => req<{ hasToken: boolean }>('PUT', '/j7/token', { token }),
+  lookupToken: (address: string) => req<import('./types').TokenInfo>('GET', `/token/${encodeURIComponent(address)}`),
   mentions: () => req<import('./types').Mention[]>('GET', '/mentions'),
   markMentionsRead: (ids?: string[]) => req<{ marked: number }>('POST', '/mentions/read', ids ? { ids } : {}),
   j7Recent: () => req<import('./types').J7Tweet[]>('GET', '/j7/recent'),

@@ -479,6 +479,38 @@ export class MessageHub extends EventEmitter {
       .catch((e) => console.warn('[tokens] enrich failed', t.address, e?.message ?? e));
   }
 
+  private lookups = new Map<string, { at: number; p: Promise<TokenInfo | undefined> }>();
+
+  /**
+   * Token data for an address nobody has called yet (right-click → Open token): the same
+   * enrichment and holder security a call gets, returned once and not tracked. Known tokens
+   * come back as-is.
+   */
+  lookup(raw: string): Promise<TokenInfo | undefined> {
+    const c = detectContracts(String(raw ?? ''))[0];
+    if (!c) return Promise.resolve(undefined);
+    const known = this.tokens.get(c.address);
+    if (known) return Promise.resolve({ ...known });
+    const hit = this.lookups.get(c.address);
+    if (hit && Date.now() - hit.at < 60_000) return hit.p;
+    const p = (async () => {
+      const now = Date.now();
+      const t: TokenInfo = { chain: c.chain, address: c.address, seen: 0, calledIn: [], calls: [], firstSeenTs: now, lastCallTs: 0 };
+      const info = this.fetcher ? await this.fetcher(c.address, c.chain).catch(() => undefined) : undefined;
+      if (info) {
+        for (const k of DATA_KEYS) if (info[k] !== undefined) (t as any)[k] = info[k];
+        for (const k of META_KEYS) if (info[k] && !t[k]) t[k] = info[k];
+        if (t.marketCap !== undefined) t.athMarketCap = t.marketCap;
+        this.applyBuy(t);
+      }
+      if (this.security && t.network) t.security = await this.security(t.network, t.address).catch(() => undefined);
+      return t;
+    })();
+    this.lookups.set(c.address, { at: Date.now(), p });
+    if (this.lookups.size > 200) this.lookups.delete(this.lookups.keys().next().value!);
+    return p;
+  }
+
   /** The first call's market cap is whatever the first enrichment after it says. */
   private noteFirstCallMc(t: TokenInfo): void {
     if (t.marketCap === undefined) return;

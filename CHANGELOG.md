@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Right-click → Open token works on any contract, called or not: the drill-down loads market data and holder security on the spot so you can research a launch before anyone calls it.
+
 - Click the chat chip on any message to open that channel or group in the focused view.
 
 ## v0.1.19 — 2026-09-11
