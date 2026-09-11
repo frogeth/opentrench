@@ -363,6 +363,23 @@ export class Services {
     return out.slice(0, limit * 2);
   }
 
+  /**
+   * Everyone in one watched chat, for browsing. Telegram lists participants directly; Discord
+   * returns the members its client has cached for that channel's server (it loads them lazily,
+   * so a server you rarely open returns fewer).
+   */
+  async listMembers(source: 'discord' | 'telegram', chatId: string, limit = 300): Promise<{ name: string; avatar?: string; source: 'discord' | 'telegram' }[]> {
+    if (source === 'telegram') {
+      const rows = await this.telegram?.listParticipants(chatId, limit).catch(() => []);
+      return (rows ?? []).map((r) => ({ name: r.name, source: 'telegram' as const }));
+    }
+    if (this.discord.state !== 'connected') return [];
+    const guildId = this.discordChannels.get(chatId)?.guildId;
+    if (!guildId) return [];
+    const rows = await this.discord.request<any[]>('members', { guildId, limit }, 10_000).catch(() => []);
+    return (Array.isArray(rows) ? rows : []).filter((r) => r?.name).map((r) => ({ name: String(r.name), avatar: r.avatar ? String(r.avatar) : undefined, source: 'discord' as const }));
+  }
+
   async watchedChats(): Promise<{ id: string; name: string; source: 'discord' | 'telegram'; avatar?: string }[]> {
     const out: { id: string; name: string; source: 'discord' | 'telegram'; avatar?: string }[] = [];
     const cfg = this.cfg.get();

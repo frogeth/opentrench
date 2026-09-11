@@ -1012,9 +1012,11 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .composer-file button { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--chrome); color: var(--text); font-size: 12px; line-height: 1; cursor: pointer; padding: 0; }
 
 /* ---------- people picker (favorites) ---------- */
-.ppl { position: relative; margin: 8px 0; }
-.ppl > input { width: 100%; }
-.ppl-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; max-height: 300px; overflow-y: auto; background: var(--chrome); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55); padding: 4px; }
+.ppl { margin: 8px 0; }
+.ppl-bar { display: flex; gap: 8px; }
+.ppl-bar select { flex: 0 0 auto; max-width: 45%; }
+.ppl-bar input { flex: 1; min-width: 0; }
+.ppl-list { margin-top: 6px; max-height: 260px; overflow-y: auto; background: var(--embed); border: 1px solid var(--line); border-radius: 10px; padding: 4px; }
 .ppl-empty { padding: 10px 12px; color: var(--muted); font-size: 12px; }
 .ppl-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: 0; color: var(--text); padding: 7px 9px; border-radius: 8px; cursor: pointer; font: inherit; }
 .ppl-row:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); }

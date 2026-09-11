@@ -429,6 +429,19 @@ export class TelegramWrapper extends EventEmitter {
     }
   }
 
+  /** One chat's members, named the way the feed names them. Large channels may refuse. */
+  async listParticipants(chatId: string, limit = 200): Promise<{ name: string }[]> {
+    if (!this.client || this.state !== 'connected') return [];
+    const parts: any[] = await this.client.getParticipants(bigInt(chatId), { limit }).catch(() => []);
+    const out: { name: string }[] = [];
+    for (const u of parts) {
+      if (u?.bot) continue;
+      const name = u?.username ? `@${u.username}` : [u?.firstName, u?.lastName].filter(Boolean).join(' ').trim();
+      if (name) out.push({ name });
+    }
+    return out;
+  }
+
   /**
    * Members of the given chats matching `query`, named the way the feed names them
    * (@username, else first+last) so a favorite added here matches their messages.

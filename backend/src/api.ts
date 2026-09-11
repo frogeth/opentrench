@@ -253,6 +253,23 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return out.slice(0, 30);
     }),
   );
+  /** Everyone in one watched chat, so you can favorite someone who has never posted. */
+  r.get(
+    '/members/:source/:chatId',
+    wrap(async (req) => {
+      const source = req.params.source === 'telegram' ? 'telegram' : 'discord';
+      const rows = await svc.listMembers(source, String(req.params.chatId));
+      const favs = new Set(cfg.get().favorites.map((f) => f.trim().replace(/^@/, '').toLowerCase()));
+      const seen = new Map(hub.people().map((p) => [`${p.source}:${p.name.trim().replace(/^@/, '').toLowerCase()}`, p]));
+      return rows
+        .map((r) => {
+          const key = `${r.source}:${r.name.trim().replace(/^@/, '').toLowerCase()}`;
+          const p = seen.get(key);
+          return { name: r.name, avatar: r.avatar ?? p?.avatar, source: r.source, messages: p?.messages ?? 0, calls: p?.calls ?? 0, lastTs: p?.lastTs ?? 0, chats: p?.chats ?? [], bot: p?.bot ?? false, member: !p, favorite: favs.has(key.split(':')[1]) };
+        })
+        .sort((a, b) => b.calls - a.calls || b.messages - a.messages || a.name.localeCompare(b.name));
+    }),
+  );
   r.get('/bots', wrap(() => hub.bots()));
   r.put(
     '/bots',
