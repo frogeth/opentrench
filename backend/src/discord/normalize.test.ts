@@ -170,23 +170,25 @@ describe('discordMention', () => {
     expect(discordMention({ ...base, mention_roles: ['r9'] }, me)).toBeUndefined();
     expect(discordMention({ ...base, mentions: [{ id: '42' }] }, undefined)).toBeUndefined();
   });
-  it('my own messages never ping me', () => {
+  it('my own messages only ping me when I @ myself explicitly', () => {
     expect(discordMention({ ...base, author: { id: '42' }, mention_everyone: true }, me)).toBeUndefined();
+    expect(discordMention({ ...base, author: { id: '42' }, mention_roles: ['r1'] }, me)).toBeUndefined();
+    expect(discordMention({ ...base, author: { id: '42' }, mentions: [{ id: '42' }] }, me)).toBe('user');
   });
 });
 
 describe('resolveDiscordMentions', () => {
   const d = { mentions: [{ id: '42', username: 'frog', global_name: 'frog.eth' }, { id: '7', username: 'plain' }] };
-  const names = { roles: new Map([['r1', 'Degens']]), channels: new Map([['c1', 'alpha-calls']]) };
+  const names = { roles: new Map([['501', 'Degens']]), channels: new Map([['601', 'alpha-calls']]) };
   it('turns raw markup into names, preferring nick > display name > username, and leaves unknown ids alone', () => {
-    expect(resolveDiscordMentions('<@42> <@!7> <@&r1> <#c1> <@999> <@&r9>', d, names)).toBe('@frog.eth @plain @Degens #alpha-calls <@999> <@&r9>');
+    expect(resolveDiscordMentions('<@42> <@!7> <@&501> <#601> <@999> <@&509>', d, names)).toBe('@frog.eth @plain @Degens #alpha-calls <@999> <@&509>');
     expect(resolveDiscordMentions('<@42>', { mentions: [{ id: '42', username: 'frog', member: { nick: 'Froggy' } }] })).toBe('@Froggy');
     expect(resolveDiscordMentions('no markup', d, names)).toBe('no markup');
   });
   it('is applied to content, embeds and the reply quote', () => {
-    const ch = { id: 'c1', name: 'alpha-calls', guildId: 'g1', guildName: 'G', position: 0 };
+    const ch = { id: '601', name: 'alpha-calls', guildId: 'g1', guildName: 'G', position: 0 };
     const m = normalizeDiscord(
-      { id: '1', author: { id: '7', username: 'x' }, content: 'hey <@42>', embeds: [{ description: 'see <#c1>' }], referenced_message: { id: '0', author: { username: 'y' }, content: 'ping <@&r1>' }, mentions: d.mentions, attachments: [], timestamp: '2024-01-01T00:00:00Z' },
+      { id: '1', author: { id: '7', username: 'x' }, content: 'hey <@42>', embeds: [{ description: 'see <#601>' }], referenced_message: { id: '0', author: { username: 'y' }, content: 'ping <@&501>' }, mentions: d.mentions, attachments: [], timestamp: '2024-01-01T00:00:00Z' },
       ch,
       undefined,
       names,

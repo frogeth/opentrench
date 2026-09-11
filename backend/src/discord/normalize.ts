@@ -152,8 +152,10 @@ export interface DiscordMe {
 
 /** Did this message ping `me`? Direct mention or a reply to me beats @everyone beats a role. */
 export function discordMention(d: any, me: DiscordMe | undefined): FeedMessage['mention'] {
-  if (!me || String(d.author?.id) === me.id) return undefined;
+  if (!me) return undefined;
+  // an explicit @me counts even in my own message (handy for testing); @everyone / roles I post don't
   if ((d.mentions ?? []).some((u: any) => String(u?.id) === me.id)) return 'user';
+  if (String(d.author?.id) === me.id) return undefined;
   if (d.referenced_message?.author?.id && String(d.referenced_message.author.id) === me.id) return 'user';
   if (d.mention_everyone) return 'everyone';
   if ((d.mention_roles ?? []).some((r: any) => me.roles.has(String(r)))) return 'role';

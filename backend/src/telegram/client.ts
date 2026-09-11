@@ -73,6 +73,7 @@ export class TelegramWrapper extends EventEmitter {
   step: LoginStep = 'idle';
   /** Logged-in account's Telegram user id (set once connected). */
   selfId?: string;
+  selfUsername?: string;
 
   constructor(
     private apiId: number,
@@ -355,6 +356,7 @@ export class TelegramWrapper extends EventEmitter {
       .then((me: any) => {
         if (me?.id) {
           this.selfId = String(me.id);
+          this.selfUsername = me.username ? String(me.username).toLowerCase() : undefined;
           this.emit('self', this.selfId);
         }
       })
@@ -462,7 +464,8 @@ export class TelegramWrapper extends EventEmitter {
       date: m.date,
       hasMedia: !!m.media && m.media.className !== 'MessageMediaWebPage',
       replyTo,
-      mentioned: !!m.mentioned && !m.out,
+      // Telegram flags incoming mentions/replies for us; for our own messages, only an explicit @me counts
+      mentioned: m.out ? !!this.selfUsername && new RegExp(`(^|[^\\w])@${this.selfUsername}(?![\\w])`, 'i').test(text) : !!m.mentioned,
       reactions: mapTelegramReactions((m.reactions as any)?.results),
       media,
       previews: preview ? [preview] : [],
