@@ -31,6 +31,7 @@ export function ChatFeed({
   empty,
   render,
   onReply,
+  onOpenChat,
   onReveal,
   onReact,
   mine,
@@ -52,6 +53,7 @@ export function ChatFeed({
   /** renders the column chrome around the body */
   render: (body: ReactNode, bodyRef: React.RefObject<HTMLDivElement>, onScroll: () => void, footer: ReactNode) => ReactNode;
   onReply?: (m: FeedMessage) => void;
+  onOpenChat?: (m: FeedMessage) => void;
   /** make a hidden/filtered message visible in this column; returns false if it is not in the buffer at all */
   onReveal?: (id: string) => boolean;
   onReact?: (m: FeedMessage, key: string, name: string, on: boolean) => void;
@@ -140,6 +142,7 @@ export function ChatFeed({
           chartProvider={chartProvider}
           onAuthorChanged={onAuthorChanged}
           onReply={onReply}
+          onOpenChat={onOpenChat}
           onJump={jumpTo}
           onReact={onReact && canReactTo(m) ? onReact : undefined}
           mine={mine}

@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Click the chat chip on any message to open that channel or group in the focused view.
+
 ## v0.1.19 — 2026-09-11
 
 - Fix: jumping to a message from Pings (or to a reply) no longer drops it into whatever column is focused; a message only ever shows in a column that carries its chat. If nothing on screen shows that chat, the jump focuses it first.

@@ -70,6 +70,7 @@ export function MessageRow({
   onReply,
   onJump,
   onReact,
+  onOpenChat,
   mine,
 }: {
   m: FeedMessage;
@@ -87,6 +88,8 @@ export function MessageRow({
   onAuthorChanged?: () => void;
   /** start a reply to this message in the column's composer */
   onReply?: (m: FeedMessage) => void;
+  /** the chat chip was clicked: focus that chat */
+  onOpenChat?: (m: FeedMessage) => void;
   /** go to the message this one replies to (feed id + a link to open if it is gone) */
   onJump?: (id: string | undefined, fallbackLink: string | undefined) => void;
   /** toggle your reaction (undefined = reacting is off for this platform) */
@@ -151,10 +154,17 @@ export function MessageRow({
             )}
           </span>
           {!discord && (
-            <span className="chat-tag" title={m.chatName}>
+            <button
+              className={`chat-tag${onOpenChat ? ' chat-tag-link' : ''}`}
+              title={onOpenChat ? `open ${m.chatName}` : m.chatName}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenChat?.(m);
+              }}
+            >
               {m.chatAvatar ? <Avatar src={m.chatAvatar} name={m.chatName} size={14} /> : <Logo source={m.source} size={11} />}
               <span className="chat-tag-name">{m.chatName}</span>
-            </span>
+            </button>
           )}
         </div>
         )}

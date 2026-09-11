@@ -809,6 +809,7 @@ export default function App() {
                 onSelect={select}
                 onAuthorChanged={reloadLists}
                 onReply={(m) => setReplyByCol((r) => ({ ...r, focused: m }))}
+                onOpenChat={(m) => openChat(m.chatName, m.source, m.chatId)}
                 onReveal={revealMessage}
                 onReact={canSend.discord || canSend.telegram ? react : undefined}
                 canReact={canSend}
@@ -949,6 +950,7 @@ export default function App() {
                     onSelect={select}
                     onAuthorChanged={reloadLists}
                     onReply={(m) => setReplyByCol((r) => ({ ...r, [col.id]: m }))}
+                    onOpenChat={(m) => openChat(m.chatName, m.source, m.chatId)}
                     onReveal={revealMessage}
                     onReact={canSend.discord || canSend.telegram ? react : undefined}
                     canReact={canSend}

@@ -220,8 +220,10 @@ b { font-weight: 600; }
 .chat-tag {
   margin-left: auto; display: inline-flex; align-items: center; gap: 5px; max-width: 45%;
   background: var(--chrome); border: 1px solid transparent; border-radius: 999px; padding: 2px 8px; color: var(--muted);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10px; font: inherit; font-size: 10px; line-height: inherit;
 }
+.chat-tag-link { cursor: pointer; }
+.chat-tag-link:hover { color: var(--text); border-color: var(--line-strong); }
 .amenu { position: relative; display: inline-flex; }
 .amenu-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; line-height: 1; padding: 0 4px; opacity: 0; border-radius: 4px; }
 .row:hover .amenu-btn, .call:hover .amenu-btn, .amenu-btn:focus { opacity: 0.7; }
