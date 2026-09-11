@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.3.1 — 2026-09-11
+
 - The red status banner (e.g. "discord: open Discord with the opentrench plugin enabled") can be dismissed with an × and stays dismissed across restarts, so Telegram-only users aren't nagged. It's keyed to the exact message, so a different error for the same platform still shows. The top-bar pill keeps showing the real state.
 
 - Telegram-only fixes. Channel and supergroup messages were dropped when Telegram handed the chat id back in a different shape than the watch list stored (`-100…` vs bare), and All Chats hid Telegram messages whose chat title didn't match the dialog list, which is why they showed in a focused chat but not in All Chats or the ★ view. Both now match by chat id in every shape.
