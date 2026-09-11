@@ -428,8 +428,6 @@ function TelegramAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status:
 
 function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
   const [amounts, setAmounts] = useState(cfg.cove.amounts.join(', '));
-  const [ref, setRef] = useState(cfg.buy?.basedbotReferral ?? 'frog');
-  const [aff, setAff] = useState(cfg.cove.affiliateId ?? '');
   const { busy, err, run } = useAsync();
   const provider = cfg.buy?.provider ?? 'cove';
   return (
@@ -440,7 +438,7 @@ function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
         <span className="muted" style={{ fontSize: 12 }}>Provider</span>
         <span className="seg">
           {(['cove', 'basedbot'] as const).map((p) => (
-            <button key={p} className={provider === p ? 'active' : ''} disabled={busy} onClick={() => run(async () => { await api.setBuy({ provider: p }); onChange(); })}>
+            <button key={p} className={provider === p ? 'active' : ''} disabled={busy} onClick={() => run(async () => { await api.setBuy(p); onChange(); })}>
               {p === 'cove' ? 'Cove' : 'BasedBot'}
             </button>
           ))}
@@ -459,7 +457,7 @@ function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
                     .split(/[,\s]+/)
                     .map(Number)
                     .filter((n) => Number.isFinite(n) && n > 0);
-                  await api.setCove({ amounts: list });
+                  await api.setCove(list);
                   onChange();
                 })
               }
@@ -467,28 +465,9 @@ function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
               Save
             </button>
           </div>
-          <div className="hint" style={{ marginTop: 8 }}>
-            Affiliate: the Telegram <b>user id</b> that gets Cove's referral credit, base62-encoded into every link per Cove's deep-link spec. Blank = opentrench's own (the app's author).
-          </div>
-          <div className="row-inline">
-            <input placeholder="Telegram user id (blank = opentrench's)" value={aff} onChange={(e) => setAff(e.target.value.replace(/[^\d]/g, ''))} />
-            <button disabled={busy} onClick={() => run(async () => { await api.setCove({ affiliateId: aff }); onChange(); })}>
-              Save
-            </button>
-          </div>
         </>
       ) : (
-        <>
-          <div className="hint">
-            BasedBot opens the token in @based_eth_bot and asks the amount there. The link carries a referral code (<code>r_…</code>) for whoever gets credit; opentrench's own is <code>frog</code>.
-          </div>
-          <div className="row-inline">
-            <input placeholder="referral code" value={ref} onChange={(e) => setRef(e.target.value)} />
-            <button disabled={busy} onClick={() => run(async () => { await api.setBuy({ basedbotReferral: ref }); onChange(); })}>
-              Save
-            </button>
-          </div>
-        </>
+        <div className="hint">BasedBot opens the token in @based_eth_bot and asks the amount there.</div>
       )}
       {err && <div className="err">{err}</div>}
     </section>

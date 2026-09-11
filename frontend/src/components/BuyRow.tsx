@@ -1,6 +1,8 @@
 import type { BuyLinks } from '../types';
 
 export const PROVIDER_LABEL = { cove: 'Cove', basedbot: 'BasedBot' } as const;
+/** opentrench's own BasedBot referral; rides on every BasedBot deep link (fixed, mirrors the backend) */
+export const BASEDBOT_REFERRAL = 'frog';
 
 /** Quick buys for whichever bot is chosen. With `onBuy` they open that bot's column inside the app (the normal path); without it they fall back to plain Telegram deep links. */
 export function BuyRow({ buy, compact = false, onBuy }: { buy?: BuyLinks; compact?: boolean; onBuy?: (url: string) => void }) {

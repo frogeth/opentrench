@@ -7,7 +7,6 @@ import { buildBasedBotLinks } from './basedbot.js';
 
 export interface BuyOptions {
   provider: 'cove' | 'basedbot';
-  basedbotReferral?: string;
 }
 import type { ExtractedMeta } from './links.js';
 import type {
@@ -449,7 +448,7 @@ export class MessageHub extends EventEmitter {
   private applyBuy(t: TokenInfo): void {
     const b = this.buyOpts();
     if (b.provider === 'basedbot') {
-      t.buy = buildBasedBotLinks(t.address, b.basedbotReferral);
+      t.buy = buildBasedBotLinks(t.address);
       return;
     }
     const network = t.network ?? (t.chain === 'sol' ? 'solana' : undefined);

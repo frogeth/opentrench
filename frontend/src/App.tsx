@@ -10,7 +10,7 @@ import { CallersList } from './components/CallersColumn';
 import { Composer, type SendTarget } from './components/Composer';
 import { ShareModal } from './components/ShareModal';
 import { CoveView, COVE_BOT } from './components/CoveView';
-import { PROVIDER_LABEL } from './components/BuyRow';
+import { PROVIDER_LABEL, BASEDBOT_REFERRAL } from './components/BuyRow';
 import { CaMenuContext } from './components/RichText';
 import { J7View } from './components/J7View';
 import { PingsPanel } from './components/PingsPanel';
@@ -257,7 +257,6 @@ export default function App() {
   const buyProvider = cfg?.buy?.provider ?? 'cove';
   const buyBot = BOTS[buyProvider];
   const buyLabel = PROVIDER_LABEL[buyProvider];
-  const basedbotReferral = cfg?.buy?.basedbotReferral || 'frog';
   /** which column type a bot lives in */
   const colTypeFor = (kind: BotKind): 'cove' | 'salpha' => (kind === 'salpha' ? 'salpha' : 'cove');
   /** make sure a bot column exists and flash it */
@@ -277,7 +276,7 @@ export default function App() {
     ensureBotColumn(kind);
     const label = kind === 'salpha' ? 'Salpha' : buyLabel;
     // BasedBot takes the token as a /start deep link so the referral rides along; Cove and Salpha take the bare address
-    const p = kind === 'basedbot' ? api.botStart(BOTS.basedbot, `r_${basedbotReferral}_b_${address}`) : api.botSend(BOTS[kind], address);
+    const p = kind === 'basedbot' ? api.botStart(BOTS.basedbot, `r_${BASEDBOT_REFERRAL}_b_${address}`) : api.botSend(BOTS[kind], address);
     void p.catch((e) => alert(`${label}: ${e?.message ?? e}`));
   };
   /** A bot deep link (Cove/BasedBot buy, Salpha, positions…) → its /start payload and which bot, or null. */

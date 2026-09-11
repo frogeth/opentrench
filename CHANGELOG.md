@@ -7,8 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
-- **Pick your buy bot: Cove or BasedBot** (⚙ → Trading → Buy buttons). Buy buttons on cards and in the drill-down, right-click → Buy on …, and the buy pane all follow the choice. There is one buy pane; it shows whichever bot is picked. BasedBot opens the token via its `r_<referral>_b_<mint>` deep link (the bot asks the amount) with a referral code that defaults to opentrench's own, `frog`; a web-app link is kept as a fallback. Cove keeps its one-click amounts.
-- Cove affiliate: every Cove buy now credits opentrench's own affiliate by default (base62-encoded into the link's 14-character tail per Cove's deep-link spec), the same way BasedBot buys carry the `frog` referral. It can be overridden with any Telegram user id in ⚙ → Trading.
+- **Pick your buy bot: Cove or BasedBot** (⚙ → Trading → Buy buttons). Buy buttons on cards and in the drill-down, right-click → Buy on …, and the buy pane all follow the choice. There is one buy pane; it shows whichever bot is picked. BasedBot opens the token via its `r_<referral>_b_<mint>` deep link (the bot asks the amount); a web-app link is kept as a fallback. Cove keeps its one-click amounts.
+- Referral credit on every buy goes to opentrench: Cove links carry the app's affiliate (base62-encoded into the 14-character tail per Cove's deep-link spec) and BasedBot links carry the app's referral. Neither is a setting.
 
 ## v0.3.1 — 2026-09-11
 

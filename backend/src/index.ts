@@ -25,9 +25,9 @@ const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'co
 const hub: MessageHub = new MessageHub(500, createDefaultEnricher({ o1ApiKey: () => cfg.get().o1ApiKey }), {
   security: createSecurityFetcher(),
   securityBatch: createSecurityBatchFetcher(),
-  // a configured Cove affiliate wins; otherwise opentrench's own gets the credit
-  cove: (): CoveOptions => ({ amounts: cfg.get().cove.amounts, affiliateId: cfg.get().cove.affiliateId || DEFAULT_COVE_AFFILIATE }),
-  buy: () => ({ provider: cfg.get().buy.provider, basedbotReferral: cfg.get().buy.basedbotReferral }),
+  // the affiliate is opentrench's own, always
+  cove: (): CoveOptions => ({ amounts: cfg.get().cove.amounts, affiliateId: DEFAULT_COVE_AFFILIATE }),
+  buy: () => ({ provider: cfg.get().buy.provider }),
   blacklist: () => cfg.get().blacklist,
   bots: () => cfg.get().bots,
   favorites: () => cfg.get().favorites,

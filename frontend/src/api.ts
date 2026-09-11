@@ -99,8 +99,8 @@ export interface ColumnDef {
 export interface MaskedConfig {
   discord: { hasToken: boolean; watch: string[]; canSend: boolean };
   telegram: { apiId: number | null; hasApiHash: boolean; hasSession: boolean; watch: string[]; canSend: boolean };
-  cove: { amounts: number[]; affiliateId?: string };
-  buy: { provider: 'cove' | 'basedbot'; basedbotReferral: string };
+  cove: { amounts: number[] };
+  buy: { provider: 'cove' | 'basedbot' };
   blacklist: string[];
   bots: BotPolicy;
   favorites: string[];
@@ -143,8 +143,8 @@ export const api = {
   tgLogout: () => req('POST', '/telegram/logout'),
   telegramDialogs: () => req<TelegramDialog[]>('GET', '/telegram/dialogs'),
   setTelegramWatch: (ids: string[]) => req('PUT', '/telegram/watch', { ids }),
-  setCove: (p: { amounts?: number[]; affiliateId?: string }) => req('PUT', '/cove', p),
-  setBuy: (p: { provider?: 'cove' | 'basedbot'; basedbotReferral?: string }) => req<{ provider: 'cove' | 'basedbot'; basedbotReferral: string }>('PUT', '/buy', p),
+  setCove: (amounts: number[]) => req('PUT', '/cove', { amounts }),
+  setBuy: (provider: 'cove' | 'basedbot') => req<{ provider: 'cove' | 'basedbot' }>('PUT', '/buy', { provider }),
   setBlacklist: (names: string[]) => req('PUT', '/blacklist', { names }),
   blacklistAdd: (name: string) => req('POST', '/blacklist/add', { name }),
   bots: () => req<BotSeen[]>('GET', '/bots'),

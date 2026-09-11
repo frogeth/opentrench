@@ -65,10 +65,10 @@ export interface Config {
   /** Discord: the Vencord bridge needs nothing stored; a legacy user token gives read-only access without the plugin */
   discord: { token?: string; watch: string[]; send?: boolean };
   telegram: { apiId?: number; apiHash?: string; session?: string; watch: string[]; send?: boolean };
-  /** Cove: one-click amounts, and optionally whose Telegram user id gets affiliate credit (blank = the logged-in account) */
-  cove: { amounts: number[]; affiliateId?: string };
+  /** Cove one-click amounts (the affiliate is opentrench's own, fixed in code) */
+  cove: { amounts: number[] };
   /** which bot the buy buttons and right-click → Buy use */
-  buy: { provider: 'cove' | 'basedbot'; basedbotReferral: string };
+  buy: { provider: 'cove' | 'basedbot' };
   /** caller names (case-insensitive, leading @ ignored) whose posts never count as calls */
   blacklist: string[];
   /** bots: hide everything except `allow`, or show everything except the blacklist */
@@ -89,7 +89,7 @@ export interface Config {
   j7: { token?: string; /** X handles (no @) whose tweets ping you */ favorites: string[] };
 }
 
-const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, buy: { provider: 'cove', basedbotReferral: 'frog' }, blacklist: [], bots: { default: 'hide', allow: [] }, favorites: [], pingTelegram: true, railOrder: [], columns: DEFAULT_COLUMNS.map((c) => ({ ...c })), seenTokens: [], j7: { favorites: [] } };
+const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, buy: { provider: 'cove' }, blacklist: [], bots: { default: 'hide', allow: [] }, favorites: [], pingTelegram: true, railOrder: [], columns: DEFAULT_COLUMNS.map((c) => ({ ...c })), seenTokens: [], j7: { favorites: [] } };
 
 export class ConfigStore {
   private cfg: Config;
@@ -118,8 +118,8 @@ export class ConfigStore {
         watch: this.cfg.telegram.watch,
         canSend: !!this.cfg.telegram.send,
       },
-      cove: { amounts: this.cfg.cove.amounts, affiliateId: this.cfg.cove.affiliateId },
-      buy: { provider: this.cfg.buy.provider, basedbotReferral: this.cfg.buy.basedbotReferral },
+      cove: { amounts: this.cfg.cove.amounts },
+      buy: { provider: this.cfg.buy.provider },
       blacklist: this.cfg.blacklist,
       bots: this.cfg.bots,
       favorites: this.cfg.favorites,
@@ -142,14 +142,8 @@ export class ConfigStore {
           send: raw.discord?.send === true,
         },
         telegram: { ...DEFAULT.telegram, ...raw.telegram },
-        cove: {
-          amounts: Array.isArray(raw.cove?.amounts) ? raw.cove.amounts.map(Number) : DEFAULT.cove.amounts,
-          affiliateId: typeof raw.cove?.affiliateId === 'string' && /^\d{1,20}$/.test(raw.cove.affiliateId.trim()) ? raw.cove.affiliateId.trim() : undefined,
-        },
-        buy: {
-          provider: raw.buy?.provider === 'basedbot' ? 'basedbot' : 'cove',
-          basedbotReferral: typeof raw.buy?.basedbotReferral === 'string' && raw.buy.basedbotReferral.trim() ? raw.buy.basedbotReferral.trim() : 'frog',
-        },
+        cove: { amounts: Array.isArray(raw.cove?.amounts) ? raw.cove.amounts.map(Number) : DEFAULT.cove.amounts }, // any old affiliateId in the file is ignored
+        buy: { provider: raw.buy?.provider === 'basedbot' ? 'basedbot' : 'cove' }, // any old basedbotReferral is ignored
         blacklist: Array.isArray(raw.blacklist) ? raw.blacklist.map(String) : [],
         favorites: Array.isArray(raw.favorites) ? raw.favorites.map(String) : [],
         bots: {
