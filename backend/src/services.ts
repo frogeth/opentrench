@@ -16,6 +16,11 @@ export class Services {
   telegram?: TelegramWrapper;
   j7?: J7Client;
   private discordSelf?: DiscordSelf;
+  private guildRoles = new Map<string, Map<string, string>>();
+  /** names for mention markup in one guild */
+  private namesIn(guildId: string) {
+    return { roles: this.guildRoles.get(guildId), channels: new Map([...this.discordChannels.values()].filter((c) => c.guildId === guildId).map((c) => [c.id, c.name])) };
+  }
   /** me, for mention detection in one guild */
   private meIn(guildId: string) {
     return this.discordSelf ? { id: this.discordSelf.id, roles: new Set(this.discordSelf.roles.get(guildId) ?? []) } : undefined;
@@ -75,6 +80,9 @@ export class Services {
     }
     const gw = new DiscordGateway(token);
     gw.on('state', (s, err) => this.hub.setStatus('discord', s, err));
+    gw.on('roles', (guildId: string, roles: Map<string, string>) => {
+      this.guildRoles.set(guildId, roles);
+    });
     gw.on('self', (me: DiscordSelf) => {
       this.discordSelf = me;
     });
@@ -86,7 +94,7 @@ export class Services {
       if (!this.cfg.get().discord.watch.includes(id)) return;
       const ch = this.discordChannels.get(id) ?? { id, name: id, guildId: '?', guildName: '?', position: 0 };
       try {
-        const msg = normalizeDiscord(d, ch, this.meIn(ch.guildId));
+        const msg = normalizeDiscord(d, ch, this.meIn(ch.guildId), this.namesIn(ch.guildId));
         this.hub.push(msg, extractLinks(msg.text, []));
         this.addPreviews(msg);
       } catch (e) {
@@ -158,7 +166,7 @@ export class Services {
       if (d?.id && this.cfg.get().discord.watch.includes(chatId)) {
         const ch = this.discordChannels.get(chatId) ?? { id: chatId, name: chatId, guildId: '?', guildName: '?', position: 0 };
         try {
-          const msg = normalizeDiscord(d, ch);
+          const msg = normalizeDiscord(d, ch, undefined, this.namesIn(ch.guildId));
           this.hub.push(msg, extractLinks(msg.text, []));
         } catch (e: any) {
           console.warn('[discord] could not echo sent message', e?.message ?? e);
@@ -191,7 +199,7 @@ export class Services {
       if (!token) return [];
       const ch = this.discordChannels.get(id) ?? { id, name: id, guildId: '?', guildName: '?', position: 0 };
       const raw = await fetchChannelHistory(token, id, limit);
-      msgs = raw.map((d) => normalizeDiscord(d, ch, this.meIn(ch.guildId)));
+      msgs = raw.map((d) => normalizeDiscord(d, ch, this.meIn(ch.guildId), this.namesIn(ch.guildId)));
     } else {
       msgs = (await this.telegram?.history(id, limit)) ?? [];
     }

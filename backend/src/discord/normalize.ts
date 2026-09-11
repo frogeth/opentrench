@@ -124,10 +124,10 @@ function authorName(a: any, member?: any): string {
   return member?.nick ?? a?.global_name ?? a?.username ?? 'unknown';
 }
 
-function replyContext(d: any): ReplyContext | undefined {
+function replyContext(d: any, names?: DiscordNames): ReplyContext | undefined {
   const r = d.referenced_message;
   if (!r) return undefined;
-  const text = String(r.content ?? '').trim() || (r.attachments?.length ? '📎 attachment' : r.embeds?.length ? '(embed)' : '');
+  const text = resolveDiscordMentions(String(r.content ?? ''), r, names).trim() || (r.attachments?.length ? '📎 attachment' : r.embeds?.length ? '(embed)' : '');
   return { author: authorName(r.author, r.member), text, ...(r.id ? { id: `discord:${r.id}` } : {}) };
 }
 
@@ -160,16 +160,34 @@ export function discordMention(d: any, me: DiscordMe | undefined): FeedMessage['
   return undefined;
 }
 
-export function normalizeDiscord(d: any, ch: DiscordChannelInfo, me?: DiscordMe): FeedMessage {
-  const parts: string[] = [d.content ?? ''];
+/** Names for the raw mention markup Discord sends: roles and channels of the guild (users ride on the message itself). */
+export interface DiscordNames {
+  roles?: Map<string, string>;
+  channels?: Map<string, string>;
+}
+
+/** <@id> → @name (from the message's own mentions array), <@&id> → @role, <#id> → #channel. Unknown ids are left as-is. */
+export function resolveDiscordMentions(text: string, d: any, names?: DiscordNames): string {
+  if (!text || !text.includes('<')) return text;
+  const users = new Map<string, string>();
+  for (const u of d?.mentions ?? []) if (u?.id) users.set(String(u.id), String(u.member?.nick ?? u.global_name ?? u.username ?? 'user'));
+  return text
+    .replace(/<@!?(\d+)>/g, (m, id) => (users.has(id) ? `@${users.get(id)}` : m))
+    .replace(/<@&(\d+)>/g, (m, id) => (names?.roles?.has(id) ? `@${names.roles.get(id)}` : m))
+    .replace(/<#(\d+)>/g, (m, id) => (names?.channels?.has(id) ? `#${names.channels.get(id)}` : m));
+}
+
+export function normalizeDiscord(d: any, ch: DiscordChannelInfo, me?: DiscordMe, names?: DiscordNames): FeedMessage {
+  const fix = (s: unknown) => resolveDiscordMentions(String(s ?? ''), d, names);
+  const parts: string[] = [fix(d.content)];
   for (const e of d.embeds ?? []) {
-    if (e.title) parts.push(e.title);
-    if (e.description) parts.push(e.description);
-    for (const f of e.fields ?? []) if (f.value) parts.push(f.value);
+    if (e.title) parts.push(fix(e.title));
+    if (e.description) parts.push(fix(e.description));
+    for (const f of e.fields ?? []) if (f.value) parts.push(fix(f.value));
   }
   const embeds = discordEmbeds(d);
   return {
-    ...(embeds.length ? { body: String(d.content ?? ''), embeds } : {}),
+    ...(embeds.length ? { body: fix(d.content), embeds } : {}),
     id: `discord:${d.id}`,
     source: 'discord',
     chatId: String(d.channel_id),
@@ -185,7 +203,7 @@ export function normalizeDiscord(d: any, ch: DiscordChannelInfo, me?: DiscordMe)
     repeat: false,
     link: d.guild_id ? `https://discord.com/channels/${d.guild_id}/${d.channel_id}/${d.id}` : undefined,
     hasAttachment: (d.attachments?.length ?? 0) > 0,
-    replyTo: replyContext(d),
+    replyTo: replyContext(d, names),
     mention: discordMention(d, me),
     chatAvatar: ch.guildIcon,
     media: discordMedia(d),

@@ -142,7 +142,10 @@ export class DiscordGateway extends EventEmitter {
         this.resumeUrl = d.resume_gateway_url;
         this.backoff = 1000;
         const channels: DiscordChannel[] = [];
-        for (const g of d.guilds ?? []) channels.push(...extractChannels(g));
+        for (const g of d.guilds ?? []) {
+          channels.push(...extractChannels(g));
+          this.emit('roles', String(g.id), extractRoles(g));
+        }
         this.emit('channels', channels);
         // who we are, and our roles per guild (user-account READY carries merged_members aligned with guilds)
         if (d.user?.id) {
@@ -162,6 +165,7 @@ export class DiscordGateway extends EventEmitter {
         break;
       case 'GUILD_CREATE':
         this.emit('channels', extractChannels(d));
+        this.emit('roles', String(d.id), extractRoles(d));
         break;
       case 'MESSAGE_CREATE':
         this.emit('message', d);
@@ -268,6 +272,11 @@ export class DiscordGateway extends EventEmitter {
     this.state = state;
     this.emit('state', state, error);
   }
+}
+
+/** role id → name, for rendering <@&id> mentions */
+function extractRoles(g: any): Map<string, string> {
+  return new Map(((g.roles ?? []) as any[]).filter((r) => r?.id).map((r) => [String(r.id), String(r.name ?? 'role')]));
 }
 
 function extractChannels(g: any): DiscordChannel[] {

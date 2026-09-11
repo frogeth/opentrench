@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Discord mentions show real names: @user, @role and #channel markup is resolved to the person's display name, the role name and the channel name.
 - Right-click on any contract now also offers "Open token", the same drill-down you get from a call card's picture.
 - Pings window: a small panel bottom-left (the @ button in the top bar opens it, it minimizes to a pill) lists everyone who pinged you across Discord and Telegram: direct mentions, replies to you, @everyone/@here and your roles. Each ping shows the 4 messages before it, the ping highlighted, and the next 4 as they arrive, so it reads in context. Jump to chat scrolls the column to the message; reply answers from the panel. New pings chirp and post a desktop notification (Brandzo).
 - J7 launches only count when the token's links point at that exact tweet and it launched after the tweet. Account-only links no longer pair.

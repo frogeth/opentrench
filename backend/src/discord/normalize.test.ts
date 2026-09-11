@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { discordEmbeds, discordMedia, discordMention, discordPreviews, discordReaction, normalizeDiscord } from './normalize.js';
+import { discordEmbeds, discordMedia, discordMention, discordPreviews, discordReaction, normalizeDiscord, resolveDiscordMentions } from './normalize.js';
 
 const payload = {
   id: '111',
@@ -172,5 +172,27 @@ describe('discordMention', () => {
   });
   it('my own messages never ping me', () => {
     expect(discordMention({ ...base, author: { id: '42' }, mention_everyone: true }, me)).toBeUndefined();
+  });
+});
+
+describe('resolveDiscordMentions', () => {
+  const d = { mentions: [{ id: '42', username: 'frog', global_name: 'frog.eth' }, { id: '7', username: 'plain' }] };
+  const names = { roles: new Map([['r1', 'Degens']]), channels: new Map([['c1', 'alpha-calls']]) };
+  it('turns raw markup into names, preferring nick > display name > username, and leaves unknown ids alone', () => {
+    expect(resolveDiscordMentions('<@42> <@!7> <@&r1> <#c1> <@999> <@&r9>', d, names)).toBe('@frog.eth @plain @Degens #alpha-calls <@999> <@&r9>');
+    expect(resolveDiscordMentions('<@42>', { mentions: [{ id: '42', username: 'frog', member: { nick: 'Froggy' } }] })).toBe('@Froggy');
+    expect(resolveDiscordMentions('no markup', d, names)).toBe('no markup');
+  });
+  it('is applied to content, embeds and the reply quote', () => {
+    const ch = { id: 'c1', name: 'alpha-calls', guildId: 'g1', guildName: 'G', position: 0 };
+    const m = normalizeDiscord(
+      { id: '1', author: { id: '7', username: 'x' }, content: 'hey <@42>', embeds: [{ description: 'see <#c1>' }], referenced_message: { id: '0', author: { username: 'y' }, content: 'ping <@&r1>' }, mentions: d.mentions, attachments: [], timestamp: '2024-01-01T00:00:00Z' },
+      ch,
+      undefined,
+      names,
+    );
+    expect(m.body).toBe('hey @frog.eth');
+    expect(m.text).toContain('see #alpha-calls');
+    expect(m.replyTo?.text).toBe('ping @Degens');
   });
 });
