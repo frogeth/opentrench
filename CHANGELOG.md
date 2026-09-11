@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Fix: jumping to a message from Pings (or to a reply) no longer drops it into whatever column is focused; a message only ever shows in a column that carries its chat. If nothing on screen shows that chat, the jump focuses it first.
+
 ## v0.1.18 — 2026-09-11
 
 - J7Tracker column: paste your J7 session id in Settings → Accounts and its tweet feed streams natively, newest first, with a strip under each tweet showing the calls it mentions (by contract or $ticker). Click a match to jump to the call; contract addresses in tweets get the usual copy and right-click actions. Unofficial integration, read-only.

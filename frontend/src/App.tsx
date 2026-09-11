@@ -444,10 +444,16 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mentions]);
-  /** scroll whichever column shows this message to it (reveals it if a filter hid it) */
+  /**
+   * Scroll whichever column shows this message to it (revealing it if a filter hid it). If no
+   * column on screen carries its chat, focus that chat first, then scroll.
+   */
   const jumpToMessage = (id: string) => {
+    const m = messages.find((x) => x.id === id);
+    if (!m) return;
     revealMessage(id);
     let tries = 0;
+    let focused = false;
     const find = () => {
       const el = document.querySelector(`[data-key="${CSS.escape(id)}"]`) as HTMLElement | null;
       if (el) {
@@ -455,11 +461,17 @@ export default function App() {
         window.setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'auto' }), 350);
         el.classList.add('vitem-flash');
         window.setTimeout(() => el.classList.remove('vitem-flash'), 2400);
-      } else if (tries++ < 12) window.setTimeout(find, 60);
-      else {
-        const m = messages.find((x) => x.id === id);
-        if (m?.link) window.open(m.link, '_blank', 'noopener');
+        return;
       }
+      if (tries++ < 8) return void window.setTimeout(find, 60);
+      if (!focused) {
+        // nothing on screen shows that chat: open it in the focused view and look again
+        focused = true;
+        tries = 0;
+        if (view.chat?.name !== m.chatName) openChat(m.chatName, m.source, m.chatId);
+        return void window.setTimeout(find, 120);
+      }
+      if (m.link) window.open(m.link, '_blank', 'noopener');
     };
     window.setTimeout(find, 30);
   };
@@ -621,16 +633,13 @@ export default function App() {
   /** Messages for a chat column (chronological); the focused/preview view ignores column filters. */
   const chatMsgsFor = (names: Set<string> | null, f?: ColumnDef['filters']) => {
     if (view.preview) return (previewMsgs ?? []).filter((m) => (showBots || !m.hidden) && matchesQuery(q, m, tokens));
+    // a revealed message skips the hidden/repeat/media/filter/search gates, never the chat scope:
+    // a message only ever shows in a column that carries its chat
     return messages.filter(
       (m) =>
-        revealed.has(m.id) ||
-        ((showBots || !m.hidden) &&
-          (showRepeats || !m.repeat) &&
-          (showMedia || !mediaOnly(m)) &&
-          (watched.length === 0 || watchedNames.has(m.chatName)) &&
-          inScope(m.chatName, names) &&
-          messagePasses(m, f) &&
-          matchesQuery(q, m, tokens)),
+        (watched.length === 0 || watchedNames.has(m.chatName)) &&
+        inScope(m.chatName, names) &&
+        (revealed.has(m.id) || ((showBots || !m.hidden) && (showRepeats || !m.repeat) && (showMedia || !mediaOnly(m)) && messagePasses(m, f) && matchesQuery(q, m, tokens))),
     );
   };
   const callsFor = (names: Set<string> | null, f?: ColumnDef['filters']) =>
