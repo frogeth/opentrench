@@ -5,6 +5,7 @@ import { DiscordGateway } from './discord/gateway.js';
 import { fetchChannelHistory } from './discord/rest.js';
 import { discordReaction, normalizeDiscord } from './discord/normalize.js';
 import { TelegramWrapper, type TelegramDialog } from './telegram/client.js';
+import { isWatched } from './telegram/ids.js';
 import { extractLinks, type ExtractedMeta } from './links.js';
 import { createPreviewer, type Previewer } from './previews.js';
 import { J7Client } from './j7.js';
@@ -327,7 +328,8 @@ export class Services {
       }),
     );
     tg.on('message', (m: FeedMessage, meta: ExtractedMeta) => {
-      if (!this.cfg.get().telegram.watch.includes(m.chatId)) return;
+      // channels/supergroups can arrive as -100<id>, bare <id> or -<id>: match every shape
+      if (!isWatched(this.cfg.get().telegram.watch, m.chatId)) return;
       this.hub.push(m, meta);
       this.addPreviews(m);
     });
@@ -354,7 +356,7 @@ export class Services {
     if (cfg.telegram.watch.length) {
       const dialogs = await this.listTelegramDialogs().catch(() => [] as TelegramDialog[]);
       for (const d of dialogs)
-        if (cfg.telegram.watch.includes(d.id))
+        if (isWatched(cfg.telegram.watch, d.id))
           out.push({ id: d.id, name: d.title, source: 'telegram', avatar: `/api/telegram/avatar/${d.id}` });
     }
     return out;

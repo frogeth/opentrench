@@ -17,6 +17,12 @@ import { BridgeNotice } from './components/BridgeNotice';
 import { Lightbox } from './components/Lightbox';
 import type { ShareItem } from './components/ShareModal';
 
+/** Telegram chat id in one shape: strip '-', then a '100' supergroup marker only when a real (long) channel id follows. */
+const normTg = (id: string) => {
+  let s = id.startsWith('-') ? id.slice(1) : id;
+  if (s.startsWith('100') && s.length >= 12) s = s.slice(3);
+  return s;
+};
 const BOTS = { cove: COVE_BOT, salpha: 'salpha_research_bot' } as const;
 type BotKind = keyof typeof BOTS;
 import { VirtualItem } from './components/Virtual';
@@ -632,7 +638,23 @@ export default function App() {
     return [...m.entries()].sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]));
   }, [messages, watched]);
   const chatCounts = useMemo(() => new Map(chats.map(([name, c]) => [name, c.count])), [chats]);
-  const watchedNames = useMemo(() => new Set(watched.map((w) => w.name)), [watched]);
+  /**
+   * "Is this chat in the feed?" straight from the config's watch lists (ids), not from the
+   * resolved chat names: a Telegram chat whose dialog didn't resolve, or whose title differs
+   * between the dialog list and the message, must still show in All Chats.
+   */
+  const watchedKeys = useMemo(() => {
+    // same rule as the backend: strip '-', then a '100' supergroup marker only when a real (long) channel id follows
+    const s = new Set<string>();
+    for (const id of cfg?.discord.watch ?? []) s.add(`discord:${id}`);
+    for (const id of cfg?.telegram.watch ?? []) s.add(`telegram:${normTg(id)}`);
+    return s;
+  }, [cfg?.discord.watch, cfg?.telegram.watch]);
+  const inWatch = (m: FeedMessage) => {
+    if (watchedKeys.size === 0) return true;
+    const id = m.source === 'telegram' ? normTg(m.chatId) : m.chatId;
+    return watchedKeys.has(`${m.source}:${id}`);
+  };
 
   /** Which chat names the current view scopes to (null = everything watched). */
   const scope = useMemo<Set<string> | null>(() => {
@@ -664,7 +686,7 @@ export default function App() {
     // a message only ever shows in a column that carries its chat
     return messages.filter(
       (m) =>
-        (watched.length === 0 || watchedNames.has(m.chatName)) &&
+        inWatch(m) &&
         inScope(m.chatName, names) &&
         (revealed.has(m.id) || ((showBots || !m.hidden) && (showRepeats || !m.repeat) && (showMedia || !mediaOnly(m)) && messagePasses(m, f) && matchesQuery(q, m, tokens))),
     );

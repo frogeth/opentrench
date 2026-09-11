@@ -100,7 +100,8 @@ b { font-weight: 600; }
 .col-actions { display: inline-flex; gap: 2px; margin-left: 4px; }
 .col-btn { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; background: none; border: none; color: var(--muted); cursor: pointer; }
 .col-btn:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
-.col-add { flex: none; width: 44px; margin: 12px; align-self: flex-start; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--chrome); color: var(--text); font-size: 22px; cursor: pointer; }
+/* sticky so it never drifts into the horizontal overflow when columns fill the width */
+.col-add { flex: none; width: 44px; margin: 12px; align-self: flex-start; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--chrome); color: var(--text); font-size: 22px; cursor: pointer; position: sticky; right: 12px; z-index: 3; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5); }
 .col-add:hover { background: var(--accent); color: #000; border-color: var(--accent); }
 .col-head {
   display: flex; align-items: center; gap: 8px; padding: 0 16px; height: 48px; flex: none;

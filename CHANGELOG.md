@@ -7,6 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Telegram-only fixes. Channel and supergroup messages were dropped when Telegram handed the chat id back in a different shape than the watch list stored (`-100…` vs bare), and All Chats hid Telegram messages whose chat title didn't match the dialog list, which is why they showed in a focused chat but not in All Chats or the ★ view. Both now match by chat id in every shape.
+- The add-column + stays pinned at the right edge of the terminal instead of sliding into the horizontal overflow when columns fill the width.
+
 - Every Cove buy now opens inside opentrench's Cove column, never a Telegram tab. Buy buttons, the token drill-down, right-click Buy, and Cove's own in-panel buttons (Move, Sell, buy confirms) all run through your Telegram session in-app. Only genuinely external links like charts still open a browser tab.
 
 ## v0.3.0 — 2026-09-11
