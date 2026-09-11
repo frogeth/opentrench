@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { io, type Socket } from 'socket.io-client';
-import type { J7Tweet } from './types.js';
+import type { J7Deploy, J7Tweet } from './types.js';
 
 /**
  * J7Tracker's live tweet stream, read the way its own web app reads it: a
@@ -89,8 +89,10 @@ export class J7Client extends EventEmitter {
       const t = normalizeJ7(raw);
       if (!t) return;
       const i = this.recent.findIndex((x) => x.id === t.id);
-      if (i >= 0) this.recent[i] = t;
-      else {
+      if (i >= 0) {
+        if (this.recent[i].launches) t.launches = this.recent[i].launches; // edits keep what we paired
+        this.recent[i] = t;
+      } else {
         this.recent.unshift(t);
         if (this.recent.length > MAX) this.recent.length = MAX;
       }
@@ -121,6 +123,18 @@ export class J7Client extends EventEmitter {
       // J7 leaves the original where it was and adds a new "deleted" entry on top
       upsert({ ...t, id: `deleted:${id}`, deleted: Date.now() });
     });
+  }
+
+  /** A launchpad token links this tweet: remember it on the tweet (and its deleted copy) and re-emit. */
+  attachLaunch(tweetId: string, d: J7Deploy): void {
+    for (const t of this.recent) {
+      if (t.id !== tweetId && t.id !== `deleted:${tweetId}`) continue;
+      const list = (t.launches ??= []);
+      if (list.some((x) => x.mint === d.mint)) continue;
+      list.unshift(d);
+      if (list.length > 20) list.length = 20;
+      this.emit('tweet', t);
+    }
   }
 
   stop(): void {

@@ -236,11 +236,13 @@ export interface J7Tweet {
   tickers: string[];
   /** when J7 saw the tweet get deleted (ms); the entry stays, badged, like on J7 */
   deleted?: number;
+  /** tokens launched off this tweet, paired live by the launch watcher */
+  launches?: J7Deploy[];
 }
 
 /** A token launched with this tweet (or its author) in its metadata links. */
 export interface J7Deploy {
-  source: 'pump' | 'bonk';
+  source: 'pump' | 'pons';
   mint: string;
   name: string;
   symbol: string;

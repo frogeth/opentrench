@@ -926,7 +926,9 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .deploy-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .deploy-name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
 .deploy-src { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 5px; border-radius: 4px; background: #2f8f4e; color: #fff; }
-.deploy-src.bonk { background: #e2762c; }
+.deploy-src.pons { background: #c8442b; }
+.tweet-deploys-live { border-style: solid; border-color: rgba(65, 200, 146, 0.45); background: rgba(65, 200, 146, 0.05); }
+.deploy-live-title { display: flex; align-items: center; gap: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ok); font-weight: 600; }
 .deploy-match { font-size: 10px; color: var(--muted); }
 .deploy-tweet .deploy-match { color: var(--ok); }
 .deploy-meta a { color: var(--muted); }

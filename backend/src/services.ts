@@ -7,6 +7,7 @@ import { extractLinks, type ExtractedMeta } from './links.js';
 import { createPreviewer, type Previewer } from './previews.js';
 import { fetchChannelHistory, reactMessage, sendChannelMessage } from './discord/rest.js';
 import { J7Client } from './j7.js';
+import { createLaunchWatcher } from './deploys.js';
 import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction } from './types.js';
 
@@ -14,6 +15,7 @@ export class Services {
   discord?: DiscordGateway;
   telegram?: TelegramWrapper;
   j7?: J7Client;
+  private launchWatcher?: ReturnType<typeof createLaunchWatcher>;
   private discordChannels = new Map<string, DiscordChannel>();
   private previewer: Previewer;
 
@@ -96,6 +98,8 @@ export class Services {
   startJ7(): void {
     this.j7?.stop();
     this.j7 = undefined;
+    this.launchWatcher?.stop();
+    this.launchWatcher = undefined;
     const token = this.cfg.get().j7.token;
     if (!token) {
       this.hub.setJ7('disconnected');
@@ -106,9 +110,13 @@ export class Services {
     c.on('tweet', (t: import('./types.js').J7Tweet) => {
       t.contracts = detectContracts(t.text);
       this.hub.emit('event', { type: 'j7', tweet: t });
+      if (!t.launches) this.launchWatcher?.matchTweet(t);
     });
     this.j7 = c;
+    // pair new pump.fun / Pons launches with the tweets they link, as they happen
+    this.launchWatcher = createLaunchWatcher({ tweets: () => c.recent, onMatch: (id, d) => c.attachLaunch(id.replace(/^deleted:/, ''), d) });
     c.start();
+    this.launchWatcher.start();
   }
   j7Recent() {
     return (this.j7?.recent ?? []).map((t) => ({ ...t, contracts: detectContracts(t.text) }));

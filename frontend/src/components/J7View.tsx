@@ -25,17 +25,44 @@ export function matchesFor(t: J7Tweet, tokens: Record<string, TokenInfo>, now: n
   return [...out.values()];
 }
 
-type DeployState = { loading: boolean; error?: string; deploys?: J7Deploy[]; scanned?: { pump?: number; bonk?: number } };
+type DeployState = { loading: boolean; error?: string; deploys?: J7Deploy[]; scanned?: { pump?: number; pons?: number } };
 
-/** Tokens launched off this tweet, from pump.fun and letsbonk metadata. */
+
+function DeployRow({ x, now }: { x: J7Deploy; now: number }) {
+  return (
+    <div className={`deploy deploy-${x.match}`}>
+      {x.image ? <img src={x.image} alt="" /> : <span className="deploy-noimg" />}
+      <span className="deploy-main">
+        <span className="deploy-name">
+          <b>{x.symbol || x.name}</b> <span className="muted">{x.name}</span>
+          <span className={`deploy-src ${x.source}`}>{x.source === 'pump' ? 'pump.fun' : 'pons'}</span>
+          <span className="deploy-match" title={x.match === 'tweet' ? 'its metadata links this exact tweet' : 'its metadata links this account, not this tweet'}>
+            {x.match === 'tweet' ? 'links tweet' : 'links account'}
+          </span>
+        </span>
+        <span className="deploy-meta muted">
+          launched {timeAgo(x.createdAt, now)} ago{money(x.marketCap) ? ` · MC ${money(x.marketCap)}` : ''} ·{' '}
+          <a href={x.url} target="_blank" rel="noreferrer">
+            open
+          </a>
+        </span>
+        <span className="deploy-ca">
+          <RichText text={x.mint} contracts={[x.mint]} />
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/** On-demand scan results: older launches linking this tweet. */
 function Deploys({ t, now, state }: { t: J7Tweet; now: number; state: DeployState }) {
-  if (state.loading) return <div className="tweet-deploys muted">scanning pump.fun and letsbonk for launches linking this tweet…</div>;
+  if (state.loading) return <div className="tweet-deploys muted">scanning pump.fun and Pons for older launches linking this tweet…</div>;
   if (state.error) return <div className="tweet-deploys err">{state.error}</div>;
   const d = state.deploys ?? [];
-  const back = [state.scanned?.pump, state.scanned?.bonk].filter((x): x is number => typeof x === 'number');
+  const back = [state.scanned?.pump, state.scanned?.pons].filter((x): x is number => typeof x === 'number');
   const oldest = back.length ? Math.max(...back) : undefined;
   const partial = oldest !== undefined && oldest > t.ts;
-  const down = [state.scanned?.pump === undefined ? 'pump.fun' : null, state.scanned?.bonk === undefined ? 'letsbonk' : null].filter(Boolean);
+  const down = [state.scanned?.pump === undefined ? 'pump.fun' : null, state.scanned?.pons === undefined ? 'Pons' : null].filter(Boolean);
   return (
     <div className="tweet-deploys">
       {d.length === 0 && (
@@ -45,27 +72,7 @@ function Deploys({ t, now, state }: { t: J7Tweet; now: number; state: DeployStat
         </div>
       )}
       {d.map((x) => (
-        <div key={x.mint} className={`deploy deploy-${x.match}`}>
-          {x.image ? <img src={x.image} alt="" /> : <span className="deploy-noimg" />}
-          <span className="deploy-main">
-            <span className="deploy-name">
-              <b>{x.symbol || x.name}</b> <span className="muted">{x.name}</span>
-              <span className={`deploy-src ${x.source}`}>{x.source === 'pump' ? 'pump.fun' : 'bonk'}</span>
-              <span className="deploy-match" title={x.match === 'tweet' ? 'its metadata links this exact tweet' : 'its metadata links this account, not this tweet'}>
-                {x.match === 'tweet' ? 'links tweet' : 'links account'}
-              </span>
-            </span>
-            <span className="deploy-meta muted">
-              launched {timeAgo(x.createdAt, now)} ago{money(x.marketCap) ? ` · MC ${money(x.marketCap)}` : ''} ·{' '}
-              <a href={x.url} target="_blank" rel="noreferrer">
-                open
-              </a>
-            </span>
-            <span className="deploy-ca">
-              <RichText text={x.mint} contracts={[x.mint]} />
-            </span>
-          </span>
-        </div>
+        <DeployRow key={x.mint} x={x} now={now} />
       ))}
       {d.length > 0 && partial && <div className="muted">scanned the last {timeAgo(oldest, now)} of launches; older ones weren't checked</div>}
     </div>
@@ -181,6 +188,16 @@ export function J7View({
                   ))}
                 </div>
               )}
+              {t.launches && t.launches.length > 0 && (
+                <div className="tweet-deploys tweet-deploys-live">
+                  <div className="deploy-live-title">
+                    <span className="j7-dot on" /> launched off this tweet
+                  </div>
+                  {t.launches.map((x) => (
+                    <DeployRow key={x.mint} x={x} now={now} />
+                  ))}
+                </div>
+              )}
               {m.length > 0 && (
                 <div className="tweet-matches">
                   {m.map((x) => (
@@ -194,8 +211,8 @@ export function J7View({
                 </div>
               )}
               <div className="tweet-actions">
-                <button className={`hdr-toggle${dep && !dep.error ? ' on' : ''}`} onClick={() => findDeploys(t)} title="find tokens launched on pump.fun or letsbonk whose metadata links this tweet">
-                  <Icon name="search" size={10} /> launches
+                <button className={`hdr-toggle${dep && !dep.error ? ' on' : ''}`} onClick={() => findDeploys(t)} title="new launches pair up on their own while this column is open; this scans pump.fun and Pons for older ones linking this tweet">
+                  <Icon name="search" size={10} /> {t.launches?.length ? 'scan for more' : 'scan launches'}
                 </button>
               </div>
               {dep && <Deploys t={t} now={now} state={dep} />}
