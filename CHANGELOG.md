@@ -7,15 +7,15 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- J7Tracker column: paste your J7 session id in Settings → Accounts and its tweet feed streams natively, newest first, with a strip under each tweet showing the calls it mentions (by contract or $ticker). Click a match to jump to the call; contract addresses in tweets get the usual copy and right-click actions. Unofficial integration, read-only.
+- J7: launches pair up live. While a J7 column is open, new pump.fun and Pons (Robinhood Chain) tokens whose links point at a tweet in the feed appear under that tweet within seconds, with market cap, launch time and the contract as a normal chip. A "scan launches" button digs for older ones.
+- J7: star an X account on any of its tweets and you get a sound (pick it in the column editor) plus a desktop notification whenever it tweets.
+- J7 column shows deleted tweets the way J7 does: the original stays put and a red "deleted" copy lands at the top of the feed.
+- J7 launches only count when the token's links point at that exact tweet and it launched after the tweet. Account-only links no longer pair.
+- Pings window: a small panel bottom-left (the @ button in the top bar opens it, it minimizes to a pill) lists everyone who pinged you across Discord and Telegram: direct mentions, replies to you, @everyone/@here and your roles. Each ping shows the 4 messages before it, the ping highlighted, and the next 4 as they arrive, so it reads in context. Jump to chat scrolls the column to the message; reply answers from the panel. New pings chirp and post a desktop notification (Brandzo). Tagging yourself counts too, so you can test it.
 - Discord mentions show real names: @user, @role and #channel markup is resolved to the person's display name, the role name and the channel name.
 - Right-click on any contract now also offers "Open token", the same drill-down you get from a call card's picture.
-- Pings window: a small panel bottom-left (the @ button in the top bar opens it, it minimizes to a pill) lists everyone who pinged you across Discord and Telegram: direct mentions, replies to you, @everyone/@here and your roles. Each ping shows the 4 messages before it, the ping highlighted, and the next 4 as they arrive, so it reads in context. Jump to chat scrolls the column to the message; reply answers from the panel. New pings chirp and post a desktop notification (Brandzo). Tagging yourself counts too, so you can test it.
-- J7 launches only count when the token's links point at that exact tweet and it launched after the tweet. Account-only links no longer pair.
 - Cove buy buttons now cover every chain in Cove's deep-link table: Tempo, Monad, Story, HyperEVM and Plasma join ETH, Base, BNB, MegaETH, Robinhood and Solana. Arbitrum, Ink and Stable have no published code yet; right-click → Buy on Cove still works there because it sends the bare contract.
-- J7Tracker column: paste your J7 session id in Settings → Accounts and its tweet feed streams natively, newest first, with a strip under each tweet showing the calls it mentions (by contract or $ticker). Click a match to jump to the call; contract addresses in tweets get the usual copy and right-click actions. Unofficial integration, read-only.
-- J7 column shows deleted tweets the way J7 does: the original stays put and a red "deleted" copy lands at the top of the feed.
-- J7: star an X account on any of its tweets and you get a sound (pick it in the column editor) plus a desktop notification whenever it tweets.
-- J7: launches pair up live. While a J7 column is open, new pump.fun and Pons (Robinhood Chain) tokens whose links point at a tweet in the feed appear under that tweet within seconds, with market cap, launch time and the contract as a normal chip. A "scan launches" button digs for older ones.
 - Bots: with "Show bots" on, a new "Calls from" switch lets you keep bots in your chats while only the bots you mark "calls" put tokens in the Calls column (Brandzo).
 - Composer keeps keyboard focus after you send a message, so you can keep typing (Brandzo).
 
