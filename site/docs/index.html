@@ -1,58 +1,136 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Getting started — opentrench docs</title><link rel="icon" href="../img/icon.png"><link rel="stylesheet" href="../style.css"></head>
-<body><header class="top"><div class="wrap"><a class="brand" href=".././"><img src="../img/icon.png" alt=""> opentrench</a>
-<nav><a href=".././">Home</a><a class="on" href="../docs/">Docs</a><a href="../docs/discord/">Discord setup</a><a href="https://github.com/frogeth/opentrench/releases/latest">Download</a><a href="https://discord.gg/6ByE8fPNN">Community</a><a href="https://github.com/frogeth/opentrench">GitHub</a></nav></div></header>
-<main class="wrap"><div class="docs"><div class="toc">
-  <div class="grp">Start</div>
-  <a href="./">Getting started</a>
-  <a href="./discord/">Discord (Mac &amp; Windows)</a>
-  <a href="./telegram/">Telegram</a>
-  <div class="grp">More</div>
-  <a href="https://github.com/frogeth/opentrench/blob/main/CHANGELOG.md">Changelog</a>
-  <a href="https://discord.gg/6ByE8fPNN">Help on Discord</a>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Getting started — opentrench</title><meta name="description" content="Install opentrench, connect Discord through your own Discord app, connect Telegram, add channels. Step by step for Mac and Windows.">
+<meta property="og:title" content="Getting started — opentrench"><meta property="og:description" content="Install opentrench, connect Discord through your own Discord app, connect Telegram, add channels. Step by step for Mac and Windows."><meta property="og:image" content="https://opentrench.app/img/terminal.png"><link rel="canonical" href="https://opentrench.app/docs/">
+<link rel="icon" href="../img/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../style.css"></head><body><header class="nav"><div class="wrap">
+<a class="brand" href=".././"><img src="../img/icon.png" alt="">opentrench</a>
+<nav class="links">
+<a class="txt on" href="../docs/">Getting started</a>
+<a class="icon" href="https://discord.gg/6ByE8fPNN" title="Community Discord" aria-label="Community Discord"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4a18 18 0 0 1 4.4 1.3 15.6 15.6 0 0 0-15.2 0A18 18 0 0 1 8.8 3.4L8.6 3a19.8 19.8 0 0 0-4.9 1.4C.6 9.1-.2 13.7.2 18.2a20 20 0 0 0 6 3l1.3-2a12.9 12.9 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12 0l.5.4-2 1 1.3 2a20 20 0 0 0 6-3c.5-5.2-.8-9.7-3.5-13.8ZM8.5 15.4c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Zm7 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Z"/></svg></a>
+<a class="icon" href="https://github.com/frogeth/opentrench" title="GitHub" aria-label="GitHub"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
+<a class="pillbtn" href="https://github.com/frogeth/opentrench/releases/latest">Download</a>
+</nav></div></header>
+<main class="wrap"><div class="docs">
+<div class="toc">
+<div class="k">Getting started</div>
+<a href="#install">1 · Install</a>
+<a href="#discord">2 · Discord</a>
+<a href="#telegram">3 · Telegram</a>
+<a href="#channels">4 · Channels</a>
+<a href="#use">5 · Using it</a>
+<div class="k" style="margin-top:16px">Help</div>
+<a href="#trouble">Troubleshooting</a>
+<a href="https://discord.gg/6ByE8fPNN">Ask on Discord</a>
 </div>
 <article>
 <h1>Getting started</h1>
-<p>opentrench runs on your own computer. Install it, connect the accounts you already have, pick the channels you care about, and read the terminal. About ten minutes end to end.</p>
-<h2 id="install">1. Install</h2>
-<ol>
-<li>Download the latest build for your system from <a href="https://github.com/frogeth/opentrench/releases/latest">GitHub releases</a>: the <code>.dmg</code> on a Mac, the <code>Setup .exe</code> on Windows.</li>
-<li><b>Mac:</b> open the dmg and drag opentrench to Applications. The build is signed and notarized, so it opens like any other app.</li>
-<li><b>Windows:</b> run the installer. It is not code-signed yet, so SmartScreen shows a warning once: click <em>More info → Run anyway</em>.</li>
-<li>Open opentrench. Updates are checked on start and installed from inside the app.</li>
+<p class="lead">About ten minutes end to end. Install the app, connect the accounts you already have, pick the channels you care about.</p>
+
+<h2 id="install"><span class="n">01</span>Install</h2>
+<ol class="steps">
+<li><b>Download</b> the latest build from <a href="https://github.com/frogeth/opentrench/releases/latest">GitHub releases</a>: the <code>.dmg</code> on a Mac, the <code>Setup .exe</code> on Windows.</li>
+<li><b>Mac:</b> open the dmg and drag opentrench to Applications. The build is signed and notarized, so it opens like any app.<br><b>Windows:</b> run the installer. It isn't code-signed yet, so SmartScreen warns once: click <em>More info → Run anyway</em>.</li>
+<li><b>Open opentrench.</b> Updates are checked on start and installed from inside the app.</li>
 </ol>
-<h2 id="discord">2. Connect Discord</h2>
-<p>Discord connects through the <b>opentrench plugin for Vencord</b>, which lives inside your own Discord app. There is no token to paste. Follow the <a href="discord/">Discord guide</a>; it has separate Mac and Windows steps and takes about five minutes once.</p>
-<div class="callout">Used a token in an earlier version? It keeps working, read-only, until you switch. The switch is your call.</div>
-<h2 id="telegram">3. Connect Telegram</h2>
-<p>Telegram uses your own account through Telegram's official API, which Telegram allows. You need an API id and hash, which takes a minute: <a href="telegram/">Telegram guide</a>.</p>
-<h2 id="channels">4. Add the channels you want</h2>
-<ul>
+
+<h2 id="discord"><span class="n">02</span>Connect Discord</h2>
+<p>opentrench talks to Discord through a small plugin inside <b>your own Discord app</b>, loaded by <a href="https://vencord.dev">Vencord</a>. It reads the channels you watch and sends for you using Discord's own functions, so to Discord it is simply you using Discord. No token is pasted or stored anywhere.</p>
+<div class="aside">Vencord loads third-party plugins only from a source build, so the steps install a few developer tools first. Once. Discord has to be open for the Discord side of the feed to work.</div>
+<div class="seg"><button data-os="mac">macOS</button><button data-os="win">Windows</button></div>
+
+<div class="os" data-os="mac">
+<ol class="steps">
+<li><b>Install the tools.</b> Open Terminal (⌘-Space, type <em>Terminal</em>) and paste each line, pressing Return after each. The first one shows a dialog: click <em>Install</em>.
+<pre><code>xcode-select --install
+curl -fsSL https://fnm.vercel.app/install | bash
+source ~/.zshrc
+fnm install 22 &amp;&amp; fnm use 22
+npm install -g pnpm</code></pre></li>
+<li><b>Get Vencord and add the plugin.</b>
+<pre><code>cd ~/Documents
+git clone https://github.com/Vendicated/Vencord
+cd Vencord
+pnpm install --frozen-lockfile
+mkdir -p src/userplugins
+git clone --depth 1 https://github.com/frogeth/opentrench /tmp/opentrench
+cp -r /tmp/opentrench/vencord/opentrench-bridge src/userplugins/</code></pre></li>
+<li><b>Build and inject.</b> When asked which Discord to patch, pick the one you use and confirm.
+<pre><code>pnpm build
+pnpm inject</code></pre></li>
+<li><b>Turn it on.</b> Quit Discord fully (⌘Q) and reopen it. User Settings → <b>Vencord</b> → <b>Plugins</b> → find <b>OpentrenchBridge</b> and switch it on.</li>
+<li><b>Done.</b> Open opentrench: the <code>discord</code> pill in the top bar turns green within a few seconds and ⚙ → Accounts shows your name.</li>
+</ol>
+</div>
+
+<div class="os" data-os="win">
+<ol class="steps">
+<li><b>Install the tools.</b> Open PowerShell (Start, type <em>PowerShell</em>) and paste each line, pressing Enter after each. Close and reopen PowerShell after the second line.
+<pre><code>winget install --id Git.Git -e
+winget install --id OpenJS.NodeJS.LTS -e
+npm install -g pnpm</code></pre></li>
+<li><b>Get Vencord and add the plugin.</b>
+<pre><code>cd $HOME\Documents
+git clone https://github.com/Vendicated/Vencord
+cd Vencord
+pnpm install --frozen-lockfile
+mkdir src\userplugins -Force
+git clone --depth 1 https://github.com/frogeth/opentrench $env:TEMP\opentrench
+Copy-Item -Recurse $env:TEMP\opentrench\vencord\opentrench-bridge src\userplugins\</code></pre></li>
+<li><b>Build and inject.</b> When asked which Discord to patch, pick the one you use and confirm. Allow it if Windows asks.
+<pre><code>pnpm build
+pnpm inject</code></pre></li>
+<li><b>Turn it on.</b> Quit Discord fully (tray icon → Quit Discord) and reopen it. User Settings → <b>Vencord</b> → <b>Plugins</b> → find <b>OpentrenchBridge</b> and switch it on.</li>
+<li><b>Done.</b> Open opentrench: the <code>discord</code> pill in the top bar turns green within a few seconds and ⚙ → Accounts shows your name.</li>
+</ol>
+</div>
+<div class="aside warn"><b>Built before copying the plugin?</b> Run <code>pnpm build</code> again in the Vencord folder and restart Discord. The plugin folder must sit at <code>Vencord/src/userplugins/opentrench-bridge</code>.</div>
+<h3>Already using a token?</h3>
+<p>Nothing breaks. Your feed keeps reading through the token; sending on that path is off. Once the plugin connects, opentrench switches to it and closes the token session. Then remove the token in ⚙ → Accounts → Discord.</p>
+
+<h2 id="telegram"><span class="n">03</span>Connect Telegram</h2>
+<p>Telegram uses your own account through Telegram's official API, which Telegram allows. It needs an API id and hash, which takes a minute.</p>
+<ol class="steps">
+<li>Go to <a href="https://my.telegram.org">my.telegram.org</a> and log in with your phone number and the code Telegram sends.</li>
+<li>Open <b>API development tools</b>. Any app title and short name (say <code>opentrench</code>), leave the rest, <b>Create application</b>. Copy the <b>api_id</b> and <b>api_hash</b>.</li>
+<li>In opentrench, ⚙ → <b>Accounts</b> → <b>Telegram</b>: paste both, <b>Save credentials</b>.</li>
+<li>Enter your number in international format (<code>+15551234567</code>) → <b>Send code</b>. The code arrives in your Telegram app, not by SMS. Enter it, and your two-step password if you have one.</li>
+</ol>
+<p>The <code>telegram</code> pill turns green and stays logged in across restarts.</p>
+
+<h2 id="channels"><span class="n">04</span>Add channels</h2>
+<ol class="steps">
 <li>Click the round <b>+</b> at the bottom of the left rail.</li>
 <li>Pick Discord or Telegram, browse your servers and chats, tick the ones to watch. Click a name first to preview its recent history.</li>
-<li>Each server and chat becomes an icon in the rail. Drag to reorder, click one to focus on it, click ★ to get back to everything.</li>
-</ul>
-<h2 id="terminal">5. Read the terminal</h2>
-<img src="../img/terminal.png" alt="the terminal">
+<li>Each server and chat becomes an icon in the rail. Drag to reorder. Click one to focus on it, click ★ to get back to everything.</li>
+</ol>
+
+<h2 id="use"><span class="n">05</span>Using it</h2>
+<img src="../img/terminal.png" alt="The terminal">
 <ul>
-<li><b>All Calls</b>: one card per token, newest call first. Who called it, where, how long ago, a gold <b>1st</b> for a first call or a 🔥 count when several chats called it, market cap at the call and the multiple since. Then image, symbol, volume, market cap, age, address (click to copy), ATH, links, holders, the buy/sell bar and holder security.</li>
-<li><b>All Chats</b>: the raw messages, read bottom-up like Discord, with every contract turned into a token strip with a live chart. Click the chat chip on a message to open that channel.</li>
-<li><b>Pings</b>: the @ button in the top bar. Everyone who mentioned you, with the messages before and after, jump-to-chat and reply.</li>
-<li>Click a token's picture for the <b>drill-down</b>: candles on a market-cap axis with every caller pinned, and the full call list.</li>
-</ul>
-<img src="../img/drilldown.png" alt="the drill-down">
-<h2 id="columns">6. Make it yours</h2>
-<ul>
-<li><b>Columns</b>: the round <b>+</b> at the right end adds one: calls, chat, Top Callers, Cove, Salpha or J7, over all channels or a few, with filters. Drag the grip to reorder, the right edge to resize, the pencil to edit, × to remove.</li>
-<li><b>Alerts</b>: the bell in a column header plays a sound on every new call there. Eight tones to pick from.</li>
-<li><b>Favorites</b>: ⋯ next to any name → Favorite caller. They get a crown and their first calls ping you.</li>
+<li><b>All Calls</b>: one card per token, newest call first. Gold <b>1st</b> for a first call, a 🔥 count when several chats called it, market cap at the call and the multiple since. Click the address to copy it.</li>
+<li><b>All Chats</b>: the raw messages, read bottom-up. Every contract becomes a token strip with a live chart. Click a message's chat chip to open that channel.</li>
+<li><b>Pings</b>: the <b>@</b> button in the top bar. Everyone who mentioned you, with the messages before and after, jump-to-chat and reply.</li>
+<li><b>Drill-down</b>: click a token's picture, or right-click any contract → Open token. Candles on a market-cap axis with every caller pinned.</li>
+<li><b>Columns</b>: the <b>+</b> at the right end adds one: calls, chat, Top Callers, Cove, Salpha or J7, scoped to any channels, with filters and its own alert sound. Drag the grip to reorder, the edge to resize.</li>
+<li><b>Favorites</b>: ⋯ next to a name → Favorite caller. They get a crown and their first calls ping you.</li>
 <li><b>Bots</b>: ⚙ → Feed → Bots decides which bots show, which count as calls, and which may ping you.</li>
-<li><b>J7</b>: paste your J7Tracker session id in ⚙ → Accounts and add a J7 column. Star accounts to get pinged when they tweet; launches off a tweet appear under it.</li>
+<li><b>J7</b>: paste your J7Tracker session id in ⚙ → Accounts and add a J7 column. Star an account to get pinged when it tweets.</li>
 </ul>
-<h2 id="help">Help</h2>
-<p>Ask in the <a href="https://discord.gg/6ByE8fPNN">community Discord</a>. Bugs and ideas go to <a href="https://github.com/frogeth/opentrench/issues">GitHub issues</a>.</p>
-</article></div></main>
-<footer class="wrap"><span>opentrench docs</span><a href="https://github.com/frogeth/opentrench">GitHub</a><a href="https://discord.gg/6ByE8fPNN">Community</a></footer>
-<script>document.querySelectorAll('.tabs').forEach(t=>{const b=[...t.querySelectorAll('button')];const on=n=>{b.forEach(x=>x.classList.toggle('on',x.dataset.os===n));document.querySelectorAll('.os').forEach(x=>x.classList.toggle('on',x.dataset.os===n));try{localStorage.setItem('os',n)}catch{}};b.forEach(x=>x.onclick=()=>on(x.dataset.os));let d='mac';try{d=localStorage.getItem('os')||(navigator.platform.startsWith('Win')?'win':'mac')}catch{}on(d)})</script>
-</body></html>
+
+<h2 id="trouble">Troubleshooting</h2>
+<ul>
+<li><b>The discord pill stays red.</b> Is Discord open, and is OpentrenchBridge switched on in Vencord's plugin list? If it isn't in the list, the build didn't include it: check the folder path, run <code>pnpm build</code> again, restart Discord.</li>
+<li><b>Vencord isn't in Discord's settings.</b> <code>pnpm inject</code> didn't patch the Discord you run. Run it again and pick the right one.</li>
+<li><b>Discord updated and Vencord stopped loading.</b> Run <code>pnpm inject</code> again in the Vencord folder.</li>
+<li><b>Different port.</b> If opentrench's web page isn't on 3210, set the port in the plugin's settings (Vencord → Plugins → OpentrenchBridge → gear).</li>
+<li><b>Updating the plugin.</b> When release notes mention it: in the Vencord folder, copy the plugin again, <code>pnpm build</code>, restart Discord.</li>
+<li><b>Is this allowed?</b> Client mods sit outside Discord's terms. Vencord has a very large user base and Discord hasn't banned for it. A self-bot, a separate program with your token, is what Discord's detection targets, which is why opentrench moved away from it.</li>
+</ul>
+</article></div></main><footer><div class="wrap"><span>opentrench</span><a href="./">Getting started</a><a href="https://github.com/frogeth/opentrench/blob/main/CHANGELOG.md">Changelog</a><a href="https://github.com/frogeth/opentrench">GitHub</a><a href="https://discord.gg/6ByE8fPNN">Discord</a><span style="margin-left:auto">MIT · runs on your machine</span></div></footer>
+<script>
+const seg=document.querySelector('.seg');if(seg){const b=[...seg.querySelectorAll('button')];const on=n=>{b.forEach(x=>x.classList.toggle('on',x.dataset.os===n));document.querySelectorAll('.os').forEach(x=>x.classList.toggle('on',x.dataset.os===n));try{localStorage.setItem('os',n)}catch{}};b.forEach(x=>x.onclick=()=>on(x.dataset.os));let d='mac';try{d=localStorage.getItem('os')||(navigator.platform.startsWith('Win')?'win':'mac')}catch{}on(d)}
+const links=[...document.querySelectorAll('.toc a[href^="#"]')];const secs=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){links.forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='#'+e.target.id))}})},{rootMargin:'-20% 0px -70% 0px'});secs.forEach(s=>io.observe(s));
+</script></body></html>
