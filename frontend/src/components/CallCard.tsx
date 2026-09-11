@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import type { CallRecord, TokenInfo } from '../types';
 import { chartEmbedUrl, copyText, isFavorite, money, price, shortAddr, telegramShareUrl, timeAgo, type ChartProvider } from '../format';
 import { Avatar } from './Avatar';
+import { CaMenuContext } from './RichText';
 import { Logo } from './Logo';
 import { Icon } from './Icon';
 import { BuyRow } from './BuyRow';
@@ -74,6 +75,7 @@ export function CallCard({
   seen?: boolean;
   onSeen?: (on: boolean) => void;
 }) {
+  const caMenu = useContext(CaMenuContext);
   const embed = chartEmbedUrl(t, chartProvider);
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
@@ -188,7 +190,16 @@ export function CallCard({
           <div className="call-line call-sub">
             {t.pairCreatedAt && <span className="call-age-tok" title="token age">{timeAgo(t.pairCreatedAt, now)}</span>}
             {t.pairCreatedAt && <span className="call-dot">|</span>}
-            <span className="call-addr" onClick={copy} title="click to copy">
+            <span
+              className="call-addr"
+              onClick={copy}
+              title="click to copy · right-click for buy / research"
+              onContextMenu={(e) => {
+                if (!caMenu) return;
+                e.preventDefault();
+                caMenu(t.address, e.clientX, e.clientY);
+              }}
+            >
               {shortAddr(t.address)} <Icon name="copy" size={10} />
             </span>
             {hasPrice && price(t.priceUsd) && <span className="call-price">{price(t.priceUsd)}</span>}

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import type { CallRecord, TokenInfo } from '../types';
 import { api } from '../api';
 import { copyText, isFavorite, money, price, shortAddr, telegramShareUrl, timeAgo } from '../format';
 import { Avatar } from './Avatar';
+import { CaMenuContext } from './RichText';
 import { Logo } from './Logo';
 import { Icon } from './Icon';
 import { BuyRow } from './BuyRow';
@@ -37,6 +38,7 @@ const serverOf = (c: CallRecord) => {
  * chart (market cap axis) with every call pinned on it, and the callers list.
  */
 export function TokenModal({ t, now, favorites, onClose, onShare, onBuy }: { t: TokenInfo; now: number; favorites: string[]; onClose: () => void; onShare?: (address: string, symbol?: string) => void; onBuy?: (url: string) => void }) {
+  const caMenu = useContext(CaMenuContext);
   const [interval, setInterval_] = useState<Interval>('5m');
   const [server, setServer] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('recent');
@@ -129,7 +131,16 @@ export function TokenModal({ t, now, favorites, onClose, onShare, onBuy }: { t: 
             </div>
             <div className="call-sub">
               {t.pairCreatedAt && <span title="token age">{timeAgo(t.pairCreatedAt, now)}</span>}
-              <span className="call-addr" onClick={copy} title="click to copy">
+              <span
+              className="call-addr"
+              onClick={copy}
+              title="click to copy · right-click for buy / research"
+              onContextMenu={(e) => {
+                if (!caMenu) return;
+                e.preventDefault();
+                caMenu(t.address, e.clientX, e.clientY);
+              }}
+            >
                 {shortAddr(t.address)} <Icon name="copy" size={10} />
               </span>
               {price(t.priceUsd) && <span className="call-price">{price(t.priceUsd)}</span>}

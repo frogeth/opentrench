@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { CaMenuContext } from './RichText';
+import { useContext, useState } from 'react';
 import type { Contract, TokenInfo } from '../types';
 import { chartEmbedUrl, copyText, money, shortAddr, type ChartProvider } from '../format';
 import { BuyRow } from './BuyRow';
@@ -26,6 +27,7 @@ export function TokenChip({
   repeat?: boolean;
 }) {
   const embed = chartEmbedUrl(t, chartProvider);
+  const caMenu = useContext(CaMenuContext);
   const [copied, setCopied] = useState(false);
   const [manual, setManual] = useState<boolean | null>(null);
   const showChart = manual ?? autoChart;
@@ -68,7 +70,16 @@ export function TokenChip({
                 🔁 repeat
               </span>
             )}
-            <span className="chip-addr" onClick={copy} title="click to copy">
+            <span
+              className="chip-addr"
+              onClick={copy}
+              title="click to copy · right-click for buy / research"
+              onContextMenu={(e) => {
+                if (!caMenu) return;
+                e.preventDefault();
+                caMenu(c.address, e.clientX, e.clientY);
+              }}
+            >
               {copied ? 'copied' : shortAddr(c.address)}
             </span>
             {showChart && (

@@ -7,6 +7,10 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Salpha column: your conversation with @salpha_research_bot, alongside Cove.
+- Right-click any contract address (in chat, on a call card, in the drill-down) for Buy on Cove, Research with Salpha, or Copy. Buy and Research paste the address to that bot and open its column.
+- Cove and Salpha columns have a slimmer editor: no channel list, since they show one bot conversation.
+
 ## v0.1.16 — 2026-09-10
 
 - Cove panels keep their links and formatting: positions, Sell 100%, Move, Hide and Switch to bulk sell are clickable and act inside the app.

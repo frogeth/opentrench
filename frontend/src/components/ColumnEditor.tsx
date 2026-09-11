@@ -109,6 +109,7 @@ export function ColumnEditor({
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const set = <K extends keyof ColumnFilters>(k: K, v: ColumnFilters[K]) => setF((s) => ({ ...s, [k]: v }));
   const num = (k: NumKey) => (e: React.ChangeEvent<HTMLInputElement>) => set(k, e.target.value === '' ? undefined : Number(e.target.value));
+  const isBot = type === 'cove' || type === 'salpha';
   const all = chats.length === 0;
   const none = chats.includes('none');
   // "All channels" is stored as an empty list and shows as every box ticked; "none" is a
@@ -146,7 +147,7 @@ export function ColumnEditor({
   };
 
   const save = () => {
-    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : all ? 'All Chats' : 'Chats');
+    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : all ? 'All Chats' : 'Chats');
     if (none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
     const clean: ColumnFilters = {};
     for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== false && !(Array.isArray(v) && v.length === 0) && !(typeof v === 'string' && !v.trim())) (clean as any)[k] = v;
@@ -164,7 +165,7 @@ export function ColumnEditor({
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal fed">
+      <div className={`modal fed${isBot ? ' fed-compact' : ''}`}>
         <div className="fed-head">
           <b>{col ? 'Edit column' : 'Add column'}</b>
           <button className="close" onClick={onClose} title="close">
@@ -175,14 +176,21 @@ export function ColumnEditor({
           {/* ---------- left: what & where ---------- */}
           <div className="fed-left">
             <div className="fed-type">
-              {(['chat', 'calls', 'callers', 'cove'] as const).map((t) => (
+              {(['chat', 'calls', 'callers', 'cove', 'salpha'] as const).map((t) => (
                 <button key={t} className={type === t ? 'active' : ''} onClick={() => setType(t)}>
-                  <Icon name={t === 'chat' ? 'chat' : t === 'calls' ? 'calls' : t === 'callers' ? 'people' : 'send'} size={13} /> {t === 'chat' ? 'Messages' : t === 'calls' ? 'Calls' : t === 'callers' ? 'Top Callers' : 'Cove'}
+                  <Icon name={t === 'chat' ? 'chat' : t === 'calls' ? 'calls' : t === 'callers' ? 'people' : t === 'cove' ? 'send' : 'search'} size={13} /> {t === 'chat' ? 'Messages' : t === 'calls' ? 'Calls' : t === 'callers' ? 'Top Callers' : t === 'cove' ? 'Cove' : 'Salpha'}
                 </button>
               ))}
             </div>
             <div className="fed-label">Feed name</div>
-            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : 'All Chats'} maxLength={40} />
+            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : 'All Chats'} maxLength={40} />
+            {isBot && (
+              <div className="fed-bot-note hint">
+                {type === 'cove' ? 'Your conversation with @cove_trading_bot. Buy buttons and right-click → Buy land here.' : 'Your conversation with @salpha_research_bot. Right-click a contract → Research sends it here.'}
+              </div>
+            )}
+            {!isBot && (
+            <>
             <div className="fed-label">
               Channels <span className="muted">({all ? 'all' : none ? 'none' : `${chats.length} of ${allKeys.length}`})</span>
               <span className="fed-links">
@@ -234,10 +242,13 @@ export function ColumnEditor({
               })}
               {watched.length === 0 && <div className="hint">No watched chats yet. Add some with the + in the rail.</div>}
             </div>
+            </>
+            )}
           </div>
 
           {/* ---------- right: filters & alerts ---------- */}
           <div className="fed-right">
+            {isBot && <div className="hint">Nothing to filter here — this column shows one bot conversation.</div>}
             {type === 'chat' && (
               <>
                 <div className="fsec">

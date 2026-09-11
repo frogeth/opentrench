@@ -10,11 +10,16 @@ import { CallersList } from './components/CallersColumn';
 import { Composer, type SendTarget } from './components/Composer';
 import { ShareModal } from './components/ShareModal';
 import { CoveView, COVE_BOT } from './components/CoveView';
+import { CaMenuContext } from './components/RichText';
+
+const BOTS = { cove: COVE_BOT, salpha: 'salpha_research_bot' } as const;
+type BotKind = keyof typeof BOTS;
 import { VirtualItem } from './components/Virtual';
 import { Settings } from './components/Settings';
 import { ChannelSidebar, discordChatName, type View } from './components/ChannelSidebar';
 import { AddChatsModal } from './components/AddChatsModal';
 import { Logo } from './components/Logo';
+import { Icon } from './components/Icon';
 import { Avatar } from './components/Avatar';
 import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
 import { beep, type ChartProvider } from './format';
@@ -216,6 +221,24 @@ export default function App() {
   // Cove buttons: send the deep link's /start payload through our own Telegram session and show
   // Cove's reply in a Cove column (added on first use).
   const [coveFlash, setCoveFlash] = useState<string | null>(null);
+  const [caMenu, setCaMenu] = useState<{ address: string; x: number; y: number } | null>(null);
+  const openCaMenu = (address: string, x: number, y: number) => setCaMenu({ address, x, y });
+  /** make sure a bot column exists and flash it */
+  const ensureBotColumn = (kind: BotKind) => {
+    if (!columns.some((c) => c.type === kind)) saveColumns([...columns, { id: kind, type: kind, title: kind === 'cove' ? 'Cove' : 'Salpha', chats: [], width: 420 }]);
+    setCoveFlash(kind);
+    window.setTimeout(() => setCoveFlash(null), 1500);
+  };
+  /** right-click → Buy (Cove) or Research (Salpha): paste the address to that bot */
+  const sendToBot = (kind: BotKind, address: string) => {
+    setCaMenu(null);
+    if (status.telegram !== 'connected') {
+      alert('Connect Telegram in Settings → Accounts first.');
+      return;
+    }
+    ensureBotColumn(kind);
+    void api.botSend(BOTS[kind], address).catch((e) => alert(`${kind === 'cove' ? 'Cove' : 'Salpha'}: ${e?.message ?? e}`));
+  };
   const onBuy = (url: string) => {
     const payload = /[?&]start=([A-Za-z0-9_-]+)/.exec(url)?.[1];
     if (!payload) return window.open(url, '_blank', 'noopener');
@@ -223,14 +246,8 @@ export default function App() {
       window.open(url, '_blank', 'noopener');
       return;
     }
-    if (!columns.some((c) => c.type === 'cove')) saveColumns([...columns, { id: 'cove', type: 'cove', title: 'Cove', chats: [], width: 420 }]);
-    api
-      .botStart(COVE_BOT, payload)
-      .then(() => {
-        setCoveFlash('cove');
-        window.setTimeout(() => setCoveFlash(null), 1500);
-      })
-      .catch((e) => alert(`Cove: ${e?.message ?? e}`));
+    ensureBotColumn('cove');
+    api.botStart(COVE_BOT, payload).catch((e) => alert(`Cove: ${e?.message ?? e}`));
   };
   const openShare = (address: string, symbol?: string) => setShare({ address, symbol });
   // Reactions: what you added this session (the platform stream brings the counts back)
@@ -578,6 +595,7 @@ export default function App() {
     : false;
 
   return (
+    <CaMenuContext.Provider value={openCaMenu}>
     <div className="app">
       <header className="top">
         <div className="brand">opentrench</div>
@@ -753,10 +771,11 @@ export default function App() {
                   onResize: last ? undefined : resizeFor(col.id),
                   fill: last,
                 };
-                if (col.type === 'cove') {
+                if (col.type === 'cove' || col.type === 'salpha') {
+                  const bot = BOTS[col.type];
                   return (
-                    <Column key={col.id} title={col.title} subtitle={`@${COVE_BOT} · your Telegram`} kind="cove" className={`col-cove${coveFlash ? ' col-flash' : ''}`} {...actions}>
-                      <CoveView bot={COVE_BOT} msgs={botMsgs[COVE_BOT] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} />
+                    <Column key={col.id} title={col.title} subtitle={`@${bot} · your Telegram`} kind={col.type} className={`col-cove${coveFlash === col.type ? ' col-flash' : ''}`} {...actions}>
+                      <CoveView bot={bot} msgs={botMsgs[bot] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} />
                     </Column>
                   );
                 }
@@ -882,6 +901,22 @@ export default function App() {
       )}
       {openToken && tokens[openToken] && <TokenModal t={tokens[openToken]} now={now} favorites={status.favorites} onClose={() => setOpenToken(null)} onShare={openShare} onBuy={onBuy} />}
       {share && <ShareModal address={share.address} symbol={share.symbol} watched={watched} channels={channels} canSend={canSend} onClose={() => setShare(null)} />}
+      {caMenu && (
+        <div className="ca-menu-backdrop" onMouseDown={() => setCaMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCaMenu(null); }}>
+          <div className="ca-menu" style={{ left: Math.min(caMenu.x, window.innerWidth - 220), top: Math.min(caMenu.y, window.innerHeight - 130) }} onMouseDown={(e) => e.stopPropagation()}>
+            <div className="ca-menu-addr">{caMenu.address.slice(0, 6)}…{caMenu.address.slice(-4)}</div>
+            <button onClick={() => sendToBot('cove', caMenu.address)}>
+              <Icon name="send" size={12} /> Buy on Cove
+            </button>
+            <button onClick={() => sendToBot('salpha', caMenu.address)}>
+              <Icon name="search" size={12} /> Research with Salpha
+            </button>
+            <button onClick={() => { void navigator.clipboard?.writeText(caMenu.address); setCaMenu(null); }}>
+              <Icon name="copy" size={12} /> Copy address
+            </button>
+          </div>
+        </div>
+      )}
       {settingsOpen && (
         <Settings
           status={status}
@@ -913,5 +948,6 @@ export default function App() {
         />
       )}
     </div>
+    </CaMenuContext.Provider>
   );
 }

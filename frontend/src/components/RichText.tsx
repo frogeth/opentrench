@@ -2,6 +2,8 @@ import { createContext, useContext, useState, type ReactNode } from 'react';
 
 /** A container can claim link clicks (return true = handled, default prevented). The Cove column uses it for the bot's deep links. */
 export const LinkInterceptContext = createContext<((href: string) => boolean) | null>(null);
+/** Right-click on a contract address anywhere: the app opens Buy / Research. */
+export const CaMenuContext = createContext<((address: string, x: number, y: number) => void) | null>(null);
 import { copyText } from '../format';
 
 // Discord custom emoji on the wire: <:name:id> or <a:name:id> (animated).
@@ -34,10 +36,17 @@ function escapeRe(s: string): string {
 /** A contract address inside message text: click to copy. */
 function CA({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+  const menu = useContext(CaMenuContext);
   return (
     <span
       className={`ca${copied ? ' ca-copied' : ''}`}
-      title="click to copy"
+      title="click to copy · right-click for buy / research"
+      onContextMenu={(e) => {
+        if (!menu) return;
+        e.preventDefault();
+        e.stopPropagation();
+        menu(text, e.clientX, e.clientY);
+      }}
       onClick={(e) => {
         e.stopPropagation();
         void copyText(text);

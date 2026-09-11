@@ -5,7 +5,7 @@ import type { BotPolicy } from './types.js';
 /** One column of the terminal. `chats` are `<source>:<id>` keys of watched chats; empty = every watched chat. */
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'cove';
+  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha';
   title: string;
   chats: string[];
   /** fixed width in px (drag-resized); unset = share the space */
@@ -30,8 +30,9 @@ export function sanitizeColumns(raw: unknown): ColumnDef[] {
   for (const r of raw.slice(0, 8)) {
     if (!r || typeof r !== 'object') continue;
     const id = String((r as any).id ?? '').trim().slice(0, 40);
-    const type = (r as any).type === 'calls' ? 'calls' : (r as any).type === 'callers' ? 'callers' : (r as any).type === 'cove' ? 'cove' : 'chat';
-    const title = String((r as any).title ?? '').trim().slice(0, 40) || (type === 'calls' ? 'Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : 'Chats');
+    const rawType = (r as any).type;
+    const type = rawType === 'calls' ? 'calls' : rawType === 'callers' ? 'callers' : rawType === 'cove' ? 'cove' : rawType === 'salpha' ? 'salpha' : 'chat';
+    const title = String((r as any).title ?? '').trim().slice(0, 40) || (type === 'calls' ? 'Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : 'Chats');
     // empty = every watched chat; the 'none' sentinel = nothing selected (a column being set up)
     const chats = Array.isArray((r as any).chats) ? (r as any).chats.map(String).filter((k: string) => /^(discord|telegram):/.test(k) || k === 'none').slice(0, 200) : [];
     if (!id || seen.has(id)) continue;

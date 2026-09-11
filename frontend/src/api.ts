@@ -77,7 +77,7 @@ export interface ColumnFilters {
 }
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'cove';
+  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
