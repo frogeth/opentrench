@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Cove buy buttons now cover every chain in Cove's deep-link table: Tempo, Monad, Story, HyperEVM and Plasma join ETH, Base, BNB, MegaETH, Robinhood and Solana. Arbitrum, Ink and Stable have no published code yet; right-click → Buy on Cove still works there because it sends the bare contract.
 - J7Tracker column: paste your J7 session id in Settings → Accounts and its tweet feed streams natively, newest first, with a strip under each tweet showing the calls it mentions (by contract or $ticker). Click a match to jump to the call; contract addresses in tweets get the usual copy and right-click actions. Unofficial integration, read-only.
 - J7 column shows deleted tweets the way J7 does: the original stays put and a red "deleted" copy lands at the top of the feed.
 - J7: star an X account on any of its tweets and you get a sound (pick it in the column editor) plus a desktop notification whenever it tweets.

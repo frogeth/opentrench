@@ -43,6 +43,13 @@ export const NETWORK_LABEL: Record<string, string> = {
   robinhood: 'RH',
   solana: 'SOL',
   megaeth: 'MEGA',
+  monad: 'MON',
+  hyperevm: 'HYPE',
+  plasma: 'XPL',
+  story: 'IP',
+  tempo: 'TEMPO',
+  ink: 'INK',
+  stable: 'STBL',
 };
 
 export function netLabel(network: string | undefined, chain: 'sol' | 'evm'): string {

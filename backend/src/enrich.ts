@@ -25,6 +25,11 @@ const EXPLORERS: Record<string, string> = {
   avalanche: 'https://snowtrace.io/token/',
   robinhood: 'https://robinhoodchain.blockscout.com/token/',
   solana: 'https://solscan.io/token/',
+  monad: 'https://monadscan.com/token/',
+  hyperevm: 'https://hyperevmscan.io/token/',
+  plasma: 'https://plasmascan.to/token/',
+  story: 'https://www.storyscan.io/token/',
+  megaeth: 'https://megaeth.blockscout.com/token/',
 };
 
 export function explorerUrl(network: string | undefined, address: string): string | undefined {

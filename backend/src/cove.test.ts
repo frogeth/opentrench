@@ -43,6 +43,15 @@ describe('cove', () => {
     );
   });
 
+  it('covers the chains in Cove\'s published deep-link table', () => {
+    const addr = '0xf30bf00edd0c22db54c9274b90d2a4c21fc09b07';
+    for (const [net, code] of [['tempo', 't'], ['monad', 'o'], ['story', 'y'], ['hyperevm', 'h'], ['plasma', 'p'], ['megaeth', 'm']]) {
+      const l = buildCoveLinks(net, addr, { amounts: [10] });
+      expect(l?.panel).toBe(`https://t.me/cove_trading_bot?start=b_${code}${encodeToken(net, addr)}`);
+      expect(l?.amounts[0].url).toBe(`https://t.me/cove_trading_bot?start=g_10${code}${encodeToken(net, addr)}`);
+    }
+  });
+
   it('returns undefined for unsupported or unknown chains', () => {
     expect(buildCoveLinks('arbitrum', BITCAT, { amounts: [50] })).toBeUndefined();
     expect(buildCoveLinks(undefined, BITCAT, { amounts: [50] })).toBeUndefined();
