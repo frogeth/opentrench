@@ -98,6 +98,23 @@ export interface Mention {
   read: boolean;
 }
 
+/** Someone you could favorite: seen posting in the feed, or found in a chat's member list. */
+export interface PersonSeen {
+  name: string;
+  avatar?: string;
+  source: Source;
+  /** messages of theirs still in the buffer */
+  messages: number;
+  /** counted calls across every token we know */
+  calls: number;
+  /** 0 when they have not posted in a watched chat (found via the member list) */
+  lastTs: number;
+  chats: string[];
+  bot: boolean;
+  /** found in a member list rather than the feed */
+  member?: boolean;
+}
+
 export interface BuyLinks {
   /** which bot these links open */
   provider: 'cove' | 'basedbot';

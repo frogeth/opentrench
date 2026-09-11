@@ -227,6 +227,32 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       });
     }),
   );
+  /**
+   * People you could favorite, matching ?q=. Everyone the feed has seen comes first (they are
+   * certain to match by name); chat members who have not posted are appended when a query is given.
+   */
+  r.get(
+    '/people',
+    wrap(async (req) => {
+      const q = String(req.query.q ?? '').trim().toLowerCase();
+      const norm = (n: string) => n.trim().replace(/^@/, '').toLowerCase();
+      const hit = (n: string) => !q || norm(n).includes(q);
+      const seen = hub.people().filter((p) => hit(p.name));
+      const rank = (p: (typeof seen)[number]) => (q && norm(p.name).startsWith(q) ? 0 : 1);
+      seen.sort((a, b) => rank(a) - rank(b) || b.calls - a.calls || b.lastTs - a.lastTs);
+      const out = seen.slice(0, 20);
+      if (q) {
+        const have = new Set(out.map((p) => `${p.source}:${norm(p.name)}`));
+        for (const m of await svc.searchMembers(q).catch(() => [])) {
+          const key = `${m.source}:${norm(m.name)}`;
+          if (have.has(key)) continue;
+          have.add(key);
+          out.push({ name: m.name, avatar: m.avatar, source: m.source, messages: 0, calls: 0, lastTs: 0, chats: [m.chat], bot: false, member: true });
+        }
+      }
+      return out.slice(0, 30);
+    }),
+  );
   r.get('/bots', wrap(() => hub.bots()));
   r.put(
     '/bots',

@@ -4,6 +4,7 @@ import type { Status } from '../types';
 import { Logo } from './Logo';
 import { Avatar } from './Avatar';
 import { DOCS } from '../site';
+import { PeoplePicker } from './PeoplePicker';
 
 type Tab = 'accounts' | 'feed' | 'trading';
 
@@ -510,7 +511,6 @@ function LaunchpadSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () =
 }
 
 function FavoritesSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
-  const [name, setName] = useState('');
   const { busy, err, run } = useAsync();
   return (
     <section>
@@ -518,7 +518,7 @@ function FavoritesSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () =
       <div className="hint">
         Favorites get a 👑 and ping you when they post a contract nobody has called yet: a desktop notification
         (enable with the 🔔 in the top bar) and a message to your own Telegram Saved Messages. Use ⋯ next to any name
-        in the feed, or add here.
+        in the feed, or search for anyone below — including people who only chat, and members who have not posted at all.
       </div>
       <label className="check">
         <input
@@ -534,21 +534,13 @@ function FavoritesSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () =
         />{' '}
         Telegram Saved Messages ping
       </label>
-      <div className="row-inline">
-        <input placeholder="add a caller name" value={name} onChange={(e) => setName(e.target.value)} />
-        <button
-          disabled={busy || !name.trim()}
-          onClick={() =>
-            run(async () => {
-              await api.favoriteToggle(name.trim());
-              setName('');
-              onChange();
-            })
-          }
-        >
-          Add
-        </button>
-      </div>
+      <PeoplePicker
+        favorites={cfg.favorites}
+        onToggle={async (n) => {
+          await api.favoriteToggle(n);
+          onChange();
+        }}
+      />
       <div className="chips">
         {cfg.favorites.length === 0 && <span className="hint">No favorites yet.</span>}
         {cfg.favorites.map((n) => (

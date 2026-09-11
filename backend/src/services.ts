@@ -343,6 +343,26 @@ export class Services {
   }
 
   /** Every watched chat by display name, for the tab row (even before it has messages). */
+  /**
+   * People matching `q` who have not necessarily posted: Discord members the client has cached
+   * (needs a current opentrench plugin; older ones just return nothing) and Telegram participants
+   * of the watched chats. Names match what the feed would show, so favorites line up.
+   */
+  async searchMembers(q: string, limit = 12): Promise<{ name: string; avatar?: string; source: 'discord' | 'telegram'; chat: string }[]> {
+    const query = q.trim();
+    if (!query) return [];
+    const out: { name: string; avatar?: string; source: 'discord' | 'telegram'; chat: string }[] = [];
+    if (this.discord.state === 'connected') {
+      const rows = await this.discord.request<any[]>('members', { q: query, limit }, 8000).catch(() => []);
+      if (Array.isArray(rows)) for (const r of rows) if (r?.name) out.push({ name: String(r.name), avatar: r.avatar ? String(r.avatar) : undefined, source: 'discord', chat: String(r.guild ?? 'Discord') });
+    }
+    if (this.telegram) {
+      const rows = await this.telegram.searchParticipants(query, this.cfg.get().telegram.watch, limit).catch(() => []);
+      for (const r of rows) out.push({ name: r.name, source: 'telegram', chat: r.chat });
+    }
+    return out.slice(0, limit * 2);
+  }
+
   async watchedChats(): Promise<{ id: string; name: string; source: 'discord' | 'telegram'; avatar?: string }[]> {
     const out: { id: string; name: string; source: 'discord' | 'telegram'; avatar?: string }[] = [];
     const cfg = this.cfg.get();

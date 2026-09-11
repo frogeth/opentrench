@@ -23,6 +23,7 @@ import type {
   TelegramState,
   TokenInfo,
   Mention,
+  PersonSeen,
 } from './types.js';
 
 /** Identifies this server process; the UI reloads when it changes so a restart with a new build never leaves stale assets. */
@@ -236,6 +237,29 @@ export class MessageHub extends EventEmitter {
     if (p.pings === 'all') return false;
     if (p.pings === 'allow') return !(p.pingAllow ?? []).some((b) => normName(b) === normName(msg.author));
     return true;
+  }
+
+  /**
+   * Everyone the feed has seen post: buffer authors (so people who chat but never call are
+   * included) merged with every token's call records (which outlive the message buffer).
+   */
+  people(): PersonSeen[] {
+    const byKey = new Map<string, PersonSeen>();
+    const add = (name: string, avatar: string | undefined, source: Source, chatName: string, ts: number, bot: boolean): PersonSeen => {
+      const key = `${source}:${normName(name)}`;
+      let p = byKey.get(key);
+      if (!p) {
+        p = { name, avatar, source, messages: 0, calls: 0, lastTs: ts, chats: [], bot };
+        byKey.set(key, p);
+      }
+      if (!p.avatar && avatar) p.avatar = avatar;
+      if (ts > p.lastTs) p.lastTs = ts;
+      if (chatName && !p.chats.includes(chatName)) p.chats.push(chatName);
+      return p;
+    };
+    for (const m of this.buffer) add(m.author, m.avatar, m.source, m.chatName, m.ts, m.isBot).messages++;
+    for (const t of this.tokens.values()) for (const c of t.calls) add(c.author, c.avatar, c.source, c.chatName, c.ts, false).calls++;
+    return [...byKey.values()];
   }
 
   /** Every bot seen in the buffer, newest first, with its current visibility. */

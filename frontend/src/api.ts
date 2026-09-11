@@ -170,6 +170,7 @@ export const api = {
   },
   /** legacy read-only token; empty string removes it */
   setDiscordToken: (token: string) => req<{ hasToken: boolean }>('PUT', '/discord/token', { token }),
+  people: (q: string) => req<import('./types').PersonSeen[]>('GET', `/people?q=${encodeURIComponent(q)}`),
   mentions: () => req<import('./types').Mention[]>('GET', '/mentions'),
   markMentionsRead: (ids?: string[]) => req<{ marked: number }>('POST', '/mentions/read', ids ? { ids } : {}),
   j7Recent: () => req<import('./types').J7Tweet[]>('GET', '/j7/recent'),

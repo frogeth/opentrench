@@ -136,6 +136,32 @@ async function handleRequest(req: Json) {
         } else if (op === "history") {
             const res: any = await RestAPI.get({ url: Constants.Endpoints.MESSAGES(String(req.channelId)), query: { limit: Math.min(100, Number(req.limit) || 50) }, retries: 1 });
             result = res?.body ?? [];
+        } else if (op === "members") {
+            // People this client already knows about, named the way the feed names them
+            // (guild nickname first) so a favorite added from here matches their messages.
+            const q = String(req.q ?? "").toLowerCase();
+            const limit = Math.min(30, Number(req.limit) || 12);
+            const out: Json[] = [];
+            const seen = new Set<string>();
+            const push = (user: any, nick: string | undefined, guild: string) => {
+                if (!user || out.length >= limit) return;
+                const name = nick || user.globalName || user.username;
+                if (!name || !String(name).toLowerCase().includes(q)) return;
+                const key = `${user.id}:${name}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                out.push({ name: String(name), avatar: user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64` : undefined, guild });
+            };
+            for (const g of Object.values(GuildStore.getGuilds() as Record<string, any>)) {
+                if (out.length >= limit) break;
+                const members: any[] = (GuildMemberStore as any).getMembers?.(g.id) ?? [];
+                for (const m of members) push(UserStore.getUser(m.userId), m.nick, String(g.name ?? ""));
+            }
+            if (out.length < limit) {
+                const users: any = (UserStore as any).getUsers?.() ?? {};
+                for (const u of Object.values(users) as any[]) push(u, undefined, "Discord");
+            }
+            result = out;
         } else if (op === "hello") {
             hello();
             result = true;

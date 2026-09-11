@@ -429,6 +429,29 @@ export class TelegramWrapper extends EventEmitter {
     }
   }
 
+  /**
+   * Members of the given chats matching `query`, named the way the feed names them
+   * (@username, else first+last) so a favorite added here matches their messages.
+   */
+  async searchParticipants(query: string, chatIds: string[], limit = 8): Promise<{ name: string; chat: string }[]> {
+    if (!this.client || this.state !== 'connected' || !query.trim()) return [];
+    const out: { name: string; chat: string }[] = [];
+    for (const id of chatIds.slice(0, 8)) {
+      try {
+        const chat: any = await this.client.getEntity(bigInt(id)).catch(() => null);
+        const parts: any[] = await this.client.getParticipants(bigInt(id), { search: query, limit });
+        for (const u of parts) {
+          const name = u?.username ? `@${u.username}` : [u?.firstName, u?.lastName].filter(Boolean).join(' ').trim();
+          if (name) out.push({ name, chat: String(chat?.title ?? id) });
+        }
+      } catch {
+        /* a chat that doesn't support participant search */
+      }
+      if (out.length >= limit * 2) break;
+    }
+    return out;
+  }
+
   /** Recent messages of a chat (newest first), for previewing a chat that isn't in the feed. */
   async history(chatId: string, limit = 50): Promise<FeedMessage[]> {
     if (!this.client || this.state !== 'connected') return [];

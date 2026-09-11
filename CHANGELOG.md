@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Search anyone to favorite. ⚙ → Feed → Favorites now has a people search instead of a blind name field: it lists everyone the feed has seen (including people who only chat and have never called), and when you type it also searches your Discord servers and Telegram groups for members who have not posted at all. Each row shows their calls, messages and where, and one click toggles the crown. Typing a name nothing matches still lets you add it verbatim (alextjh).
+
 - Sound fixes. The 🔕 in the top bar is now a true master mute: column alerts and J7 pings obeyed only their own switches before and kept playing. A column's bell is the only thing that makes it ping: call alerts come only from chat/calls columns with the bell on (the J7 pane's bell was wrongly counted as a call alert, so every new call also played its tone), and J7 starred-account pings and notifications fire only when the J7 column's bell is on. Bot panes no longer show a bell. The top-bar bell now toggles sound no matter what the desktop-notification permission is; before, it only became a mute after notifications were granted, so users who declined them had no way to silence the app.
 
 - **Pick your buy bot: Cove or BasedBot** (⚙ → Trading → Buy buttons). Buy buttons on cards and in the drill-down, right-click → Buy on …, and the buy pane all follow the choice. There is one buy pane; it shows whichever bot is picked. BasedBot opens the token via its `r_<referral>_b_<mint>` deep link (the bot asks the amount); a web-app link is kept as a fallback. Cove keeps its one-click amounts.
