@@ -8,7 +8,9 @@ app shows the same text in its update prompt.
 ## Unreleased
 
 - J7Tracker column: paste your J7 session id in Settings → Accounts and its tweet feed streams natively, newest first, with a strip under each tweet showing the calls it mentions (by contract or $ticker). Click a match to jump to the call; contract addresses in tweets get the usual copy and right-click actions. Unofficial integration, read-only.
-- J7 column keeps deleted tweets, badged red and re-surfaced at the top the way J7 shows them, with a "deleted" filter toggle.
+- J7 column shows deleted tweets the way J7 does: the original stays put and a red "deleted" copy lands at the top of the feed.
+- J7: star an X account on any of its tweets and you get a sound (pick it in the column editor) plus a desktop notification whenever it tweets.
+- J7: a "launches" button under each tweet scans pump.fun and letsbonk for tokens whose metadata links that tweet (or just the account), with market cap, launch time and the contract as a normal chip.
 - Bots: with "Show bots" on, a new "Calls from" switch lets you keep bots in your chats while only the bots you mark "calls" put tokens in the Calls column (Brandzo).
 - Composer keeps keyboard focus after you send a message, so you can keep typing (Brandzo).
 

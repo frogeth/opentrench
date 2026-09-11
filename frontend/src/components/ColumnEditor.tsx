@@ -158,7 +158,7 @@ export function ColumnEditor({
       title: t,
       chats,
       ...(type === 'callers' ? { window: win } : {}),
-      ...(type === 'calls' || type === 'chat' ? { alert: { on: alertOn, sound } } : {}),
+      ...(type === 'calls' || type === 'chat' ? { alert: { on: alertOn, sound } } : type === 'j7' ? { alert: { on: true, sound } } : {}),
       filters: Object.keys(clean).length ? clean : undefined,
     });
   };
@@ -248,7 +248,20 @@ export function ColumnEditor({
 
           {/* ---------- right: filters & alerts ---------- */}
           <div className="fed-right">
-            {isBot && <div className="hint">Nothing to filter here — this column shows one bot conversation.</div>}
+            {isBot && type !== 'j7' && <div className="hint">Nothing to filter here — this column shows one bot conversation.</div>}
+            {type === 'j7' && (
+              <div className="fsec">
+                <div className="fsec-title">Ping sound</div>
+                <div className="hint">Star an account on any of its tweets and this sound plays whenever it tweets.</div>
+                <div className="fchips">
+                  {SOUNDS.map((s) => (
+                    <button key={s} className={`fchip${sound === s ? ' on' : ''}`} onClick={() => { setSound(s); playSound(s); }} title={`use “${s}”`}>
+                      <Icon name="play" size={9} /> {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {type === 'chat' && (
               <>
                 <div className="fsec">

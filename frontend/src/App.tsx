@@ -396,6 +396,37 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ping]);
 
+  // Favorited X accounts: a fresh tweet plays the J7 column's sound and posts a notification.
+  const j7Seen = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (j7.length === 0) return;
+    if (j7Seen.current === null) {
+      j7Seen.current = new Set(j7.map((t) => t.id)); // initial load: nothing to announce
+      return;
+    }
+    const favs = new Set((cfg?.j7?.favorites ?? []).map((h) => h.toLowerCase()));
+    const nowMs = Date.now();
+    for (const t of j7) {
+      if (j7Seen.current.has(t.id)) continue;
+      j7Seen.current.add(t.id);
+      if (t.deleted || nowMs - t.ts > 120_000 || !favs.has(t.author.handle.toLowerCase())) continue;
+      const col = columns.find((c) => c.type === 'j7' && c.alert?.sound);
+      playSound(col?.alert?.sound ?? 'ping');
+      if (notify === 'granted') {
+        try {
+          const n = new Notification(`★ @${t.author.handle} tweeted`, { body: t.text.slice(0, 160), icon: t.author.avatar, tag: `j7:${t.id}` });
+          n.onclick = () => {
+            window.focus();
+            n.close();
+          };
+        } catch {
+          /* notifications unavailable */
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [j7]);
+
   // Per-column alerts: a new call (message with a contract, not a repeat) in a column's channels plays its sound.
   const alerted = useRef<{ lastId: string | null; lastPlay: number }>({ lastId: null, lastPlay: 0 });
   useEffect(() => {
@@ -775,7 +806,7 @@ export default function App() {
                 if (col.type === 'j7') {
                   return (
                     <Column key={col.id} title={col.title} subtitle="j7tracker.io · your session" kind="j7" className="col-j7" {...actions}>
-                      <J7View tweets={j7} tokens={tokens} now={now} connected={status.j7 === 'connected'} error={status.error.j7} hasToken={!!cfg?.j7?.hasToken} onLoaded={mergeJ7} onSelect={select} />
+                      <J7View tweets={j7} tokens={tokens} now={now} connected={status.j7 === 'connected'} error={status.error.j7} hasToken={!!cfg?.j7?.hasToken} favorites={cfg?.j7?.favorites ?? []} onFavorite={(h) => void api.j7Favorite(h).then((r) => setCfg((c) => (c ? { ...c, j7: { ...c.j7, favorites: r.favorites } } : c))).catch((e) => alert(`J7: ${e?.message ?? e}`))} onLoaded={mergeJ7} onSelect={select} />
                     </Column>
                   );
                 }

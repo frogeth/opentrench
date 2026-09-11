@@ -10,6 +10,7 @@ import type { ConfigStore } from './config.js';
 import type { MessageHub } from './hub.js';
 import type { Services } from './services.js';
 import { IpfsCache } from './ipfs.js';
+import { createDeployFinder } from './deploys.js';
 
 export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hover?: HoverFetchers): Router {
   const r = Router();
@@ -317,6 +318,36 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     }),
   );
   r.get('/j7/recent', wrap(() => svc.j7Recent()));
+  r.post(
+    '/j7/favorites/toggle',
+    wrap((req) => {
+      const handle = String(req.body?.handle ?? '').replace(/^@/, '').trim().toLowerCase();
+      if (!handle) throw new Error('handle required');
+      let on = false;
+      cfg.update((c) => {
+        c.j7.favorites ??= [];
+        const i = c.j7.favorites.indexOf(handle);
+        if (i >= 0) c.j7.favorites.splice(i, 1);
+        else {
+          c.j7.favorites.push(handle);
+          on = true;
+        }
+      });
+      return { favorite: on, favorites: cfg.get().j7.favorites };
+    }),
+  );
+  // Tokens launched off a tweet: pump.fun and letsbonk metadata that links the tweet or its author.
+  const deploys = createDeployFinder();
+  r.get(
+    '/j7/deploys',
+    wrap((req) => {
+      const tweetId = String(req.query.id ?? '').trim();
+      const handle = String(req.query.handle ?? '').trim();
+      const since = Number(req.query.ts);
+      if (!/^\d{5,}$/.test(tweetId) || !Number.isFinite(since)) throw new Error('id and ts required');
+      return deploys.find({ tweetId, handle, since });
+    }),
+  );
   // Bot conversations (Cove): the user's own session talks to the bot; the UI renders the panels.
   const BOT_RE = /^[A-Za-z0-9_]{3,32}$/;
   r.get(

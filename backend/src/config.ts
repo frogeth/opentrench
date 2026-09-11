@@ -82,10 +82,10 @@ export interface Config {
   /** call cards the user has marked as seen (inbox style); newest last, capped */
   seenTokens: string[];
   /** J7Tracker: the account's session id (from its web app), read-only tweet stream */
-  j7: { token?: string };
+  j7: { token?: string; /** X handles (no @) whose tweets ping you */ favorites: string[] };
 }
 
-const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [], bots: { default: 'hide', allow: [] }, favorites: [], pingTelegram: true, railOrder: [], columns: DEFAULT_COLUMNS.map((c) => ({ ...c })), seenTokens: [], j7: {} };
+const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [], bots: { default: 'hide', allow: [] }, favorites: [], pingTelegram: true, railOrder: [], columns: DEFAULT_COLUMNS.map((c) => ({ ...c })), seenTokens: [], j7: { favorites: [] } };
 
 export class ConfigStore {
   private cfg: Config;
@@ -122,7 +122,7 @@ export class ConfigStore {
       hasO1Key: !!this.cfg.o1ApiKey,
       railOrder: this.cfg.railOrder,
       columns: this.cfg.columns,
-      j7: { hasToken: !!this.cfg.j7.token },
+      j7: { hasToken: !!this.cfg.j7.token, favorites: this.cfg.j7.favorites },
       seenTokens: this.cfg.seenTokens,
     };
   }
@@ -145,7 +145,10 @@ export class ConfigStore {
         o1ApiKey: typeof raw.o1ApiKey === 'string' && raw.o1ApiKey.trim() ? raw.o1ApiKey.trim() : undefined,
         railOrder: Array.isArray(raw.railOrder) ? raw.railOrder.map(String) : [],
         columns: sanitizeColumns(raw.columns),
-        j7: { token: typeof raw.j7?.token === 'string' && raw.j7.token.trim() ? raw.j7.token.trim() : undefined },
+        j7: {
+          token: typeof raw.j7?.token === 'string' && raw.j7.token.trim() ? raw.j7.token.trim() : undefined,
+          favorites: Array.isArray(raw.j7?.favorites) ? [...new Set((raw.j7.favorites as unknown[]).map((h) => String(h).replace(/^@/, '').trim().toLowerCase()).filter((h) => h.length > 0))].slice(0, 500) : [],
+        },
         seenTokens: Array.isArray(raw.seenTokens) ? raw.seenTokens.map(String).slice(-3000) : [],
       };
     } catch {

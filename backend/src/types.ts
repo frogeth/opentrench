@@ -238,6 +238,21 @@ export interface J7Tweet {
   deleted?: number;
 }
 
+/** A token launched with this tweet (or its author) in its metadata links. */
+export interface J7Deploy {
+  source: 'pump' | 'bonk';
+  mint: string;
+  name: string;
+  symbol: string;
+  image?: string;
+  createdAt: number;
+  marketCap?: number;
+  twitter: string;
+  /** links the exact tweet, or just the account */
+  match: 'tweet' | 'account';
+  url: string;
+}
+
 export interface Status {
   discord: DiscordState;
   telegram: TelegramState;

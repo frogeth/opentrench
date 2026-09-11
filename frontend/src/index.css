@@ -915,3 +915,19 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .tweet-deleted:not(.tweet-hit) { box-shadow: inset 3px 0 0 #f87171; }
 .tweet-del { margin-left: auto; color: #f87171; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
 .tweet-del + .tweet-time { margin-left: 0; }
+.tweet-fav { background: none; border: 0; color: var(--dim); font-size: 14px; line-height: 1; padding: 0 4px; cursor: pointer; }
+.tweet-fav:hover { color: var(--gold); }
+.tweet-fav.on { color: var(--gold); }
+.tweet-actions { display: flex; gap: 6px; }
+.tweet-actions .hdr-toggle { display: inline-flex; align-items: center; gap: 4px; }
+.tweet-deploys { display: flex; flex-direction: column; gap: 6px; font-size: 11px; padding: 6px 8px; border: 1px dashed var(--line-strong); border-radius: 8px; }
+.deploy { display: flex; gap: 8px; align-items: flex-start; }
+.deploy img, .deploy-noimg { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; background: var(--embed); flex: 0 0 auto; }
+.deploy-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.deploy-name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+.deploy-src { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 5px; border-radius: 4px; background: #2f8f4e; color: #fff; }
+.deploy-src.bonk { background: #e2762c; }
+.deploy-match { font-size: 10px; color: var(--muted); }
+.deploy-tweet .deploy-match { color: var(--ok); }
+.deploy-meta a { color: var(--muted); }
+.deploy-ca { font-family: var(--mono); font-size: 11px; word-break: break-all; }

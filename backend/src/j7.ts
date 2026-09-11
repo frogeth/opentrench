@@ -118,8 +118,8 @@ export class J7Client extends EventEmitter {
             contracts: [],
             tickers: [],
           };
-      t.deleted = Date.now();
-      upsert(t);
+      // J7 leaves the original where it was and adds a new "deleted" entry on top
+      upsert({ ...t, id: `deleted:${id}`, deleted: Date.now() });
     });
   }
 
