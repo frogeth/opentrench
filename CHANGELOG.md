@@ -7,7 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
-- **Discord no longer uses your token.** opentrench now reads and sends Discord through a small Vencord plugin (`vencord/opentrench-bridge`) running inside your own Discord app, the way BetterDiscord and Vencord plugins work: the client's own functions do the work, so there is no separate self-bot session for Discord to detect. Paste-your-token is gone from Settings and any saved token is dropped from the config on first start. Discord must be open for the Discord side of the feed to work; Telegram is unchanged. Setup guide: docs/getting-started.md.
+- **Discord through your own Discord app.** opentrench can now read and send Discord through a small Vencord plugin (`vencord/opentrench-bridge`) running inside your Discord client, the way BetterDiscord and Vencord plugins work: the client's own functions do the work, so there is no self-bot session for Discord to detect and no token anywhere. Discord must be open for that side of the feed to work.
+- **Tokens are read-only now.** If you connected with a user token, nothing changes for reading. Sending and reacting with a token are gone (that was the part Discord bans for); they need the plugin. A one-time note in the app explains this, and the switch is yours to make: once the plugin connects, the token session closes on its own and you can remove the token in Settings.
+- **opentrench.app**: a website with a landing page and step-by-step setup guides for Mac and Windows (Discord plugin, Telegram). Settings and the update note link there.
 
 ## v0.2.1 — 2026-09-11
 

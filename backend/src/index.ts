@@ -12,7 +12,8 @@ import { createMarketRefresher } from './refresh.js';
 import type { CoveOptions } from './cove.js';
 import { Services } from './services.js';
 import { createApi } from './api.js';
-import { attachWs } from './ws.js';
+import { createFeedWss, routeUpgrades } from './ws.js';
+import { DiscordBridge } from './discord/bridge.js';
 import { StateStore } from './store.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -109,8 +110,10 @@ if (fs.existsSync(dist)) {
 }
 
 const server = http.createServer(app);
-attachWs(server, hub);
-svc.discord.attach(server);
+routeUpgrades(server, {
+  '/ws': { wss: createFeedWss(hub) },
+  '/bridge': { wss: svc.discord.wss, allow: DiscordBridge.allowOrigin },
+});
 
 server.listen(PORT, HOST, () => {
   console.log(`opentrench listening on http://${HOST}:${PORT}`);

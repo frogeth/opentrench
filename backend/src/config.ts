@@ -62,8 +62,8 @@ export function sanitizeColumns(raw: unknown): ColumnDef[] {
 
 export interface Config {
   /** `send`: the user explicitly enabled composing messages from the app (Discord: after the ToS warning) */
-  /** Discord is read through the plugin in the user's client; nothing to store but the watch list */
-  discord: { watch: string[]; send?: boolean };
+  /** Discord: the Vencord bridge needs nothing stored; a legacy user token gives read-only access without the plugin */
+  discord: { token?: string; watch: string[]; send?: boolean };
   telegram: { apiId?: number; apiHash?: string; session?: string; watch: string[]; send?: boolean };
   cove: { amounts: number[] };
   /** caller names (case-insensitive, leading @ ignored) whose posts never count as calls */
@@ -107,7 +107,7 @@ export class ConfigStore {
   /** Tokens/sessions replaced with booleans, safe to send to the UI. */
   masked() {
     return {
-      discord: { watch: this.cfg.discord.watch, canSend: !!this.cfg.discord.send },
+      discord: { hasToken: !!this.cfg.discord.token, watch: this.cfg.discord.watch, canSend: !!this.cfg.discord.send },
       telegram: {
         apiId: this.cfg.telegram.apiId ?? null,
         hasApiHash: !!this.cfg.telegram.apiHash,
@@ -132,7 +132,11 @@ export class ConfigStore {
     try {
       const raw = JSON.parse(fs.readFileSync(this.file, 'utf8'));
       return {
-        discord: { watch: Array.isArray(raw.discord?.watch) ? raw.discord.watch.map(String) : [], send: raw.discord?.send === true }, // any old token in the file is dropped
+        discord: {
+          token: typeof raw.discord?.token === 'string' && raw.discord.token.trim() ? raw.discord.token.trim() : undefined,
+          watch: Array.isArray(raw.discord?.watch) ? raw.discord.watch.map(String) : [],
+          send: raw.discord?.send === true,
+        },
         telegram: { ...DEFAULT.telegram, ...raw.telegram },
         cove: { amounts: Array.isArray(raw.cove?.amounts) ? raw.cove.amounts.map(Number) : DEFAULT.cove.amounts },
         blacklist: Array.isArray(raw.blacklist) ? raw.blacklist.map(String) : [],

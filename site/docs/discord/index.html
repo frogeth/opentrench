@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect Discord — opentrench docs</title><link rel="icon" href="../../img/icon.png"><link rel="stylesheet" href="../../style.css"></head>
+<body><header class="top"><div class="wrap"><a class="brand" href="../.././"><img src="../../img/icon.png" alt=""> opentrench</a>
+<nav><a href="../.././">Home</a><a class="on" href="../../docs/">Docs</a><a href="../../docs/discord/">Discord setup</a><a href="https://github.com/frogeth/opentrench/releases/latest">Download</a><a href="https://discord.gg/6ByE8fPNN">Community</a><a href="https://github.com/frogeth/opentrench">GitHub</a></nav></div></header>
+<main class="wrap"><div class="docs"><div class="toc">
+  <div class="grp">Start</div>
+  <a href="../">Getting started</a>
+  <a href="../discord/">Discord (Mac &amp; Windows)</a>
+  <a href="../telegram/">Telegram</a>
+  <div class="grp">More</div>
+  <a href="https://github.com/frogeth/opentrench/blob/main/CHANGELOG.md">Changelog</a>
+  <a href="https://discord.gg/6ByE8fPNN">Help on Discord</a>
+</div>
+<article>
+<h1>Connect Discord</h1>
+<p>opentrench talks to Discord through a small plugin inside <b>your own Discord app</b>, loaded by <a href="https://vencord.dev">Vencord</a>. The plugin feeds opentrench the channels you watch and sends messages for you using Discord's own functions, so to Discord it is simply you using Discord. No token is ever pasted or stored.</p>
+<div class="callout"><b>What you need:</b> the Discord desktop app, and about five minutes. Vencord only loads third-party plugins from a source build, so the steps below install a few developer tools first. You do this once.</div>
+<div class="tabs"><button data-os="mac">macOS</button><button data-os="win">Windows</button></div>
+
+<div class="os" data-os="mac">
+<h2>macOS</h2>
+<h3>1. Install the tools</h3>
+<p>Open <b>Terminal</b> (⌘-Space, type Terminal). Paste each line and press Return.</p>
+<pre><code>xcode-select --install</code></pre>
+<p>Click <em>Install</em> in the dialog that appears; this gives you <code>git</code>. Then install Node.js and pnpm:</p>
+<pre><code>curl -fsSL https://fnm.vercel.app/install | bash
+source ~/.zshrc
+fnm install 22 && fnm use 22
+npm install -g pnpm</code></pre>
+<p class="steps-note">Already have Node 20+ and pnpm? Skip that block.</p>
+<h3>2. Get Vencord and build it with the plugin</h3>
+<pre><code>cd ~/Documents
+git clone https://github.com/Vendicated/Vencord
+cd Vencord
+pnpm install --frozen-lockfile
+mkdir -p src/userplugins
+git clone --depth 1 https://github.com/frogeth/opentrench /tmp/opentrench
+cp -r /tmp/opentrench/vencord/opentrench-bridge src/userplugins/
+pnpm build
+pnpm inject</code></pre>
+<p><code>pnpm inject</code> asks which Discord to patch: pick <b>Discord</b> (or PTB/Canary if that is what you use) and confirm.</p>
+<div class="callout warn">The plugin folder must end up at <code>~/Documents/Vencord/src/userplugins/opentrench-bridge</code>, and <code>pnpm build</code> must run <b>after</b> copying it. If you built before copying, run <code>pnpm build</code> again.</div>
+<h3>3. Turn it on</h3>
+<ol>
+<li>Fully quit Discord (⌘Q) and open it again.</li>
+<li>Open <b>User Settings</b> (gear, bottom left) → <b>Vencord</b> → <b>Plugins</b>. Search <b>OpentrenchBridge</b> and switch it on.</li>
+<li>Open opentrench. The <code>discord</code> pill in the top bar turns green within a few seconds. In ⚙ → Accounts → Discord it shows <em>plugin · read + write</em> and your name.</li>
+</ol>
+</div>
+
+<div class="os" data-os="win">
+<h2>Windows</h2>
+<h3>1. Install the tools</h3>
+<p>Open <b>PowerShell</b> (Start, type PowerShell). Paste each line and press Enter.</p>
+<pre><code>winget install --id Git.Git -e
+winget install --id OpenJS.NodeJS.LTS -e</code></pre>
+<p>Close and reopen PowerShell so the new tools are on your path, then:</p>
+<pre><code>npm install -g pnpm</code></pre>
+<p class="steps-note">Already have git, Node 20+ and pnpm? Skip this step.</p>
+<h3>2. Get Vencord and build it with the plugin</h3>
+<pre><code>cd $HOME\Documents
+git clone https://github.com/Vendicated/Vencord
+cd Vencord
+pnpm install --frozen-lockfile
+mkdir src\userplugins -Force
+git clone --depth 1 https://github.com/frogeth/opentrench $env:TEMP\opentrench
+Copy-Item -Recurse $env:TEMP\opentrench\vencord\opentrench-bridge src\userplugins\
+pnpm build
+pnpm inject</code></pre>
+<p><code>pnpm inject</code> asks which Discord to patch: pick <b>Discord</b> (or PTB/Canary if that is what you use) and confirm. If Windows asks for permission, allow it.</p>
+<div class="callout warn">The plugin folder must end up at <code>Documents\Vencord\src\userplugins\opentrench-bridge</code>, and <code>pnpm build</code> must run <b>after</b> copying it. If you built before copying, run <code>pnpm build</code> again.</div>
+<h3>3. Turn it on</h3>
+<ol>
+<li>Fully quit Discord (right-click its tray icon → Quit Discord) and open it again.</li>
+<li>Open <b>User Settings</b> (gear, bottom left) → <b>Vencord</b> → <b>Plugins</b>. Search <b>OpentrenchBridge</b> and switch it on.</li>
+<li>Open opentrench. The <code>discord</code> pill in the top bar turns green within a few seconds. In ⚙ → Accounts → Discord it shows <em>plugin · read + write</em> and your name.</li>
+</ol>
+</div>
+
+<h2>Switching from a token</h2>
+<p>If you connected Discord with a user token in an earlier version, nothing breaks: the feed keeps reading through the token, and sending is off on that path. Once the plugin connects, opentrench uses it automatically and closes the token session. Then go to ⚙ → Accounts → Discord and click <b>Remove token</b>.</p>
+
+<h2>Updating the plugin</h2>
+<p>When opentrench ships a plugin update (the release notes will say), repeat the copy and build in the Vencord folder, then restart Discord:</p>
+<pre><code>cd ~/Documents/Vencord   # Windows: cd $HOME\Documents\Vencord
+git pull && pnpm install --frozen-lockfile
+git clone --depth 1 https://github.com/frogeth/opentrench /tmp/opentrench   # Windows: $env:TEMP\opentrench
+cp -r /tmp/opentrench/vencord/opentrench-bridge src/userplugins/          # Windows: Copy-Item -Recurse -Force ...
+pnpm build</code></pre>
+
+<h2>Troubleshooting</h2>
+<ul>
+<li><b>The pill stays red.</b> Is Discord open, and is OpentrenchBridge switched on in Vencord's plugin list? If the plugin is not in the list, the build did not include it: check the folder path, run <code>pnpm build</code> again, restart Discord.</li>
+<li><b>Vencord isn't in Discord's settings.</b> <code>pnpm inject</code> did not patch the Discord you run. Run it again and pick the right one.</li>
+<li><b>Different port.</b> If opentrench's web page isn't on 3210, set the port in the plugin's settings (Vencord → Plugins → OpentrenchBridge → gear).</li>
+<li><b>Discord updated and Vencord stopped loading.</b> Run <code>pnpm inject</code> again in the Vencord folder.</li>
+<li><b>Is this allowed?</b> Client mods sit outside Discord's terms. Vencord has a very large user base and Discord has not banned for it; a self-bot (a separate program with your token) is what Discord's detection is built for, which is why opentrench moved away from it.</li>
+</ul>
+</article></div></main>
+<footer class="wrap"><span>opentrench docs</span><a href="https://github.com/frogeth/opentrench">GitHub</a><a href="https://discord.gg/6ByE8fPNN">Community</a></footer>
+<script>document.querySelectorAll('.tabs').forEach(t=>{const b=[...t.querySelectorAll('button')];const on=n=>{b.forEach(x=>x.classList.toggle('on',x.dataset.os===n));document.querySelectorAll('.os').forEach(x=>x.classList.toggle('on',x.dataset.os===n));try{localStorage.setItem('os',n)}catch{}};b.forEach(x=>x.onclick=()=>on(x.dataset.os));let d='mac';try{d=localStorage.getItem('os')||(navigator.platform.startsWith('Win')?'win':'mac')}catch{}on(d)})</script>
+</body></html>

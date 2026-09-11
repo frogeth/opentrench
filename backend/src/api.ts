@@ -431,6 +431,18 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { ok: true };
     }),
   );
+  // Legacy token (read-only): set or remove it. Sending never uses it.
+  r.put(
+    '/discord/token',
+    wrap((req) => {
+      const token = String(req.body?.token ?? '').trim();
+      cfg.update((c) => {
+        c.discord.token = token || undefined;
+      });
+      svc.startDiscord();
+      return { hasToken: !!token };
+    }),
+  );
   r.get('/discord/channels', wrap(() => svc.listDiscordChannels()));
   r.put(
     '/discord/watch',

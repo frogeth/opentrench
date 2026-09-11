@@ -97,7 +97,7 @@ export interface ColumnDef {
   filters?: ColumnFilters;
 }
 export interface MaskedConfig {
-  discord: { watch: string[]; canSend: boolean };
+  discord: { hasToken: boolean; watch: string[]; canSend: boolean };
   telegram: { apiId: number | null; hasApiHash: boolean; hasSession: boolean; watch: string[]; canSend: boolean };
   cove: { amounts: number[] };
   blacklist: string[];
@@ -158,6 +158,8 @@ export const api = {
   send: (source: 'discord' | 'telegram', chatId: string, text: string, replyTo?: string) => req<{ ok: true }>('POST', '/send', { source, chatId, text, replyTo }),
   setJ7Token: (token: string) => req<{ hasToken: boolean }>('PUT', '/j7/token', { token }),
   lookupToken: (address: string) => req<import('./types').TokenInfo>('GET', `/token/${encodeURIComponent(address)}`),
+  /** legacy read-only token; empty string removes it */
+  setDiscordToken: (token: string) => req<{ hasToken: boolean }>('PUT', '/discord/token', { token }),
   mentions: () => req<import('./types').Mention[]>('GET', '/mentions'),
   markMentionsRead: (ids?: string[]) => req<{ marked: number }>('POST', '/mentions/read', ids ? { ids } : {}),
   j7Recent: () => req<import('./types').J7Tweet[]>('GET', '/j7/recent'),

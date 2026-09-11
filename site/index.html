@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>opentrench — your alpha feed, one terminal</title>
+<meta name="description" content="opentrench turns the Discord servers and Telegram chats you already sit in into one live terminal: every contract called, market caps, holder security, buy buttons, pings, and a J7 feed. Runs on your machine.">
+<meta property="og:title" content="opentrench"><meta property="og:description" content="Every call from your Discord and Telegram groups in one live terminal. Free, open source, runs on your machine."><meta property="og:image" content="https://opentrench.app/img/terminal.png"><link rel="canonical" href="https://opentrench.app/">
+<link rel="icon" href="img/icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="./"><img src="img/icon.png" alt=""> opentrench</a>
+  <nav><a class="on" href="./">Home</a><a href="docs/">Docs</a><a href="docs/discord/">Discord setup</a><a href="https://github.com/frogeth/opentrench/releases/latest">Download</a><a href="https://discord.gg/6ByE8fPNN">Community</a><a href="https://github.com/frogeth/opentrench">GitHub</a></nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <div>
+      <h1>Every call from your groups, <span>in one terminal.</span></h1>
+      <p class="lead">opentrench watches the Discord servers and Telegram chats you already sit in and turns every contract address into a live card: who called it, market cap then and now, holder security, one-click buys. Add tweets from J7, pings from people who @ you, and columns you arrange yourself.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/frogeth/opentrench/releases/latest">Download for Mac &amp; Windows</a>
+        <a class="btn" href="docs/">Getting started</a>
+      </div>
+      <div class="pills"><span class="pill dc">Discord</span><span class="pill tg">Telegram</span><span class="pill">J7Tracker</span><span class="pill">Cove</span><span class="pill">pump.fun · Pons · Bonk · Bankr · Stonks</span><span class="pill">free · open source · local</span></div>
+    </div>
+    <div class="shot"><img src="img/terminal.png" alt="opentrench terminal: calls column, chat column, J7 column"></div>
+  </section>
+
+  <section class="block">
+    <h2>What it does</h2>
+    <p class="sub">Nothing leaves your computer except the requests to Discord, Telegram and the price APIs. No account with us, no server of ours in the middle.</p>
+    <div class="grid">
+      <div class="card"><h3>Calls, not scrollback</h3><p>One card per token, newest call first: caller, channel, first-call badge, market cap at the call and the multiple since, age, liquidity, volume, the buys/sells bar and holder security (top 10, dev, insiders, LP lock).</p></div>
+      <div class="card"><h3>Columns you arrange</h3><p>Calls, chats, Top Callers, Cove, Salpha, J7. Scope each to any set of channels, filter them, drag to reorder, resize, give each its own alert sound. Layouts persist.</p></div>
+      <div class="card"><h3>Pings, with context</h3><p>Everyone who @s you across Discord and Telegram lands in one panel with the messages before and after, a jump to the chat, and a reply box.</p></div>
+      <div class="card"><h3>J7 tweets, paired with launches</h3><p>Stream J7Tracker natively. Tweets that mention your calls get a strip; pump.fun and Pons tokens launched off a tweet appear under it within seconds. Star an account to get pinged when it tweets.</p></div>
+      <div class="card"><h3>Buy without leaving</h3><p>Cove buy buttons on every card, Cove and Salpha conversations as columns, right-click any contract to buy, research, or open the drill-down with a chart and every caller pinned on it.</p></div>
+      <div class="card"><h3>Send from the terminal</h3><p>Reply in Telegram from any column. On Discord, sending goes through a small plugin in your own Discord app, so there is no token and no self-bot.</p></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>The drill-down</h2>
+    <p class="sub">Click a token's picture, or right-click any contract, called or not.</p>
+    <div class="shot"><img src="img/drilldown.png" alt="token drill-down with candles on a market-cap axis and every caller pinned"></div>
+  </section>
+
+  <section class="block">
+    <h2>How Discord is connected</h2>
+    <div class="callout"><b>No token, no self-bot.</b> opentrench reads and sends Discord through the <b>opentrench plugin for Vencord</b>, which runs inside your own Discord app and uses Discord's own functions. To Discord it is simply you using Discord. Set it up once in about five minutes: <a href="docs/discord/">Mac and Windows guide</a>.</div>
+    <p class="steps-note">Already using a token from an earlier version? It keeps reading, read-only. Switch whenever you like.</p>
+  </section>
+
+  <section class="block">
+    <h2>Get it</h2>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/frogeth/opentrench/releases/latest">Latest release</a>
+      <a class="btn" href="docs/">Set it up</a>
+      <a class="btn" href="https://discord.gg/6ByE8fPNN">Join the Discord</a>
+    </div>
+    <p class="steps-note">Mac builds are signed and notarized. Windows builds are unsigned for now: SmartScreen will ask once. Updates arrive inside the app.</p>
+  </section>
+</main>
+<footer class="wrap"><span>opentrench · open source · MIT</span><a href="https://github.com/frogeth/opentrench">GitHub</a><a href="https://discord.gg/6ByE8fPNN">Community</a><a href="docs/">Docs</a></footer>
+</body>
+</html>

@@ -1,6 +1,8 @@
 import type { ConfigStore } from './config.js';
 import type { MessageHub } from './hub.js';
 import { DiscordBridge, type DiscordChannel, type DiscordSelf } from './discord/bridge.js';
+import { DiscordGateway } from './discord/gateway.js';
+import { fetchChannelHistory } from './discord/rest.js';
 import { discordReaction, normalizeDiscord } from './discord/normalize.js';
 import { TelegramWrapper, type TelegramDialog } from './telegram/client.js';
 import { extractLinks, type ExtractedMeta } from './links.js';
@@ -11,8 +13,11 @@ import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction } from './types.js';
 
 export class Services {
-  /** the Vencord plugin inside the user's Discord client */
+  /** the Vencord plugin inside the user's Discord client: reads and writes */
   readonly discord = new DiscordBridge();
+  /** legacy read-only session with a user token; runs only while the plugin is not connected */
+  private gateway?: DiscordGateway;
+  private gatewayTimer?: NodeJS.Timeout;
   telegram?: TelegramWrapper;
   j7?: J7Client;
   private discordSelf?: DiscordSelf;
@@ -68,15 +73,44 @@ export class Services {
       .catch(() => {});
   }
 
-  // ---- Discord (through the opentrench plugin in the user's own client) ----
+  // ---- Discord ----
+  // Two ways in. The Vencord bridge (plugin inside the user's own client) reads and writes.
+  // A legacy user token can still READ through our own gateway session for people who have
+  // not switched yet; it never sends. When the plugin connects, the token session is closed.
+
+  private onDiscordMessage(d: any): void {
+    const id = String(d.channel_id);
+    if (!this.cfg.get().discord.watch.includes(id)) return;
+    const ch = this.discordChannels.get(id) ?? { id, name: id, guildId: '?', guildName: '?', position: 0 };
+    try {
+      const msg = normalizeDiscord(d, ch, this.meIn(ch.guildId), this.namesIn(ch.guildId));
+      this.hub.push(msg, extractLinks(msg.text, []));
+      this.addPreviews(msg);
+    } catch (e) {
+      console.warn('[discord] dropped message', e);
+    }
+  }
+
+  private onDiscordReaction(d: any, delta: number): void {
+    if (!this.cfg.get().discord.watch.includes(String(d.channel_id))) return;
+    this.hub.applyReactionDelta(`discord:${d.message_id}`, discordReaction(d.emoji), delta);
+  }
 
   /** Wire the bridge once; called from the constructor. */
   private wireDiscord(): void {
     const b = this.discord;
     b.watch(this.cfg.get().discord.watch); // so the very first hello already gets the list
     b.on('state', (s) => {
-      this.hub.setStatus('discord', s, s === 'disconnected' ? 'open Discord with the opentrench plugin enabled' : undefined);
-      if (s === 'connected') this.hub.setDiscordUser(b.self?.username);
+      if (s === 'connected') {
+        this.stopGateway();
+        this.hub.setDiscordMode('bridge');
+        this.hub.setStatus('discord', 'connected');
+        this.hub.setDiscordUser(b.self?.username);
+      } else if (s === 'disconnected') {
+        this.hub.setDiscordUser(undefined);
+        // the plugin went away: fall back to the read-only token session if there is one
+        this.startDiscord();
+      }
     });
     b.on('self', (me?: DiscordSelf) => {
       this.discordSelf = me;
@@ -88,28 +122,58 @@ export class Services {
     b.on('roles', (guildId: string, roles: Map<string, string>) => {
       this.guildRoles.set(guildId, roles);
     });
-    b.on('message', (d) => {
-      const id = String(d.channel_id);
-      if (!this.cfg.get().discord.watch.includes(id)) return;
-      const ch = this.discordChannels.get(id) ?? { id, name: id, guildId: '?', guildName: '?', position: 0 };
-      try {
-        const msg = normalizeDiscord(d, ch, this.meIn(ch.guildId), this.namesIn(ch.guildId));
-        this.hub.push(msg, extractLinks(msg.text, []));
-        this.addPreviews(msg);
-      } catch (e) {
-        console.warn('[discord] dropped message', e);
-      }
-    });
-    b.on('reaction', (d, delta: number) => {
-      if (!this.cfg.get().discord.watch.includes(String(d.channel_id))) return;
-      this.hub.applyReactionDelta(`discord:${d.message_id}`, discordReaction(d.emoji), delta);
-    });
+    b.on('message', (d) => this.onDiscordMessage(d));
+    b.on('reaction', (d, delta: number) => this.onDiscordReaction(d, delta));
   }
 
-  /** Push the watch list to the client (call after the config changes). */
+  /** Push the watch list to the plugin; without the plugin, run the read-only token session if a token exists. */
   startDiscord(): void {
     this.discord.watch(this.cfg.get().discord.watch);
-    if (this.discord.state === 'disconnected') this.hub.setStatus('discord', 'disconnected', 'open Discord with the opentrench plugin enabled');
+    if (this.discord.state === 'connected') return;
+    const token = this.cfg.get().discord.token;
+    if (!token) {
+      this.stopGateway();
+      this.hub.setDiscordMode('none');
+      this.hub.setStatus('discord', 'disconnected', 'open Discord with the opentrench plugin enabled');
+      return;
+    }
+    this.startGateway(token);
+  }
+
+  private startGateway(token: string): void {
+    if (this.gateway) return; // already running
+    if (this.gatewayTimer) clearTimeout(this.gatewayTimer);
+    const gw = new DiscordGateway(token);
+    gw.on('state', (s, err) => {
+      if (this.gateway !== gw) return;
+      this.hub.setDiscordMode('token');
+      this.hub.setStatus('discord', s, err);
+    });
+    gw.on('self', (me: DiscordSelf) => {
+      this.discordSelf = me;
+    });
+    gw.on('channels', (chs: DiscordChannel[]) => {
+      for (const c of chs) this.discordChannels.set(c.id, c);
+    });
+    gw.on('roles', (guildId: string, roles: Map<string, string>) => {
+      this.guildRoles.set(guildId, roles);
+    });
+    gw.on('message', (d) => this.onDiscordMessage(d));
+    gw.on('reaction', (d, delta: number) => this.onDiscordReaction(d, delta));
+    this.gateway = gw;
+    gw.connect();
+  }
+
+  private stopGateway(): void {
+    if (this.gatewayTimer) clearTimeout(this.gatewayTimer);
+    this.gatewayTimer = undefined;
+    this.gateway?.stop();
+    this.gateway = undefined;
+  }
+
+  /** Is Discord writable right now? Only through the bridge. */
+  private requireBridge(): void {
+    if (this.discord.state !== 'connected') throw new Error('Sending on Discord needs the opentrench plugin (Settings → Accounts → Discord). The token is read-only.');
   }
 
   /** Recent messages of any chat (newest first) without adding it to the feed. Not persisted. */
@@ -162,6 +226,7 @@ export class Services {
   /** Compose a message as the user. Sending must be enabled per platform in config; the API checks that. */
   async send(source: 'discord' | 'telegram', chatId: string, text: string, replyTo?: string): Promise<void> {
     if (source === 'discord') {
+      this.requireBridge();
       const d: any = await this.discord.request('send', { channelId: chatId, content: text, replyTo });
       // echo into the feed now; the client's own copy is deduplicated by id
       if (d?.id && this.cfg.get().discord.watch.includes(chatId)) {
@@ -182,6 +247,7 @@ export class Services {
   /** React as the user. Discord custom emoji arrive as `custom:<id>` with a name; unicode as-is. */
   async react(source: 'discord' | 'telegram', chatId: string, msgId: string, key: string, name: string, on: boolean): Promise<void> {
     if (source === 'discord') {
+      this.requireBridge();
       const emoji = key.startsWith('custom:') ? { id: key.slice(7), name, animated: false } : { id: null, name: key, animated: false };
       await this.discord.request('react', { channelId: chatId, messageId: msgId, emoji, on });
       return;
@@ -194,9 +260,12 @@ export class Services {
   async preview(source: 'discord' | 'telegram', id: string, limit = 50): Promise<FeedMessage[]> {
     let msgs: FeedMessage[] = [];
     if (source === 'discord') {
-      if (this.discord.state !== 'connected') return [];
       const ch = this.discordChannels.get(id) ?? { id, name: id, guildId: '?', guildName: '?', position: 0 };
-      const raw = await this.discord.request<any[]>('history', { channelId: id, limit });
+      const token = this.cfg.get().discord.token;
+      let raw: any[] = [];
+      if (this.discord.state === 'connected') raw = await this.discord.request<any[]>('history', { channelId: id, limit });
+      else if (token) raw = await fetchChannelHistory(token, id, limit);
+      else return [];
       msgs = (Array.isArray(raw) ? raw : []).map((d) => normalizeDiscord(d, ch, this.meIn(ch.guildId), this.namesIn(ch.guildId)));
     } else {
       msgs = (await this.telegram?.history(id, limit)) ?? [];

@@ -388,6 +388,11 @@ export class MessageHub extends EventEmitter {
     this.emitStatus();
   }
 
+  setDiscordMode(mode: NonNullable<Status['discordMode']>): void {
+    this.status.discordMode = mode;
+    this.emitStatus();
+  }
+
   setDiscordUser(name?: string): void {
     this.status.discordUser = name;
     this.emitStatus();

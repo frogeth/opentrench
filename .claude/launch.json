@@ -6,6 +6,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
       "port": 3210
-    }
+    },
+    { "name": "site", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "3215", "-d", "site"], "port": 3215 }
   ]
 }

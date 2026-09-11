@@ -3,6 +3,7 @@ import { api, type BotSeen, type MaskedConfig } from '../api';
 import type { Status } from '../types';
 import { Logo } from './Logo';
 import { Avatar } from './Avatar';
+import { DOCS } from '../site';
 
 type Tab = 'accounts' | 'feed' | 'trading';
 
@@ -150,35 +151,88 @@ function StatePill({ state }: { state: string }) {
 }
 
 function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: Status; onChange: () => void }) {
-  const on = status.discord === 'connected';
+  const bridge = status.discordMode === 'bridge';
+  const [token, setToken] = useState('');
+  const [edit, setEdit] = useState(false);
+  const { busy, err, run } = useAsync();
   return (
     <section>
       <h2>
         <Logo source="discord" size={14} /> Discord <StatePill state={status.discord} />
+        {status.discord === 'connected' && <span className="pill pill-mode">{bridge ? 'plugin · read + write' : 'token · read only'}</span>}
       </h2>
-      {on ? (
-        <div className="hint">
-          Connected through your Discord client{status.discordUser ? ` as ${status.discordUser}` : ''} · {cfg.discord.watch.length} channel(s) in feed. No token is stored.
+
+      <div className={`acct-card${bridge ? ' acct-card-on' : ''}`}>
+        <div className="acct-card-title">
+          <b>opentrench plugin for Vencord</b> <span className="muted">recommended · reads and sends · no token</span>
         </div>
-      ) : (
-        <>
-          <div className="hint">
-            opentrench reads and sends Discord through a small plugin inside <b>your own Discord app</b> (Vencord), so there is no token to paste and no separate
-            self-bot session. Discord has to be open for the Discord side of the feed to work.
-          </div>
-          <ol className="steps">
-            <li>Install Vencord from source and add the <code>opentrench-bridge</code> plugin (5 minutes, one time):{' '}
-              <a href="https://github.com/frogeth/opentrench/tree/main/vencord" target="_blank" rel="noreferrer">
-                step-by-step guide
+        {bridge ? (
+          <div className="hint">Connected through your Discord app{status.discordUser ? ` as ${status.discordUser}` : ''} · {cfg.discord.watch.length} channel(s) in feed.</div>
+        ) : (
+          <>
+            <div className="hint">
+              A small plugin inside <b>your own Discord app</b> feeds opentrench and sends for you, so to Discord it is just you using Discord. No token is stored. Discord has to
+              be open for this side of the feed to work.
+            </div>
+            <div className="row-inline">
+              <a className="btn primary" href={DOCS.discordBridge} target="_blank" rel="noreferrer">
+                Step-by-step guide (Mac &amp; Windows)
               </a>
-            </li>
-            <li>Restart Discord, then enable <b>OpentrenchBridge</b> in User Settings → Vencord → Plugins.</li>
-            <li>This pill turns green on its own. Then add channels with the <b>+</b> button.</li>
-          </ol>
-          <div className="hint">Running opentrench on a port other than 3210? Set it in the plugin's settings.</div>
-        </>
-      )}
-      <DiscordSendToggle cfg={cfg} onChange={onChange} />
+              <span className="hint">This pill turns green on its own once the plugin connects.</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className={`acct-card${!bridge && cfg.discord.hasToken ? ' acct-card-on' : ''}`}>
+        <div className="acct-card-title">
+          <b>User token</b> <span className="muted">legacy · read only · self-bot risk</span>
+        </div>
+        {cfg.discord.hasToken && !edit ? (
+          <div className="row-inline">
+            <span className="hint">{bridge ? 'Saved, unused while the plugin is connected.' : `Reading ${cfg.discord.watch.length} channel(s). Sending is off on this path.`}</span>
+            <button onClick={() => setEdit(true)}>Change</button>
+            <button
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await api.setDiscordToken('');
+                  onChange();
+                })
+              }
+            >
+              Remove token
+            </button>
+          </div>
+        ) : edit || !cfg.discord.hasToken ? (
+          <>
+            <div className="hint">
+              Only if you can't run the plugin. Discord's terms forbid this and accounts have been banned for it; reading is quieter than sending, which is why sending was
+              removed here. Token: DevTools → Network → any request → Authorization header.
+            </div>
+            <div className="row-inline">
+              <input type="password" placeholder="user token" value={token} onChange={(e) => setToken(e.target.value)} />
+              <button
+                disabled={busy || !token}
+                onClick={() =>
+                  run(async () => {
+                    await api.setDiscordToken(token);
+                    setToken('');
+                    setEdit(false);
+                    onChange();
+                  })
+                }
+              >
+                Save
+              </button>
+              {cfg.discord.hasToken && <button onClick={() => setEdit(false)}>Cancel</button>}
+            </div>
+          </>
+        ) : null}
+      </div>
+
+      {bridge ? <DiscordSendToggle cfg={cfg} onChange={onChange} /> : <div className="hint">Sending on Discord needs the plugin. With a token, chat columns are read-only.</div>}
+      {err && <div className="err">{err}</div>}
     </section>
   );
 }

@@ -22,7 +22,7 @@ every caller pinned where they called, and the full call list.
 
 ![token drill-down](docs/img/drilldown.png)
 
-> **Discord** connects through a small [Vencord plugin](vencord/) inside your own Discord app, so there is no token and no self-bot session. Discord has to be open for that side of the feed to work.
+> **Discord** connects through a small [Vencord plugin](vencord/) inside your own Discord app, so there is no token and no self-bot session. Discord has to be open for that side of the feed to work. A user token still works as a read-only fallback. Website and setup guides: **https://opentrench.app**
 
 ## Run
 

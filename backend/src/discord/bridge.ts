@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { Server } from 'node:http';
+import type { IncomingMessage } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { DiscordState } from '../types.js';
 
@@ -40,14 +40,16 @@ export class DiscordBridge extends EventEmitter {
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
   private watched: string[] = [];
 
-  /** Accept plugin connections on `/bridge` of the app's own HTTP server. */
-  attach(server: Server): void {
-    const wss = new WebSocketServer({
-      server,
-      path: '/bridge',
-      verifyClient: ({ origin }: { origin?: string }) => !origin || ALLOWED_ORIGINS.has(origin),
-    });
-    wss.on('connection', (ws) => this.accept(ws));
+  /** A `noServer` WebSocket server for `/bridge`; mount it with `routeUpgrades` and gate it with `allowOrigin`. */
+  readonly wss = new WebSocketServer({ noServer: true });
+  constructor() {
+    super();
+    this.wss.on('connection', (ws) => this.accept(ws));
+  }
+  /** Only the Discord client's own origin may connect (a web page in a browser can't impersonate the plugin). */
+  static allowOrigin(req: IncomingMessage): boolean {
+    const origin = req.headers.origin;
+    return !origin || ALLOWED_ORIGINS.has(String(origin));
   }
 
   /** For tests and embedding: hand over a socket-like object directly. */

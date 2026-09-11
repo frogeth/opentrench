@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting started — opentrench docs</title><link rel="icon" href="../img/icon.png"><link rel="stylesheet" href="../style.css"></head>
+<body><header class="top"><div class="wrap"><a class="brand" href=".././"><img src="../img/icon.png" alt=""> opentrench</a>
+<nav><a href=".././">Home</a><a class="on" href="../docs/">Docs</a><a href="../docs/discord/">Discord setup</a><a href="https://github.com/frogeth/opentrench/releases/latest">Download</a><a href="https://discord.gg/6ByE8fPNN">Community</a><a href="https://github.com/frogeth/opentrench">GitHub</a></nav></div></header>
+<main class="wrap"><div class="docs"><div class="toc">
+  <div class="grp">Start</div>
+  <a href="./">Getting started</a>
+  <a href="./discord/">Discord (Mac &amp; Windows)</a>
+  <a href="./telegram/">Telegram</a>
+  <div class="grp">More</div>
+  <a href="https://github.com/frogeth/opentrench/blob/main/CHANGELOG.md">Changelog</a>
+  <a href="https://discord.gg/6ByE8fPNN">Help on Discord</a>
+</div>
+<article>
+<h1>Getting started</h1>
+<p>opentrench runs on your own computer. Install it, connect the accounts you already have, pick the channels you care about, and read the terminal. About ten minutes end to end.</p>
+<h2 id="install">1. Install</h2>
+<ol>
+<li>Download the latest build for your system from <a href="https://github.com/frogeth/opentrench/releases/latest">GitHub releases</a>: the <code>.dmg</code> on a Mac, the <code>Setup .exe</code> on Windows.</li>
+<li><b>Mac:</b> open the dmg and drag opentrench to Applications. The build is signed and notarized, so it opens like any other app.</li>
+<li><b>Windows:</b> run the installer. It is not code-signed yet, so SmartScreen shows a warning once: click <em>More info → Run anyway</em>.</li>
+<li>Open opentrench. Updates are checked on start and installed from inside the app.</li>
+</ol>
+<h2 id="discord">2. Connect Discord</h2>
+<p>Discord connects through the <b>opentrench plugin for Vencord</b>, which lives inside your own Discord app. There is no token to paste. Follow the <a href="discord/">Discord guide</a>; it has separate Mac and Windows steps and takes about five minutes once.</p>
+<div class="callout">Used a token in an earlier version? It keeps working, read-only, until you switch. The switch is your call.</div>
+<h2 id="telegram">3. Connect Telegram</h2>
+<p>Telegram uses your own account through Telegram's official API, which Telegram allows. You need an API id and hash, which takes a minute: <a href="telegram/">Telegram guide</a>.</p>
+<h2 id="channels">4. Add the channels you want</h2>
+<ul>
+<li>Click the round <b>+</b> at the bottom of the left rail.</li>
+<li>Pick Discord or Telegram, browse your servers and chats, tick the ones to watch. Click a name first to preview its recent history.</li>
+<li>Each server and chat becomes an icon in the rail. Drag to reorder, click one to focus on it, click ★ to get back to everything.</li>
+</ul>
+<h2 id="terminal">5. Read the terminal</h2>
+<img src="../img/terminal.png" alt="the terminal">
+<ul>
+<li><b>All Calls</b>: one card per token, newest call first. Who called it, where, how long ago, a gold <b>1st</b> for a first call or a 🔥 count when several chats called it, market cap at the call and the multiple since. Then image, symbol, volume, market cap, age, address (click to copy), ATH, links, holders, the buy/sell bar and holder security.</li>
+<li><b>All Chats</b>: the raw messages, read bottom-up like Discord, with every contract turned into a token strip with a live chart. Click the chat chip on a message to open that channel.</li>
+<li><b>Pings</b>: the @ button in the top bar. Everyone who mentioned you, with the messages before and after, jump-to-chat and reply.</li>
+<li>Click a token's picture for the <b>drill-down</b>: candles on a market-cap axis with every caller pinned, and the full call list.</li>
+</ul>
+<img src="../img/drilldown.png" alt="the drill-down">
+<h2 id="columns">6. Make it yours</h2>
+<ul>
+<li><b>Columns</b>: the round <b>+</b> at the right end adds one: calls, chat, Top Callers, Cove, Salpha or J7, over all channels or a few, with filters. Drag the grip to reorder, the right edge to resize, the pencil to edit, × to remove.</li>
+<li><b>Alerts</b>: the bell in a column header plays a sound on every new call there. Eight tones to pick from.</li>
+<li><b>Favorites</b>: ⋯ next to any name → Favorite caller. They get a crown and their first calls ping you.</li>
+<li><b>Bots</b>: ⚙ → Feed → Bots decides which bots show, which count as calls, and which may ping you.</li>
+<li><b>J7</b>: paste your J7Tracker session id in ⚙ → Accounts and add a J7 column. Star accounts to get pinged when they tweet; launches off a tweet appear under it.</li>
+</ul>
+<h2 id="help">Help</h2>
+<p>Ask in the <a href="https://discord.gg/6ByE8fPNN">community Discord</a>. Bugs and ideas go to <a href="https://github.com/frogeth/opentrench/issues">GitHub issues</a>.</p>
+</article></div></main>
+<footer class="wrap"><span>opentrench docs</span><a href="https://github.com/frogeth/opentrench">GitHub</a><a href="https://discord.gg/6ByE8fPNN">Community</a></footer>
+<script>document.querySelectorAll('.tabs').forEach(t=>{const b=[...t.querySelectorAll('button')];const on=n=>{b.forEach(x=>x.classList.toggle('on',x.dataset.os===n));document.querySelectorAll('.os').forEach(x=>x.classList.toggle('on',x.dataset.os===n));try{localStorage.setItem('os',n)}catch{}};b.forEach(x=>x.onclick=()=>on(x.dataset.os));let d='mac';try{d=localStorage.getItem('os')||(navigator.platform.startsWith('Win')?'win':'mac')}catch{}on(d)})</script>
+</body></html>

@@ -976,3 +976,18 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .steps { margin: 6px 0 4px; padding-left: 20px; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
 .steps b, .steps a { color: var(--text); }
 .steps code { font-family: var(--mono); font-size: 11px; }
+
+/* ---------- account cards / bridge notice ---------- */
+.acct-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.acct-card-on { border-color: rgba(65, 200, 146, 0.45); background: rgba(65, 200, 146, 0.04); }
+.acct-card-title { font-size: 13px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.acct-card-title .muted { font-size: 11px; }
+.pill-mode { color: var(--muted); border-color: var(--line-strong); margin-left: 6px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 6px 12px; font-size: 12px; color: var(--text); text-decoration: none; background: var(--chrome); cursor: pointer; }
+.btn.primary { background: var(--accent); color: #041a10; border-color: transparent; font-weight: 700; }
+.btn.primary:hover { background: #4fd9a1; }
+.notice-modal { width: min(560px, 94vw); height: auto; padding: 18px 20px; gap: 12px; }
+.notice-head { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.notice-body { display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #d5d9e2; }
+.notice-body p { margin: 0; line-height: 1.45; }
+.notice-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

@@ -13,6 +13,7 @@ import { CoveView, COVE_BOT } from './components/CoveView';
 import { CaMenuContext } from './components/RichText';
 import { J7View } from './components/J7View';
 import { PingsPanel } from './components/PingsPanel';
+import { BridgeNotice } from './components/BridgeNotice';
 
 const BOTS = { cove: COVE_BOT, salpha: 'salpha_research_bot' } as const;
 type BotKind = keyof typeof BOTS;
@@ -290,7 +291,8 @@ export default function App() {
   };
   // Composing: reply state per column, send targets from each column's chats
   const [replyByCol, setReplyByCol] = useState<Record<string, FeedMessage | undefined>>({});
-  const canSend = { discord: !!cfg?.discord.canSend, telegram: !!cfg?.telegram.canSend } as const;
+  // Discord is writable only through the Vencord bridge; a legacy token reads and nothing more
+  const canSend = { discord: !!cfg?.discord.canSend && status.discordMode === 'bridge', telegram: !!cfg?.telegram.canSend } as const;
   const targetsFor = (names: Set<string> | null): SendTarget[] =>
     watched.filter((w) => (!names || names.has(w.name)) && (!scope || scope.has(w.name))).map((w) => ({ id: w.id, name: w.name, source: w.source }));
   const composerFor = (colId: string, names: Set<string> | null) => (
@@ -1072,6 +1074,7 @@ export default function App() {
           </div>
         </div>
       )}
+      {cfg && status.discordMode !== undefined && <BridgeNotice cfg={cfg} status={status} onOpenSettings={() => setSettingsOpen(true)} />}
       {settingsOpen && (
         <Settings
           status={status}
