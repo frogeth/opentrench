@@ -35,7 +35,7 @@ import { Icon } from './components/Icon';
 import { Avatar } from './components/Avatar';
 import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
 import { beep, type ChartProvider } from './format';
-import { playSound } from './sounds';
+import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, tokenPasses } from './filters';
 import type { FeedMessage, Source, Status, TokenInfo } from './types';
 
@@ -389,6 +389,8 @@ export default function App() {
       return true;
     }
   });
+  // 🔕 is a master mute: every automatic sound in the app goes quiet, not just favorite pings
+  useEffect(() => setMuted(!sound), [sound]);
 
   const reloadLists = () => {
     api.watched().then(setWatched).catch(() => {});
@@ -521,7 +523,7 @@ export default function App() {
     window.setTimeout(find, 30);
   };
 
-  // Favorited X accounts: a fresh tweet plays the J7 column's sound and posts a notification.
+  // Favorited X accounts: a fresh tweet plays the J7 column's sound and posts a notification, if that column's bell is on.
   const j7Seen = useRef<Set<string> | null>(null);
   useEffect(() => {
     if (j7.length === 0) return;
@@ -535,8 +537,10 @@ export default function App() {
       if (j7Seen.current.has(t.id)) continue;
       j7Seen.current.add(t.id);
       if (t.deleted || nowMs - t.ts > 120_000 || !favs.has(t.author.handle.toLowerCase())) continue;
-      const col = columns.find((c) => c.type === 'j7' && c.alert?.sound);
-      playSound(col?.alert?.sound ?? 'ping');
+      // the J7 column's bell is the switch: no J7 column with its bell on → no ping, no notification
+      const col = columns.find((c) => c.type === 'j7' && c.alert?.on);
+      if (!col) continue;
+      playSound(col.alert?.sound ?? 'ping');
       if (notify === 'granted') {
         try {
           const n = new Notification(`★ @${t.author.handle} tweeted`, { body: t.text.slice(0, 160), icon: t.author.avatar, tag: `j7:${t.id}` });
@@ -573,7 +577,8 @@ export default function App() {
     for (const m of fresh) {
       if (m.hidden || m.repeat || m.contracts.length === 0 || now - m.ts > 60_000) continue;
       for (const col of columns) {
-        if (!col.alert?.on || col.type === 'callers' || !inScope(m.chatName, namesFor(col))) continue;
+        // only chat/calls columns announce calls; a J7 or bot pane's bell is not a call alert
+        if (!col.alert?.on || (col.type !== 'chat' && col.type !== 'calls') || !inScope(m.chatName, namesFor(col))) continue;
         if (!played && now - alerted.current.lastPlay > 1200) {
           playSound(col.alert.sound);
           alerted.current.lastPlay = now;
@@ -604,19 +609,20 @@ export default function App() {
     };
   }, [view.preview?.id, view.preview?.source]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const askNotify = () => {
-    if (typeof Notification === 'undefined') return;
-    if (Notification.permission === 'granted') {
-      const next = !sound;
-      setSound(next);
-      try {
-        localStorage.setItem('trenchfeed.sound', next ? 'on' : 'off');
-      } catch {
-        /* ignore */
-      }
-      return;
+  /**
+   * The top-bar bell is the master sound switch, always, whatever the desktop-notification
+   * permission says. Turning sound on also asks for notification permission once if it was
+   * never decided, so favorite pings can pop a notification too.
+   */
+  const toggleSound = () => {
+    const next = !sound;
+    setSound(next);
+    try {
+      localStorage.setItem('trenchfeed.sound', next ? 'on' : 'off');
+    } catch {
+      /* ignore */
     }
-    void Notification.requestPermission().then(setNotify);
+    if (next && typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission().then(setNotify);
   };
 
   const toggleWatch = async (source: Source, id: string, on: boolean) => {
@@ -804,16 +810,12 @@ export default function App() {
           {!wsOpen && <span className="pill pill-disconnected">server: offline</span>}
         </div>
         <button
-          className={`gear bell${notify === 'granted' ? ' on' : ''}`}
-          onClick={askNotify}
-          title={
-            notify === 'granted'
-              ? `pings on · sound ${sound ? 'on' : 'off'} (click to toggle sound)`
-              : 'enable desktop pings for favorite callers'
-          }
+          className={`gear bell${sound ? ' on' : ''}`}
+          onClick={toggleSound}
+          title={`all app sounds ${sound ? 'on' : 'off'} (click to toggle)${notify === 'granted' ? ' · desktop notifications on' : notify === 'denied' ? ' · desktop notifications blocked in the browser' : ' · desktop notifications not enabled yet'}`}
         >
-          {notify === 'granted' ? (sound ? '🔔' : '🔕') : '🔔'}
-          {notify !== 'granted' && <span className="bell-off">off</span>}
+          {sound ? '🔔' : '🔕'}
+          {notify !== 'granted' && <span className="bell-off" title="desktop notifications not enabled">no notifs</span>}
         </button>
         <button className={`gear pings-btn${pingsOpen ? ' on' : ''}`} onClick={() => openPings(!pingsOpen)} title="pings: who mentioned you">
           @{mentions.some((m) => !m.read) && <span className="pings-badge">{mentions.filter((m) => !m.read).length}</span>}
@@ -965,12 +967,12 @@ export default function App() {
                 const actions = {
                   onEdit: () => setEditing({ col }),
                   onRemove: () => setConfirmRemove(col.id),
-                  ...(col.type !== 'callers'
+                  ...(col.type === 'chat' || col.type === 'calls' || col.type === 'j7'
                     ? {
                         alertOn: !!col.alert?.on,
                         onAlert: () => {
                           const next = { on: !col.alert?.on, sound: col.alert?.sound ?? 'ping' };
-                          if (next.on) playSound(next.sound);
+                          if (next.on) playSound(next.sound, { force: true });
                           saveColumns(columns.map((c) => (c.id === col.id ? { ...c, alert: next } : c)));
                         },
                       }

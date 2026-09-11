@@ -158,7 +158,7 @@ export function ColumnEditor({
       title: t,
       chats,
       ...(type === 'callers' ? { window: win } : {}),
-      ...(type === 'calls' || type === 'chat' ? { alert: { on: alertOn, sound } } : type === 'j7' ? { alert: { on: true, sound } } : {}),
+      ...(type === 'calls' || type === 'chat' || type === 'j7' ? { alert: { on: alertOn, sound } } : {}),
       filters: Object.keys(clean).length ? clean : undefined,
     });
   };
@@ -251,11 +251,14 @@ export function ColumnEditor({
             {isBot && type !== 'j7' && <div className="hint">Nothing to filter here — this column shows one bot conversation.</div>}
             {type === 'j7' && (
               <div className="fsec">
-                <div className="fsec-title">Ping sound</div>
-                <div className="hint">Star an account on any of its tweets and this sound plays whenever it tweets.</div>
+                <div className="fsec-title">Alert</div>
+                <label className="check">
+                  <input type="checkbox" checked={alertOn} onChange={(e) => setAlertOn(e.target.checked)} /> Ping me when a starred account tweets
+                </label>
+                <div className="hint">Star an account on any of its tweets. With this off (or the bell in the column header off), starred accounts stay quiet.</div>
                 <div className="fchips">
                   {SOUNDS.map((s) => (
-                    <button key={s} className={`fchip${sound === s ? ' on' : ''}`} onClick={() => { setSound(s); playSound(s); }} title={`use “${s}”`}>
+                    <button key={s} className={`fchip${sound === s ? ' on' : ''}`} onClick={() => { setSound(s); playSound(s, { force: true }); }} title={`use “${s}”`}>
                       <Icon name="play" size={9} /> {s}
                     </button>
                   ))}
@@ -343,7 +346,7 @@ export function ColumnEditor({
                 </label>
                 <div className="fchips">
                   {SOUNDS.map((s) => (
-                    <button key={s} className={`fchip${sound === s ? ' on' : ''}`} onClick={() => { setSound(s); playSound(s); }} title={`use “${s}”`}>
+                    <button key={s} className={`fchip${sound === s ? ' on' : ''}`} onClick={() => { setSound(s); playSound(s, { force: true }); }} title={`use “${s}”`}>
                       <Icon name="play" size={9} /> {s}
                     </button>
                   ))}

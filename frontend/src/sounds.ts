@@ -65,7 +65,27 @@ const RECIPES: Record<SoundName, (ctx: AudioContext, t: number) => number> = {
 
 let ctx: AudioContext | undefined;
 
-export function playSound(name: string): void {
+/**
+ * Master mute, owned by the 🔔/🔕 in the top bar. It lives here, inside the engine, so every
+ * automatic sound (column alerts, J7 pings, mentions, favorite callers) obeys it without each
+ * call site having to remember. Explicit "preview this tone" clicks pass `force`.
+ */
+let muted = (() => {
+  try {
+    return localStorage.getItem('trenchfeed.sound') === 'off';
+  } catch {
+    return false;
+  }
+})();
+export function setMuted(m: boolean): void {
+  muted = m;
+}
+export function isMuted(): boolean {
+  return muted;
+}
+
+export function playSound(name: string, opts: { force?: boolean } = {}): void {
+  if (muted && !opts.force) return;
   try {
     ctx ??= new AudioContext();
     if (ctx.state === 'suspended') void ctx.resume();
