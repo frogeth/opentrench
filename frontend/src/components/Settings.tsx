@@ -150,49 +150,40 @@ function StatePill({ state }: { state: string }) {
 }
 
 function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: Status; onChange: () => void }) {
-  const [token, setToken] = useState('');
-  const [edit, setEdit] = useState(!cfg.discord.hasToken);
-  const { busy, err, run } = useAsync();
+  const on = status.discord === 'connected';
   return (
     <section>
       <h2>
         <Logo source="discord" size={14} /> Discord <StatePill state={status.discord} />
       </h2>
-      {!edit ? (
-        <div className="row-inline">
-          <span className="hint">Token saved · {cfg.discord.watch.length} channel(s) in feed</span>
-          <button onClick={() => setEdit(true)}>Change token</button>
+      {on ? (
+        <div className="hint">
+          Connected through your Discord client{status.discordUser ? ` as ${status.discordUser}` : ''} · {cfg.discord.watch.length} channel(s) in feed. No token is stored.
         </div>
       ) : (
         <>
-          <div className="hint">Your Discord user token: DevTools → Network → any request → Authorization header.</div>
-          <input type="password" placeholder="user token" value={token} onChange={(e) => setToken(e.target.value)} />
-          <div className="row-inline">
-            <button
-              className="primary"
-              disabled={busy || !token}
-              onClick={() =>
-                run(async () => {
-                  await api.setDiscordToken(token);
-                  setToken('');
-                  setEdit(false);
-                  onChange();
-                })
-              }
-            >
-              Save &amp; connect
-            </button>
-            {cfg.discord.hasToken && <button onClick={() => setEdit(false)}>Cancel</button>}
+          <div className="hint">
+            opentrench reads and sends Discord through a small plugin inside <b>your own Discord app</b> (Vencord), so there is no token to paste and no separate
+            self-bot session. Discord has to be open for the Discord side of the feed to work.
           </div>
+          <ol className="steps">
+            <li>Install Vencord from source and add the <code>opentrench-bridge</code> plugin (5 minutes, one time):{' '}
+              <a href="https://github.com/frogeth/opentrench/tree/main/vencord" target="_blank" rel="noreferrer">
+                step-by-step guide
+              </a>
+            </li>
+            <li>Restart Discord, then enable <b>OpentrenchBridge</b> in User Settings → Vencord → Plugins.</li>
+            <li>This pill turns green on its own. Then add channels with the <b>+</b> button.</li>
+          </ol>
+          <div className="hint">Running opentrench on a port other than 3210? Set it in the plugin's settings.</div>
         </>
       )}
-      {cfg.discord.hasToken && <DiscordSendToggle cfg={cfg} onChange={onChange} />}
-      {err && <div className="err">{err}</div>}
+      <DiscordSendToggle cfg={cfg} onChange={onChange} />
     </section>
   );
 }
 
-/** Sending on Discord is the risky half of using a user token: off by default, typed acknowledgement to enable. */
+/** Sending on Discord: off by default, typed acknowledgement to enable (automation from your account, even through the client). */
 function DiscordSendToggle({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
   const [warn, setWarn] = useState(false);
   const [ack, setAck] = useState('');
@@ -221,12 +212,11 @@ function DiscordSendToggle({ cfg, onChange }: { cfg: MaskedConfig; onChange: () 
         <div className="send-warn">
           <b>Before you turn this on</b>
           <p>
-            opentrench reads Discord with your own account token, which Discord's terms forbid. Reading is rarely noticed. <b>Sending is different:</b> posting through a
-            token is exactly what Discord's automation checks look for, and accounts do get banned for it — sometimes without warning and with no appeal.
+            Messages go out through your own Discord app via the opentrench plugin, so to Discord they look like you typing. Still, a program posting from your
+            account is automation, and client mods sit outside Discord's terms. Reports for spam or repeated posts land on <b>your</b> account.
           </p>
           <p>
-            The app limits you to one message a second per channel and only ever sends what you typed, but that does not make it allowed. If this account matters to
-            you, keep this off or use an alt.
+            The app limits you to one message a second per channel and only ever sends what you typed. If this account matters to you, think before turning this on.
           </p>
           <label>
             Type <code>I understand</code> to enable:

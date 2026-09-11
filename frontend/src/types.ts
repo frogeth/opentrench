@@ -254,6 +254,8 @@ export interface Status {
   j7?: 'disconnected' | 'connecting' | 'connected' | 'auth_error';
   /** favorite callers (crown + pings) */
   favorites: string[];
+  /** who the Discord plugin is signed in as */
+  discordUser?: string;
 }
 
 export type ServerEvent =

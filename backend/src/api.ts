@@ -431,17 +431,6 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { ok: true };
     }),
   );
-  r.put(
-    '/discord/token',
-    wrap((req) => {
-      const token = String(req.body?.token ?? '').trim();
-      if (!token) throw new Error('token required');
-      cfg.update((c) => {
-        c.discord.token = token;
-      });
-      svc.startDiscord();
-    }),
-  );
   r.get('/discord/channels', wrap(() => svc.listDiscordChannels()));
   r.put(
     '/discord/watch',
@@ -450,6 +439,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       cfg.update((c) => {
         c.discord.watch = ids;
       });
+      svc.startDiscord();
     }),
   );
 

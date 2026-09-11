@@ -110,6 +110,7 @@ if (fs.existsSync(dist)) {
 
 const server = http.createServer(app);
 attachWs(server, hub);
+svc.discord.attach(server);
 
 server.listen(PORT, HOST, () => {
   console.log(`opentrench listening on http://${HOST}:${PORT}`);

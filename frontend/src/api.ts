@@ -97,7 +97,7 @@ export interface ColumnDef {
   filters?: ColumnFilters;
 }
 export interface MaskedConfig {
-  discord: { hasToken: boolean; watch: string[]; canSend: boolean };
+  discord: { watch: string[]; canSend: boolean };
   telegram: { apiId: number | null; hasApiHash: boolean; hasSession: boolean; watch: string[]; canSend: boolean };
   cove: { amounts: number[] };
   blacklist: string[];
@@ -133,7 +133,6 @@ export interface TelegramDialog {
 
 export const api = {
   config: () => req<MaskedConfig>('GET', '/config'),
-  setDiscordToken: (token: string) => req('PUT', '/discord/token', { token }),
   discordChannels: () => req<DiscordChannel[]>('GET', '/discord/channels'),
   setDiscordWatch: (ids: string[]) => req('PUT', '/discord/watch', { ids }),
   setTelegramCreds: (apiId: number, apiHash: string) => req('PUT', '/telegram/credentials', { apiId, apiHash }),

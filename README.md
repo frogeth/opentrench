@@ -22,10 +22,7 @@ every caller pinned where they called, and the full call list.
 
 ![token drill-down](docs/img/drilldown.png)
 
-> **Warning.** The Discord side uses your **own account token** (a self-bot).
-> That is against Discord's Terms of Service and can get the account banned.
-> Use at your own risk. The Telegram side uses your own account via the
-> official MTProto API, which Telegram permits.
+> **Discord** connects through a small [Vencord plugin](vencord/) inside your own Discord app, so there is no token and no self-bot session. Discord has to be open for that side of the feed to work.
 
 ## Run
 
@@ -60,7 +57,7 @@ its recent history without adding it (a banner offers "+ add to feed").
 Clicking a ticker under a message jumps to and flashes its card in Calls.
 The search box matches text, authors, chats, tickers and addresses.
 
-Settings (⚙) is one modal with three tabs: **Accounts** (Discord token,
+Settings (⚙) is one modal with three tabs: **Accounts** (Discord bridge status,
 Telegram login), **Feed** (favorite callers & pings, blacklist), **Trading**
 (Cove amounts, o1 key). Channels are managed in the sidebar, not in settings.
 

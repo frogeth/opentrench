@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- **Discord no longer uses your token.** opentrench now reads and sends Discord through a small Vencord plugin (`vencord/opentrench-bridge`) running inside your own Discord app, the way BetterDiscord and Vencord plugins work: the client's own functions do the work, so there is no separate self-bot session for Discord to detect. Paste-your-token is gone from Settings and any saved token is dropped from the config on first start. Discord must be open for the Discord side of the feed to work; Telegram is unchanged. Setup guide: docs/getting-started.md.
+
 ## v0.2.1 — 2026-09-11
 
 - Pings ignore bots by default. Settings → Feed → Bots has a "Pings from" switch: no bots, bots I pick (a per-bot "pings" toggle appears), or every bot (Brandzo).

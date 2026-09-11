@@ -9,11 +9,13 @@ Telegram themselves.
 
 Community, help and release news: **https://discord.gg/6ByE8fPNN**
 
-> **Read this first.** The Discord side signs in with your *user token*, which
-> makes opentrench a "self-bot". That is against Discord's terms of service and
-> Discord can ban accounts for it. Use an alt if you are not comfortable with
-> that risk. The Telegram side uses your own account through Telegram's
-> official API, which Telegram allows.
+> **How Discord is wired.** opentrench does **not** use your Discord token.
+> A small plugin runs inside your own Discord app (via Vencord) and feeds
+> opentrench from there, so to Discord it is just you using Discord. Discord
+> must be open for the Discord side of the feed to work. Client mods are still
+> outside Discord's terms; Vencord has a very large user base and Discord has
+> not banned for it. The Telegram side uses your own account through
+> Telegram's official API, which Telegram allows.
 
 ---
 
@@ -40,20 +42,31 @@ build && npm start`, then open http://127.0.0.1:3210.
 
 ## 2. Connect Discord
 
-1. Open Discord **in a browser** (not the desktop app): https://discord.com/app
-2. Press **F12** (or `Cmd+Option+I` on a Mac) to open DevTools and pick the
-   **Network** tab.
-3. Click any channel so Discord makes a request. In the list, click any request
-   whose name starts with `messages` or `science`.
-4. In the **Headers** panel scroll to **Request Headers** and find
-   **`authorization`**. The long string after it is your user token. Copy it.
-   It does *not* start with `Bot` — if it does, you copied the wrong thing.
-5. In opentrench click **⚙** (top right) → **Accounts** → paste the token into
-   **user token** → **Save & connect**. The `discord` pill in the top bar turns
-   green.
+Discord connects through the **opentrench bridge**, a Vencord plugin that
+lives inside your Discord app. One-time setup, about five minutes:
 
-Never share this token. It is your account password in another form.
-opentrench stores it only in its local config file.
+1. Install [git](https://git-scm.com/), [Node.js 20+](https://nodejs.org/) and
+   [pnpm](https://pnpm.io/installation).
+2. Get Vencord's source:
+   ```bash
+   git clone https://github.com/Vendicated/Vencord
+   cd Vencord
+   pnpm install --frozen-lockfile
+   ```
+3. Copy the plugin folder from opentrench's repo
+   (`vencord/opentrench-bridge`, [here](https://github.com/frogeth/opentrench/tree/main/vencord))
+   into `src/userplugins/` inside the Vencord checkout.
+4. Build and inject it into your Discord install:
+   ```bash
+   pnpm build
+   pnpm inject
+   ```
+5. Fully quit and reopen Discord. In **User Settings → Vencord → Plugins**
+   enable **OpentrenchBridge**.
+
+The `discord` pill in opentrench's top bar turns green as soon as the plugin
+connects. If opentrench runs on a port other than 3210, set it in the plugin's
+settings. Nothing is pasted into opentrench and no token is stored anywhere.
 
 ---
 

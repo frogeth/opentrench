@@ -1,18 +1,18 @@
 import type { ConfigStore } from './config.js';
 import type { MessageHub } from './hub.js';
-import { DiscordGateway, type DiscordChannel, type DiscordSelf } from './discord/gateway.js';
+import { DiscordBridge, type DiscordChannel, type DiscordSelf } from './discord/bridge.js';
 import { discordReaction, normalizeDiscord } from './discord/normalize.js';
 import { TelegramWrapper, type TelegramDialog } from './telegram/client.js';
 import { extractLinks, type ExtractedMeta } from './links.js';
 import { createPreviewer, type Previewer } from './previews.js';
-import { fetchChannelHistory, reactMessage, sendChannelMessage } from './discord/rest.js';
 import { J7Client } from './j7.js';
 import { createLaunchWatcher } from './deploys.js';
 import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction } from './types.js';
 
 export class Services {
-  discord?: DiscordGateway;
+  /** the Vencord plugin inside the user's Discord client */
+  readonly discord = new DiscordBridge();
   telegram?: TelegramWrapper;
   j7?: J7Client;
   private discordSelf?: DiscordSelf;
@@ -35,6 +35,7 @@ export class Services {
     previewer?: Previewer,
   ) {
     this.previewer = previewer ?? createPreviewer();
+    this.wireDiscord();
     hub.on('event', (e) => {
       if (e.type === 'ping') void this.ping(e.token, e.msg);
     });
@@ -67,29 +68,27 @@ export class Services {
       .catch(() => {});
   }
 
-  // ---- Discord ----
+  // ---- Discord (through the opentrench plugin in the user's own client) ----
 
-  startDiscord(): void {
-    this.discord?.stop();
-    this.discord = undefined;
-    this.discordChannels.clear();
-    const token = this.cfg.get().discord.token;
-    if (!token) {
-      this.hub.setStatus('discord', 'disconnected');
-      return;
-    }
-    const gw = new DiscordGateway(token);
-    gw.on('state', (s, err) => this.hub.setStatus('discord', s, err));
-    gw.on('roles', (guildId: string, roles: Map<string, string>) => {
-      this.guildRoles.set(guildId, roles);
+  /** Wire the bridge once; called from the constructor. */
+  private wireDiscord(): void {
+    const b = this.discord;
+    b.watch(this.cfg.get().discord.watch); // so the very first hello already gets the list
+    b.on('state', (s) => {
+      this.hub.setStatus('discord', s, s === 'disconnected' ? 'open Discord with the opentrench plugin enabled' : undefined);
+      if (s === 'connected') this.hub.setDiscordUser(b.self?.username);
     });
-    gw.on('self', (me: DiscordSelf) => {
+    b.on('self', (me?: DiscordSelf) => {
       this.discordSelf = me;
     });
-    gw.on('channels', (chs: DiscordChannel[]) => {
+    b.on('channels', (chs: DiscordChannel[]) => {
+      this.discordChannels.clear();
       for (const c of chs) this.discordChannels.set(c.id, c);
     });
-    gw.on('message', (d) => {
+    b.on('roles', (guildId: string, roles: Map<string, string>) => {
+      this.guildRoles.set(guildId, roles);
+    });
+    b.on('message', (d) => {
       const id = String(d.channel_id);
       if (!this.cfg.get().discord.watch.includes(id)) return;
       const ch = this.discordChannels.get(id) ?? { id, name: id, guildId: '?', guildName: '?', position: 0 };
@@ -101,12 +100,16 @@ export class Services {
         console.warn('[discord] dropped message', e);
       }
     });
-    gw.on('reaction', (d, delta: number) => {
+    b.on('reaction', (d, delta: number) => {
       if (!this.cfg.get().discord.watch.includes(String(d.channel_id))) return;
       this.hub.applyReactionDelta(`discord:${d.message_id}`, discordReaction(d.emoji), delta);
     });
-    gw.connect();
-    this.discord = gw;
+  }
+
+  /** Push the watch list to the client (call after the config changes). */
+  startDiscord(): void {
+    this.discord.watch(this.cfg.get().discord.watch);
+    if (this.discord.state === 'disconnected') this.hub.setStatus('discord', 'disconnected', 'open Discord with the opentrench plugin enabled');
   }
 
   /** Recent messages of any chat (newest first) without adding it to the feed. Not persisted. */
@@ -159,10 +162,8 @@ export class Services {
   /** Compose a message as the user. Sending must be enabled per platform in config; the API checks that. */
   async send(source: 'discord' | 'telegram', chatId: string, text: string, replyTo?: string): Promise<void> {
     if (source === 'discord') {
-      const token = this.cfg.get().discord.token;
-      if (!token) throw new Error('discord not connected');
-      const d = await sendChannelMessage(token, chatId, text, replyTo);
-      // echo into the feed now; the gateway's own copy is deduplicated by id
+      const d: any = await this.discord.request('send', { channelId: chatId, content: text, replyTo });
+      // echo into the feed now; the client's own copy is deduplicated by id
       if (d?.id && this.cfg.get().discord.watch.includes(chatId)) {
         const ch = this.discordChannels.get(chatId) ?? { id: chatId, name: chatId, guildId: '?', guildName: '?', position: 0 };
         try {
@@ -181,10 +182,8 @@ export class Services {
   /** React as the user. Discord custom emoji arrive as `custom:<id>` with a name; unicode as-is. */
   async react(source: 'discord' | 'telegram', chatId: string, msgId: string, key: string, name: string, on: boolean): Promise<void> {
     if (source === 'discord') {
-      const token = this.cfg.get().discord.token;
-      if (!token) throw new Error('discord not connected');
-      const emoji = key.startsWith('custom:') ? `${name}:${key.slice(7)}` : key;
-      await reactMessage(token, chatId, msgId, emoji, on);
+      const emoji = key.startsWith('custom:') ? { id: key.slice(7), name, animated: false } : { id: null, name: key, animated: false };
+      await this.discord.request('react', { channelId: chatId, messageId: msgId, emoji, on });
       return;
     }
     if (!this.telegram) throw new Error('telegram not connected');
@@ -195,11 +194,10 @@ export class Services {
   async preview(source: 'discord' | 'telegram', id: string, limit = 50): Promise<FeedMessage[]> {
     let msgs: FeedMessage[] = [];
     if (source === 'discord') {
-      const token = this.cfg.get().discord.token;
-      if (!token) return [];
+      if (this.discord.state !== 'connected') return [];
       const ch = this.discordChannels.get(id) ?? { id, name: id, guildId: '?', guildName: '?', position: 0 };
-      const raw = await fetchChannelHistory(token, id, limit);
-      msgs = raw.map((d) => normalizeDiscord(d, ch, this.meIn(ch.guildId), this.namesIn(ch.guildId)));
+      const raw = await this.discord.request<any[]>('history', { channelId: id, limit });
+      msgs = (Array.isArray(raw) ? raw : []).map((d) => normalizeDiscord(d, ch, this.meIn(ch.guildId), this.namesIn(ch.guildId)));
     } else {
       msgs = (await this.telegram?.history(id, limit)) ?? [];
     }
