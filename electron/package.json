@@ -1,7 +1,7 @@
 {
   "name": "opentrench-desktop",
   "productName": "opentrench",
-  "version": "0.1.19",
+  "version": "0.2.0",
   "private": true,
   "description": "Discord + Telegram alpha feed with contract calls",
   "main": "main.js",
