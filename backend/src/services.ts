@@ -55,7 +55,7 @@ export class Services {
       `🔔 ${m.author} called ${label} in ${m.chatName}`,
       t.address,
       ...(m.link ? [m.link] : []),
-      ...(t.buy?.panel ? [`Cove: ${t.buy.panel}`] : []),
+      ...(t.buy?.panel ? [`${t.buy.provider === 'basedbot' ? 'BasedBot' : 'Cove'}: ${t.buy.panel}`] : []),
     ];
     try {
       await this.telegram.sendSelf(lines.join('\n'));

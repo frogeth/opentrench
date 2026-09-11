@@ -51,9 +51,26 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
         .filter((n: number) => Number.isFinite(n) && n > 0 && n <= 9999)
         .slice(0, 5);
       cfg.update((c) => {
-        c.cove.amounts = amounts.length ? amounts : [25, 50, 100];
+        if (Array.isArray(req.body?.amounts)) c.cove.amounts = amounts.length ? amounts : [25, 50, 100];
+        if (typeof req.body?.affiliateId === 'string') {
+          const id = req.body.affiliateId.trim();
+          if (id && !/^\d{1,20}$/.test(id)) throw new Error('the Cove affiliate is a numeric Telegram user id');
+          c.cove.affiliateId = id || undefined;
+        }
       });
       hub.recomputeBuyLinks();
+    }),
+  );
+  // Which bot buys go through, and the BasedBot referral that gets credit.
+  r.put(
+    '/buy',
+    wrap((req) => {
+      cfg.update((c) => {
+        if (req.body?.provider === 'cove' || req.body?.provider === 'basedbot') c.buy.provider = req.body.provider;
+        if (typeof req.body?.basedbotReferral === 'string') c.buy.basedbotReferral = req.body.basedbotReferral.trim() || 'frog';
+      });
+      hub.recomputeBuyLinks();
+      return cfg.masked().buy;
     }),
   );
   r.get('/config', wrap(() => cfg.masked()));

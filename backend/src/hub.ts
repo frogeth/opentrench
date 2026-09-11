@@ -3,6 +3,12 @@ import { detectContracts } from './contracts.js';
 import type { TokenFetcher } from './enrich.js';
 import type { SecurityBatchFetcher, SecurityFetcher } from './security.js';
 import { buildCoveLinks, type CoveOptions } from './cove.js';
+import { buildBasedBotLinks } from './basedbot.js';
+
+export interface BuyOptions {
+  provider: 'cove' | 'basedbot';
+  basedbotReferral?: string;
+}
 import type { ExtractedMeta } from './links.js';
 import type {
   BotPolicy,
@@ -62,6 +68,8 @@ export interface Snapshot {
 export interface HubOptions {
   retryDelaysMs?: number[];
   cove?: () => CoveOptions;
+  /** which bot the buy links point at (default Cove) */
+  buy?: () => BuyOptions;
   blacklist?: () => string[];
   /** holder security lookups (GoPlus / RugCheck); optional */
   security?: SecurityFetcher;
@@ -87,6 +95,7 @@ export class MessageHub extends EventEmitter {
   private status: Status = { discord: 'disconnected', telegram: 'disconnected', loginStep: 'idle', error: {}, favorites: [] };
   private retryDelays: number[];
   private cove: () => CoveOptions;
+  private buyOpts: () => BuyOptions;
   private blacklist: () => string[];
   private security?: SecurityFetcher;
   private securityBatch?: SecurityBatchFetcher;
@@ -101,6 +110,7 @@ export class MessageHub extends EventEmitter {
     super();
     this.retryDelays = opts.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
     this.cove = opts.cove ?? (() => ({ amounts: [25, 50, 100] }));
+    this.buyOpts = opts.buy ?? (() => ({ provider: 'cove' }));
     this.blacklist = opts.blacklist ?? (() => []);
     this.security = opts.security;
     this.securityBatch = opts.securityBatch;
@@ -437,6 +447,11 @@ export class MessageHub extends EventEmitter {
   }
 
   private applyBuy(t: TokenInfo): void {
+    const b = this.buyOpts();
+    if (b.provider === 'basedbot') {
+      t.buy = buildBasedBotLinks(t.address, b.basedbotReferral);
+      return;
+    }
     const network = t.network ?? (t.chain === 'sol' ? 'solana' : undefined);
     t.buy = buildCoveLinks(network, t.address, this.cove());
   }

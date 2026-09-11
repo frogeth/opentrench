@@ -7,6 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- **Pick your buy bot: Cove or BasedBot** (⚙ → Trading → Buy buttons). Buy buttons on cards and in the drill-down, right-click → Buy on …, and the buy pane all follow the choice. There is one buy pane; it shows whichever bot is picked. BasedBot opens the token via its `r_<referral>_b_<mint>` deep link (the bot asks the amount) with a referral code that defaults to opentrench's own, `frog`; a web-app link is kept as a fallback. Cove keeps its one-click amounts.
+- Cove affiliate is now configurable: a Telegram user id, base62-encoded into every link's 14-character tail per Cove's deep-link spec. Blank keeps today's behaviour, credit to your own logged-in account.
+
 ## v0.3.1 — 2026-09-11
 
 - The red status banner (e.g. "discord: open Discord with the opentrench plugin enabled") can be dismissed with an × and stays dismissed across restarts, so Telegram-only users aren't nagged. It's keyed to the exact message, so a different error for the same platform still shows. The top-bar pill keeps showing the real state.

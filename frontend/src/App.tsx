@@ -10,6 +10,7 @@ import { CallersList } from './components/CallersColumn';
 import { Composer, type SendTarget } from './components/Composer';
 import { ShareModal } from './components/ShareModal';
 import { CoveView, COVE_BOT } from './components/CoveView';
+import { PROVIDER_LABEL } from './components/BuyRow';
 import { CaMenuContext } from './components/RichText';
 import { J7View } from './components/J7View';
 import { PingsPanel } from './components/PingsPanel';
@@ -23,7 +24,7 @@ const normTg = (id: string) => {
   if (s.startsWith('100') && s.length >= 12) s = s.slice(3);
   return s;
 };
-const BOTS = { cove: COVE_BOT, salpha: 'salpha_research_bot' } as const;
+const BOTS = { cove: COVE_BOT, basedbot: 'based_eth_bot', salpha: 'salpha_research_bot' } as const;
 type BotKind = keyof typeof BOTS;
 import { VirtualItem } from './components/Virtual';
 import { Settings } from './components/Settings';
@@ -251,13 +252,22 @@ export default function App() {
   const [coveFlash, setCoveFlash] = useState<string | null>(null);
   const [caMenu, setCaMenu] = useState<{ address: string; x: number; y: number } | null>(null);
   const openCaMenu = (address: string, x: number, y: number) => setCaMenu({ address, x, y });
+  // The buy provider: Cove or BasedBot. There is ONE buy pane (column type 'cove', kept for old
+  // configs) and it shows whichever bot is chosen.
+  const buyProvider = cfg?.buy?.provider ?? 'cove';
+  const buyBot = BOTS[buyProvider];
+  const buyLabel = PROVIDER_LABEL[buyProvider];
+  const basedbotReferral = cfg?.buy?.basedbotReferral || 'frog';
+  /** which column type a bot lives in */
+  const colTypeFor = (kind: BotKind): 'cove' | 'salpha' => (kind === 'salpha' ? 'salpha' : 'cove');
   /** make sure a bot column exists and flash it */
   const ensureBotColumn = (kind: BotKind) => {
-    if (!columns.some((c) => c.type === kind)) saveColumns([...columns, { id: kind, type: kind, title: kind === 'cove' ? 'Cove' : 'Salpha', chats: [], width: 420 }]);
-    setCoveFlash(kind);
+    const type = colTypeFor(kind);
+    if (!columns.some((c) => c.type === type)) saveColumns([...columns, { id: type, type, title: type === 'salpha' ? 'Salpha' : buyLabel, chats: [], width: 420 }]);
+    setCoveFlash(type);
     window.setTimeout(() => setCoveFlash(null), 1500);
   };
-  /** right-click → Buy (Cove) or Research (Salpha): paste the address to that bot */
+  /** right-click → Buy (the chosen provider) or Research (Salpha) */
   const sendToBot = (kind: BotKind, address: string) => {
     setCaMenu(null);
     if (status.telegram !== 'connected') {
@@ -265,9 +275,12 @@ export default function App() {
       return;
     }
     ensureBotColumn(kind);
-    void api.botSend(BOTS[kind], address).catch((e) => alert(`${kind === 'cove' ? 'Cove' : 'Salpha'}: ${e?.message ?? e}`));
+    const label = kind === 'salpha' ? 'Salpha' : buyLabel;
+    // BasedBot takes the token as a /start deep link so the referral rides along; Cove and Salpha take the bare address
+    const p = kind === 'basedbot' ? api.botStart(BOTS.basedbot, `r_${basedbotReferral}_b_${address}`) : api.botSend(BOTS[kind], address);
+    void p.catch((e) => alert(`${label}: ${e?.message ?? e}`));
   };
-  /** A bot deep link (Cove buy, Salpha, positions…) → its /start payload and which bot, or null. */
+  /** A bot deep link (Cove/BasedBot buy, Salpha, positions…) → its /start payload and which bot, or null. */
   const botLink = (url: string): { kind: BotKind; payload: string } | null => {
     for (const kind of Object.keys(BOTS) as BotKind[]) {
       const m = new RegExp(`(?:t\\.me/${BOTS[kind]}/?\\?start=|tg://resolve\\?domain=${BOTS[kind]}&start=)([A-Za-z0-9_-]+)`, 'i').exec(url);
@@ -281,7 +294,7 @@ export default function App() {
     if (!hit) return window.open(url, '_blank', 'noopener');
     ensureBotColumn(hit.kind);
     if (status.telegram !== 'connected') return; // the column shows the "connect Telegram" prompt
-    api.botStart(BOTS[hit.kind], hit.payload).catch((e) => alert(`${hit.kind === 'cove' ? 'Cove' : 'Salpha'}: ${e?.message ?? e}`));
+    api.botStart(BOTS[hit.kind], hit.payload).catch((e) => alert(`${hit.kind === 'salpha' ? 'Salpha' : PROVIDER_LABEL[hit.kind]}: ${e?.message ?? e}`));
   };
   const openShare = (address: string, symbol?: string) => setShare({ text: address, title: `Share ${symbol ? `$${symbol}` : 'contract'}`, hint: 'Only the address is sent, nothing else.' });
   // Reactions: what you added this session (the platform stream brings the counts back)
@@ -977,9 +990,11 @@ export default function App() {
                   );
                 }
                 if (col.type === 'cove' || col.type === 'salpha') {
-                  const bot = BOTS[col.type];
+                  const bot = col.type === 'salpha' ? BOTS.salpha : buyBot;
+                  // a default-titled buy pane follows the provider; a custom title is kept
+                  const title = col.type === 'cove' && (col.title === 'Cove' || col.title === 'BasedBot') ? buyLabel : col.title;
                   return (
-                    <Column key={col.id} title={col.title} subtitle={`@${bot} · your Telegram`} kind={col.type} className={`col-cove${coveFlash === col.type ? ' col-flash' : ''}`} {...actions}>
+                    <Column key={col.id} title={title} subtitle={`@${bot} · your Telegram`} kind={col.type} className={`col-cove${coveFlash === col.type ? ' col-flash' : ''}`} {...actions}>
                       <CoveView bot={bot} msgs={botMsgs[bot] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} />
                     </Column>
                   );
@@ -1128,8 +1143,8 @@ export default function App() {
             <button onClick={() => openAnyToken(caMenu.address)}>
               <Icon name="chart" size={12} /> Open token
             </button>
-            <button onClick={() => sendToBot('cove', caMenu.address)}>
-              <Icon name="send" size={12} /> Buy on Cove
+            <button onClick={() => sendToBot(buyProvider, caMenu.address)}>
+              <Icon name="send" size={12} /> Buy on {buyLabel}
             </button>
             <button onClick={() => sendToBot('salpha', caMenu.address)}>
               <Icon name="search" size={12} /> Research with Salpha

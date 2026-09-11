@@ -100,8 +100,12 @@ export interface Mention {
 }
 
 export interface BuyLinks {
+  /** which bot these links open */
+  provider: 'cove' | 'basedbot';
   amounts: { usd: number; url: string }[];
   panel: string;
+  /** a browser fallback (BasedBot's web app) */
+  web?: string;
 }
 
 export interface FirstCaller {

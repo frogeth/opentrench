@@ -99,7 +99,8 @@ export interface ColumnDef {
 export interface MaskedConfig {
   discord: { hasToken: boolean; watch: string[]; canSend: boolean };
   telegram: { apiId: number | null; hasApiHash: boolean; hasSession: boolean; watch: string[]; canSend: boolean };
-  cove: { amounts: number[] };
+  cove: { amounts: number[]; affiliateId?: string };
+  buy: { provider: 'cove' | 'basedbot'; basedbotReferral: string };
   blacklist: string[];
   bots: BotPolicy;
   favorites: string[];
@@ -142,7 +143,8 @@ export const api = {
   tgLogout: () => req('POST', '/telegram/logout'),
   telegramDialogs: () => req<TelegramDialog[]>('GET', '/telegram/dialogs'),
   setTelegramWatch: (ids: string[]) => req('PUT', '/telegram/watch', { ids }),
-  setCove: (amounts: number[]) => req('PUT', '/cove', { amounts }),
+  setCove: (p: { amounts?: number[]; affiliateId?: string }) => req('PUT', '/cove', p),
+  setBuy: (p: { provider?: 'cove' | 'basedbot'; basedbotReferral?: string }) => req<{ provider: 'cove' | 'basedbot'; basedbotReferral: string }>('PUT', '/buy', p),
   setBlacklist: (names: string[]) => req('PUT', '/blacklist', { names }),
   blacklistAdd: (name: string) => req('POST', '/blacklist/add', { name }),
   bots: () => req<BotSeen[]>('GET', '/bots'),

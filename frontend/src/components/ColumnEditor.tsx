@@ -178,7 +178,7 @@ export function ColumnEditor({
             <div className="fed-type">
               {(['chat', 'calls', 'callers', 'cove', 'salpha', 'j7'] as const).map((t) => (
                 <button key={t} className={type === t ? 'active' : ''} onClick={() => setType(t)}>
-                  <Icon name={t === 'chat' ? 'chat' : t === 'calls' ? 'calls' : t === 'callers' ? 'people' : t === 'cove' ? 'send' : t === 'salpha' ? 'search' : 'x'} size={13} /> {t === 'chat' ? 'Messages' : t === 'calls' ? 'Calls' : t === 'callers' ? 'Top Callers' : t === 'cove' ? 'Cove' : t === 'salpha' ? 'Salpha' : 'J7'}
+                  <Icon name={t === 'chat' ? 'chat' : t === 'calls' ? 'calls' : t === 'callers' ? 'people' : t === 'cove' ? 'send' : t === 'salpha' ? 'search' : 'x'} size={13} /> {t === 'chat' ? 'Messages' : t === 'calls' ? 'Calls' : t === 'callers' ? 'Top Callers' : t === 'cove' ? 'Buy bot' : t === 'salpha' ? 'Salpha' : 'J7'}
                 </button>
               ))}
             </div>
@@ -186,7 +186,7 @@ export function ColumnEditor({
             <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : 'All Chats'} maxLength={40} />
             {isBot && (
               <div className="fed-bot-note hint">
-                {type === 'cove' ? 'Your conversation with @cove_trading_bot. Buy buttons and right-click → Buy land here.' : type === 'salpha' ? 'Your conversation with @salpha_research_bot. Right-click a contract → Research sends it here.' : 'J7Tracker’s live tweet feed, with the calls each tweet touches. Needs your J7 session id in ⚙ → Accounts.'}
+                {type === 'cove' ? 'Your buy bot — Cove or BasedBot, whichever is picked in ⚙ → Trading. Buy buttons and right-click → Buy land here.' : type === 'salpha' ? 'Your conversation with @salpha_research_bot. Right-click a contract → Research sends it here.' : 'J7Tracker’s live tweet feed, with the calls each tweet touches. Needs your J7 session id in ⚙ → Accounts.'}
               </div>
             )}
             {!isBot && (

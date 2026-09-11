@@ -428,32 +428,68 @@ function TelegramAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status:
 
 function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => void }) {
   const [amounts, setAmounts] = useState(cfg.cove.amounts.join(', '));
+  const [ref, setRef] = useState(cfg.buy?.basedbotReferral ?? 'frog');
+  const [aff, setAff] = useState(cfg.cove.affiliateId ?? '');
   const { busy, err, run } = useAsync();
+  const provider = cfg.buy?.provider ?? 'cove';
   return (
     <section>
-      <h2>Buy buttons (Cove)</h2>
-      <div className="hint">
-        One-click buys run in the Cove column inside opentrench (through your Telegram account) with the token and amount
-        prefilled. Referral credit goes to your logged-in Telegram account automatically.
+      <h2>Buy buttons</h2>
+      <div className="hint">Which bot the buy buttons and right-click → Buy use. Either way it runs in one buy pane inside opentrench through your Telegram account.</div>
+      <div className="row-inline" style={{ marginTop: 6 }}>
+        <span className="muted" style={{ fontSize: 12 }}>Provider</span>
+        <span className="seg">
+          {(['cove', 'basedbot'] as const).map((p) => (
+            <button key={p} className={provider === p ? 'active' : ''} disabled={busy} onClick={() => run(async () => { await api.setBuy({ provider: p }); onChange(); })}>
+              {p === 'cove' ? 'Cove' : 'BasedBot'}
+            </button>
+          ))}
+        </span>
       </div>
-      <div className="row-inline">
-        <input placeholder="amounts in USD, e.g. 25, 50, 100" value={amounts} onChange={(e) => setAmounts(e.target.value)} />
-        <button
-          disabled={busy}
-          onClick={() =>
-            run(async () => {
-              const list = amounts
-                .split(/[,\s]+/)
-                .map(Number)
-                .filter((n) => Number.isFinite(n) && n > 0);
-              await api.setCove(list);
-              onChange();
-            })
-          }
-        >
-          Save
-        </button>
-      </div>
+      {provider === 'cove' ? (
+        <>
+          <div className="hint">One-click amounts, prefilled in Cove.</div>
+          <div className="row-inline">
+            <input placeholder="amounts in USD, e.g. 25, 50, 100" value={amounts} onChange={(e) => setAmounts(e.target.value)} />
+            <button
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  const list = amounts
+                    .split(/[,\s]+/)
+                    .map(Number)
+                    .filter((n) => Number.isFinite(n) && n > 0);
+                  await api.setCove({ amounts: list });
+                  onChange();
+                })
+              }
+            >
+              Save
+            </button>
+          </div>
+          <div className="hint" style={{ marginTop: 8 }}>
+            Affiliate: the Telegram <b>user id</b> that gets Cove's referral credit, base62-encoded into every link per Cove's deep-link spec. Blank = your own logged-in account.
+          </div>
+          <div className="row-inline">
+            <input placeholder="Telegram user id (blank = you)" value={aff} onChange={(e) => setAff(e.target.value.replace(/[^\d]/g, ''))} />
+            <button disabled={busy} onClick={() => run(async () => { await api.setCove({ affiliateId: aff }); onChange(); })}>
+              Save
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="hint">
+            BasedBot opens the token in @based_eth_bot and asks the amount there. The link carries a referral code (<code>r_…</code>) for whoever gets credit; opentrench's own is <code>frog</code>.
+          </div>
+          <div className="row-inline">
+            <input placeholder="referral code" value={ref} onChange={(e) => setRef(e.target.value)} />
+            <button disabled={busy} onClick={() => run(async () => { await api.setBuy({ basedbotReferral: ref }); onChange(); })}>
+              Save
+            </button>
+          </div>
+        </>
+      )}
       {err && <div className="err">{err}</div>}
     </section>
   );

@@ -25,7 +25,9 @@ const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'co
 const hub: MessageHub = new MessageHub(500, createDefaultEnricher({ o1ApiKey: () => cfg.get().o1ApiKey }), {
   security: createSecurityFetcher(),
   securityBatch: createSecurityBatchFetcher(),
-  cove: (): CoveOptions => ({ amounts: cfg.get().cove.amounts, affiliateId: svc.affiliateId() }),
+  // a configured Cove affiliate wins; otherwise the logged-in Telegram account credits itself
+  cove: (): CoveOptions => ({ amounts: cfg.get().cove.amounts, affiliateId: cfg.get().cove.affiliateId || svc.affiliateId() }),
+  buy: () => ({ provider: cfg.get().buy.provider, basedbotReferral: cfg.get().buy.basedbotReferral }),
   blacklist: () => cfg.get().blacklist,
   bots: () => cfg.get().bots,
   favorites: () => cfg.get().favorites,

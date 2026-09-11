@@ -1,22 +1,25 @@
 import type { BuyLinks } from '../types';
 
-/** Cove quick buys. With `onBuy` they open the Cove column inside the app (the normal path); without it they fall back to plain Telegram deep links. */
+export const PROVIDER_LABEL = { cove: 'Cove', basedbot: 'BasedBot' } as const;
+
+/** Quick buys for whichever bot is chosen. With `onBuy` they open that bot's column inside the app (the normal path); without it they fall back to plain Telegram deep links. */
 export function BuyRow({ buy, compact = false, onBuy }: { buy?: BuyLinks; compact?: boolean; onBuy?: (url: string) => void }) {
   if (!buy) return null;
-  const item = (url: string, label: string, title: string, cls = '') =>
+  const label = PROVIDER_LABEL[buy.provider] ?? 'Buy';
+  const item = (url: string, text: string, title: string, cls = '') =>
     onBuy ? (
       <button key={url} className={`buy-btn ${cls}`} onClick={() => onBuy(url)} title={title}>
-        {label}
+        {text}
       </button>
     ) : (
       <a key={url} className={`buy-btn ${cls}`} href={url} target="_blank" rel="noreferrer" title={title}>
-        {label}
+        {text}
       </a>
     );
   return (
     <div className={`buy${compact ? ' buy-compact' : ''}`}>
-      {buy.amounts.map((a) => item(a.url, `$${a.usd}`, `buy $${a.usd} on Cove`))}
-      {item(buy.panel, 'Cove', 'open in Cove', 'buy-panel')}
+      {buy.amounts.map((a) => item(a.url, `$${a.usd}`, `buy $${a.usd} on ${label}`))}
+      {item(buy.panel, buy.amounts.length ? label : `Buy · ${label}`, `open in ${label}`, 'buy-panel')}
     </div>
   );
 }

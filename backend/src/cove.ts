@@ -111,7 +111,7 @@ export function buildCoveLinks(network: string | undefined, address: string, opt
     const amounts = opts.amounts
       .filter((a) => Number.isFinite(a) && a > 0 && a <= 9999)
       .map((usd) => ({ usd, url: url(`g_${encodeAmount(usd)}${code}${token}${tail}`) }));
-    return { amounts, panel: url(`b_${code}${token}${tail}`) };
+    return { provider: 'cove', amounts, panel: url(`b_${code}${token}${tail}`) };
   } catch (e: any) {
     console.warn('[cove] link failed', address, e?.message ?? e);
     return undefined;
