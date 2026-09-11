@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.2.1 — 2026-09-11
+
 - Pings ignore bots by default. Settings → Feed → Bots has a "Pings from" switch: no bots, bots I pick (a per-bot "pings" toggle appears), or every bot (Brandzo).
 
 ## v0.2.0 — 2026-09-11
