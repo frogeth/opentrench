@@ -261,15 +261,21 @@ export default function App() {
     ensureBotColumn(kind);
     void api.botSend(BOTS[kind], address).catch((e) => alert(`${kind === 'cove' ? 'Cove' : 'Salpha'}: ${e?.message ?? e}`));
   };
-  const onBuy = (url: string) => {
-    const payload = /[?&]start=([A-Za-z0-9_-]+)/.exec(url)?.[1];
-    if (!payload) return window.open(url, '_blank', 'noopener');
-    if (status.telegram !== 'connected') {
-      window.open(url, '_blank', 'noopener');
-      return;
+  /** A bot deep link (Cove buy, Salpha, positions…) → its /start payload and which bot, or null. */
+  const botLink = (url: string): { kind: BotKind; payload: string } | null => {
+    for (const kind of Object.keys(BOTS) as BotKind[]) {
+      const m = new RegExp(`(?:t\\.me/${BOTS[kind]}/?\\?start=|tg://resolve\\?domain=${BOTS[kind]}&start=)([A-Za-z0-9_-]+)`, 'i').exec(url);
+      if (m) return { kind, payload: m[1] };
     }
-    ensureBotColumn('cove');
-    api.botStart(COVE_BOT, payload).catch((e) => alert(`Cove: ${e?.message ?? e}`));
+    return null;
+  };
+  // Every Cove/Salpha buy opens inside opentrench: route it to that bot's column, never out to Telegram.
+  const onBuy = (url: string) => {
+    const hit = botLink(url);
+    if (!hit) return window.open(url, '_blank', 'noopener');
+    ensureBotColumn(hit.kind);
+    if (status.telegram !== 'connected') return; // the column shows the "connect Telegram" prompt
+    api.botStart(BOTS[hit.kind], hit.payload).catch((e) => alert(`${hit.kind === 'cove' ? 'Cove' : 'Salpha'}: ${e?.message ?? e}`));
   };
   const openShare = (address: string, symbol?: string) => setShare({ text: address, title: `Share ${symbol ? `$${symbol}` : 'contract'}`, hint: 'Only the address is sent, nothing else.' });
   // Reactions: what you added this session (the platform stream brings the counts back)

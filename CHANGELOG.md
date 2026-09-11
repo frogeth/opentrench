@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Every Cove buy now opens inside opentrench's Cove column, never a Telegram tab. Buy buttons, the token drill-down, right-click Buy, and Cove's own in-panel buttons (Move, Sell, buy confirms) all run through your Telegram session in-app. Only genuinely external links like charts still open a browser tab.
+
 ## v0.3.0 — 2026-09-11
 
 - Chat and J7 columns hold your place: when you're scrolled up (or away for a while), new messages, reconnects and old rows dropping off no longer move what you're reading. "Latest" is still one click away.

@@ -433,8 +433,8 @@ function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
     <section>
       <h2>Buy buttons (Cove)</h2>
       <div className="hint">
-        One-click buys open t.me/cove_trading_bot with the token and amount prefilled. Referral credit goes to your
-        logged-in Telegram account automatically.
+        One-click buys run in the Cove column inside opentrench (through your Telegram account) with the token and amount
+        prefilled. Referral credit goes to your logged-in Telegram account automatically.
       </div>
       <div className="row-inline">
         <input placeholder="amounts in USD, e.g. 25, 50, 100" value={amounts} onChange={(e) => setAmounts(e.target.value)} />

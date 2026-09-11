@@ -52,9 +52,16 @@ export function CoveView({
     setToast(t);
     window.setTimeout(() => setToast(null), 4000);
   };
+  // Cove's own deep links (positions, Sell 100%, Move, Hide, bulk sell, buy confirms…) run in-app
+  const intercept = (href: string) => {
+    const m = new RegExp(`^(?:https?://t\\.me/${bot}/?\\?start=|tg://resolve\\?domain=${bot}&start=)([A-Za-z0-9_-]+)`, 'i').exec(href);
+    if (!m) return false;
+    void api.botStart(bot, m[1]).catch((err) => flash(err?.message ?? 'failed'));
+    return true;
+  };
   const press = async (m: BotMessage, b: { text: string; data?: string; url?: string }) => {
     if (b.url) {
-      window.open(b.url, '_blank', 'noopener');
+      if (!intercept(b.url)) window.open(b.url, '_blank', 'noopener');
       return;
     }
     if (!b.data) return;
@@ -66,7 +73,7 @@ export function CoveView({
         flash('That message was already closed.');
         return;
       }
-      if (r.url) window.open(r.url, '_blank', 'noopener');
+      if (r.url && !intercept(r.url)) window.open(r.url, '_blank', 'noopener');
       if (r.message) flash(r.message);
     } catch (e: any) {
       flash(e?.message ?? 'press failed');
@@ -85,13 +92,6 @@ export function CoveView({
     }
   };
 
-  // Cove's own deep links (positions, Sell 100%, Move, Hide, bulk sell…) run in-app
-  const intercept = (href: string) => {
-    const m = new RegExp(`^(?:https?://t\\.me/${bot}/?\\?start=|tg://resolve\\?domain=${bot}&start=)([A-Za-z0-9_-]+)`, 'i').exec(href);
-    if (!m) return false;
-    void api.botStart(bot, m[1]).catch((err) => flash(err?.message ?? 'failed'));
-    return true;
-  };
   return (
     <LinkInterceptContext.Provider value={intercept}>
     <div className="cove">

@@ -1,6 +1,6 @@
 import type { BuyLinks } from '../types';
 
-/** Cove quick buys. With `onBuy` they open the Cove tab inside the app; without it they are plain Telegram deep links. */
+/** Cove quick buys. With `onBuy` they open the Cove column inside the app (the normal path); without it they fall back to plain Telegram deep links. */
 export function BuyRow({ buy, compact = false, onBuy }: { buy?: BuyLinks; compact?: boolean; onBuy?: (url: string) => void }) {
   if (!buy) return null;
   const item = (url: string, label: string, title: string, cls = '') =>
