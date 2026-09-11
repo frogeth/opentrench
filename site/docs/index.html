@@ -19,7 +19,8 @@
 <a href="#discord">2 · Discord</a>
 <a href="#telegram">3 · Telegram</a>
 <a href="#channels">4 · Channels</a>
-<a href="#use">5 · Using it</a>
+<a href="#j7">5 · J7 feed</a>
+<a href="#use">6 · Using it</a>
 <div class="k" style="margin-top:16px">Help</div>
 <a href="#trouble">Troubleshooting</a>
 <a href="https://discord.gg/6ByE8fPNN">Ask on Discord</a>
@@ -106,7 +107,19 @@ pnpm inject</code></pre></li>
 <li>Each server and chat becomes an icon in the rail. Drag to reorder. Click one to focus on it, click ★ to get back to everything.</li>
 </ol>
 
-<h2 id="use"><span class="n">05</span>Using it</h2>
+<h2 id="j7"><span class="n">05</span>J7 feed <span class="muted" style="font-size:14px;font-weight:400">(optional)</span></h2>
+<p>Add <a href="https://j7tracker.io">J7Tracker</a>'s live tweet feed as a column, right next to your calls. Tweets that mention a token you're already tracking get a highlighted strip, and tokens launched off a tweet on pump.fun or Pons show up under it within seconds.</p>
+<div class="aside">This reads J7 with your own J7 session, so you need a J7Tracker account you're logged into. It's read-only and unofficial: if J7 changes their site it can stop working, and you'd just paste a fresh session id.</div>
+<ol class="steps">
+<li><b>Open <a href="https://j7tracker.io">j7tracker.io</a></b> in a browser and make sure you're logged in.</li>
+<li><b>Open DevTools.</b> <kbd>F12</kbd>, or <kbd>Cmd</kbd>+<kbd>Option</kbd>+<kbd>I</kbd> on a Mac, then go to the <b>Application</b> tab (it may be hidden under the <b>»</b> menu).</li>
+<li><b>Find the session id.</b> In the left sidebar under <b>Storage → Local Storage</b>, click <code>https://j7tracker.io</code>. Find the row named <code>sessionId</code> and copy its value.</li>
+<li><b>Paste it into opentrench.</b> ⚙ → <b>Accounts</b> → <b>J7Tracker</b> → paste the session id → <b>Save &amp; connect</b>. The status turns to <em>connected</em>.</li>
+<li><b>Add the column.</b> The <b>+</b> at the right end of the terminal → pick <b>J7</b>. Tweets stream newest first.</li>
+</ol>
+<p>In the column: <b>★</b> on any account to get a sound and a notification whenever it tweets. Right-click a contract in a tweet for the usual Buy / Research / Open token menu. The <b>launches</b> line under a tweet is filled in automatically for tokens deployed off it.</p>
+
+<h2 id="use"><span class="n">06</span>Using it</h2>
 <img src="../img/terminal.png" alt="The terminal">
 <ul>
 <li><b>All Calls</b>: one card per token, newest call first. Gold <b>1st</b> for a first call, a 🔥 count when several chats called it, market cap at the call and the multiple since. Click the address to copy it.</li>
@@ -116,7 +129,6 @@ pnpm inject</code></pre></li>
 <li><b>Columns</b>: the <b>+</b> at the right end adds one: calls, chat, Top Callers, Cove, Salpha or J7, scoped to any channels, with filters and its own alert sound. Drag the grip to reorder, the edge to resize.</li>
 <li><b>Favorites</b>: ⋯ next to a name → Favorite caller. They get a crown and their first calls ping you.</li>
 <li><b>Bots</b>: ⚙ → Feed → Bots decides which bots show, which count as calls, and which may ping you.</li>
-<li><b>J7</b>: paste your J7Tracker session id in ⚙ → Accounts and add a J7 column. Star an account to get pinged when it tweets.</li>
 </ul>
 
 <h2 id="trouble">Troubleshooting</h2>
