@@ -330,6 +330,15 @@ export default function App() {
     />
   );
   const [liveWidths, setLiveWidths] = useState<Record<string, number>>({});
+  /**
+   * One column soaks up the leftover width so the row has no gap: the last one the user has not
+   * given an explicit width. That keeps every sized column (the buy pane arrives at 420) fixed
+   * and resizable — the last column used to fill unconditionally and had no resize handle.
+   */
+  const fillIdx = useMemo(() => {
+    for (let i = columns.length - 1; i >= 0; i--) if (!(liveWidths[columns[i].id] ?? columns[i].width)) return i;
+    return -1;
+  }, [columns, liveWidths]);
   const resizeFor = (id: string) => (w: number, done: boolean) => {
     if (!done) {
       setLiveWidths((m) => ({ ...m, [id]: w }));
@@ -980,8 +989,8 @@ export default function App() {
                   drag: dragFor(col.id),
                   filtered: filtersActive(col.filters),
                   width: liveWidths[col.id] ?? col.width,
-                  onResize: last ? undefined : resizeFor(col.id),
-                  fill: last,
+                  onResize: resizeFor(col.id),
+                  fill: i === fillIdx,
                 };
                 if (col.type === 'j7') {
                   return (

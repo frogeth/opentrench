@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- The last column can be resized. It used to fill the row and was given no resize handle, so whichever column sat on the end — the buy pane, most often, since it is appended when you first buy — was stuck at its width. Every column now has a handle, and the leftover width goes to the last column you have not sized yourself.
+
 - Dark form controls. The page never declared `color-scheme: dark`, so every native control the OS draws — dropdowns and their popups, scrollbars, date pickers — rendered light. Settings dropdowns are now styled like the text fields, with a matching chevron, and the people picker's scrollbar is themed.
 
 - Search anyone to favorite. ⚙ → Feed → Favorites now has a people search instead of a blind name field: it lists everyone the feed has seen (including people who only chat and have never called), and when you type it also searches your Discord servers and Telegram groups for members who have not posted at all. Each row shows their calls, messages and where, and one click toggles the crown. Typing a name nothing matches still lets you add it verbatim (alextjh).
