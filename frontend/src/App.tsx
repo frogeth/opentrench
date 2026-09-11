@@ -1016,6 +1016,18 @@ export default function App() {
         <div className="ca-menu-backdrop" onMouseDown={() => setCaMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCaMenu(null); }}>
           <div className="ca-menu" style={{ left: Math.min(caMenu.x, window.innerWidth - 220), top: Math.min(caMenu.y, window.innerHeight - 130) }} onMouseDown={(e) => e.stopPropagation()}>
             <div className="ca-menu-addr">{caMenu.address.slice(0, 6)}…{caMenu.address.slice(-4)}</div>
+            {(() => {
+              const key = tokens[caMenu.address] ? caMenu.address : tokens[caMenu.address.toLowerCase()] ? caMenu.address.toLowerCase() : null;
+              return key ? (
+                <button onClick={() => { setOpenToken(key); setCaMenu(null); }}>
+                  <Icon name="chart" size={12} /> Open token
+                </button>
+              ) : (
+                <button disabled title="opens once someone calls it">
+                  <Icon name="chart" size={12} /> Open token <span className="muted">· not called yet</span>
+                </button>
+              );
+            })()}
             <button onClick={() => sendToBot('cove', caMenu.address)}>
               <Icon name="send" size={12} /> Buy on Cove
             </button>

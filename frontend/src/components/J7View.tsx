@@ -175,7 +175,7 @@ export function J7View({
   return (
     <div className="j7" ref={rootRef}>
       {!atTop && (
-        <button className="jump" onClick={toLatest}>
+        <button className="jump jump-top" onClick={toLatest}>
           ↑ {pending > 0 ? `${pending} new` : 'latest'}
         </button>
       )}
