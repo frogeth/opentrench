@@ -158,6 +158,14 @@ export const api = {
   send: (source: 'discord' | 'telegram', chatId: string, text: string, replyTo?: string) => req<{ ok: true }>('POST', '/send', { source, chatId, text, replyTo }),
   setJ7Token: (token: string) => req<{ hasToken: boolean }>('PUT', '/j7/token', { token }),
   lookupToken: (address: string) => req<import('./types').TokenInfo>('GET', `/token/${encodeURIComponent(address)}`),
+  /** send one image (raw body) with an optional caption */
+  sendFile: async (source: 'discord' | 'telegram', chatId: string, file: File, text = '', replyTo?: string) => {
+    const q = new URLSearchParams({ source, chatId, text, name: file.name || 'image.png', ...(replyTo ? { replyTo } : {}) });
+    const res = await fetch(`/api/send-file?${q}`, { method: 'POST', headers: { 'content-type': file.type || 'application/octet-stream' }, body: file });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((data as any)?.error ?? `HTTP ${res.status}`);
+    return data as { ok: true };
+  },
   /** legacy read-only token; empty string removes it */
   setDiscordToken: (token: string) => req<{ hasToken: boolean }>('PUT', '/discord/token', { token }),
   mentions: () => req<import('./types').Mention[]>('GET', '/mentions'),

@@ -7,6 +7,11 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Chat and J7 columns hold your place: when you're scrolled up (or away for a while), new messages, reconnects and old rows dropping off no longer move what you're reading. "Latest" is still one click away.
+- Paste or drop images into any composer to send them, with the text as the caption. Telegram sends through your session; Discord uploads through your own client via the plugin.
+- Share button on J7 tweets: pick chats in your feed and the tweet link is sent there, with a "sent to …" line under the tweet (Brandzo).
+- Click any image in chat, embeds, previews or tweets to view it full size; Esc or click outside closes, "Open original" for the file (Brandzo).
+
 - **Discord through your own Discord app.** opentrench can now read and send Discord through a small Vencord plugin (`vencord/opentrench-bridge`) running inside your Discord client, the way BetterDiscord and Vencord plugins work: the client's own functions do the work, so there is no self-bot session for Discord to detect and no token anywhere. Discord must be open for that side of the feed to work.
 - **Tokens are read-only now.** If you connected with a user token, nothing changes for reading. Sending and reacting with a token are gone (that was the part Discord bans for); they need the plugin. A one-time note in the app explains this, and the switch is yours to make: once the plugin connects, the token session closes on its own and you can remove the token in Settings.
 - **opentrench.app**: a website with a landing page and step-by-step setup guides for Mac and Windows (Discord plugin, Telegram). Settings and the update note link there.

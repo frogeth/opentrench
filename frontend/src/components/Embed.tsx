@@ -1,3 +1,4 @@
+import { openImage } from './Lightbox';
 import { useState } from 'react';
 import type { EmbedInfo } from '../types';
 import { RichText } from './RichText';
@@ -100,7 +101,7 @@ export function Embed({ e, contracts, compact = true }: { e: EmbedInfo; contract
             ))}
           </div>
         )}
-        {e.image && <img className="embed-image" src={e.image} alt="" loading="lazy" />}
+        {e.image && <img className="embed-image" src={e.image} alt="" loading="lazy" onClick={() => openImage(e.image!)} />}
         {(e.footer || e.timestamp) && (
           <div className="embed-footer">
             {e.footer}
@@ -109,7 +110,7 @@ export function Embed({ e, contracts, compact = true }: { e: EmbedInfo; contract
           </div>
         )}
       </div>
-      {e.thumbnail && <img className="embed-thumb" src={e.thumbnail} alt="" loading="lazy" />}
+      {e.thumbnail && <img className="embed-thumb" src={e.thumbnail} alt="" loading="lazy" onClick={() => openImage(e.thumbnail!)} />}
     </div>
   );
 }

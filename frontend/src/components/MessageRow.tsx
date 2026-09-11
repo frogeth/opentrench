@@ -8,6 +8,7 @@ import { Icon } from './Icon';
 
 const QUICK_EMOJI = ['👍', '🔥', '😂', '💀', '🚀', '👀', '💎', '🤝', '❤️', '😭', '🫡', '📈', '📉', '🐐', '🧠', '🤡', '💩', '😮', '🙏', '✅', '❌', '⚡', '🍀', '🎯'];
 import { AuthorMenu } from './AuthorMenu';
+import { openImage } from './Lightbox';
 import { RichText } from './RichText';
 import { Embed } from './Embed';
 
@@ -35,7 +36,7 @@ function Media({ item }: { item: MediaItem }) {
   }
   return (
     <a href={item.url} target="_blank" rel="noreferrer">
-      <img className={item.kind === 'gif' ? 'media-gif' : 'media-img'} src={item.url} alt="" loading="lazy" onError={fail} />
+      <img className={item.kind === 'gif' ? 'media-gif' : 'media-img'} src={item.url} alt="" loading="lazy" onError={fail} onClick={() => openImage(item.url)} />
     </a>
   );
 }
@@ -51,7 +52,7 @@ function Preview({ p }: { p: LinkPreview }) {
         {!p.author && p.title && <b>{p.title}</b>}
       </div>
       {p.text && <div className="preview-text">{p.text}</div>}
-      {p.image && <img className="preview-img" src={p.image} alt="" loading="lazy" />}
+      {p.image && <img className="preview-img" src={p.image} alt="" loading="lazy" onClick={() => openImage(p.image!)} />}
     </a>
   );
 }

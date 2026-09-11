@@ -15,21 +15,32 @@ const key = (w: WatchedChat) => `${w.source}:${w.id}`;
  * bare address and nothing else, one chat at a time with a pause between, and
  * only to platforms where sending is switched on.
  */
+export interface ShareItem {
+  /** exactly what gets sent */
+  text: string;
+  /** modal title, e.g. "Share $BONK" or "Share tweet" */
+  title: string;
+  /** what the preview line shows instead of the raw text (a tweet's first words, say) */
+  preview?: string;
+  hint?: string;
+  /** called with the chat names each successful send went to */
+  onSent?: (names: string[]) => void;
+}
+
 export function ShareModal({
-  address,
-  symbol,
+  item,
   watched,
   channels = [],
   canSend,
   onClose,
 }: {
-  address: string;
-  symbol?: string;
+  item: ShareItem;
   watched: WatchedChat[];
   channels?: DiscordChannel[];
   canSend: Record<'discord' | 'telegram', boolean>;
   onClose: () => void;
 }) {
+  const { text, title, preview, hint, onSent } = item;
   const [picked, setPicked] = useState<string[]>(() => {
     try {
       const saved: string[] = JSON.parse(localStorage.getItem('trenchfeed.shareTargets') ?? '[]');
@@ -68,8 +79,9 @@ export function ShareModal({
       const w = targets[i];
       setStatus((s) => ({ ...s, [key(w)]: 'sending' }));
       try {
-        await api.send(w.source, w.id, address);
+        await api.send(w.source, w.id, text);
         setStatus((s) => ({ ...s, [key(w)]: 'sent' }));
+        onSent?.([shortName(w)]);
       } catch (e: any) {
         setStatus((s) => ({ ...s, [key(w)]: e?.message ?? 'failed' }));
       }
@@ -85,15 +97,15 @@ export function ShareModal({
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal share-modal">
         <div className="fed-head">
-          <b>Share {symbol ? `$${symbol}` : 'contract'}</b>
+          <b>{title}</b>
           <button className="close" onClick={onClose} title="close">
             <Icon name="close" size={14} />
           </button>
         </div>
         <div className="share-body">
           <div className="share-ca">
-            <code>{address}</code>
-            <span className="hint">Only the address is sent, nothing else.</span>
+            <code>{preview ?? text}</code>
+            <span className="hint">{hint ?? 'Only this is sent, nothing else.'}</span>
           </div>
           {((anyDiscord && !canSend.discord) || (anyTelegram && !canSend.telegram)) && (
             <div className="hint share-off">
@@ -143,7 +155,7 @@ export function ShareModal({
           </div>
         </div>
         <div className="fed-foot">
-          <a className="fed-link" href={telegramShareUrl(address, symbol ? `$${symbol}` : address)} target="_blank" rel="noreferrer" title="open the Telegram share sheet for chats outside your feed">
+          <a className="fed-link" href={telegramShareUrl(text, preview ?? text)} target="_blank" rel="noreferrer" title="open the Telegram share sheet for chats outside your feed">
             share via the Telegram app instead
           </a>
           <span className="muted share-count">

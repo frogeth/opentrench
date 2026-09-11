@@ -5,6 +5,7 @@ import { StringSession } from 'telegram/sessions/index.js';
 import { NewMessage, Raw, type NewMessageEvent } from 'telegram/events/index.js';
 import { Api } from 'telegram/tl/index.js';
 import { getPeerId } from 'telegram/Utils.js';
+import { CustomFile } from 'telegram/client/uploads.js';
 import type { BotMessage, FeedMessage, LoginStep, TelegramState } from '../types.js';
 import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, type TelegramPlain, entitiesToMarkdown } from './normalize.js';
 import { extractLinks, type ExtractedMeta, type LinkIn } from '../links.js';
@@ -239,6 +240,25 @@ export class TelegramWrapper extends EventEmitter {
         this.emit('message', msg, meta);
       } catch (e: any) {
         console.warn('[telegram] could not echo sent message', e?.message ?? e);
+      }
+    }
+  }
+
+  /** Send an image (or any file) with an optional caption, as a photo when it is one. */
+  async sendFile(chatId: string, file: { name: string; mime: string; data: Buffer }, caption: string, replyTo?: number): Promise<void> {
+    if (!this.client || this.state !== 'connected') throw new Error('telegram not connected');
+    const sent: any = await this.client.sendFile(bigInt(chatId), {
+      file: new CustomFile(file.name, file.data.length, '', file.data),
+      caption,
+      replyTo,
+      forceDocument: !/^image\/(png|jpe?g|gif|webp)$/i.test(file.mime),
+    });
+    if (sent?.className === 'Message') {
+      try {
+        const { msg, meta } = await this.toFeed(sent, chatId);
+        this.emit('message', msg, meta);
+      } catch (e: any) {
+        console.warn('[telegram] could not echo sent file', e?.message ?? e);
       }
     }
   }

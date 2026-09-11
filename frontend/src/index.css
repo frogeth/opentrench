@@ -991,3 +991,17 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .notice-body { display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #d5d9e2; }
 .notice-body p { margin: 0; line-height: 1.45; }
 .notice-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* ---------- lightbox, share on tweets, composer attachments ---------- */
+.media-img, .media-gif, .embed-image, .embed-thumb, .preview-img, .tweet-media img { cursor: zoom-in; }
+.lightbox { position: fixed; inset: 0; z-index: 80; background: rgba(0, 0, 0, 0.85); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px; cursor: zoom-out; }
+.lightbox img { max-width: 92vw; max-height: 86vh; object-fit: contain; border-radius: 6px; box-shadow: 0 20px 80px rgba(0, 0, 0, 0.7); cursor: default; }
+.lightbox-open { color: var(--muted); font-size: 12px; text-decoration: underline; cursor: pointer; }
+.lightbox-open:hover { color: var(--text); }
+.tweet-share { background: none; border: 0; color: var(--dim); padding: 0 4px; cursor: pointer; display: inline-flex; align-items: center; }
+.tweet-share:hover { color: var(--text); }
+.tweet-sent { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ok); }
+.composer-files { display: flex; align-items: center; gap: 8px; padding: 6px 10px 0; font-size: 11px; flex-wrap: wrap; }
+.composer-file { position: relative; display: inline-block; }
+.composer-file img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line-strong); display: block; }
+.composer-file button { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--chrome); color: var(--text); font-size: 12px; line-height: 1; cursor: pointer; padding: 0; }

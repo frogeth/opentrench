@@ -1,4 +1,4 @@
-import { Router, json, type Request, type Response } from 'express';
+import { Router, json, raw, type Request, type Response } from 'express';
 import type { HoverFetchers } from './hover.js';
 import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
 
@@ -428,6 +428,33 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       if (Date.now() - last < 400) throw new Error('slow down');
       lastSend.set(rk, Date.now());
       await svc.react(source, chatId, msgId, key, name, on);
+      return { ok: true };
+    }),
+  );
+  // An image pasted into the composer: raw body, details in the query string. Same gates as /send.
+  r.post(
+    '/send-file',
+    raw({ type: ['image/*', 'application/octet-stream'], limit: '10mb' }),
+    wrap(async (req) => {
+      const source = req.query.source === 'telegram' ? 'telegram' : 'discord';
+      const chatId = String(req.query.chatId ?? '').trim();
+      const text = String(req.query.text ?? '').replace(/\r\n/g, '\n').trim();
+      const replyTo = req.query.replyTo ? String(req.query.replyTo) : undefined;
+      const name = String(req.query.name ?? 'image.png').replace(/[^\w.\-]+/g, '_').slice(0, 80) || 'image.png';
+      const mime = String(req.headers['content-type'] ?? 'application/octet-stream').split(';')[0];
+      const data = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      if (!chatId || data.length === 0) throw new Error('chat and an image required');
+      if (!/^image\//.test(mime)) throw new Error('only images can be sent');
+      const c = cfg.get();
+      if (source === 'discord' && !c.discord.send) throw new Error('sending on Discord is off (Settings → Accounts)');
+      if (source === 'telegram' && !c.telegram.send) throw new Error('sending on Telegram is off (Settings → Accounts)');
+      const watched = source === 'discord' ? c.discord.watch : c.telegram.watch;
+      if (!watched.includes(chatId)) throw new Error('you can only send to chats in your feed');
+      const key = `${source}:${chatId}`;
+      const last = lastSend.get(key) ?? 0;
+      if (Date.now() - last < 1000) throw new Error('slow down — one message per second per chat');
+      lastSend.set(key, Date.now());
+      await svc.sendFile(source, chatId, { name, mime, data }, text, replyTo);
       return { ok: true };
     }),
   );

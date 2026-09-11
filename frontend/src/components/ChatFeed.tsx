@@ -3,6 +3,7 @@ import type { FeedMessage, TokenInfo } from '../types';
 import type { ChartProvider } from '../format';
 import { MessageRow } from './MessageRow';
 import { VirtualItem } from './Virtual';
+import { useScrollAnchor } from '../useScrollAnchor';
 
 /** Discord-style grouping: hide the header when the message just above (in display order) is the same author within 5 min. */
 export function continued(list: FeedMessage[], i: number): boolean {
@@ -66,12 +67,15 @@ export function ChatFeed({
   const [atEnd, setAtEnd] = useState(true);
   const shown = useMemo(() => (order === 'bottom' ? [...msgs].reverse() : msgs), [msgs, order]);
   const atEndRef = useRef(true);
+  // away from the live end, the row under the reader stays put when the list changes
+  const captureAnchor = useScrollAnchor(() => bodyRef.current, shown, () => !atEndRef.current);
   const onScroll = () => {
     const el = bodyRef.current;
     if (!el) return;
     const end = order === 'bottom' ? el.scrollHeight - el.scrollTop - el.clientHeight < 60 : el.scrollTop < 60;
     atEndRef.current = end; // synchronously: the resize observer below may run before React re-renders
     setAtEnd(end);
+    if (!end) captureAnchor();
   };
   useLayoutEffect(() => {
     const el = bodyRef.current;

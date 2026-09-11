@@ -19,10 +19,12 @@ import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
-import { findByPropsLazy } from "@webpack";
-import { ChannelStore, Constants, FluxDispatcher, GuildChannelStore, GuildMemberStore, GuildRoleStore, GuildStore, RestAPI, UserStore } from "@webpack/common";
+import { findByPropsLazy, findLazy } from "@webpack";
+import { ChannelStore, Constants, FluxDispatcher, GuildChannelStore, GuildMemberStore, GuildRoleStore, GuildStore, RestAPI, SnowflakeUtils, UserStore } from "@webpack/common";
 
 const ReactionActions = findByPropsLazy("addReaction", "removeReaction");
+/** Discord's upload class (the same one its own composer uses) */
+const CloudUpload: any = findLazy(m => m.prototype?.trackUploadFinished);
 
 const VERSION = 1;
 
@@ -102,6 +104,30 @@ async function handleRequest(req: Json) {
             if (req.replyTo) extra.messageReference = { channel_id: String(req.channelId), message_id: String(req.replyTo) };
             const res: any = await sendMessage(String(req.channelId), { content: String(req.content ?? "") }, undefined, extra);
             result = res?.body ?? res ?? null;
+        } else if (op === "sendFile") {
+            // an image pasted into opentrench: upload it the way the client does, then post the message
+            const bytes = Uint8Array.from(atob(String(req.data ?? "")), c => c.charCodeAt(0));
+            const file = new File([bytes], String(req.name || "image.png"), { type: String(req.mime || "application/octet-stream") });
+            const channelId = String(req.channelId);
+            const upload = new CloudUpload({ file, isThumbnail: false, platform: 1 }, channelId, false, 0);
+            await new Promise<void>((resolve, reject) => {
+                upload.on("complete", () => resolve());
+                upload.on("error", (e: any) => reject(new Error(String(e?.message ?? e ?? "upload failed"))));
+                upload.upload();
+            });
+            const res: any = await RestAPI.post({
+                url: Constants.Endpoints.MESSAGES(channelId),
+                body: {
+                    channel_id: channelId,
+                    content: String(req.content ?? ""),
+                    nonce: SnowflakeUtils.fromTimestamp(Date.now()),
+                    sticker_ids: [],
+                    type: 0,
+                    attachments: [{ id: "0", filename: upload.filename, uploaded_filename: upload.uploadedFilename }],
+                    message_reference: req.replyTo ? { channel_id: channelId, message_id: String(req.replyTo) } : null,
+                },
+            });
+            result = res?.body ?? null;
         } else if (op === "react") {
             const emoji = { id: req.emoji?.id ?? null, name: String(req.emoji?.name ?? ""), animated: !!req.emoji?.animated };
             if (req.on) await ReactionActions.addReaction(String(req.channelId), String(req.messageId), emoji);

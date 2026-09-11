@@ -6,6 +6,8 @@ import { Avatar } from './Avatar';
 import { RichText } from './RichText';
 import { Icon } from './Icon';
 import { VirtualItem } from './Virtual';
+import { openImage } from './Lightbox';
+import { useScrollAnchor } from '../useScrollAnchor';
 
 const fmtFollowers = (n?: number) => (n === undefined ? '' : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
 
@@ -86,6 +88,7 @@ export function J7View({
   hasToken,
   favorites,
   onFavorite,
+  onShare,
   onLoaded,
   onSelect,
 }: {
@@ -98,18 +101,23 @@ export function J7View({
   /** X handles (lower-case) whose tweets ping you */
   favorites: string[];
   onFavorite: (handle: string) => void;
+  /** share this tweet's link to chats; resolves with the names it went to */
+  onShare: (t: J7Tweet, onSent: (names: string[]) => void) => void;
   onLoaded: (t: J7Tweet[]) => void;
   /** highlight a call in the Calls column */
   onSelect: (address: string) => void;
 }) {
   const [onlyMatches, setOnlyMatches] = useState(false);
   const [deploys, setDeploys] = useState<Record<string, DeployState>>({});
+  const [sentTo, setSentTo] = useState<Record<string, string[]>>({});
   // "latest" button: the column scrolls (newest on top); count tweets that land while scrolled away
   const rootRef = useRef<HTMLDivElement>(null);
   const atTopRef = useRef(true);
   const [atTop, setAtTop] = useState(true);
   const [pending, setPending] = useState(0);
   const seenIds = useRef<Set<string> | null>(null);
+  // scrolled down: what you're reading stays put as tweets land above
+  const captureAnchor = useScrollAnchor(() => rootRef.current?.closest('.col-body') as HTMLElement | null, tweets, () => !atTopRef.current);
   useEffect(() => {
     const scroller = rootRef.current?.closest('.col-body') as HTMLElement | null;
     if (!scroller) return;
@@ -118,6 +126,7 @@ export function J7View({
       atTopRef.current = top;
       setAtTop(top);
       if (top) setPending(0);
+      else captureAnchor();
     };
     onScroll();
     scroller.addEventListener('scroll', onScroll, { passive: true });
@@ -206,6 +215,9 @@ export function J7View({
                 <button className={`tweet-fav${fav ? ' on' : ''}`} onClick={() => onFavorite(t.author.handle)} title={fav ? `stop pinging when @${t.author.handle} tweets` : `ping me when @${t.author.handle} tweets`}>
                   {fav ? '★' : '☆'}
                 </button>
+                <button className="tweet-share" onClick={() => onShare(t, (names) => setSentTo((m) => ({ ...m, [t.id]: [...new Set([...(m[t.id] ?? []), ...names])] })))} title="send this tweet's link to chats in your feed">
+                  <Icon name="send" size={11} />
+                </button>
                 {t.deleted && (
                   <span className="tweet-del" title={`posted ${timeAgo(t.ts, now)} ago, deleted ${timeAgo(t.deleted, now)} ago`}>
                     <Icon name="trash" size={10} /> deleted {timeAgo(t.deleted, now)}
@@ -227,7 +239,7 @@ export function J7View({
               {t.images.length > 0 && (
                 <div className={`tweet-media n${Math.min(t.images.length, 4)}`}>
                   {t.images.slice(0, 4).map((src) => (
-                    <img key={src} src={src} alt="" loading="lazy" />
+                    <img key={src} src={src} alt="" loading="lazy" onClick={() => openImage(src)} />
                   ))}
                 </div>
               )}
@@ -253,6 +265,11 @@ export function J7View({
                   ))}
                 </div>
               )}
+              {sentTo[t.id]?.length ? (
+                <div className="tweet-sent">
+                  <span className="j7-dot on" /> sent to {sentTo[t.id].join(', ')}
+                </div>
+              ) : null}
               <div className="tweet-actions">
                 <button className={`hdr-toggle${dep && !dep.error ? ' on' : ''}`} onClick={() => findDeploys(t)} title="new launches pair up on their own while this column is open; this scans pump.fun and Pons for older tokens whose links point at this exact tweet">
                   <Icon name="search" size={10} /> {t.launches?.length ? 'scan for more' : 'scan launches'}

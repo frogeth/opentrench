@@ -39,6 +39,17 @@ export function Composer({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
+  // images pasted or dropped in, sent as attachments (the first one carries the text as its caption)
+  const [files, setFiles] = useState<{ file: File; url: string }[]>([]);
+  const addFiles = (list: Iterable<File>) => {
+    const imgs = [...list].filter((f) => f.type.startsWith('image/')).slice(0, 4);
+    if (imgs.length) setFiles((cur) => [...cur, ...imgs.map((file) => ({ file, url: URL.createObjectURL(file) }))].slice(0, 4));
+  };
+  const removeFile = (url: string) =>
+    setFiles((cur) => {
+      URL.revokeObjectURL(url);
+      return cur.filter((f) => f.url !== url);
+    });
 
   // a reply pins the target to that message's chat
   const replyTarget = reply ? targets.find((t) => t.name === reply.chatName) : undefined;
@@ -56,11 +67,19 @@ export function Composer({
 
   const send = async () => {
     const body = text.trim();
-    if (!target || !body || busy || !enabled) return;
+    if (!target || (!body && files.length === 0) || busy || !enabled) return;
     setBusy(true);
     setErr(null);
     try {
-      await api.send(target.source, target.id, body, reply ? platformMessageId(reply) : undefined);
+      const replyTo = reply ? platformMessageId(reply) : undefined;
+      if (files.length) {
+        for (let i = 0; i < files.length; i++) {
+          await api.sendFile(target.source, target.id, files[i].file, i === 0 ? body : '', i === 0 ? replyTo : undefined);
+          if (i < files.length - 1) await new Promise((r) => setTimeout(r, 1100));
+        }
+        for (const f of files) URL.revokeObjectURL(f.url);
+        setFiles([]);
+      } else await api.send(target.source, target.id, body, replyTo);
       setText('');
       onCancelReply();
       onSent?.();
@@ -82,6 +101,19 @@ export function Composer({
           <button onClick={onCancelReply} title="cancel reply">
             ✕
           </button>
+        </div>
+      )}
+      {files.length > 0 && (
+        <div className="composer-files">
+          {files.map((f) => (
+            <span key={f.url} className="composer-file">
+              <img src={f.url} alt="" />
+              <button onClick={() => removeFile(f.url)} title="remove">
+                ×
+              </button>
+            </span>
+          ))}
+          <span className="muted">{files.length === 1 ? 'image attached' : `${files.length} images`} · paste or drop to add</span>
         </div>
       )}
       <div className="composer-row">
@@ -110,6 +142,20 @@ export function Composer({
           }
           maxLength={max}
           onChange={(e) => setText(e.target.value)}
+          onPaste={(e) => {
+            const items = [...(e.clipboardData?.files ?? [])];
+            if (items.some((f) => f.type.startsWith('image/'))) {
+              e.preventDefault();
+              addFiles(items);
+            }
+          }}
+          onDrop={(e) => {
+            if (e.dataTransfer?.files?.length) {
+              e.preventDefault();
+              addFiles(e.dataTransfer.files);
+            }
+          }}
+          onDragOver={(e) => e.preventDefault()}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
@@ -118,7 +164,7 @@ export function Composer({
             if (e.key === 'Escape' && reply) onCancelReply();
           }}
         />
-        <button className="composer-send" disabled={!enabled || busy || !text.trim()} onClick={() => void send()} title="send (Enter)">
+        <button className="composer-send" disabled={!enabled || busy || (!text.trim() && files.length === 0)} onClick={() => void send()} title="send (Enter)">
           <Icon name="send" size={14} />
         </button>
       </div>

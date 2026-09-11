@@ -244,6 +244,26 @@ export class Services {
     await this.telegram.send(chatId, text, replyTo ? Number(replyTo) : undefined);
   }
 
+  /** Send an image with an optional caption. Discord goes through the plugin (the client uploads it), Telegram through the session. */
+  async sendFile(source: 'discord' | 'telegram', chatId: string, file: { name: string; mime: string; data: Buffer }, caption: string, replyTo?: string): Promise<void> {
+    if (source === 'discord') {
+      this.requireBridge();
+      const d: any = await this.discord.request('sendFile', { channelId: chatId, name: file.name, mime: file.mime, data: file.data.toString('base64'), content: caption, replyTo }, 60_000);
+      if (d?.id && this.cfg.get().discord.watch.includes(chatId)) {
+        const ch = this.discordChannels.get(chatId) ?? { id: chatId, name: chatId, guildId: '?', guildName: '?', position: 0 };
+        try {
+          const msg = normalizeDiscord(d, ch, undefined, this.namesIn(ch.guildId));
+          this.hub.push(msg, extractLinks(msg.text, []));
+        } catch (e: any) {
+          console.warn('[discord] could not echo sent file', e?.message ?? e);
+        }
+      }
+      return;
+    }
+    if (!this.telegram) throw new Error('telegram not connected');
+    await this.telegram.sendFile(chatId, file, caption, replyTo ? Number(replyTo) : undefined);
+  }
+
   /** React as the user. Discord custom emoji arrive as `custom:<id>` with a name; unicode as-is. */
   async react(source: 'discord' | 'telegram', chatId: string, msgId: string, key: string, name: string, on: boolean): Promise<void> {
     if (source === 'discord') {

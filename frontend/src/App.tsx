@@ -14,6 +14,8 @@ import { CaMenuContext } from './components/RichText';
 import { J7View } from './components/J7View';
 import { PingsPanel } from './components/PingsPanel';
 import { BridgeNotice } from './components/BridgeNotice';
+import { Lightbox } from './components/Lightbox';
+import type { ShareItem } from './components/ShareModal';
 
 const BOTS = { cove: COVE_BOT, salpha: 'salpha_research_bot' } as const;
 type BotKind = keyof typeof BOTS;
@@ -237,7 +239,7 @@ export default function App() {
     setRevealed((s) => (s.has(id) ? s : new Set([...s, id])));
     return true;
   };
-  const [share, setShare] = useState<{ address: string; symbol?: string } | null>(null);
+  const [share, setShare] = useState<ShareItem | null>(null);
   // Cove buttons: send the deep link's /start payload through our own Telegram session and show
   // Cove's reply in a Cove column (added on first use).
   const [coveFlash, setCoveFlash] = useState<string | null>(null);
@@ -269,7 +271,7 @@ export default function App() {
     ensureBotColumn('cove');
     api.botStart(COVE_BOT, payload).catch((e) => alert(`Cove: ${e?.message ?? e}`));
   };
-  const openShare = (address: string, symbol?: string) => setShare({ address, symbol });
+  const openShare = (address: string, symbol?: string) => setShare({ text: address, title: `Share ${symbol ? `$${symbol}` : 'contract'}`, hint: 'Only the address is sent, nothing else.' });
   // Reactions: what you added this session (the platform stream brings the counts back)
   const [myReactions, setMyReactions] = useState<Set<string>>(() => new Set());
   const react = (m: FeedMessage, key: string, name: string, on: boolean) => {
@@ -907,7 +909,7 @@ export default function App() {
                 if (col.type === 'j7') {
                   return (
                     <Column key={col.id} title={col.title} subtitle="j7tracker.io · your session" kind="j7" className="col-j7" {...actions}>
-                      <J7View tweets={j7} tokens={tokens} now={now} connected={status.j7 === 'connected'} error={status.error.j7} hasToken={!!cfg?.j7?.hasToken} favorites={cfg?.j7?.favorites ?? []} onFavorite={(h) => void api.j7Favorite(h).then((r) => setCfg((c) => (c ? { ...c, j7: { ...c.j7, favorites: r.favorites } } : c))).catch((e) => alert(`J7: ${e?.message ?? e}`))} onLoaded={mergeJ7} onSelect={select} />
+                      <J7View tweets={j7} tokens={tokens} now={now} connected={status.j7 === 'connected'} error={status.error.j7} hasToken={!!cfg?.j7?.hasToken} favorites={cfg?.j7?.favorites ?? []} onFavorite={(h) => void api.j7Favorite(h).then((r) => setCfg((c) => (c ? { ...c, j7: { ...c.j7, favorites: r.favorites } } : c))).catch((e) => alert(`J7: ${e?.message ?? e}`))} onLoaded={mergeJ7} onSelect={select} onShare={(t, onSent) => setShare({ text: t.url ?? `https://x.com/${t.author.handle}/status/${t.id.replace(/^deleted:/, '')}`, title: 'Share tweet', preview: `@${t.author.handle}: ${t.text.replace(/\s+/g, ' ').slice(0, 90)}${t.text.length > 90 ? '…' : ''}`, hint: 'The tweet link is sent; Discord and Telegram unfurl it.', onSent })} />
                     </Column>
                   );
                 }
@@ -1053,8 +1055,9 @@ export default function App() {
           onBuy={onBuy}
         />
       )}
+      <Lightbox />
       {lookingUp && <div className="lookup-toast">looking up {lookingUp.slice(0, 6)}…{lookingUp.slice(-4)}</div>}
-      {share && <ShareModal address={share.address} symbol={share.symbol} watched={watched} channels={channels} canSend={canSend} onClose={() => setShare(null)} />}
+      {share && <ShareModal item={share} watched={watched} channels={channels} canSend={canSend} onClose={() => setShare(null)} />}
       {caMenu && (
         <div className="ca-menu-backdrop" onMouseDown={() => setCaMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCaMenu(null); }}>
           <div className="ca-menu" style={{ left: Math.min(caMenu.x, window.innerWidth - 220), top: Math.min(caMenu.y, window.innerHeight - 130) }} onMouseDown={(e) => e.stopPropagation()}>
