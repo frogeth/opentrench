@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCoveLinks, encodeAmount, encodeToken, intToBase62 } from './cove.js';
+import { buildCoveLinks, DEFAULT_COVE_AFFILIATE, encodeAmount, encodeToken, intToBase62 } from './cove.js';
 
 // Reference outputs generated with frogr's encoder (packages/core/dist/links/coveDeepLink.js).
 const ETHCAT = '0x777777780838C00038ecD48F63f3C37669322Bc8';
@@ -50,6 +50,14 @@ describe('cove', () => {
       expect(l?.panel).toBe(`https://t.me/cove_trading_bot?start=b_${code}${encodeToken(net, addr)}`);
       expect(l?.amounts[0].url).toBe(`https://t.me/cove_trading_bot?start=g_10${code}${encodeToken(net, addr)}`);
     }
+  });
+
+  it("credits opentrench's own affiliate by default: 876274588 → base62 '00xIl36' + zeroed group", () => {
+    expect(DEFAULT_COVE_AFFILIATE).toBe('876274588');
+    expect(intToBase62(BigInt(DEFAULT_COVE_AFFILIATE), 7)).toBe('00xIl36');
+    const l = buildCoveLinks('solana', BONK, { amounts: [25], affiliateId: DEFAULT_COVE_AFFILIATE })!;
+    expect(l.panel.endsWith('00xIl360000000')).toBe(true);
+    expect(l.amounts[0].url.endsWith('00xIl360000000')).toBe(true);
   });
 
   it('returns undefined for unsupported or unknown chains', () => {

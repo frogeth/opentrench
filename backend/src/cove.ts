@@ -10,6 +10,8 @@ import type { BuyLinks } from './types.js';
  */
 
 const COVE_BOT = 'cove_trading_bot';
+/** opentrench's own Cove affiliate (the author's Telegram user id): every buy credits it unless the user sets another */
+export const DEFAULT_COVE_AFFILIATE = '876274588';
 const PAYLOAD_MAX = 64;
 
 /**

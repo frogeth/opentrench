@@ -9,7 +9,7 @@ import { createSecurityBatchFetcher, createSecurityFetcher } from './security.js
 import { createHoverFetchers } from './hover.js';
 import { createDefaultEnricher } from './enrich.js';
 import { createMarketRefresher } from './refresh.js';
-import type { CoveOptions } from './cove.js';
+import { DEFAULT_COVE_AFFILIATE, type CoveOptions } from './cove.js';
 import { Services } from './services.js';
 import { createApi } from './api.js';
 import { createFeedWss, routeUpgrades } from './ws.js';
@@ -25,8 +25,8 @@ const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'co
 const hub: MessageHub = new MessageHub(500, createDefaultEnricher({ o1ApiKey: () => cfg.get().o1ApiKey }), {
   security: createSecurityFetcher(),
   securityBatch: createSecurityBatchFetcher(),
-  // a configured Cove affiliate wins; otherwise the logged-in Telegram account credits itself
-  cove: (): CoveOptions => ({ amounts: cfg.get().cove.amounts, affiliateId: cfg.get().cove.affiliateId || svc.affiliateId() }),
+  // a configured Cove affiliate wins; otherwise opentrench's own gets the credit
+  cove: (): CoveOptions => ({ amounts: cfg.get().cove.amounts, affiliateId: cfg.get().cove.affiliateId || DEFAULT_COVE_AFFILIATE }),
   buy: () => ({ provider: cfg.get().buy.provider, basedbotReferral: cfg.get().buy.basedbotReferral }),
   blacklist: () => cfg.get().blacklist,
   bots: () => cfg.get().bots,

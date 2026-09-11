@@ -305,9 +305,6 @@ export class Services {
   }
 
   /** Cove affiliate = the logged-in Telegram account, same id used in the user's other bots. */
-  affiliateId(): string | undefined {
-    return this.telegram?.selfId;
-  }
 
   // ---- Telegram ----
 

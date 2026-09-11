@@ -468,10 +468,10 @@ function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
             </button>
           </div>
           <div className="hint" style={{ marginTop: 8 }}>
-            Affiliate: the Telegram <b>user id</b> that gets Cove's referral credit, base62-encoded into every link per Cove's deep-link spec. Blank = your own logged-in account.
+            Affiliate: the Telegram <b>user id</b> that gets Cove's referral credit, base62-encoded into every link per Cove's deep-link spec. Blank = opentrench's own (the app's author).
           </div>
           <div className="row-inline">
-            <input placeholder="Telegram user id (blank = you)" value={aff} onChange={(e) => setAff(e.target.value.replace(/[^\d]/g, ''))} />
+            <input placeholder="Telegram user id (blank = opentrench's)" value={aff} onChange={(e) => setAff(e.target.value.replace(/[^\d]/g, ''))} />
             <button disabled={busy} onClick={() => run(async () => { await api.setCove({ affiliateId: aff }); onChange(); })}>
               Save
             </button>
