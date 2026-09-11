@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.1.18 — 2026-09-11
+
 - J7Tracker column: paste your J7 session id in Settings → Accounts and its tweet feed streams natively, newest first, with a strip under each tweet showing the calls it mentions (by contract or $ticker). Click a match to jump to the call; contract addresses in tweets get the usual copy and right-click actions. Unofficial integration, read-only.
 - J7: launches pair up live. While a J7 column is open, new pump.fun and Pons (Robinhood Chain) tokens whose links point at a tweet in the feed appear under that tweet within seconds, with market cap, launch time and the contract as a normal chip. A "scan launches" button digs for older ones.
 - J7: star an X account on any of its tweets and you get a sound (pick it in the column editor) plus a desktop notification whenever it tweets.
