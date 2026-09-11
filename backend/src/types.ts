@@ -206,6 +206,9 @@ export interface BotPolicy {
   allow: string[];
   /** when bots show by default: whose contract posts become calls. 'all' (default) or only the `allow` list. */
   calls?: 'all' | 'allow';
+  /** which bots may ping you: none (default), every bot, or only `pingAllow` */
+  pings?: 'none' | 'all' | 'allow';
+  pingAllow?: string[];
 }
 
 /** A bot the hub has seen, for the bot manager in settings. */
@@ -219,6 +222,8 @@ export interface BotSeen {
   hidden: boolean;
   /** its contract posts become calls */
   calls: boolean;
+  /** its mentions of you land in Pings */
+  pings: boolean;
 }
 
 /** One message in a conversation with a Telegram bot (Cove), with its inline keyboard. */

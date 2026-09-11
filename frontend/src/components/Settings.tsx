@@ -533,6 +533,14 @@ function BotsSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
       onChange();
     });
   const pickedCalls = !hide && cfg.bots.calls === 'allow';
+  const pings = cfg.bots.pings ?? 'none';
+  const setPings = (n: string, on: boolean) =>
+    run(async () => {
+      const pingAllow = (cfg.bots.pingAllow ?? []).filter((b) => norm(b) !== norm(n));
+      if (on) pingAllow.push(n);
+      await api.setBots({ ...cfg.bots, pingAllow });
+      onChange();
+    });
   const norm = (n: string) => n.replace(/^@/, '').toLowerCase();
   const setCalls = (n: string, on: boolean) =>
     run(async () => {
@@ -581,6 +589,16 @@ function BotsSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
           </span>
         </div>
       )}
+      <div className="row-inline" style={{ marginTop: 6 }}>
+        <span className="muted" style={{ fontSize: 12 }}>Pings from</span>
+        <span className="seg">
+          {(['none', 'allow', 'all'] as const).map((v) => (
+            <button key={v} className={pings === v ? 'active' : ''} disabled={busy} onClick={() => run(async () => { await api.setBots({ ...cfg.bots, pings: v }); onChange(); })}>
+              {v === 'none' ? 'no bots' : v === 'allow' ? 'bots I pick' : 'every bot'}
+            </button>
+          ))}
+        </span>
+      </div>
       <div className="hint">
         {hide
           ? 'Bots are hidden unless you turn them on below. Shown bots count as callers; hidden ones only feed links into tokens.'
@@ -598,6 +616,11 @@ function BotsSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
               <span title={b.chats.join('\n')}>{b.chats.join(', ')}</span>
             </span>
             <span className="botrow-count">{b.count} posts</span>
+            {pings === 'allow' && !b.hidden && (
+              <button className={`mini ${b.pings ? 'on' : 'off'}`} disabled={busy} onClick={() => setPings(b.name, !b.pings)} title="may this bot ping you?">
+                {b.pings ? 'pings ✓' : 'no pings'}
+              </button>
+            )}
             {pickedCalls && !b.hidden && (
               <button className={`mini ${b.calls ? 'on' : 'off'}`} disabled={busy} onClick={() => setCalls(b.name, !b.calls)} title="do this bot's contract posts count as calls?">
                 {b.calls ? 'calls ✓' : 'no calls'}

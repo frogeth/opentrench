@@ -224,6 +224,8 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       cfg.update((c) => {
         if (req.body?.default === 'show' || req.body?.default === 'hide') c.bots.default = req.body.default;
         if (req.body?.calls === 'all' || req.body?.calls === 'allow') c.bots.calls = req.body.calls;
+        if (req.body?.pings === 'none' || req.body?.pings === 'all' || req.body?.pings === 'allow') c.bots.pings = req.body.pings;
+        if (Array.isArray(req.body?.pingAllow)) c.bots.pingAllow = [...new Set((req.body.pingAllow as unknown[]).map((n) => String(n).trim()).filter(Boolean))].slice(0, 500);
         c.bots.allow = [...new Set(raw.map((n) => String(n).trim()).filter(Boolean))].slice(0, 500);
       });
       hub.rebuild();

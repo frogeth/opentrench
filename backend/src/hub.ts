@@ -156,7 +156,7 @@ export class MessageHub extends EventEmitter {
 
   /** A ping gets the 4 messages before it from the same chat; later messages there fill in `after`. */
   private trackMention(msg: FeedMessage, emit = true): void {
-    if (msg.mention) {
+    if (msg.mention && !this.isPingMuted(msg)) {
       if (this.mentionList.some((m) => m.id === msg.id)) return;
       const same = this.buffer.filter((m) => m.chatId === msg.chatId && m.source === msg.source && m.id !== msg.id).sort((a, b) => a.ts - b.ts);
       const mention: Mention = {
@@ -220,6 +220,15 @@ export class MessageHub extends EventEmitter {
     return p.default === 'show' && p.calls === 'allow' && !this.isAllowedBot(msg.author);
   }
 
+  /** Bots don't ping you unless the policy says so: every bot, or only the ones on the ping allow list. */
+  isPingMuted(msg: Pick<FeedMessage, 'author' | 'isBot'>): boolean {
+    if (!msg.isBot) return false;
+    const p = this.botPolicy();
+    if (p.pings === 'all') return false;
+    if (p.pings === 'allow') return !(p.pingAllow ?? []).some((b) => normName(b) === normName(msg.author));
+    return true;
+  }
+
   /** Every bot seen in the buffer, newest first, with its current visibility. */
   bots(): BotSeen[] {
     const byName = new Map<string, BotSeen>();
@@ -229,7 +238,7 @@ export class MessageHub extends EventEmitter {
       const key = normName(m.author);
       let b = byName.get(key);
       if (!b) {
-        b = { name: m.author, avatar: m.avatar, source: m.source, count: 0, lastTs: m.ts, chats: [], hidden: this.isHidden(m), calls: !this.isHidden(m) && !this.isCallMuted(m) };
+        b = { name: m.author, avatar: m.avatar, source: m.source, count: 0, lastTs: m.ts, chats: [], hidden: this.isHidden(m), calls: !this.isHidden(m) && !this.isCallMuted(m), pings: !this.isPingMuted(m) };
         byName.set(key, b);
       }
       b.count++;

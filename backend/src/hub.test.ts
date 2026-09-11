@@ -236,8 +236,8 @@ describe('MessageHub', () => {
     expect(alerts.hidden).toBe(false);
     expect(hub.hello().tokens[0]).toMatchObject({ seen: 1, calledIn: ['#b'], firstCaller: { author: 'alertsbot' } });
     expect(hub.bots()).toEqual([
-      { name: 'alertsbot', avatar: undefined, source: 'discord', count: 1, lastTs: 2, chats: ['#b'], hidden: false, calls: true },
-      { name: 'Rick', avatar: undefined, source: 'discord', count: 1, lastTs: 1, chats: ['#a'], hidden: true, calls: false },
+      { name: 'alertsbot', avatar: undefined, source: 'discord', count: 1, lastTs: 2, chats: ['#b'], hidden: false, calls: true, pings: false },
+      { name: 'Rick', avatar: undefined, source: 'discord', count: 1, lastTs: 1, chats: ['#a'], hidden: true, calls: false, pings: false },
     ]);
     policy = { default: 'show', allow: [] };
     black = ['rick'];
@@ -258,9 +258,9 @@ describe('MessageHub', () => {
     hub.push(msg(3, EVM, { author: 'human', chatId: 'c', chatName: '#c' }));
     expect(hub.hello().messages.map((m) => m.hidden)).toEqual([false, false, false]);
     expect(hub.hello().tokens[0]).toMatchObject({ seen: 2, calledIn: ['#b', '#c'], firstCaller: { author: 'alertsbot' } });
-    expect(hub.bots().map((b) => [b.name, b.hidden, b.calls])).toEqual([
-      ['alertsbot', false, true],
-      ['Rick', false, false],
+    expect(hub.bots().map((b) => [b.name, b.hidden, b.calls, b.pings])).toEqual([
+      ['alertsbot', false, true, false],
+      ['Rick', false, false, false],
     ]);
     policy = { default: 'show', allow: [], calls: 'all' };
     hub.rebuild();
@@ -289,6 +289,20 @@ describe('MessageHub', () => {
     expect(hub.markMentionsRead()).toBe(1);
     expect(hub.mentions()[0].read).toBe(true);
     expect(hub.hello().mentions).toHaveLength(1);
+  });
+
+  it('pings from bots are muted unless the policy allows that bot (or every bot)', () => {
+    let policy: BotPolicy = { default: 'show', allow: [], pings: 'none' };
+    const hub = new MessageHub(500, undefined, { bots: () => policy });
+    hub.push(msg(1, 'you are first', { chatId: 'a', ts: 1, isBot: true, author: 'Rick', mention: 'user' }));
+    expect(hub.mentions()).toHaveLength(0);
+    policy = { default: 'show', allow: [], pings: 'allow', pingAllow: ['@rick'] };
+    hub.push(msg(2, 'you are first again', { chatId: 'a', ts: 2, isBot: true, author: 'Rick', mention: 'user' }));
+    hub.push(msg(3, 'hey', { chatId: 'a', ts: 3, isBot: true, author: 'OtherBot', mention: 'user' }));
+    expect(hub.mentions().map((m) => m.msg.author)).toEqual(['Rick']);
+    policy = { default: 'show', allow: [], pings: 'all' };
+    hub.push(msg(4, 'hey', { chatId: 'a', ts: 4, isBot: true, author: 'OtherBot', mention: 'user' }));
+    expect(hub.mentions().map((m) => m.msg.author)).toEqual(['Rick', 'OtherBot']);
   });
 
   it('records every counted call with the market cap at that moment, and the first-call cap after enrichment', async () => {

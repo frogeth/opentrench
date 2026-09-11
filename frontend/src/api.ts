@@ -14,6 +14,9 @@ export interface BotPolicy {
   allow: string[];
   /** when bots show by default: whose contract posts become calls. 'all' (default) or only the `allow` list. */
   calls?: 'all' | 'allow';
+  /** which bots may ping you: none (default), every bot, or only `pingAllow` */
+  pings?: 'none' | 'all' | 'allow';
+  pingAllow?: string[];
 }
 export interface BotSeen {
   name: string;
@@ -24,6 +27,7 @@ export interface BotSeen {
   chats: string[];
   hidden: boolean;
   calls: boolean;
+  pings: boolean;
 }
 export interface SitePreview {
   url: string;
