@@ -5,7 +5,7 @@ import type { BotPolicy } from './types.js';
 /** One column of the terminal. `chats` are `<source>:<id>` keys of watched chats; empty = every watched chat. */
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha';
+  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7';
   title: string;
   chats: string[];
   /** fixed width in px (drag-resized); unset = share the space */
@@ -31,8 +31,8 @@ export function sanitizeColumns(raw: unknown): ColumnDef[] {
     if (!r || typeof r !== 'object') continue;
     const id = String((r as any).id ?? '').trim().slice(0, 40);
     const rawType = (r as any).type;
-    const type = rawType === 'calls' ? 'calls' : rawType === 'callers' ? 'callers' : rawType === 'cove' ? 'cove' : rawType === 'salpha' ? 'salpha' : 'chat';
-    const title = String((r as any).title ?? '').trim().slice(0, 40) || (type === 'calls' ? 'Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : 'Chats');
+    const type = rawType === 'calls' ? 'calls' : rawType === 'callers' ? 'callers' : rawType === 'cove' ? 'cove' : rawType === 'salpha' ? 'salpha' : rawType === 'j7' ? 'j7' : 'chat';
+    const title = String((r as any).title ?? '').trim().slice(0, 40) || (type === 'calls' ? 'Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : 'Chats');
     // empty = every watched chat; the 'none' sentinel = nothing selected (a column being set up)
     const chats = Array.isArray((r as any).chats) ? (r as any).chats.map(String).filter((k: string) => /^(discord|telegram):/.test(k) || k === 'none').slice(0, 200) : [];
     if (!id || seen.has(id)) continue;
@@ -81,9 +81,11 @@ export interface Config {
   columns: ColumnDef[];
   /** call cards the user has marked as seen (inbox style); newest last, capped */
   seenTokens: string[];
+  /** J7Tracker: the account's session id (from its web app), read-only tweet stream */
+  j7: { token?: string };
 }
 
-const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [], bots: { default: 'hide', allow: [] }, favorites: [], pingTelegram: true, railOrder: [], columns: DEFAULT_COLUMNS.map((c) => ({ ...c })), seenTokens: [] };
+const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, blacklist: [], bots: { default: 'hide', allow: [] }, favorites: [], pingTelegram: true, railOrder: [], columns: DEFAULT_COLUMNS.map((c) => ({ ...c })), seenTokens: [], j7: {} };
 
 export class ConfigStore {
   private cfg: Config;
@@ -120,6 +122,7 @@ export class ConfigStore {
       hasO1Key: !!this.cfg.o1ApiKey,
       railOrder: this.cfg.railOrder,
       columns: this.cfg.columns,
+      j7: { hasToken: !!this.cfg.j7.token },
       seenTokens: this.cfg.seenTokens,
     };
   }
@@ -141,6 +144,7 @@ export class ConfigStore {
         o1ApiKey: typeof raw.o1ApiKey === 'string' && raw.o1ApiKey.trim() ? raw.o1ApiKey.trim() : undefined,
         railOrder: Array.isArray(raw.railOrder) ? raw.railOrder.map(String) : [],
         columns: sanitizeColumns(raw.columns),
+        j7: { token: typeof raw.j7?.token === 'string' && raw.j7.token.trim() ? raw.j7.token.trim() : undefined },
         seenTokens: Array.isArray(raw.seenTokens) ? raw.seenTokens.map(String).slice(-3000) : [],
       };
     } catch {

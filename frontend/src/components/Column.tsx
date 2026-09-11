@@ -30,7 +30,7 @@ export function Column({
   title: string;
   subtitle?: string;
   count?: number;
-  kind?: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha';
+  kind?: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7';
   extra?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -70,7 +70,7 @@ export function Column({
         )}
         {kind && (
           <span className="col-kind" title={`${kind} column`}>
-            <Icon name={kind === 'calls' ? 'calls' : kind === 'callers' ? 'people' : kind === 'cove' ? 'send' : kind === 'salpha' ? 'search' : 'chat'} size={14} />
+            <Icon name={kind === 'calls' ? 'calls' : kind === 'callers' ? 'people' : kind === 'cove' ? 'send' : kind === 'salpha' ? 'search' : kind === 'j7' ? 'x' : 'chat'} size={14} />
           </span>
         )}
         <div className="col-title">

@@ -303,6 +303,19 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { ok: true };
     }),
   );
+  // J7Tracker: session id in, live tweets out.
+  r.put(
+    '/j7/token',
+    wrap((req) => {
+      const token = String(req.body?.token ?? '').trim();
+      cfg.update((c) => {
+        c.j7.token = token || undefined;
+      });
+      svc.startJ7();
+      return { hasToken: !!token };
+    }),
+  );
+  r.get('/j7/recent', wrap(() => svc.j7Recent()));
   // Bot conversations (Cove): the user's own session talks to the bot; the UI renders the panels.
   const BOT_RE = /^[A-Za-z0-9_]{3,32}$/;
   r.get(

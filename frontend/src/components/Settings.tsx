@@ -67,6 +67,7 @@ export function Settings({
             <>
               <DiscordAccount cfg={cfg} status={status} onChange={reload} />
               <TelegramAccount cfg={cfg} status={status} onChange={reload} />
+              <J7Section cfg={cfg} status={status} onChange={reload} />
             </>
           )}
           {cfg && tab === 'feed' && (
@@ -655,6 +656,63 @@ function BlacklistSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () =
           </span>
         ))}
       </div>
+      {err && <div className="err">{err}</div>}
+    </section>
+  );
+}
+
+/** J7Tracker: paste the session id its web app keeps in local storage; we read its tweet stream with it. */
+function J7Section({ cfg, status, onChange }: { cfg: MaskedConfig; status: Status; onChange: () => void }) {
+  const [token, setToken] = useState('');
+  const [edit, setEdit] = useState(!cfg.j7?.hasToken);
+  const { busy, err, run } = useAsync();
+  const st = status.j7 ?? 'disconnected';
+  return (
+    <section>
+      <h2>
+        J7Tracker <span className={`pill pill-${st}`}>{st.replace('_', ' ')}</span>
+      </h2>
+      <div className="hint">
+        Streams J7's tweet feed into a J7 column and links each tweet to your calls. Read-only. On j7tracker.io: DevTools → Application → Local Storage → copy the value of
+        <code> sessionId</code>. Unofficial: if J7 changes their app this can stop working.
+      </div>
+      {status.error.j7 && <div className="err">{status.error.j7}</div>}
+      {cfg.j7?.hasToken && !edit ? (
+        <div className="row-inline">
+          <span className="muted">session id saved</span>
+          <button onClick={() => setEdit(true)}>Replace</button>
+          <button
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                await api.setJ7Token('');
+                onChange();
+              })
+            }
+          >
+            Disconnect
+          </button>
+        </div>
+      ) : (
+        <div className="row-inline">
+          <input type="password" placeholder="sessionId" value={token} onChange={(e) => setToken(e.target.value)} />
+          <button
+            className="primary"
+            disabled={busy || !token.trim()}
+            onClick={() =>
+              run(async () => {
+                await api.setJ7Token(token.trim());
+                setToken('');
+                setEdit(false);
+                onChange();
+              })
+            }
+          >
+            Save &amp; connect
+          </button>
+          {cfg.j7?.hasToken && <button onClick={() => setEdit(false)}>Cancel</button>}
+        </div>
+      )}
       {err && <div className="err">{err}</div>}
     </section>
   );

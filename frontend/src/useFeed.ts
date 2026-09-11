@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BotMessage, FeedMessage, ServerEvent, Status, TokenInfo } from './types';
+import type { BotMessage, FeedMessage, J7Tweet, ServerEvent, Status, TokenInfo } from './types';
 
 const MAX = 500;
 
@@ -16,6 +16,14 @@ export function useFeed() {
   });
   const [wsOpen, setWsOpen] = useState(false);
   const [ping, setPing] = useState<Extract<ServerEvent, { type: 'ping' }> | null>(null);
+  /** J7Tracker tweets, newest first; updates replace in place */
+  const [j7, setJ7] = useState<J7Tweet[]>([]);
+  const mergeJ7 = (incoming: J7Tweet[]) =>
+    setJ7((cur) => {
+      const byId = new Map(cur.map((t) => [t.id, t]));
+      for (const t of incoming) byId.set(t.id, t);
+      return [...byId.values()].sort((a, b) => b.ts - a.ts).slice(0, 300);
+    });
   /** live bot conversations (Cove), keyed by bot username; newest last, edits replace in place */
   const [botMsgs, setBotMsgs] = useState<Record<string, BotMessage[]>>({});
   const mergeBot = (bot: string, incoming: BotMessage[]) =>
@@ -58,7 +66,9 @@ export function useFeed() {
           setMessages((m) => m.map((x) => (x.id === ev.msgId ? { ...x, ...ev.patch } : x)));
         } else if (ev.type === 'reactions') {
           setMessages((m) => m.map((x) => (x.id === ev.msgId ? { ...x, reactions: ev.reactions } : x)));
-        } else if (ev.type === 'bot') mergeBot(ev.bot, [ev.msg]);
+        } else if (ev.type === 'j7') mergeJ7([ev.tweet]);
+        else if (ev.type === 'j7Delete') setJ7((cur) => cur.filter((t) => t.id !== ev.id));
+        else if (ev.type === 'bot') mergeBot(ev.bot, [ev.msg]);
         else if (ev.type === 'botDelete') {
           const gone = new Set(ev.ids);
           setBotMsgs((all) => Object.fromEntries(Object.entries(all).map(([b, list]) => [b, list.filter((m) => !gone.has(m.id))])));
@@ -79,5 +89,5 @@ export function useFeed() {
     };
   }, []);
 
-  return { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot };
+  return { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7 };
 }

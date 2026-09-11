@@ -66,6 +66,7 @@ setInterval(() => {
   if (due.length) void hub.refreshSecurity(due);
 }, 60 * 1000).unref();
 const svc: Services = new Services(cfg, hub);
+svc.startJ7();
 const hover = createHoverFetchers();
 const store = new StateStore(process.env.TRENCHFEED_STATE ?? path.join(root, 'state.json'));
 hub.load(store.load());

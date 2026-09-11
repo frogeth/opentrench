@@ -198,11 +198,29 @@ export interface BotMessage {
   hasMedia?: boolean;
 }
 
+/** A tweet from J7Tracker's stream, trimmed to what the column renders. */
+export interface J7Tweet {
+  id: string;
+  url?: string;
+  ts: number;
+  author: { handle: string; name: string; avatar?: string; followers?: number };
+  text: string;
+  images: string[];
+  quoted?: { handle: string; text: string };
+  replyTo?: string;
+  /** contract addresses found in the text (filled by the hub's detector) */
+  contracts: { chain: 'sol' | 'evm'; address: string }[];
+  /** $TICKERS mentioned, upper-case */
+  tickers: string[];
+}
+
 export interface Status {
   discord: DiscordState;
   telegram: TelegramState;
   loginStep: LoginStep;
-  error: { discord?: string; telegram?: string };
+  error: { discord?: string; telegram?: string; j7?: string };
+  /** J7Tracker stream */
+  j7?: 'disconnected' | 'connecting' | 'connected' | 'auth_error';
   /** favorite callers (crown + pings) */
   favorites: string[];
 }
@@ -216,5 +234,7 @@ export type ServerEvent =
   | { type: 'msg'; msgId: string; patch: Partial<FeedMessage> }
   | { type: 'ping'; token: TokenInfo; msg: FeedMessage }
   | { type: 'bot'; bot: string; msg: BotMessage }
+  | { type: 'j7'; tweet: J7Tweet }
+  | { type: 'j7Delete'; id: string }
   | { type: 'botDelete'; ids: number[] }
   | { type: 'status'; status: Status };

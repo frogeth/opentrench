@@ -77,7 +77,7 @@ export interface ColumnFilters {
 }
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha';
+  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
@@ -98,6 +98,7 @@ export interface MaskedConfig {
   favorites: string[];
   pingTelegram: boolean;
   hasO1Key: boolean;
+  j7: { hasToken: boolean };
   railOrder: string[];
   columns: ColumnDef[];
   seenTokens: string[];
@@ -149,6 +150,8 @@ export const api = {
   setDiscordSend: (enabled: boolean, confirm = '') => req<{ canSend: boolean }>('PUT', '/discord/send', { enabled, confirm }),
   setTelegramSend: (enabled: boolean) => req<{ canSend: boolean }>('PUT', '/telegram/send', { enabled }),
   send: (source: 'discord' | 'telegram', chatId: string, text: string, replyTo?: string) => req<{ ok: true }>('POST', '/send', { source, chatId, text, replyTo }),
+  setJ7Token: (token: string) => req<{ hasToken: boolean }>('PUT', '/j7/token', { token }),
+  j7Recent: () => req<import('./types').J7Tweet[]>('GET', '/j7/recent'),
   botHistory: (bot: string) => req<import('./types').BotMessage[]>('GET', `/bot/${encodeURIComponent(bot)}/history`),
   botStart: (bot: string, payload: string) => req<{ ok: true }>('POST', `/bot/${encodeURIComponent(bot)}/start`, { payload }),
   botSend: (bot: string, text: string) => req<{ ok: true }>('POST', `/bot/${encodeURIComponent(bot)}/send`, { text }),

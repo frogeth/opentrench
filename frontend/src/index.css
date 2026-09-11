@@ -884,3 +884,29 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .fed-compact .fed-left { border-right: none; }
 .fed-compact .fed-right { padding-top: 0; }
 .fed-bot-note { margin-top: 10px; }
+
+/* ---------- J7 column ---------- */
+.j7-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 1; }
+.j7-bar .hdr-toggle { margin-left: auto; }
+.j7-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--err); display: inline-block; }
+.j7-dot.on { background: var(--ok); }
+.tweet { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.tweet-hit { box-shadow: inset 3px 0 0 var(--accent); }
+.tweet-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tweet-who { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; font-size: 12px; }
+.tweet-who b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tweet-who .muted { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tweet-time { margin-left: auto; color: var(--dim); font-size: 11px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.tweet-time:hover { color: var(--text); }
+.tweet-reply { font-size: 11px; }
+.tweet-text { font-size: 13px; white-space: pre-wrap; word-break: break-word; line-height: 1.4; }
+.tweet-quote { border-left: 2px solid var(--line-strong); padding: 4px 8px; font-size: 12px; color: var(--muted); }
+.tweet-quote b { color: var(--text); }
+.tweet-media { display: grid; gap: 4px; grid-template-columns: 1fr; }
+.tweet-media.n2, .tweet-media.n3, .tweet-media.n4 { grid-template-columns: 1fr 1fr; }
+.tweet-media img { width: 100%; max-height: 260px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: var(--embed); }
+.tweet-matches { display: flex; flex-wrap: wrap; gap: 6px; }
+.tweet-match { display: inline-flex; align-items: center; gap: 6px; background: rgba(65, 200, 146, 0.08); border: 1px solid rgba(65, 200, 146, 0.4); color: var(--text); border-radius: 999px; padding: 3px 10px 3px 4px; font-size: 11px; cursor: pointer; }
+.tweet-match img { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
+.tweet-match:hover { background: rgba(65, 200, 146, 0.18); }
+.pill-connecting { color: var(--gold); border-color: var(--gold); }

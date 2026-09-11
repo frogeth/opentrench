@@ -322,6 +322,13 @@ export class MessageHub extends EventEmitter {
     this.emitStatus();
   }
 
+  setJ7(state: NonNullable<Status['j7']>, error?: string): void {
+    this.status.j7 = state;
+    if (error) this.status.error.j7 = error;
+    else delete this.status.error.j7;
+    this.emitStatus();
+  }
+
   setLoginStep(step: LoginStep): void {
     this.status.loginStep = step;
     this.emitStatus();

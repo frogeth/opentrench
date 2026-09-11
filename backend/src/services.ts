@@ -6,12 +6,14 @@ import { TelegramWrapper, type TelegramDialog } from './telegram/client.js';
 import { extractLinks, type ExtractedMeta } from './links.js';
 import { createPreviewer, type Previewer } from './previews.js';
 import { fetchChannelHistory, reactMessage, sendChannelMessage } from './discord/rest.js';
+import { J7Client } from './j7.js';
 import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction } from './types.js';
 
 export class Services {
   discord?: DiscordGateway;
   telegram?: TelegramWrapper;
+  j7?: J7Client;
   private discordChannels = new Map<string, DiscordChannel>();
   private previewer: Previewer;
 
@@ -90,6 +92,29 @@ export class Services {
   }
 
   /** Recent messages of any chat (newest first) without adding it to the feed. Not persisted. */
+  /** J7Tracker tweet stream with the account's session id. */
+  startJ7(): void {
+    this.j7?.stop();
+    this.j7 = undefined;
+    const token = this.cfg.get().j7.token;
+    if (!token) {
+      this.hub.setJ7('disconnected');
+      return;
+    }
+    const c = new J7Client(token);
+    c.on('state', (s: any, err?: string) => this.hub.setJ7(s, err));
+    c.on('tweet', (t: import('./types.js').J7Tweet) => {
+      t.contracts = detectContracts(t.text);
+      this.hub.emit('event', { type: 'j7', tweet: t });
+    });
+    c.on('delete', (id: string) => this.hub.emit('event', { type: 'j7Delete', id }));
+    this.j7 = c;
+    c.start();
+  }
+  j7Recent() {
+    return (this.j7?.recent ?? []).map((t) => ({ ...t, contracts: detectContracts(t.text) }));
+  }
+
   /** Conversation with a Telegram bot (Cove) through the user's own session. */
   botHistory(bot: string, limit?: number) {
     if (!this.telegram) throw new Error('telegram not connected');

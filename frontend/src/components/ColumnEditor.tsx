@@ -109,7 +109,7 @@ export function ColumnEditor({
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const set = <K extends keyof ColumnFilters>(k: K, v: ColumnFilters[K]) => setF((s) => ({ ...s, [k]: v }));
   const num = (k: NumKey) => (e: React.ChangeEvent<HTMLInputElement>) => set(k, e.target.value === '' ? undefined : Number(e.target.value));
-  const isBot = type === 'cove' || type === 'salpha';
+  const isBot = type === 'cove' || type === 'salpha' || type === 'j7';
   const all = chats.length === 0;
   const none = chats.includes('none');
   // "All channels" is stored as an empty list and shows as every box ticked; "none" is a
@@ -147,7 +147,7 @@ export function ColumnEditor({
   };
 
   const save = () => {
-    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : all ? 'All Chats' : 'Chats');
+    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : all ? 'All Chats' : 'Chats');
     if (none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
     const clean: ColumnFilters = {};
     for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== false && !(Array.isArray(v) && v.length === 0) && !(typeof v === 'string' && !v.trim())) (clean as any)[k] = v;
@@ -176,17 +176,17 @@ export function ColumnEditor({
           {/* ---------- left: what & where ---------- */}
           <div className="fed-left">
             <div className="fed-type">
-              {(['chat', 'calls', 'callers', 'cove', 'salpha'] as const).map((t) => (
+              {(['chat', 'calls', 'callers', 'cove', 'salpha', 'j7'] as const).map((t) => (
                 <button key={t} className={type === t ? 'active' : ''} onClick={() => setType(t)}>
-                  <Icon name={t === 'chat' ? 'chat' : t === 'calls' ? 'calls' : t === 'callers' ? 'people' : t === 'cove' ? 'send' : 'search'} size={13} /> {t === 'chat' ? 'Messages' : t === 'calls' ? 'Calls' : t === 'callers' ? 'Top Callers' : t === 'cove' ? 'Cove' : 'Salpha'}
+                  <Icon name={t === 'chat' ? 'chat' : t === 'calls' ? 'calls' : t === 'callers' ? 'people' : t === 'cove' ? 'send' : t === 'salpha' ? 'search' : 'x'} size={13} /> {t === 'chat' ? 'Messages' : t === 'calls' ? 'Calls' : t === 'callers' ? 'Top Callers' : t === 'cove' ? 'Cove' : t === 'salpha' ? 'Salpha' : 'J7'}
                 </button>
               ))}
             </div>
             <div className="fed-label">Feed name</div>
-            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : 'All Chats'} maxLength={40} />
+            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : 'All Chats'} maxLength={40} />
             {isBot && (
               <div className="fed-bot-note hint">
-                {type === 'cove' ? 'Your conversation with @cove_trading_bot. Buy buttons and right-click → Buy land here.' : 'Your conversation with @salpha_research_bot. Right-click a contract → Research sends it here.'}
+                {type === 'cove' ? 'Your conversation with @cove_trading_bot. Buy buttons and right-click → Buy land here.' : type === 'salpha' ? 'Your conversation with @salpha_research_bot. Right-click a contract → Research sends it here.' : 'J7Tracker’s live tweet feed, with the calls each tweet touches. Needs your J7 session id in ⚙ → Accounts.'}
               </div>
             )}
             {!isBot && (

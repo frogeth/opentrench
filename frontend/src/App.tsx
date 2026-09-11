@@ -11,6 +11,7 @@ import { Composer, type SendTarget } from './components/Composer';
 import { ShareModal } from './components/ShareModal';
 import { CoveView, COVE_BOT } from './components/CoveView';
 import { CaMenuContext } from './components/RichText';
+import { J7View } from './components/J7View';
 
 const BOTS = { cove: COVE_BOT, salpha: 'salpha_research_bot' } as const;
 type BotKind = keyof typeof BOTS;
@@ -64,7 +65,7 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 export type ChatOrder = 'bottom' | 'top';
 
 export default function App() {
-  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot } = useFeed();
+  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7 } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState<Source | null>(null);
   const [view, setView] = useState<View>({ rail: 'all' });
@@ -771,6 +772,13 @@ export default function App() {
                   onResize: last ? undefined : resizeFor(col.id),
                   fill: last,
                 };
+                if (col.type === 'j7') {
+                  return (
+                    <Column key={col.id} title={col.title} subtitle="j7tracker.io · your session" kind="j7" className="col-j7" {...actions}>
+                      <J7View tweets={j7} tokens={tokens} now={now} connected={status.j7 === 'connected'} error={status.error.j7} hasToken={!!cfg?.j7?.hasToken} onLoaded={mergeJ7} onSelect={select} />
+                    </Column>
+                  );
+                }
                 if (col.type === 'cove' || col.type === 'salpha') {
                   const bot = BOTS[col.type];
                   return (
