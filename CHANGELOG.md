@@ -8,6 +8,9 @@ app shows the same text in its update prompt.
 ## Unreleased
 
 - J7Tracker column: paste your J7 session id in Settings → Accounts and its tweet feed streams natively, newest first, with a strip under each tweet showing the calls it mentions (by contract or $ticker). Click a match to jump to the call; contract addresses in tweets get the usual copy and right-click actions. Unofficial integration, read-only.
+- J7 column keeps deleted tweets, badged red and re-surfaced at the top the way J7 shows them, with a "deleted" filter toggle.
+- Bots: with "Show bots" on, a new "Calls from" switch lets you keep bots in your chats while only the bots you mark "calls" put tokens in the Calls column (Brandzo).
+- Composer keeps keyboard focus after you send a message, so you can keep typing (Brandzo).
 
 ## v0.1.17 — 2026-09-11
 

@@ -1,4 +1,4 @@
-export type IconName = 'chart' | 'live' | 'globe' | 'x' | 'telegram' | 'explorer' | 'copy' | 'search' | 'people' | 'top' | 'dev' | 'insider' | 'sniper' | 'bundle' | 'lock' | 'chat' | 'grip' | 'calls' | 'pencil' | 'close' | 'bell' | 'play' | 'filter' | 'send' | 'reply';
+export type IconName = 'chart' | 'live' | 'globe' | 'x' | 'telegram' | 'explorer' | 'copy' | 'search' | 'people' | 'top' | 'dev' | 'insider' | 'sniper' | 'bundle' | 'lock' | 'chat' | 'grip' | 'calls' | 'pencil' | 'close' | 'bell' | 'play' | 'filter' | 'send' | 'reply' | 'trash';
 
 // Small inline glyphs. X and Telegram from Simple Icons (CC0); the rest hand-drawn.
 const PATHS: Record<IconName, string> = {
@@ -52,6 +52,7 @@ const PATHS: Record<IconName, string> = {
   filter: 'M3 4h18v2.6L14 14.2V20l-4 2v-7.8L3 6.6V4zm2.5 2 5.5 6.3V18.7l1-.5v-5.9L17.5 6h-12z',
   // padlock = lp locked
   lock: 'M12 2a5 5 0 0 1 5 5v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3zm0 10a1.5 1.5 0 0 0-.5 2.9V19h1v-2.1A1.5 1.5 0 0 0 12 14z',
+  trash: 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v7M14 10v7',
 };
 
 export function Icon({ name, size = 14 }: { name: IconName; size?: number }) {

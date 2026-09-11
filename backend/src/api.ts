@@ -222,6 +222,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       const raw: unknown[] = Array.isArray(req.body?.allow) ? req.body.allow : [];
       cfg.update((c) => {
         if (req.body?.default === 'show' || req.body?.default === 'hide') c.bots.default = req.body.default;
+        if (req.body?.calls === 'all' || req.body?.calls === 'allow') c.bots.calls = req.body.calls;
         c.bots.allow = [...new Set(raw.map((n) => String(n).trim()).filter(Boolean))].slice(0, 500);
       });
       hub.rebuild();

@@ -103,7 +103,8 @@ export function Composer({
           ref={box}
           rows={1}
           value={text}
-          disabled={!enabled || busy}
+          disabled={!enabled}
+          readOnly={busy}
           placeholder={
             !target ? 'no chat' : enabled ? `Message ${target.source === 'discord' ? '#' : ''}${target.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '')}` : `Sending on ${target.source === 'discord' ? 'Discord' : 'Telegram'} is off — enable it in Settings → Accounts`
           }

@@ -163,6 +163,13 @@ export class MessageHub extends EventEmitter {
     return !(this.botPolicy().default === 'show' || this.isAllowedBot(msg.author));
   }
 
+  /** A shown bot whose contract posts should not become calls (policy `calls: 'allow'`, bot not allow-listed). */
+  isCallMuted(msg: Pick<FeedMessage, 'author' | 'isBot'>): boolean {
+    if (!msg.isBot) return false;
+    const p = this.botPolicy();
+    return p.default === 'show' && p.calls === 'allow' && !this.isAllowedBot(msg.author);
+  }
+
   /** Every bot seen in the buffer, newest first, with its current visibility. */
   bots(): BotSeen[] {
     const byName = new Map<string, BotSeen>();
@@ -172,7 +179,7 @@ export class MessageHub extends EventEmitter {
       const key = normName(m.author);
       let b = byName.get(key);
       if (!b) {
-        b = { name: m.author, avatar: m.avatar, source: m.source, count: 0, lastTs: m.ts, chats: [], hidden: this.isHidden(m) };
+        b = { name: m.author, avatar: m.avatar, source: m.source, count: 0, lastTs: m.ts, chats: [], hidden: this.isHidden(m), calls: !this.isHidden(m) && !this.isCallMuted(m) };
         byName.set(key, b);
       }
       b.count++;
@@ -187,8 +194,8 @@ export class MessageHub extends EventEmitter {
    * still enrich tokens humans already called.
    */
   private register(msg: FeedMessage, meta: ExtractedMeta | undefined, live: boolean): void {
-    const blocked = this.isHidden(msg);
-    msg.hidden = blocked;
+    msg.hidden = this.isHidden(msg);
+    const blocked = msg.hidden || this.isCallMuted(msg);
     let anyNew = false;
     for (const c of msg.contracts) {
       let t = this.tokens.get(c.address);

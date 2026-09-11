@@ -22,7 +22,9 @@ export function useFeed() {
     setJ7((cur) => {
       const byId = new Map(cur.map((t) => [t.id, t]));
       for (const t of incoming) byId.set(t.id, t);
-      return [...byId.values()].sort((a, b) => b.ts - a.ts).slice(0, 300);
+      // a deletion re-surfaces the tweet at the top, the way J7 shows it
+      const key = (t: J7Tweet) => t.deleted ?? t.ts;
+      return [...byId.values()].sort((a, b) => key(b) - key(a)).slice(0, 300);
     });
   /** live bot conversations (Cove), keyed by bot username; newest last, edits replace in place */
   const [botMsgs, setBotMsgs] = useState<Record<string, BotMessage[]>>({});
@@ -67,7 +69,6 @@ export function useFeed() {
         } else if (ev.type === 'reactions') {
           setMessages((m) => m.map((x) => (x.id === ev.msgId ? { ...x, reactions: ev.reactions } : x)));
         } else if (ev.type === 'j7') mergeJ7([ev.tweet]);
-        else if (ev.type === 'j7Delete') setJ7((cur) => cur.filter((t) => t.id !== ev.id));
         else if (ev.type === 'bot') mergeBot(ev.bot, [ev.msg]);
         else if (ev.type === 'botDelete') {
           const gone = new Set(ev.ids);

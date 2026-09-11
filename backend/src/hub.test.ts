@@ -236,8 +236,8 @@ describe('MessageHub', () => {
     expect(alerts.hidden).toBe(false);
     expect(hub.hello().tokens[0]).toMatchObject({ seen: 1, calledIn: ['#b'], firstCaller: { author: 'alertsbot' } });
     expect(hub.bots()).toEqual([
-      { name: 'alertsbot', avatar: undefined, source: 'discord', count: 1, lastTs: 2, chats: ['#b'], hidden: false },
-      { name: 'Rick', avatar: undefined, source: 'discord', count: 1, lastTs: 1, chats: ['#a'], hidden: true },
+      { name: 'alertsbot', avatar: undefined, source: 'discord', count: 1, lastTs: 2, chats: ['#b'], hidden: false, calls: true },
+      { name: 'Rick', avatar: undefined, source: 'discord', count: 1, lastTs: 1, chats: ['#a'], hidden: true, calls: false },
     ]);
     policy = { default: 'show', allow: [] };
     black = ['rick'];
@@ -248,6 +248,23 @@ describe('MessageHub', () => {
     hub.rebuild();
     expect(hub.hello().messages.map((m) => m.hidden)).toEqual([false, false]);
     expect(hub.hello().tokens[0].seen).toBe(2);
+  });
+
+  it("bot policy calls:'allow': shown bots stay in chats but only allow-listed ones make calls", () => {
+    let policy: BotPolicy = { default: 'show', allow: ['alertsbot'], calls: 'allow' };
+    const hub = new MessageHub(500, undefined, { bots: () => policy });
+    hub.push(msg(1, EVM, { author: 'Rick', isBot: true, chatId: 'a', chatName: '#a' }));
+    hub.push(msg(2, EVM, { author: 'alertsbot', isBot: true, chatId: 'b', chatName: '#b' }));
+    hub.push(msg(3, EVM, { author: 'human', chatId: 'c', chatName: '#c' }));
+    expect(hub.hello().messages.map((m) => m.hidden)).toEqual([false, false, false]);
+    expect(hub.hello().tokens[0]).toMatchObject({ seen: 2, calledIn: ['#b', '#c'], firstCaller: { author: 'alertsbot' } });
+    expect(hub.bots().map((b) => [b.name, b.hidden, b.calls])).toEqual([
+      ['alertsbot', false, true],
+      ['Rick', false, false],
+    ]);
+    policy = { default: 'show', allow: [], calls: 'all' };
+    hub.rebuild();
+    expect(hub.hello().tokens[0].seen).toBe(3);
   });
 
   it('records every counted call with the market cap at that moment, and the first-call cap after enrichment', async () => {

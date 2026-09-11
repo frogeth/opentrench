@@ -887,7 +887,7 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 
 /* ---------- J7 column ---------- */
 .j7-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 1; }
-.j7-bar .hdr-toggle { margin-left: auto; }
+.j7-toggles { margin-left: auto; display: flex; gap: 4px; }
 .j7-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--err); display: inline-block; }
 .j7-dot.on { background: var(--ok); }
 .tweet { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
@@ -910,3 +910,8 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .tweet-match img { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
 .tweet-match:hover { background: rgba(65, 200, 146, 0.18); }
 .pill-connecting { color: var(--gold); border-color: var(--gold); }
+.tweet-deleted { background: rgba(248, 113, 113, 0.06); }
+.tweet-deleted.tweet-hit { box-shadow: inset 3px 0 0 var(--accent); }
+.tweet-deleted:not(.tweet-hit) { box-shadow: inset 3px 0 0 #f87171; }
+.tweet-del { margin-left: auto; color: #f87171; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.tweet-del + .tweet-time { margin-left: 0; }

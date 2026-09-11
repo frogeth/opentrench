@@ -99,12 +99,27 @@ export class J7Client extends EventEmitter {
     s.on('tweet', upsert);
     s.on('tweet_update', upsert);
     s.on('tweet.subtweet.update', upsert);
+    // J7 keeps deleted tweets in the feed as a red "deleted" entry (that is half the point of
+    // the tracker), rebuilt from the event's copy of the tweet, its own cache, or what we saw.
     s.on('tweet_deleted', (e: any) => {
       const id = str(e?.id) ?? str(e?.tweet_id);
       if (!id) return;
-      const i = this.recent.findIndex((x) => x.id === id);
-      if (i >= 0) this.recent.splice(i, 1);
-      this.emit('delete', id);
+      const known = this.recent.find((x) => x.id === id);
+      const fromEvent = normalizeJ7(e?.tweet ?? e?.deletedTweet);
+      const t: J7Tweet = fromEvent
+        ? { ...fromEvent, id, contracts: known?.contracts ?? [] }
+        : known ?? {
+            id,
+            url: `https://x.com/i/status/${id}`,
+            ts: Date.now(),
+            author: { handle: str(e?.author?.handle) ?? 'unknown', name: str(e?.author?.profile?.name) ?? str(e?.author?.handle) ?? 'Unknown', avatar: str(e?.author?.profile?.avatar) },
+            text: 'Tweet was deleted before it reached the feed.',
+            images: [],
+            contracts: [],
+            tickers: [],
+          };
+      t.deleted = Date.now();
+      upsert(t);
     });
   }
 

@@ -532,6 +532,15 @@ function BotsSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
       await api.botShow(n, show);
       onChange();
     });
+  const pickedCalls = !hide && cfg.bots.calls === 'allow';
+  const norm = (n: string) => n.replace(/^@/, '').toLowerCase();
+  const setCalls = (n: string, on: boolean) =>
+    run(async () => {
+      const allow = cfg.bots.allow.filter((b) => norm(b) !== norm(n));
+      if (on) allow.push(n);
+      await api.setBots({ ...cfg.bots, allow });
+      onChange();
+    });
   return (
     <section>
       <h2>Bots</h2>
@@ -559,9 +568,25 @@ function BotsSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
           </button>
         </span>
       </div>
+      {!hide && (
+        <div className="row-inline" style={{ marginTop: 6 }}>
+          <span className="muted" style={{ fontSize: 12 }}>Calls from</span>
+          <span className="seg">
+            <button className={!pickedCalls ? 'active' : ''} disabled={busy} onClick={() => run(async () => { await api.setBots({ ...cfg.bots, calls: 'all' }); onChange(); })}>
+              every shown bot
+            </button>
+            <button className={pickedCalls ? 'active' : ''} disabled={busy} onClick={() => run(async () => { await api.setBots({ ...cfg.bots, calls: 'allow' }); onChange(); })}>
+              only bots I pick
+            </button>
+          </span>
+        </div>
+      )}
       <div className="hint">
-        {hide ? 'Bots are hidden unless you turn them on below.' : 'Bots show unless you turn them off below.'} Shown bots
-        count as callers; hidden ones only feed links into tokens.
+        {hide
+          ? 'Bots are hidden unless you turn them on below. Shown bots count as callers; hidden ones only feed links into tokens.'
+          : pickedCalls
+            ? 'Bots show in chats unless you turn them off below. Only bots marked "calls" put tokens in your Calls column; the rest just chat.'
+            : 'Bots show unless you turn them off below. Shown bots count as callers; hidden ones only feed links into tokens.'}
       </div>
       <div className="botlist">
         {bots.length === 0 && unseenAllowed.length === 0 && <span className="hint">No bots seen yet.</span>}
@@ -573,6 +598,11 @@ function BotsSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
               <span title={b.chats.join('\n')}>{b.chats.join(', ')}</span>
             </span>
             <span className="botrow-count">{b.count} posts</span>
+            {pickedCalls && !b.hidden && (
+              <button className={`mini ${b.calls ? 'on' : 'off'}`} disabled={busy} onClick={() => setCalls(b.name, !b.calls)} title="do this bot's contract posts count as calls?">
+                {b.calls ? 'calls ✓' : 'no calls'}
+              </button>
+            )}
             <button className={`mini ${b.hidden ? 'off' : 'on'}`} disabled={busy} onClick={() => setShow(b.name, b.hidden)}>
               {b.hidden ? 'hidden' : 'shown ✓'}
             </button>

@@ -139,6 +139,7 @@ export class ConfigStore {
         bots: {
           default: raw.bots?.default === 'show' ? 'show' : 'hide',
           allow: Array.isArray(raw.bots?.allow) ? raw.bots.allow.map(String) : [],
+          calls: raw.bots?.calls === 'allow' ? 'allow' : 'all',
         },
         pingTelegram: raw.pingTelegram !== false,
         o1ApiKey: typeof raw.o1ApiKey === 'string' && raw.o1ApiKey.trim() ? raw.o1ApiKey.trim() : undefined,

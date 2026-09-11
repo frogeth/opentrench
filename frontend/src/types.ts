@@ -212,6 +212,8 @@ export interface J7Tweet {
   contracts: { chain: 'sol' | 'evm'; address: string }[];
   /** $TICKERS mentioned, upper-case */
   tickers: string[];
+  /** when J7 saw the tweet get deleted (ms); the entry stays, badged, like on J7 */
+  deleted?: number;
 }
 
 export interface Status {
@@ -235,6 +237,5 @@ export type ServerEvent =
   | { type: 'ping'; token: TokenInfo; msg: FeedMessage }
   | { type: 'bot'; bot: string; msg: BotMessage }
   | { type: 'j7'; tweet: J7Tweet }
-  | { type: 'j7Delete'; id: string }
   | { type: 'botDelete'; ids: number[] }
   | { type: 'status'; status: Status };

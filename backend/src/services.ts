@@ -107,7 +107,6 @@ export class Services {
       t.contracts = detectContracts(t.text);
       this.hub.emit('event', { type: 'j7', tweet: t });
     });
-    c.on('delete', (id: string) => this.hub.emit('event', { type: 'j7Delete', id }));
     this.j7 = c;
     c.start();
   }

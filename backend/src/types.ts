@@ -190,6 +190,8 @@ export interface BotPolicy {
   default: 'hide' | 'show';
   /** bot names (case-insensitive, leading @ ignored) shown and counted even when the default hides bots */
   allow: string[];
+  /** when bots show by default: whose contract posts become calls. 'all' (default) or only the `allow` list. */
+  calls?: 'all' | 'allow';
 }
 
 /** A bot the hub has seen, for the bot manager in settings. */
@@ -201,6 +203,8 @@ export interface BotSeen {
   lastTs: number;
   chats: string[];
   hidden: boolean;
+  /** its contract posts become calls */
+  calls: boolean;
 }
 
 /** One message in a conversation with a Telegram bot (Cove), with its inline keyboard. */
@@ -230,6 +234,8 @@ export interface J7Tweet {
   contracts: { chain: 'sol' | 'evm'; address: string }[];
   /** $TICKERS mentioned, upper-case */
   tickers: string[];
+  /** when J7 saw the tweet get deleted (ms); the entry stays, badged, like on J7 */
+  deleted?: number;
 }
 
 export interface Status {
@@ -253,6 +259,5 @@ export type ServerEvent =
   | { type: 'ping'; token: TokenInfo; msg: FeedMessage }
   | { type: 'bot'; bot: string; msg: BotMessage }
   | { type: 'j7'; tweet: J7Tweet }
-  | { type: 'j7Delete'; id: string }
   | { type: 'botDelete'; ids: number[] }
   | { type: 'status'; status: Status };

@@ -12,6 +12,8 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 export interface BotPolicy {
   default: 'hide' | 'show';
   allow: string[];
+  /** when bots show by default: whose contract posts become calls. 'all' (default) or only the `allow` list. */
+  calls?: 'all' | 'allow';
 }
 export interface BotSeen {
   name: string;
@@ -21,6 +23,7 @@ export interface BotSeen {
   lastTs: number;
   chats: string[];
   hidden: boolean;
+  calls: boolean;
 }
 export interface SitePreview {
   url: string;

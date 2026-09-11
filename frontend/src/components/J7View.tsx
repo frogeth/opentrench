@@ -47,26 +47,32 @@ export function J7View({
   onSelect: (address: string) => void;
 }) {
   const [onlyMatches, setOnlyMatches] = useState(false);
+  const [onlyDeleted, setOnlyDeleted] = useState(false);
   useEffect(() => {
     if (!hasToken) return;
     api.j7Recent().then((r) => onLoaded(Array.isArray(r) ? r : [])).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasToken]);
-  const rows = useMemo(() => tweets.map((t) => ({ t, m: matchesFor(t, tokens, now) })).filter((r) => !onlyMatches || r.m.length > 0), [tweets, tokens, now, onlyMatches]);
+  const rows = useMemo(() => tweets.map((t) => ({ t, m: matchesFor(t, tokens, now) })).filter((r) => (!onlyMatches || r.m.length > 0) && (!onlyDeleted || r.t.deleted)), [tweets, tokens, now, onlyMatches, onlyDeleted]);
 
   if (!hasToken) return <div className="empty">Paste your J7Tracker session id in ⚙ → Accounts → J7Tracker to stream its feed here.</div>;
   return (
     <div className="j7">
       <div className="j7-bar">
         <span className={`j7-dot${connected ? ' on' : ''}`} /> {connected ? 'live' : error ?? 'connecting…'}
-        <button className={`hdr-toggle${onlyMatches ? ' on' : ''}`} onClick={() => setOnlyMatches((v) => !v)} title="only tweets that mention a token in your calls">
-          matches only
-        </button>
+        <span className="j7-toggles">
+          <button className={`hdr-toggle${onlyDeleted ? ' on' : ''}`} onClick={() => setOnlyDeleted((v) => !v)} title="only tweets the author deleted">
+            deleted
+          </button>
+          <button className={`hdr-toggle${onlyMatches ? ' on' : ''}`} onClick={() => setOnlyMatches((v) => !v)} title="only tweets that mention a token in your calls">
+            matches
+          </button>
+        </span>
       </div>
-      {rows.length === 0 && <div className="empty">{onlyMatches ? 'No tweets touching your calls yet.' : 'Waiting for tweets…'}</div>}
+      {rows.length === 0 && <div className="empty">{onlyDeleted ? 'No deleted tweets yet.' : onlyMatches ? 'No tweets touching your calls yet.' : 'Waiting for tweets…'}</div>}
       {rows.map(({ t, m }) => (
         <VirtualItem key={t.id} id={`j7:${t.id}`} domKey={t.id} estimate={t.images.length ? 220 : 96}>
-          <div className={`tweet${m.length ? ' tweet-hit' : ''}`}>
+          <div className={`tweet${m.length ? ' tweet-hit' : ''}${t.deleted ? ' tweet-deleted' : ''}`}>
             <div className="tweet-head">
               <Avatar src={t.author.avatar} name={t.author.name} size={28} />
               <span className="tweet-who">
@@ -76,6 +82,11 @@ export function J7View({
                   {t.author.followers !== undefined && ` · ${fmtFollowers(t.author.followers)}`}
                 </span>
               </span>
+              {t.deleted && (
+                <span className="tweet-del" title={`posted ${timeAgo(t.ts, now)} ago, deleted ${timeAgo(t.deleted, now)} ago`}>
+                  <Icon name="trash" size={10} /> deleted {timeAgo(t.deleted, now)}
+                </span>
+              )}
               <a className="tweet-time" href={t.url} target="_blank" rel="noreferrer" title="open on X">
                 {timeAgo(t.ts, now)} <Icon name="x" size={10} />
               </a>
