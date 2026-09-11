@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.4.0 — 2026-09-11
+
 - **Pick your buy bot: Cove or BasedBot** (⚙ → Trading → Buy buttons). Buy buttons on cards and in the drill-down, right-click → Buy on …, and the buy pane all follow the choice. There is one buy pane; it shows whichever bot is picked. BasedBot opens the token via its `r_<referral>_b_<mint>` deep link (the bot asks the amount); a web-app link is kept as a fallback. Cove keeps its one-click amounts.
 - Referral credit on every buy goes to opentrench: Cove links carry the app's affiliate (base62-encoded into the 14-character tail per Cove's deep-link spec) and BasedBot links carry the app's referral. Neither is a setting.
 - Search anyone to favorite. ⚙ → Feed → Favorites now has a people search instead of a blind name field: it lists everyone the feed has seen (including people who only chat and have never called), and when you type it also searches your Discord servers and Telegram groups for members who have not posted at all. Each row shows their calls, messages and where, and one click toggles the crown. Typing a name nothing matches still lets you add it verbatim (alextjh).
