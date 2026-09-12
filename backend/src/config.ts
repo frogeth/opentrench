@@ -81,9 +81,14 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
       else if (Array.isArray(v)) out[k] = v.map(String).map((x) => x.slice(0, 80)).slice(0, 300);
     }
     if (type === 'mints') {
-      if (Array.isArray(out.chains)) out.chains = (out.chains as string[]).filter((c) => (MINT_CHAINS as readonly string[]).includes(c));
-      if (Array.isArray(out.chains) && out.chains.length === 0) delete out.chains;
-      if (typeof out.minQty === 'number' && out.minQty < 1) delete out.minQty;
+      if (Array.isArray(out.chains)) {
+        out.chains = (out.chains as string[]).filter((c) => (MINT_CHAINS as readonly string[]).includes(c));
+        if (out.chains.length === 0) delete out.chains;
+      } else delete out.chains;
+      if (typeof out.minQty === 'number') {
+        out.minQty = Math.round(out.minQty);
+        if (out.minQty < 1 || out.minQty > 1000) delete out.minQty;
+      }
     }
     if (Object.keys(out).length) col.filters = out;
   }
@@ -228,9 +233,18 @@ export class ConfigStore {
         },
         seenTokens: Array.isArray(raw.seenTokens) ? raw.seenTokens.map(String).slice(-3000) : [],
         opensea: {
-          walletKey: /^0x[0-9a-fA-F]{64}$/.test(String(raw.opensea?.walletKey ?? '')) ? String(raw.opensea.walletKey) : undefined,
+          walletKey: (() => {
+            const wk = raw.opensea?.walletKey;
+            if (wk === undefined || wk === null) return undefined;
+            if (/^0x[0-9a-fA-F]{64}$/.test(String(wk))) return String(wk);
+            console.warn('[config] ignoring invalid opensea.walletKey');
+            return undefined;
+          })(),
           rpc: Object.fromEntries(
-            Object.entries(raw.opensea?.rpc ?? {}).filter(([k, v]) => /^[a-z_]{1,30}$/.test(k) && /^https?:\/\//i.test(String(v))).map(([k, v]) => [k, String(v)]),
+            Object.entries(raw.opensea?.rpc ?? {})
+              .filter(([k, v]) => /^[a-z0-9_]{1,30}$/.test(k) && /^https?:\/\//i.test(String(v)))
+              .slice(0, 40)
+              .map(([k, v]) => [k, String(v).slice(0, 500)]),
           ),
         },
       };

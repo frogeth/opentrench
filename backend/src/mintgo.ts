@@ -22,7 +22,15 @@ export const SAME_ORIGIN_HEADERS: Record<string, string> = {
 };
 
 const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
-const num = (v: unknown) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? undefined : Number(v));
+const NUM_RE = /^-?\d+(\.\d+)?([eE][-+]?\d+)?$/;
+const num = (v: unknown): number | undefined => {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v === 'string') {
+    const s = v.trim();
+    return s && NUM_RE.test(s) ? Number(s) : undefined;
+  }
+  return undefined;
+};
 
 export function chainFromCode(code: unknown): MintChain {
   const n = Number(code);
@@ -36,36 +44,42 @@ export function decodeBatch(packet: unknown): MintEvent[] {
   const contracts: unknown[][] = Array.isArray(packet[3]) ? packet[3] : [];
   const rows: unknown[][] = Array.isArray(packet[4]) ? packet[4] : [];
   const out: MintEvent[] = [];
-  for (const row of rows) {
+  for (const row of rows.slice(0, 500)) {
     if (!Array.isArray(row)) continue;
     const c = contracts[Number(row[4] ?? 0)];
-    const id = str(row[0]);
+    const id = str(row[0]) ?? (typeof row[0] === 'number' && Number.isFinite(row[0]) ? String(row[0]) : undefined);
     const address = str(c?.[0])?.toLowerCase();
     if (!id || !address || !Array.isArray(c)) continue;
     const flags = Number(row[11] ?? 0) || 0;
-    const tokenIds = Array.isArray(row[5]) ? row[5].filter((v) => v !== null && v !== undefined && v !== '').map(String) : [];
+    const tokenIds = Array.isArray(row[5])
+      ? row[5]
+          .filter((v) => typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v)))
+          .map(String)
+          .slice(0, 200)
+      : [];
     const slug = str(c[4]);
     const deployer = str(c[8]);
     const surge = !!(flags & 128);
     out.push({
       id,
       chain,
-      ts: num(row[3]) ?? Date.now(),
+      ts: Math.max(0, num(row[3]) ?? Date.now()),
       txHash: str(row[1]) ?? '',
-      blockNumber: num(row[2]) ?? 0,
+      blockNumber: Math.max(0, num(row[2]) ?? 0),
       contract: {
         address,
         name: str(c[1]) ?? address.slice(0, 10),
         symbol: str(c[2]),
         image: str(c[3]),
         slug,
+        // MintGo's own decoder: index 12 overrides, else the slug; index 5 is the collection's external URL (unused here)
         openSeaUrl: str(c[12]) ?? (slug ? `https://opensea.io/collection/${slug}` : undefined),
         projectUrl: str(c[6]),
         twitterUrl: str(c[7]),
         standard: str(c[11]),
         deployer: deployer ? { address: deployer, createdAgo: str(c[9]), projects: num(c[10]) } : undefined,
       },
-      quantity: num(row[6]) ?? (tokenIds.length || 1),
+      quantity: Math.max(num(row[6]) ?? 0, tokenIds.length, 1),
       tokenIds,
       tokenIdsTotal: flags & 64 ? num(row[21]) : undefined,
       minter: str(row[7]) ?? '',
@@ -84,16 +98,30 @@ export function decodeBatch(packet: unknown): MintEvent[] {
   return out;
 }
 
-/** Replace by id (a preview row becomes its confirmed row in place), else newest first; capped. */
-export function upsertMint(list: MintEvent[], e: MintEvent, max = MAX): 'new' | 'update' {
+/** Shallow-copies `obj`, keeping only its own keys whose value is not `undefined`. */
+function definedFieldsOf<T extends object>(obj: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const k of Object.keys(obj) as (keyof T)[]) {
+    if (obj[k] !== undefined) out[k] = obj[k];
+  }
+  return out;
+}
+
+/**
+ * Merge by id (MintGo re-sends a mint id as preview → confirmed, and a sparser later row must
+ * not erase what the preview carried), else newest first; capped.
+ */
+export function upsertMint(list: MintEvent[], e: MintEvent, max = MAX): void {
   const i = list.findIndex((x) => x.id === e.id);
   if (i >= 0) {
-    list[i] = e;
-    return 'update';
+    const prev = list[i];
+    const merged: MintEvent = { ...prev, ...definedFieldsOf(e) };
+    merged.contract = { ...prev.contract, ...definedFieldsOf(e.contract) };
+    list[i] = merged;
+    return;
   }
   list.unshift(e);
   if (list.length > max) list.length = max;
-  return 'new';
 }
 
 export type MintGoState = NonNullable<import('./types.js').Status['mintgo']>;

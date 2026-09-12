@@ -1,5 +1,8 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_COLUMNS, sanitizeColumns } from './config.js';
+import { ConfigStore, DEFAULT_COLUMNS, sanitizeColumns } from './config.js';
 
 describe('columns', () => {
   it('falls back to All Calls + All Chats and drops junk', () => {
@@ -41,5 +44,33 @@ describe('nft column types', () => {
     const [c] = sanitizeColumns([{ id: 'b', type: 'nftvol', title: 'V', chats: [], ranking: 'nope', timeframe: '7d' }]);
     expect(c.ranking).toBe('trending');
     expect(c.timeframe).toBe('1h');
+  });
+  it('drops a non-array chains filter and rounds minQty into range', () => {
+    const [c] = sanitizeColumns([{ id: 'a', type: 'mints', title: '', chats: [], filters: { chains: 'ethereum', minQty: 2.6 } }]);
+    expect(c.filters).toEqual({ minQty: 3 });
+  });
+});
+
+describe('ConfigStore opensea block', () => {
+  const tmp = () => path.join(os.tmpdir(), `trenchfeed-cfg-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+  it('loads the wallet key and valid RPCs, and never masks the key into the UI', () => {
+    const f = tmp();
+    fs.writeFileSync(f, JSON.stringify({ opensea: { walletKey: '0x' + 'a'.repeat(64), rpc: { ethereum: 'https://e.io', b3: 'https://b3.io', bad: 'ftp://x', 'Bad Key': 'https://y' } } }));
+    const s = new ConfigStore(f);
+    expect(s.get().opensea.walletKey).toBe('0x' + 'a'.repeat(64));
+    expect(s.get().opensea.rpc).toEqual({ ethereum: 'https://e.io', b3: 'https://b3.io' });
+    expect(JSON.stringify(s.masked())).not.toContain('aaaa');
+    expect((s.masked() as any).opensea).toEqual({ hasWallet: true, rpc: { ethereum: 'https://e.io', b3: 'https://b3.io' } });
+    fs.unlinkSync(f);
+  });
+  it('drops an invalid wallet key and loads an old config without opensea', () => {
+    const f = tmp();
+    fs.writeFileSync(f, JSON.stringify({ discord: { watch: [] }, telegram: { watch: [] }, columns: [{ id: 'calls', type: 'calls', title: 'All Calls', chats: [] }] }));
+    const s = new ConfigStore(f);
+    expect(s.get().opensea).toEqual({ rpc: {} });
+    expect(s.get().columns[0].type).toBe('calls');
+    fs.writeFileSync(f, JSON.stringify({ opensea: { walletKey: '0Xdeadbeef', rpc: {} } }));
+    expect(new ConfigStore(f).get().opensea.walletKey).toBeUndefined();
+    fs.unlinkSync(f);
   });
 });
