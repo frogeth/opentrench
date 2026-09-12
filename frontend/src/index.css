@@ -1070,3 +1070,23 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .web-frame { flex: 1; width: 100%; height: 100%; border: 0; background: #fff; }
 .col-open { font-size: 11px; color: var(--muted); text-decoration: none; white-space: nowrap; }
 .col-open:hover { color: var(--text); }
+
+/* ---------- MintGo column ---------- */
+.mint { padding: 8px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.mint:hover { background: var(--hover); }
+.mint-preview .mint-name b { opacity: 0.75; }
+.mint-row { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.mint-img { width: 36px; height: 36px; border-radius: 9px; object-fit: cover; flex: none; background: var(--panel-2); }
+.mint-noimg { display: inline-block; }
+.mint-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.mint-name { display: flex; align-items: center; gap: 6px; font-size: 13px; min-width: 0; }
+.mint-name b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mint-chain { font-size: 9px; padding: 1px 4px; border-radius: 4px; background: var(--chrome); color: var(--muted); letter-spacing: 0.04em; }
+.mint-chain-robinhood { color: #c8f27a; } .mint-chain-ink { color: #b58cff; } .mint-chain-ethereum { color: var(--evm); }
+.mint-tag { font-size: 10px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 4px; }
+.mint-surge { color: var(--warn); border-color: rgba(242, 195, 102, 0.5); }
+.mint-meta { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mint-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; font-size: 11px; }
+.mint-links a, .mint-copy { display: inline-flex; align-items: center; gap: 3px; color: var(--text); text-decoration: none; background: var(--chrome); border: 1px solid var(--line-strong); border-radius: 6px; padding: 3px 7px; cursor: pointer; }
+.mint-links a:hover, .mint-copy:hover { border-color: var(--accent); color: var(--accent); }
+.mint-go { margin-left: auto; background: var(--accent); color: #04140d; border: 0; border-radius: 6px; padding: 4px 12px; font-weight: 600; cursor: pointer; }

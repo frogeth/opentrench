@@ -13,6 +13,7 @@ import { CoveView, COVE_BOT } from './components/CoveView';
 import { PROVIDER_LABEL, BASEDBOT_REFERRAL, BuyContext } from './components/BuyRow';
 import { CaMenuContext, LinkInterceptContext } from './components/RichText';
 import { J7View } from './components/J7View';
+import { MintFeed, mintPasses } from './components/MintFeed';
 import { PingsPanel } from './components/PingsPanel';
 import { BridgeNotice } from './components/BridgeNotice';
 import { Lightbox } from './components/Lightbox';
@@ -76,7 +77,8 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 export type ChatOrder = 'bottom' | 'top';
 
 export default function App() {
-  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead } = useFeed();
+  // rankings/mintJobs are unused until the OpenSea Volume / Mint columns land (Tasks 7 & 13)
+  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState<Source | null>(null);
   const [view, setView] = useState<View>({ rail: 'all' });
@@ -932,6 +934,14 @@ export default function App() {
           ) : (
             <div className="empty">No address yet — edit the column (✎) and paste one.</div>
           )}
+        </Column>
+      );
+    }
+    if (col.type === 'mints') {
+      const shown = mints.filter((e) => mintPasses(e, col.filters));
+      return (
+        <Column key={col.id} title={col.title} subtitle={`mintgo.fun · ${status.mintgo ?? 'off'}`} kind="mints" count={shown.length} className="col-mints" {...actions}>
+          <MintFeed mints={mints} now={now} state={status.mintgo} error={status.error.mintgo} filters={col.filters} onMint={undefined} />
         </Column>
       );
     }

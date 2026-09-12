@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BotMessage, FeedMessage, J7Tweet, Mention, ServerEvent, Status, TokenInfo } from './types';
+import type { BotMessage, FeedMessage, J7Tweet, Mention, MintEvent, MintJob, NftRanking, RankingKey, ServerEvent, Status, TokenInfo } from './types';
 
 const MAX = 500;
 
@@ -38,6 +38,17 @@ export function useFeed() {
       for (const m of incoming) byId.set(m.id, { ...(byId.get(m.id) ?? {}), ...m });
       return { ...all, [bot]: [...byId.values()].sort((a, b) => a.id - b.id).slice(-200) };
     });
+  /** MintGo mints, newest first; a confirmed row replaces its preview in place */
+  const [mints, setMints] = useState<MintEvent[]>([]);
+  const upsertMints = (incoming: MintEvent[]) =>
+    setMints((cur) => {
+      const byId = new Map(cur.map((m) => [m.id, m]));
+      for (const m of incoming) byId.set(m.id, m);
+      return [...byId.values()].sort((a, b) => b.ts - a.ts || b.id.localeCompare(a.id)).slice(0, 300);
+    });
+  const [rankings, setRankings] = useState<Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>>>({});
+  const [mintJobs, setMintJobs] = useState<MintJob[]>([]);
+  const upsertJob = (job: MintJob) => setMintJobs((cur) => (cur.some((j) => j.id === job.id) ? cur.map((j) => (j.id === job.id ? job : j)) : [...cur, job].slice(-100)));
   const boot = useRef<string | null>(null);
 
   useEffect(() => {
@@ -62,6 +73,9 @@ export function useFeed() {
           setMentions(ev.mentions ?? []);
           setTokens(Object.fromEntries(ev.tokens.map((t) => [t.address, t])));
           setStatus(ev.status);
+          setMints(ev.mints ?? []);
+          setRankings(ev.rankings ?? {});
+          setMintJobs(ev.mintJobs ?? []);
         } else if (ev.type === 'message') {
           setMessages((m) => [ev.msg, ...m].slice(0, MAX));
         } else if (ev.type === 'token') {
@@ -86,6 +100,9 @@ export function useFeed() {
         }
         else if (ev.type === 'ping') setPing(ev);
         else if (ev.type === 'status') setStatus(ev.status);
+        else if (ev.type === 'mint') upsertMints([ev.mint]);
+        else if (ev.type === 'nftRankings') setRankings((r) => ({ ...r, [ev.key]: { rows: ev.rows, at: ev.at } }));
+        else if (ev.type === 'mintJob') upsertJob(ev.job);
       };
       ws.onclose = () => {
         setWsOpen(false);
@@ -100,5 +117,5 @@ export function useFeed() {
     };
   }, []);
 
-  return { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead };
+  return { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs };
 }

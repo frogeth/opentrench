@@ -28,6 +28,9 @@ const TYPE_CARDS: { t: ColumnDef['type']; icon: import('./Icon').IconName; name:
   { t: 'salpha', icon: 'search', name: 'Salpha', blurb: 'your research bot chat' },
   { t: 'j7', icon: 'x', name: 'J7', blurb: 'J7Tracker’s tweet stream' },
   { t: 'web', icon: 'globe', name: 'Website', blurb: 'any page, living in a column' },
+  { t: 'mints', icon: 'mint', name: 'MintGo', blurb: 'NFT mints as they happen' },
+  { t: 'nftvol', icon: 'sea', name: 'OpenSea Volume', blurb: 'trending & top collections, 1H or 1D' },
+  { t: 'osmint', icon: 'wallet', name: 'OpenSea Mint', blurb: 'mint a drop with your wallet' },
 ];
 
 /** Ready-made Website columns; "Custom" takes any address. */
@@ -138,10 +141,13 @@ export function ColumnEditor({
     if (WEB_PRESETS.some((q) => q.name === title.trim())) setTitle('');
   };
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [ranking, setRanking] = useState<NonNullable<ColumnDef['ranking']>>(col?.ranking ?? 'trending');
+  const [timeframe, setTimeframe] = useState<NonNullable<ColumnDef['timeframe']>>(col?.timeframe ?? '1h');
   const set = <K extends keyof ColumnFilters>(k: K, v: ColumnFilters[K]) => setF((s) => ({ ...s, [k]: v }));
   const num = (k: NumKey) => (e: React.ChangeEvent<HTMLInputElement>) => set(k, e.target.value === '' ? undefined : Number(e.target.value));
   const isBot = type === 'cove' || type === 'salpha' || type === 'j7';
   const isWeb = type === 'web';
+  const isNft = type === 'mints' || type === 'nftvol' || type === 'osmint';
   const all = chats.length === 0;
   const none = chats.includes('none');
   // "All channels" is stored as an empty list and shows as every box ticked; "none" is a
@@ -187,12 +193,12 @@ export function ColumnEditor({
   })();
   const urlOk = /^https?:\/\/[^\s/]+/i.test(cleanUrl);
   const save = () => {
-    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : all ? 'All Chats' : 'Chats');
+    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'OpenSea Volume' : type === 'osmint' ? 'OpenSea Mint' : all ? 'All Chats' : 'Chats');
     if (isWeb && !urlOk) {
       window.alert('Paste the address of the page to show (http:// or https://).');
       return;
     }
-    if (!isWeb && none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
+    if (!isWeb && !isNft && none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
     const clean: ColumnFilters = {};
     for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== false && !(Array.isArray(v) && v.length === 0) && !(typeof v === 'string' && !v.trim())) (clean as any)[k] = v;
     onSave({
@@ -200,9 +206,10 @@ export function ColumnEditor({
       id: col?.id ?? `c${Date.now().toString(36)}`,
       type,
       title: t,
-      chats: isWeb ? [] : chats,
+      chats: isWeb || isNft ? [] : chats,
       ...(isWeb ? { url: cleanUrl } : {}),
       ...(type === 'callers' ? { window: win } : {}),
+      ...(type === 'nftvol' ? { ranking, timeframe } : {}),
       ...(type === 'calls' || type === 'chat' || type === 'j7' ? { alert: { on: alertOn, sound } } : {}),
       filters: Object.keys(clean).length ? clean : undefined,
     });
@@ -231,7 +238,7 @@ export function ColumnEditor({
               ))}
             </div>
             <div className="fed-label">Feed name</div>
-            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : 'All Chats'} maxLength={40} />
+            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'OpenSea Volume' : type === 'osmint' ? 'OpenSea Mint' : 'All Chats'} maxLength={40} />
             {isWeb && (
               <>
                 <div className="fed-label">Site</div>
@@ -259,7 +266,12 @@ export function ColumnEditor({
                 {type === 'cove' ? 'Your buy bot — Cove or BasedBot, whichever is picked in ⚙ → Trading. Buy buttons and right-click → Buy land here.' : type === 'salpha' ? 'Your conversation with @salpha_research_bot. Right-click a contract → Research sends it here.' : 'J7Tracker’s live tweet feed, with the calls each tweet touches. Needs your J7 session id in ⚙ → Accounts.'}
               </div>
             )}
-            {!isBot && !isWeb && (
+            {isNft && (
+              <div className="fed-bot-note hint">
+                {type === 'mints' ? 'Every mint MintGo sees on Ethereum, Robinhood Chain and Ink. Click a mint for its X, OpenSea and website links, and a Mint button.' : type === 'nftvol' ? "OpenSea's trending or top collections with floor, volume and sales. Switch 1H / 1D in the column header." : 'Paste a collection (slug, OpenSea link or address), see the open stage and price, and mint with the wallet from ⚙ → Trading.'}
+              </div>
+            )}
+            {!isBot && !isWeb && !isNft && (
             <>
             <div className="fed-label">
               Channels <span className="muted">({all ? 'all' : none ? 'none' : `${chats.length} of ${allKeys.length}`})</span>
@@ -320,6 +332,32 @@ export function ColumnEditor({
           <div className="fed-right">
             {isBot && type !== 'j7' && <div className="hint">Nothing to filter here — this column shows one bot conversation.</div>}
             {isWeb && <div className="hint">Nothing to filter here — this column shows a web page.</div>}
+            {type === 'mints' && (
+              <>
+                <Chips title="Chains" options={[['ethereum', 'Ethereum'], ['robinhood', 'Robinhood'], ['ink', 'Ink']]} value={f.chains ?? []} onChange={(v) => set('chains', v)} all="all chains" />
+                <div className="fsec">
+                  <div className="fsec-title">Minimum quantity</div>
+                  <input className="fed-input" type="number" min={1} value={f.minQty ?? ''} onChange={(e) => set('minQty', e.target.value === '' ? undefined : Number(e.target.value))} placeholder="any" />
+                </div>
+              </>
+            )}
+            {type === 'nftvol' && (
+              <>
+                <div className="fsec">
+                  <div className="fsec-title">List</div>
+                  <div className="fchips">
+                    {(['trending', 'top'] as const).map((r) => <button key={r} className={`fchip${ranking === r ? ' on' : ''}`} onClick={() => setRanking(r)}>{r === 'trending' ? 'Trending' : 'Top'}</button>)}
+                  </div>
+                </div>
+                <div className="fsec">
+                  <div className="fsec-title">Window</div>
+                  <div className="fchips">
+                    {(['1h', '1d'] as const).map((t) => <button key={t} className={`fchip${timeframe === t ? ' on' : ''}`} onClick={() => setTimeframe(t)}>{t.toUpperCase()}</button>)}
+                  </div>
+                </div>
+              </>
+            )}
+            {type === 'osmint' && <div className="hint">Nothing to filter here — this column is your mint window.</div>}
             {type === 'j7' && (
               <div className="fsec">
                 <div className="fsec-title">Alert</div>

@@ -210,4 +210,5 @@ export const api = {
   xProfile: (handle: string) => req<XProfile | null>('GET', `/x-profile/${encodeURIComponent(handle)}`),
   preview: (source: 'discord' | 'telegram', id: string) =>
     req<import('./types').FeedMessage[]>('GET', `/preview/${source}/${encodeURIComponent(id)}`),
+  mintsRecent: () => req<import('./types').MintEvent[]>('GET', '/mints/recent'),
 };
