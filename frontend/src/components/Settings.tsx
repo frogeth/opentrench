@@ -5,6 +5,7 @@ import { Logo } from './Logo';
 import { Avatar } from './Avatar';
 import { DOCS } from '../site';
 import { PeoplePicker } from './PeoplePicker';
+import { CHART_PROVIDERS, type ChartProvider } from '../format';
 
 type Tab = 'accounts' | 'feed' | 'trading';
 
@@ -29,8 +30,8 @@ export function Settings({
   onAutoChart: (on: boolean) => void;
   compactEmbeds: boolean;
   onCompactEmbeds: (on: boolean) => void;
-  chartProvider: 'basedbot' | 'dexscreener';
-  onChartProvider: (p: 'basedbot' | 'dexscreener') => void;
+  chartProvider: ChartProvider;
+  onChartProvider: (p: ChartProvider) => void;
 }) {
   const [cfg, setCfg] = useState<MaskedConfig | null>(null);
   const [tab, setTab] = useState<Tab>('accounts');
@@ -89,14 +90,17 @@ export function Settings({
               <section>
                 <h2>Chart provider</h2>
                 <div className="seg">
-                  <button className={chartProvider === 'basedbot' ? 'active' : ''} onClick={() => onChartProvider('basedbot')}>
-                    BasedBot
-                  </button>
-                  <button className={chartProvider === 'dexscreener' ? 'active' : ''} onClick={() => onChartProvider('dexscreener')}>
-                    Dexscreener / GeckoTerminal
-                  </button>
+                  {CHART_PROVIDERS.map((p) => (
+                    <button key={p.id} className={chartProvider === p.id ? 'active' : ''} onClick={() => onChartProvider(p.id)}>
+                      {p.label}
+                    </button>
+                  ))}
                 </div>
-                <div className="hint">BasedBot needs the token's chain to be known; until then the Dexscreener chart is used.</div>
+                <div className="hint">
+                  {chartProvider === 'defined'
+                    ? "Defined.fi doesn't allow its chart to be embedded, so the inline chart under contracts stays Dexscreener; every \"open chart\" link goes to Defined.fi instead."
+                    : "BasedBot needs the token's chain to be known; until then the Dexscreener chart is used."}
+                </div>
               </section>
               <section>
                 <h2>Live charts in chat</h2>

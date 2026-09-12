@@ -1,3 +1,5 @@
+import { useChartProvider } from '../chartProvider';
+import { chartOpenUrl } from '../format';
 import { useState } from 'react';
 import type { Contract, TokenInfo } from '../types';
 import { Icon, type IconName } from './Icon';
@@ -31,6 +33,7 @@ const NETWORK_LABEL: Record<string, string> = {
 
 export function TokenCard({ c, t }: { c: Contract; t?: TokenInfo }) {
   const [copied, setCopied] = useState(false);
+  const chartProvider = useChartProvider();
   const [showChart, setShowChart] = useState(false);
   const short = `${c.address.slice(0, 4)}…${c.address.slice(-4)}`;
   const copy = async () => {
@@ -47,7 +50,7 @@ export function TokenCard({ c, t }: { c: Contract; t?: TokenInfo }) {
   const net = t?.network;
   const netLabel = net ? (NETWORK_LABEL[net] ?? net.toUpperCase().slice(0, 5)) : c.chain.toUpperCase();
   const links: [IconName, string, string | undefined][] = [
-    ['chart', 'open chart', t?.chartUrl],
+    ['chart', 'open chart', chartOpenUrl(t, chartProvider)],
     ['globe', 'website', t?.website],
     ['x', 'X / Twitter', t?.twitter],
     ['telegram', 'Telegram', t?.telegram],
