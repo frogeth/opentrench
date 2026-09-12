@@ -12,7 +12,7 @@ import { createMarketRefresher } from './refresh.js';
 import { DEFAULT_COVE_AFFILIATE, type CoveOptions } from './cove.js';
 import { Services } from './services.js';
 import { createApi } from './api.js';
-import { createFeedWss, routeUpgrades } from './ws.js';
+import { allowLocalOrigin, createFeedWss, isLoopbackHost, routeUpgrades } from './ws.js';
 import { DiscordBridge } from './discord/bridge.js';
 import { StateStore } from './store.js';
 
@@ -74,6 +74,9 @@ svc.syncColumnFeeds();
 const hover = createHoverFetchers();
 const store = new StateStore(process.env.TRENCHFEED_STATE ?? path.join(root, 'state.json'));
 hub.load(store.load());
+// A mint that was in flight when the process died is still in flight on the chain: take those jobs
+// back so their receipts are still watched and the one-mint-per-wallet guard still holds.
+void svc.minter.restore(hub.restoredMintJobs);
 hub.on('changed', () => store.schedule(() => hub.snapshot()));
 // Desktop app: die with the parent. On Windows a killed/crashed Electron leaves the
 // backend (this same exe running as node) orphaned, which then blocks the installer
@@ -103,6 +106,22 @@ process.on('uncaughtException', (e) => console.error('[backend] uncaught', e));
 process.on('unhandledRejection', (e) => console.error('[backend] unhandled', e));
 
 const app = express();
+// This API drives the trading wallet and is reachable on 127.0.0.1, which a page on the open web can
+// still address (a browser sends cross-origin requests there happily, and DNS rebinding turns an
+// attacker's hostname into a loopback address). So: the Host must name this machine, and an Origin,
+// when the client sends one, must be local. Non-browser clients send no Origin and are allowed.
+app.use('/api', (req, res, next) => {
+  const host = Array.isArray(req.headers.host) ? req.headers.host[0] : req.headers.host;
+  if (host && !isLoopbackHost(host)) {
+    res.status(403).type('text/plain').send('forbidden: opentrench only answers on localhost');
+    return;
+  }
+  if (!allowLocalOrigin(req)) {
+    res.status(403).type('text/plain').send('forbidden: cross-origin request');
+    return;
+  }
+  next();
+});
 app.use('/api', createApi(cfg, hub, svc, hover));
 
 const dist = path.resolve(root, '..', 'frontend', 'dist');
@@ -118,7 +137,7 @@ if (fs.existsSync(dist)) {
 
 const server = http.createServer(app);
 routeUpgrades(server, {
-  '/ws': { wss: createFeedWss(hub) },
+  '/ws': { wss: createFeedWss(hub), allow: allowLocalOrigin },
   '/bridge': { wss: svc.discord.wss, allow: DiscordBridge.allowOrigin },
 });
 

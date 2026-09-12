@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Minter, redact, toWei, type MinterDeps } from './minter.js';
 import type { DropCollection } from './drops.js';
+import type { MintJob } from '../types.js';
 
 const KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'; // hardhat #1, no funds anywhere
 const WALLET = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
@@ -14,6 +15,7 @@ function deps(over: Partial<MinterDeps> = {}): MinterDeps {
     eligibility: async () => ({ kind: 'Erc721SeaDropV1', minted: 1, stages: [{ type: 'PUBLIC_SALE', index: 0, eligible: true, maxPerWallet: 3, eligibleMax: 3, priceUnit: 0.002, priceUsd: 5, priceSymbol: 'ETH' }] }),
     mintAction: async () => ({ actionTypes: ['MintAction'], errors: [], tx: { to: '0x00005ea00ac477b1030ce78506496e8c2de24bf5', data: '0x161ac21f' + ['9d2a003322874163cbb18f7f538a1aaea49b75d1', 'fee', '0', '2', '0', '0', '0', '0', '0'].map((h) => h.padStart(64, '0')).join(''), value: '4000000000000000', networkId: 4663, chain: 'robinhood' } }),
     rpc: () => ({
+      getChainId: async () => 4663,
       getBalance: async () => 10n ** 18n,
       estimateFeesPerGas: async () => ({ maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000n }),
       getTransactionCount: async () => 7,
@@ -26,6 +28,37 @@ function deps(over: Partial<MinterDeps> = {}): MinterDeps {
     ...over,
   };
 }
+
+/**
+ * A fake clock: every injected sleep advances it. With `park`, a slow-watch sleep (>= 15 s) never
+ * resolves, which freezes the background watch where it is so a test can assert on a pending job
+ * without the watch racing it.
+ */
+function clock(start = now, opts: { park?: boolean } = {}) {
+  let t = start;
+  return {
+    now: () => t,
+    sleep: async (ms: number): Promise<void> => {
+      if (opts.park && ms >= 15_000) return new Promise<void>(() => {});
+      t += ms;
+    },
+  };
+}
+
+/** A job as it comes back out of state.json: broadcast, pending, watched by a previous process. */
+const restored = (over: Partial<MintJob> = {}): MintJob => ({
+  id: 'mrestored',
+  ts: now - 60_000,
+  updatedAt: now - 60_000,
+  state: 'pending',
+  collection: { slug: 'chump', name: 'Chump', address: col.address, chain: 'robinhood', networkId: 4663, dropKind: 'Erc721SeaDropV1' },
+  quantity: 2,
+  wallet: WALLET,
+  txHash: ('0x' + 'ab'.repeat(32)) as string,
+  nonce: 7,
+  watchUntil: now + 6 * 60 * 60_000,
+  ...over,
+});
 
 describe('Minter', () => {
   it('quotes an open, eligible stage', async () => {
@@ -114,17 +147,151 @@ describe('Minter', () => {
     expect(r.txHash).toMatch(HASH);
   });
 
-  it('fails a send whose receipt never appears', async () => {
-    let t = now;
+  it('leaves a mint with no receipt pending, still watched, and still holding the wallet guard', async () => {
+    const c = clock(now, { park: true });
+    let sends = 0;
     const d = deps({
-      now: () => { const v = t; t += 60_000; return v; },
-      rpc: () => ({ ...deps().rpc('x'), getTransactionReceipt: async () => { throw new Error('not found'); } }),
+      now: c.now,
+      sleep: c.sleep,
+      rpc: () => ({
+        ...deps().rpc('x'),
+        sendRawTransaction: async () => { sends++; return '0xhash'; },
+        getTransactionReceipt: async () => { throw new Error('not found'); },
+      }),
     });
     const m = new Minter(() => KEY, () => ({}), d);
     const q = await m.quote({ locator: 'chump', quantity: 2 });
     const r = await m.send(q.id);
+    // three minutes of silence is a slow block, not a failed mint
+    expect(r.state).toBe('pending');
+    expect(r.error).toMatch(/still watching/);
+    expect(r.error).toContain(r.txHash!);
+    expect(sends).toBe(1);
+    // and because it is still pending, a second mint from the same wallet is refused rather than
+    // being signed at the next nonce
+    const again = await m.quote({ locator: 'chump', quantity: 1 });
+    const refused = await m.send(again.id);
+    expect(refused.state).toBe('failed');
+    expect(refused.error).toMatch(/still pending/);
+    expect(sends).toBe(1);
+  });
+
+  it('confirms a mint whose receipt only arrives after ten minutes', async () => {
+    const c = clock();
+    const d = deps({
+      now: c.now,
+      sleep: c.sleep,
+      rpc: () => ({
+        ...deps().rpc('x'),
+        getTransactionReceipt: async () => {
+          if (c.now() < now + 10 * 60_000) throw new Error('not found');
+          return { status: 'success', blockNumber: 1234n, logs: [] };
+        },
+      }),
+    });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    const pending = await m.send(q.id);
+    expect(pending.state).toBe('pending');
+    const done = await m.watching(q.id)!;
+    expect(done.state).toBe('confirmed');
+    expect(done.blockNumber).toBe(1234);
+    expect(done.error).toBeUndefined(); // the "still watching" note goes away with the receipt
+  });
+
+  it('fails a pending mint once the chain shows its nonce spent by another transaction', async () => {
+    const c = clock();
+    const d = deps({
+      now: c.now,
+      sleep: c.sleep,
+      rpc: () => ({
+        ...deps().rpc('x'),
+        getTransactionReceipt: async () => { throw new Error('not found'); },
+        getTransactionCount: async ({ blockTag }: any) => (blockTag === 'latest' ? 8 : 7),
+      }),
+    });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    expect((await m.send(q.id)).state).toBe('pending');
+    const done = await m.watching(q.id)!;
+    expect(done.state).toBe('failed');
+    expect(done.error).toMatch(/replaced or dropped/);
+    expect(done.error).toMatch(/nonce 7/);
+  });
+
+  it('stops watching after six hours, saying so', async () => {
+    const c = clock();
+    const d = deps({
+      now: c.now,
+      sleep: c.sleep,
+      rpc: () => ({
+        ...deps().rpc('x'),
+        getTransactionReceipt: async () => { throw new Error('not found'); },
+        getTransactionCount: async () => 7, // the nonce is still ours, so nothing is resolved early
+      }),
+    });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    await m.send(q.id);
+    const done = await m.watching(q.id)!;
+    expect(done.state).toBe('failed');
+    expect(done.error).toMatch(/stopped watching .* after 6 hours/);
+  });
+
+  it('resumes a restored pending mint and confirms it', async () => {
+    let polls = 0;
+    const d = deps({ rpc: () => ({ ...deps().rpc('x'), getTransactionReceipt: async () => { polls++; return { status: 'success', blockNumber: 5n, logs: [] }; } }) });
+    const m = new Minter(() => KEY, () => ({}), d);
+    await m.restore([restored()]);
+    expect(polls).toBeGreaterThan(0);
+    const job = m.jobs.find((j) => j.id === 'mrestored')!;
+    expect(job.state).toBe('confirmed');
+    expect(job.blockNumber).toBe(5);
+  });
+
+  it('a restored pending mint blocks a new mint from the same wallet', async () => {
+    const d = deps({
+      sleep: () => new Promise<void>(() => {}), // freeze the resumed watch on its first sleep
+      rpc: () => ({ ...deps().rpc('x'), getTransactionReceipt: async () => { throw new Error('not found'); } }),
+    });
+    const m = new Minter(() => KEY, () => ({}), d);
+    void m.restore([restored()]);
+    expect(m.jobs.map((j) => j.id)).toEqual(['mrestored']); // adopted synchronously
+    const q = await m.quote({ locator: 'chump', quantity: 1 });
+    const r = await m.send(q.id);
     expect(r.state).toBe('failed');
-    expect(r.error).toMatch(/no receipt/);
+    expect(r.error).toMatch(/still pending/);
+  });
+
+  it('restores the same job only once, and does not watch one without a hash or nonce', async () => {
+    const d = deps({ rpc: () => ({ ...deps().rpc('x'), getTransactionReceipt: async () => ({ status: 'success', blockNumber: 5n, logs: [] }) }) });
+    const m = new Minter(() => KEY, () => ({}), d);
+    await m.restore([restored(), restored()]);
+    await m.restore([restored()]);
+    expect(m.jobs.filter((j) => j.id === 'mrestored').length).toBe(1);
+    await m.restore([restored({ id: 'mnonce', nonce: undefined })]);
+    expect(m.jobs.find((j) => j.id === 'mnonce')!.state).toBe('pending'); // left alone, guard intact
+  });
+
+  it('leaves a restored mint pending when there is no RPC left to watch it with', async () => {
+    const m = new Minter(() => KEY, () => ({}), deps());
+    await m.restore([restored({ collection: { ...restored().collection, chain: 'zora' } })]);
+    const job = m.jobs.find((j) => j.id === 'mrestored')!;
+    expect(job.state).toBe('pending');
+    expect(job.error).toMatch(/no RPC to watch this mint/);
+  });
+
+  it('refuses an RPC that answers for another chain, and asks it only once per URL', async () => {
+    const mismatch = deps({ rpc: () => ({ ...deps().rpc('x'), getChainId: async () => 8453 }) });
+    const bad = await new Minter(() => KEY, () => ({}), mismatch).quote({ locator: 'chump', quantity: 1 });
+    expect(bad.state).toBe('failed');
+    expect(bad.error).toMatch(/answers for chain id 8453, expected 4663/);
+    let calls = 0;
+    const good = deps({ rpc: () => ({ ...deps().rpc('x'), getChainId: async () => { calls++; return 4663; } }) });
+    const m = new Minter(() => KEY, () => ({}), good);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    expect((await m.send(q.id)).state).toBe('confirmed');
+    expect(calls).toBe(1);
   });
 
   it('throws on a second send of the same job', async () => {
@@ -144,10 +311,20 @@ describe('Minter', () => {
     expect(stored.state).not.toBe('mutated-away');
   });
 
-  it('caps jobs at 100', async () => {
+  it('caps finished jobs at 100', async () => {
     const m = new Minter(() => KEY, () => ({}), deps());
-    for (let i = 0; i < 105; i++) await m.quote({ locator: 'chump', quantity: 1 });
+    for (let i = 0; i < 105; i++) await m.quote({ locator: 'chump', quantity: 3 }); // each fails
     expect(m.jobs.length).toBe(100);
+  });
+
+  it('never evicts a quote the user could still send, until the hard bound', async () => {
+    const c = clock();
+    const m = new Minter(() => KEY, () => ({}), deps({ now: c.now, sleep: c.sleep }));
+    for (let i = 0; i < 105; i++) await m.quote({ locator: 'chump', quantity: 1 }); // all ready
+    expect(m.jobs.length).toBe(105);
+    expect(m.jobs.every((j) => j.state === 'ready')).toBe(true);
+    for (let i = 0; i < 105; i++) await m.quote({ locator: 'chump', quantity: 1 });
+    expect(m.jobs.length).toBe(200); // the hard bound holds even so
   });
 
   it('fails a non-ERC721 drop kind as not supported', async () => {
@@ -308,7 +485,7 @@ describe('Minter', () => {
     const m = new Minter(() => KEY, () => ({}), deps());
     const first = await m.quote({ locator: 'chump', quantity: 1 });
     m.jobs.find((j) => j.id === first.id)!.state = 'pending';
-    for (let i = 0; i < 105; i++) await m.quote({ locator: 'chump', quantity: 1 });
+    for (let i = 0; i < 105; i++) await m.quote({ locator: 'chump', quantity: 3 }); // each fails
     expect(m.jobs.length).toBe(100);
     expect(m.jobs.find((j) => j.id === first.id)).toBeDefined();
   });
@@ -386,11 +563,11 @@ describe('Minter', () => {
   });
 
   it('reports a lost broadcast as maybe-sent, with the hash, never as nothing sent', async () => {
-    let t = now;
-    const states: { state: string; txHash?: string }[] = [];
+    const c = clock(now, { park: true });
+    const states: { state: string; txHash?: string; error?: string }[] = [];
     const d = deps({
-      now: () => t,
-      sleep: async () => { t += 60_000; },
+      now: c.now,
+      sleep: c.sleep,
       rpc: () => ({
         ...deps().rpc('x'),
         sendRawTransaction: async () => { throw new Error('socket hang up'); },
@@ -398,16 +575,17 @@ describe('Minter', () => {
       }),
     });
     const m = new Minter(() => KEY, () => ({}), d);
-    m.on('job', (j) => states.push({ state: j.state, txHash: j.txHash }));
+    m.on('job', (j) => states.push({ state: j.state, txHash: j.txHash, error: j.error }));
     const q = await m.quote({ locator: 'chump', quantity: 2 });
     const r = await m.send(q.id);
-    expect(r.state).toBe('failed');
-    expect(r.error).toMatch(/check .* on the explorer/);
-    expect(r.error).not.toContain('nothing was sent');
     expect(r.txHash).toMatch(HASH);
-    // it was in flight (so the per-wallet guard held) between the lost answer and the timeout
-    expect(states.map((x) => x.state)).toEqual(['ready', 'sending', 'pending', 'failed']);
-    expect(states[2].txHash).toBe(r.txHash);
+    expect(states[2]).toMatchObject({ state: 'pending', txHash: r.txHash });
+    expect(states[2].error).toMatch(/broadcast result is unknown/);
+    expect(states[2].error).not.toContain('nothing was sent');
+    // the lost answer never becomes a failure on its own: the transaction may be in the mempool, so
+    // the job stays pending (guard held) until the chain says otherwise
+    expect(r.state).toBe('pending');
+    expect(states.map((x) => x.state)).toEqual(['ready', 'sending', 'pending', 'pending']);
   });
 
   it('records the simulated gas and a fresh gas estimate on the pending job', async () => {

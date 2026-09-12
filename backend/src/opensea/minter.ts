@@ -17,8 +17,19 @@ const GAS_CAP = 600_000n;
  */
 const DRIFT_FLOOR = 100_000_000n; // 0.1 gwei
 const QUOTE_TTL_MS = 2 * 60_000;
+/** How long the receipt is polled fast (250 ms → 2 s) while send() is still awaited. */
 const RECEIPT_TIMEOUT_MS = 3 * 60_000;
+/** After that, the same transaction is polled on this interval in the background. */
+const SLOW_POLL_MS = 15_000;
+/** A pending transaction is watched this long before we stop looking at all. */
+const WATCH_MAX_MS = 6 * 60 * 60_000;
 const MAX_JOBS = 100;
+/**
+ * `evict()` refuses to drop a quote the user may still send (a `ready` job inside its TTL), so the
+ * log can grow past MAX_JOBS when someone quotes a hundred times in two minutes. This is the bound
+ * that holds anyway, so the log cannot grow without limit.
+ */
+const HARD_MAX_JOBS = 2 * MAX_JOBS;
 const MAX_QUANTITY = 99;
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const GWEI = 1_000_000_000n;
@@ -30,9 +41,10 @@ export const toWei = (unit: number): bigint => {
 
 /** The slice of a viem PublicClient the minter uses; tests pass fakes. */
 export interface Rpc {
+  getChainId(): Promise<number>;
   getBalance(a: { address: `0x${string}` }): Promise<bigint>;
   estimateFeesPerGas(): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }>;
-  getTransactionCount(a: { address: `0x${string}`; blockTag: 'pending' }): Promise<number>;
+  getTransactionCount(a: { address: `0x${string}`; blockTag: 'pending' | 'latest' }): Promise<number>;
   estimateGas(a: { account: `0x${string}`; to: `0x${string}`; data: `0x${string}`; value: bigint }): Promise<bigint>;
   sendRawTransaction(a: { serializedTransaction: `0x${string}` }): Promise<`0x${string}`>;
   getTransactionReceipt(a: { hash: `0x${string}` }): Promise<{ status: string; blockNumber: bigint; logs: { address: string; topics: readonly string[] }[] }>;
@@ -113,13 +125,21 @@ const blockOf = (b: unknown): number => (typeof b === 'bigint' && b >= 0n && b <
  * Quote → send → receipt for one SeaDrop mint with the configured wallet. Every state change is
  * emitted as 'job'. Errors never throw out of quote()/send(): the job ends 'failed' with a sentence.
  *
- * Jobs live in memory only. A restart loses the log, including a `pending` job — the *transaction*
- * is not lost (it is already broadcast and will confirm or not on its own), but we stop watching
- * it, so after a restart a pending mint has to be checked on the explorer by its hash.
+ * A broadcast transaction is only ever resolved by the chain: either its receipt arrives, or the
+ * nonce is seen spent by something else. No wall-clock deadline turns a `pending` mint into a
+ * `failed` one, because `failed` releases the one-mint-per-wallet guard, and a second mint signed
+ * while the first is still in the mempool would either replace it or mint twice.
+ *
+ * Jobs live in memory, and the hub persists the ones with a transaction hash; `restore()` takes
+ * them back after a restart and resumes the watch.
  */
 export class Minter extends EventEmitter {
   readonly jobs: MintJob[] = [];
   private sessions = new Map<string, OpenSeaSession>();
+  /** RPC URL → the chain id it answered with, checked once per URL */
+  private verifiedRpc = new Map<string, number>();
+  /** job id → the receipt watch still running for it */
+  private watches = new Map<string, Promise<MintJob>>();
   constructor(
     private walletKey: () => string | undefined,
     private rpcOverrides: () => Record<string, string>,
@@ -175,6 +195,20 @@ export class Minter extends EventEmitter {
     return undefined;
   }
 
+  /**
+   * An RPC that answers for a different chain than the one we are minting on would have us read the
+   * wrong balance, the wrong nonce, and — worse — no receipt for a transaction that did confirm,
+   * which is indistinguishable from an unmined mint. `eth_chainId` is static, so it is asked once
+   * per URL and only cached when it agreed. Returns the sentence to fail with, or undefined.
+   */
+  private async verifyChain(client: Rpc, url: string, info: ChainInfo): Promise<string | undefined> {
+    if (this.verifiedRpc.get(url) === info.chainId) return undefined;
+    const got = await client.getChainId();
+    if (got !== info.chainId) return `the RPC for ${info.id} answers for chain id ${got}, expected ${info.chainId}; check ⚙ → Trading → OpenSea RPCs`;
+    this.verifiedRpc.set(url, info.chainId);
+    return undefined;
+  }
+
   async quote(req: { locator: string; chain?: string; quantity: number }): Promise<MintJob> {
     const asked = Number(req.quantity);
     // Clamped rather than trusted: quantity reaches the calldata and the price, and `Infinity`/`NaN`
@@ -225,6 +259,8 @@ export class Minter extends EventEmitter {
       const totalWei = unitWei * BigInt(quantity);
       job.price = { unitWei: unitWei.toString(), totalWei: totalWei.toString(), symbol: open.e.priceSymbol ?? info.symbol, usd: open.e.priceUsd !== undefined ? open.e.priceUsd * quantity : undefined };
       const client = this.deps.rpc(rpc);
+      const wrongChain = await this.verifyChain(client, rpc, info);
+      if (wrongChain) return this.fail(job, wrongChain);
       const [balance, fees] = await Promise.all([client.getBalance({ address: acct.address }), client.estimateFeesPerGas()]);
       const tooDear = this.overCeiling(info, fees, BigInt(GAS_LIMIT));
       if (tooDear) return this.fail(job, tooDear);
@@ -281,6 +317,8 @@ export class Minter extends EventEmitter {
       const stage = job.stage;
       if (stage && (Date.parse(stage.startTime ?? '') > now || (stage.endTime && now >= Date.parse(stage.endTime)))) return this.fail(job, 'the stage closed');
       const client = this.deps.rpc(rpc);
+      const wrongChain = await this.verifyChain(client, rpc, info);
+      if (wrongChain) return this.fail(job, wrongChain);
       const action = await this.deps.mintAction(this.session(acct), col, job.quantity);
       const tx = validateMintTransaction(action, col, acct.address, job.stage!, job.quantity, chainId);
       if (BigInt(tx.value) !== BigInt(job.price!.totalWei)) {
@@ -344,34 +382,12 @@ export class Minter extends EventEmitter {
       this.put(job, {
         state: 'pending',
         txHash: hash,
+        nonce,
+        watchUntil: this.deps.now() + WATCH_MAX_MS,
         gas: { limit: Number(gas), maxFeeWei: fees.maxFeePerGas.toString(), maxPriorityWei: fees.maxPriorityFeePerGas.toString(), estimateWei: estimate.toString() },
         error: broadcastUnknown ? `the broadcast result is unknown: the transaction may have been sent; check ${hash} on the explorer before minting again` : undefined,
       });
-      const started = this.deps.now();
-      let delay = 250;
-      while (this.deps.now() - started < RECEIPT_TIMEOUT_MS) {
-        let receipt: Awaited<ReturnType<Rpc['getTransactionReceipt']>> | undefined;
-        try {
-          receipt = await client.getTransactionReceipt({ hash });
-        } catch {
-          /* not mined yet */
-        }
-        // Parsing happens outside the try on purpose: inside it, a malformed log threw, looked like
-        // "not mined yet", and the job ended as 'no receipt' for a mint that had already confirmed.
-        if (receipt) {
-          if (receipt.status !== 'success') return this.fail(job, `the mint transaction reverted (${hash})`);
-          // A receipt settles a lost broadcast response, so the note about it goes away with it.
-          return this.put(job, { state: 'confirmed', blockNumber: blockOf(receipt.blockNumber), tokenIds: mintedTokenIds(receipt.logs, col.address, acct.address), error: undefined });
-        }
-        await this.deps.sleep(delay);
-        delay = Math.min(2000, delay * 2);
-      }
-      return this.fail(
-        job,
-        broadcastUnknown
-          ? `the broadcast result is unknown: the transaction may have been sent; check ${hash} on the explorer before minting again`
-          : `no receipt after three minutes; check ${hash} on the explorer`,
-      );
+      return await this.watch(job, client, col.address, acct.address);
     } catch (e: unknown) {
       console.warn('[osmint]', job.id, redact(rawMessage(e)));
       const where = broadcastAttempted ? ` (the transaction may have been sent: check the explorer for ${hash})` : ' (nothing was sent)';
@@ -379,10 +395,146 @@ export class Minter extends EventEmitter {
     }
   }
 
-  /** Keep the log at MAX_JOBS, but never drop a job we are still watching a transaction for. */
+  /**
+   * Re-adopt the jobs a previous run left behind (`hub.restoredMintJobs`). A `pending` job is a
+   * transaction the chain has not answered for yet: resuming its watch is what makes it resolve at
+   * all, and keeping it in `jobs` is what keeps the per-wallet guard engaged, so a restart cannot be
+   * used (or stumbled into) as a way to sign a second mint while the first is still in the mempool.
+   *
+   * The returned promise settles when the resumed watches have had their fast phase; nothing needs
+   * to await it (the slow phase continues in the background either way).
+   */
+  async restore(jobs: MintJob[] | undefined): Promise<void> {
+    const resumed: Promise<unknown>[] = [];
+    for (const j of jobs ?? []) {
+      if (!j || typeof j.id !== 'string' || !j.id || this.jobs.some((x) => x.id === j.id)) continue;
+      this.jobs.push(j);
+      if (j.state === 'pending' && j.txHash && typeof j.nonce === 'number') resumed.push(this.resume(j));
+    }
+    this.evict();
+    await Promise.all(resumed);
+  }
+
+  /** The watch still running for a job, if any — production fires and forgets, tests await it. */
+  watching(jobId: string): Promise<MintJob> | undefined {
+    return this.watches.get(jobId);
+  }
+
+  /** Pick the watch back up for a restored pending job. Never throws; leaves the job pending. */
+  private async resume(job: MintJob): Promise<void> {
+    try {
+      const url = rpcFor(job.collection.chain, this.rpcOverrides());
+      if (!url) {
+        this.put(job, { error: 'no RPC to watch this mint' });
+        return;
+      }
+      const client = this.deps.rpc(url);
+      const info = chainInfo(job.collection.chain);
+      if (info) {
+        // A wrong-chain RPC would report "no receipt" forever; say so instead of watching nothing.
+        const wrongChain = await this.verifyChain(client, url, info).catch(() => undefined);
+        if (wrongChain) {
+          this.put(job, { error: wrongChain });
+          return;
+        }
+      }
+      await this.watch(job, client, job.collection.address, job.wallet);
+    } catch (e: unknown) {
+      console.warn('[osmint]', job.id, redact(rawMessage(e)));
+    }
+  }
+
+  /**
+   * Watch a broadcast transaction to its end. Polls fast (250 ms → 2 s) for RECEIPT_TIMEOUT_MS,
+   * which is what `send()` awaits; if the receipt has not arrived by then the job *stays pending* —
+   * three minutes of silence is a slow block, not a failed mint — and the slow watch continues in
+   * the background. Resolves with the job as it stands when the fast phase ends.
+   */
+  private async watch(job: MintJob, client: Rpc, nft: string, wallet: string): Promise<MintJob> {
+    const hash = job.txHash as `0x${string}`;
+    const fastUntil = this.deps.now() + RECEIPT_TIMEOUT_MS;
+    let delay = 250;
+    while (this.deps.now() < fastUntil) {
+      const settled = await this.pollReceipt(job, client, hash, nft, wallet);
+      if (settled) return settled;
+      await this.deps.sleep(delay);
+      delay = Math.min(2000, delay * 2);
+    }
+    // Said once, so the UI can show "still watching" without a new line every fifteen seconds.
+    this.put(job, { error: `no receipt yet after 3 minutes; still watching ${hash}` });
+    const slow = this.slowWatch(job, client, hash, nft, wallet).finally(() => {
+      if (this.watches.get(job.id) === slow) this.watches.delete(job.id);
+    });
+    this.watches.set(job.id, slow);
+    return job;
+  }
+
+  /**
+   * One receipt poll. Returns the settled job (confirmed or reverted), or undefined while the
+   * transaction is not mined yet.
+   */
+  private async pollReceipt(job: MintJob, client: Rpc, hash: `0x${string}`, nft: string, wallet: string): Promise<MintJob | undefined> {
+    let receipt: Awaited<ReturnType<Rpc['getTransactionReceipt']>> | undefined;
+    try {
+      receipt = await client.getTransactionReceipt({ hash });
+    } catch {
+      /* not mined yet */
+    }
+    // Parsing happens outside the try on purpose: inside it, a malformed log threw, looked like
+    // "not mined yet", and the job ended as 'no receipt' for a mint that had already confirmed.
+    if (!receipt) return undefined;
+    if (receipt.status !== 'success') return this.fail(job, `the mint transaction reverted (${hash})`);
+    // A receipt settles a lost broadcast response, so the note about it goes away with it.
+    return this.put(job, { state: 'confirmed', blockNumber: blockOf(receipt.blockNumber), tokenIds: mintedTokenIds(receipt.logs, nft, wallet), error: undefined });
+  }
+
+  /**
+   * The patient half of the watch: every SLOW_POLL_MS until `watchUntil`. Two ways out other than a
+   * receipt: the nonce is seen spent on chain while our hash still has none (some other transaction
+   * took it, so this one can never mint), or the six hours run out.
+   */
+  private async slowWatch(job: MintJob, client: Rpc, hash: `0x${string}`, nft: string, wallet: string): Promise<MintJob> {
+    const until = job.watchUntil ?? this.deps.now() + WATCH_MAX_MS;
+    let nonceSpent = 0;
+    while (this.deps.now() < until) {
+      try {
+        await this.deps.sleep(SLOW_POLL_MS);
+        const settled = await this.pollReceipt(job, client, hash, nft, wallet);
+        if (settled) return settled;
+        if (typeof job.nonce === 'number') {
+          let count: number | undefined;
+          try {
+            count = await client.getTransactionCount({ address: wallet as `0x${string}`, blockTag: 'latest' });
+          } catch {
+            /* the nonce check is a bonus; silence here just means we keep waiting */
+          }
+          if (count !== undefined && count > job.nonce) nonceSpent++;
+          // The nonce is spent and our hash has no receipt: another transaction (a replacement, a
+          // wallet used elsewhere) used it, so ours can never be mined. Two further polls before
+          // believing it — the receipt can lag the nonce, and the two answers can come from
+          // different nodes behind one URL.
+          if (nonceSpent >= 3) return this.fail(job, `the transaction was replaced or dropped (nonce ${job.nonce} was used by another transaction); nothing minted`);
+        }
+      } catch (e: unknown) {
+        console.warn('[osmint]', job.id, redact(rawMessage(e)));
+      }
+    }
+    return this.fail(job, `stopped watching ${hash} after 6 hours; check the explorer`);
+  }
+
+  /**
+   * Keep the log small. A job whose transaction is in flight is never dropped, and neither is a
+   * quote the user could still send (a `ready` job inside its TTL) — so finished jobs go first,
+   * then stale quotes, and only past HARD_MAX_JOBS does a live quote become expendable.
+   */
   private evict(): void {
+    const expendable = (j: MintJob): boolean => j.state !== 'sending' && j.state !== 'pending';
+    const finished = (j: MintJob): boolean => j.state === 'failed' || j.state === 'confirmed';
     while (this.jobs.length > MAX_JOBS) {
-      const i = this.jobs.findIndex((j) => j.state !== 'sending' && j.state !== 'pending');
+      const stale = this.deps.now() - QUOTE_TTL_MS;
+      let i = this.jobs.findIndex(finished);
+      if (i < 0) i = this.jobs.findIndex((j) => expendable(j) && j.ts <= stale);
+      if (i < 0 && this.jobs.length > HARD_MAX_JOBS) i = this.jobs.findIndex(expendable);
       if (i < 0) return;
       this.jobs.splice(i, 1);
     }

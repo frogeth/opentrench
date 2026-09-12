@@ -368,6 +368,10 @@ export interface MintJob {
   gas?: { limit: number; maxFeeWei: string; maxPriorityWei: string; estimateWei: string };
   balanceWei?: string;
   txHash?: string;
+  /** the nonce the transaction was signed with; a later nonce on chain means ours was replaced or dropped */
+  nonce?: number;
+  /** wall-clock deadline for watching a pending transaction, kept across restarts */
+  watchUntil?: number;
   blockNumber?: number;
   tokenIds?: string[];
   error?: string;

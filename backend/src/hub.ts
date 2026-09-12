@@ -67,6 +67,8 @@ export interface Snapshot {
   messages: FeedMessage[];
   tokens: TokenInfo[];
   tokenChats: Record<string, string[]>;
+  /** mints with a transaction hash, so a restart can pick the watch back up */
+  mintJobs?: MintJob[];
 }
 
 export interface HubOptions {
@@ -98,6 +100,11 @@ export class MessageHub extends EventEmitter {
     rankings: () => ({}),
     mintJobs: () => [],
   };
+  /**
+   * Mint jobs read back from the state file, for the Minter to re-adopt after a restart
+   * (`minter.restore`). Empty until `load()` has run.
+   */
+  restoredMintJobs: MintJob[] = [];
   private buffer: FeedMessage[] = [];
   private tokens = new Map<string, TokenInfo>();
   /** address -> chat ids that have posted it */
@@ -507,6 +514,13 @@ export class MessageHub extends EventEmitter {
       messages: this.buffer,
       tokens: [...this.tokens.values()],
       tokenChats: Object.fromEntries([...this.tokenChats].map(([a, s]) => [a, [...s]])),
+      // Only jobs with a transaction hash are worth keeping: a `pending` one is still watched after
+      // a restart, and a finished one is the user's record of where their money went. A `ready` or
+      // `quoting` job is a quote that expires in two minutes, so it dies with the process.
+      mintJobs: this.nftState
+        .mintJobs()
+        .filter((j) => j.txHash && (j.state === 'pending' || j.state === 'confirmed' || j.state === 'failed'))
+        .slice(-50),
     };
   }
 
@@ -518,6 +532,7 @@ export class MessageHub extends EventEmitter {
     for (const m of [...this.buffer].sort((a, b) => a.ts - b.ts)) if (m.mention) this.trackMention(m, false);
     this.tokens = new Map((snap.tokens ?? []).map((t) => [t.address, t]));
     this.tokenChats = new Map(Object.entries(snap.tokenChats ?? {}).map(([a, ids]) => [a, new Set(ids)]));
+    this.restoredMintJobs = (snap.mintJobs ?? []).filter((j) => j && typeof j.id === 'string' && !!j.txHash);
     for (const t of this.tokens.values()) {
       if (!this.tokenChats.has(t.address)) this.tokenChats.set(t.address, new Set());
       if (t.lastCallTs === undefined) t.lastCallTs = t.firstSeenTs;
