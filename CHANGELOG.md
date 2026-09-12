@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.5.1 — 2026-09-12
+
 - Fix: the reaction picker vanished as soon as you moved the mouse over it. Two CSS rules fought over its position and left the box 14px tall with the emoji drawn outside it, so crossing any gap between emoji counted as leaving. The picker now sizes to its contents below the ☺+ button and closes on an outside click or Escape, like the other menus, instead of on mouse-leave.
 
 ## v0.5.0 — 2026-09-12
