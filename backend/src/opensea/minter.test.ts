@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Minter, toWei, type MinterDeps } from './minter.js';
+import { Minter, redact, toWei, type MinterDeps } from './minter.js';
 import type { DropCollection } from './drops.js';
 
 const KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'; // hardhat #1, no funds anywhere
 const WALLET = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
 const col: DropCollection = { slug: 'chump', name: 'Chump', address: '0x9d2a003322874163cbb18f7f538a1aaea49b75d1', chain: 'robinhood', networkId: 4663, drop: { kind: 'Erc721SeaDropV1', address: '0x9d2a003322874163cbb18f7f538a1aaea49b75d1', stages: [{ kind: 'Erc721SeaDropV1Stage', type: 'PUBLIC_SALE', index: 0, startTime: '2026-09-12T20:00:48.000Z', endTime: '2026-09-14T20:00:48.000Z', maxPerWallet: 3 }] } };
 const now = Date.parse('2026-09-13T00:00:00Z');
+const HASH = /^0x[0-9a-f]{64}$/;
 
 function deps(over: Partial<MinterDeps> = {}): MinterDeps {
   return {
@@ -16,6 +17,7 @@ function deps(over: Partial<MinterDeps> = {}): MinterDeps {
       getBalance: async () => 10n ** 18n,
       estimateFeesPerGas: async () => ({ maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000n }),
       getTransactionCount: async () => 7,
+      estimateGas: async () => 150_000n,
       sendRawTransaction: async () => '0xhash',
       getTransactionReceipt: async () => ({ status: 'success', blockNumber: 99n, logs: [{ address: col.address, topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', '0x' + '0'.repeat(64), '0x' + WALLET.slice(2).padStart(64, '0'), '0x' + (462).toString(16).padStart(64, '0')] }] }),
     }),
@@ -59,7 +61,7 @@ describe('Minter', () => {
     const q = await m.quote({ locator: 'chump', quantity: 2 });
     const done = await m.send(q.id);
     expect(done.state).toBe('confirmed');
-    expect(done.txHash).toBe('0xhash');
+    expect(done.txHash).toMatch(HASH); // keccak of the signed envelope, not the RPC's answer
     expect(done.blockNumber).toBe(99);
     expect(done.tokenIds).toEqual(['462']);
     expect(sent[0]).toMatch(/^0x02/); // EIP-1559 envelope
@@ -109,7 +111,7 @@ describe('Minter', () => {
     const r = await m.send(q.id);
     expect(r.state).toBe('failed');
     expect(r.error).toMatch(/reverted/);
-    expect(r.txHash).toBe('0xhash');
+    expect(r.txHash).toMatch(HASH);
   });
 
   it('fails a send whose receipt never appears', async () => {
@@ -328,5 +330,149 @@ describe('Minter', () => {
       spyWarn.mockRestore();
       spyErr.mockRestore();
     }
+  });
+
+  it('fails a send when only the drop kind changed since the quote', async () => {
+    let n = 0;
+    const sent: string[] = [];
+    const d = deps({
+      resolve: async () => (++n === 1 ? col : { ...col, drop: { ...col.drop!, kind: 'Erc1155SeaDropV2' } }),
+      rpc: () => ({ ...deps().rpc('x'), sendRawTransaction: async ({ serializedTransaction }: any) => { sent.push(serializedTransaction); return '0xhash'; } }),
+    });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    const r = await m.send(q.id);
+    expect(r.state).toBe('failed');
+    expect(r.error).toMatch(/collection changed/);
+    expect(sent).toEqual([]);
+  });
+
+  it('treats sub-gwei fee noise as no drift, but refuses a real jump in the priority fee', async () => {
+    const run = async (quotedTip: bigint, sentTip: bigint) => {
+      let n = 0;
+      const fees = () => ({ maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: ++n === 1 ? quotedTip : sentTip });
+      const d = deps({ rpc: () => ({ ...deps().rpc('x'), estimateFeesPerGas: async () => fees() }) });
+      const m = new Minter(() => KEY, () => ({}), d);
+      const q = await m.quote({ locator: 'chump', quantity: 2 });
+      expect(q.state).toBe('ready');
+      return m.send(q.id);
+    };
+    expect((await run(0n, 1n)).state).toBe('confirmed');
+    expect((await run(0n, 100_000_000n)).state).toBe('confirmed'); // at the 0.1 gwei floor
+    const jumped = await run(0n, 1_000_000_000n);
+    expect(jumped.state).toBe('failed');
+    expect(jumped.error).toMatch(/moved too far/);
+    expect(jumped.error).toMatch(/priority fee/);
+  });
+
+  it('keeps watching the precomputed hash when the broadcast answer is lost', async () => {
+    let polls = 0;
+    const d = deps({
+      rpc: () => ({
+        ...deps().rpc('x'),
+        sendRawTransaction: async () => { throw new Error('socket hang up at https://rpc.example/v2/SECRETKEY'); },
+        getTransactionReceipt: async () => {
+          if (++polls < 2) throw new Error('not found');
+          return { status: 'success', blockNumber: 99n, logs: [] };
+        },
+      }),
+    });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    const r = await m.send(q.id);
+    expect(r.state).toBe('confirmed');
+    expect(r.txHash).toMatch(HASH);
+    expect(r.error).toBeUndefined();
+  });
+
+  it('reports a lost broadcast as maybe-sent, with the hash, never as nothing sent', async () => {
+    let t = now;
+    const states: { state: string; txHash?: string }[] = [];
+    const d = deps({
+      now: () => t,
+      sleep: async () => { t += 60_000; },
+      rpc: () => ({
+        ...deps().rpc('x'),
+        sendRawTransaction: async () => { throw new Error('socket hang up'); },
+        getTransactionReceipt: async () => { throw new Error('not found'); },
+      }),
+    });
+    const m = new Minter(() => KEY, () => ({}), d);
+    m.on('job', (j) => states.push({ state: j.state, txHash: j.txHash }));
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    const r = await m.send(q.id);
+    expect(r.state).toBe('failed');
+    expect(r.error).toMatch(/check .* on the explorer/);
+    expect(r.error).not.toContain('nothing was sent');
+    expect(r.txHash).toMatch(HASH);
+    // it was in flight (so the per-wallet guard held) between the lost answer and the timeout
+    expect(states.map((x) => x.state)).toEqual(['ready', 'sending', 'pending', 'failed']);
+    expect(states[2].txHash).toBe(r.txHash);
+  });
+
+  it('records the simulated gas and a fresh gas estimate on the pending job', async () => {
+    const m = new Minter(() => KEY, () => ({}), deps());
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    const quoted = { limit: q.gas!.limit, estimateWei: q.gas!.estimateWei };
+    expect(quoted).toEqual({ limit: 300_000, estimateWei: '600000000000000' });
+    const r = await m.send(q.id);
+    expect(r.state).toBe('confirmed');
+    expect(r.gas!.limit).toBe(187_500); // 150,000 simulated + 25%
+    expect(r.gas!.estimateWei).toBe((2_000_000_000n * 187_500n).toString());
+    expect(r.gas!.estimateWei).not.toBe(quoted.estimateWei);
+  });
+
+  it('refuses a quote whose gas cost would exceed the chain cost ceiling', async () => {
+    const d = deps({ rpc: () => ({ ...deps().rpc('x'), estimateFeesPerGas: async () => ({ maxFeePerGas: 10_000_000_000n, maxPriorityFeePerGas: 1_000_000n }) }) });
+    const r = await new Minter(() => KEY, () => ({}), d).quote({ locator: 'chump', quantity: 1 });
+    expect(r.state).toBe('failed');
+    expect(r.error).toMatch(/the gas for this mint would exceed the robinhood ceiling/);
+  });
+
+  it('refuses a priority fee above the max fee', async () => {
+    const d = deps({ rpc: () => ({ ...deps().rpc('x'), estimateFeesPerGas: async () => ({ maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 3_000_000_000n }) }) });
+    const r = await new Minter(() => KEY, () => ({}), d).quote({ locator: 'chump', quantity: 1 });
+    expect(r.state).toBe('failed');
+    expect(r.error).toMatch(/priority fee above the max fee/);
+  });
+
+  it('still quotes at a congested but affordable gas price', async () => {
+    const d = deps({ rpc: () => ({ ...deps().rpc('x'), estimateFeesPerGas: async () => ({ maxFeePerGas: 6_000_000_000n, maxPriorityFeePerGas: 2_000_000_000n }) }) });
+    const r = await new Minter(() => KEY, () => ({}), d).quote({ locator: 'chump', quantity: 1 });
+    expect(r.state).toBe('ready');
+  });
+
+  it('refuses a mint that reverts in simulation, without broadcasting', async () => {
+    const sent: string[] = [];
+    const d = deps({
+      rpc: () => ({
+        ...deps().rpc('x'),
+        estimateGas: async () => { throw new Error('execution reverted: MintQuantityExceedsMaxSupply (https://rpc.example/v2/SECRETKEY)'); },
+        sendRawTransaction: async ({ serializedTransaction }: any) => { sent.push(serializedTransaction); return '0xhash'; },
+      }),
+    });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    const r = await m.send(q.id);
+    expect(r.state).toBe('failed');
+    expect(r.error).toMatch(/reverts in simulation/);
+    expect(r.error).toMatch(/nothing was sent/);
+    expect(r.error).not.toContain('SECRETKEY');
+    expect(r.txHash).toBeUndefined();
+    expect(sent).toEqual([]);
+  });
+
+  it('caps the signed gas at 600,000 however high the simulation came back', async () => {
+    const d = deps({ rpc: () => ({ ...deps().rpc('x'), estimateGas: async () => 700_000n }) });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    const r = await m.send(q.id);
+    expect(r.state).toBe('confirmed');
+    expect(r.gas!.limit).toBe(600_000);
+  });
+
+  it('strips a scheme-less host and a websocket URL from a logged message', () => {
+    expect(redact('boom at wss://rpc.example/v2/SECRETKEY now')).not.toContain('SECRETKEY');
+    expect(redact('boom at rpc.example.com:8545/v2/SECRETKEY now')).toBe('boom at <rpc> now');
   });
 });

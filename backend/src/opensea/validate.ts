@@ -49,9 +49,12 @@ export function validateMintTransaction(
   if (!/^0x[0-9a-fA-F]*$/.test(tx.data) || tx.data.length < 10) throw new UnsafeMintAction('calldata is shorter than a selector');
   if (!/^\d+$/.test(tx.value)) throw new UnsafeMintAction('invalid value');
 
-  if (col.drop?.kind !== 'Erc721SeaDropV1') return tx;
+  // A validator must never pass a transaction through unchecked: a kind we cannot decode calldata
+  // for is refused, not waved past. (The minter pins the quoted kind too, so a second lookup that
+  // answers with a different drop kind cannot reach this point in the first place.)
+  if (col.drop?.kind !== 'Erc721SeaDropV1') throw new UnsafeMintAction(`unsupported drop kind ${col.drop?.kind ?? 'none'}`);
 
-  if (!SEADROP_TARGETS.has(tx.to.toLowerCase())) throw new UnsafeMintAction('unexpected mint target');
+  if (!SEADROP_TARGETS.has(tx.to.toLowerCase())) throw new UnsafeMintAction(`unexpected mint target ${tx.to}`);
 
   const data = tx.data.toLowerCase();
   if ((data.length - 10) % 64 !== 0) throw new UnsafeMintAction('calldata is shorter than a whole number of words');

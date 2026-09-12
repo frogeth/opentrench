@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { createPublicClient, http, parseEther, type TransactionSerializableEIP1559 } from 'viem';
+import { createPublicClient, http, keccak256, parseEther, type TransactionSerializableEIP1559 } from 'viem';
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import { chainInfo, rpcFor, type ChainInfo } from './chains.js';
 import { OpenSeaError } from './gql.js';
@@ -9,6 +9,13 @@ import { UnsafeMintAction, validateMintTransaction } from './validate.js';
 import type { MintJob } from '../types.js';
 
 const GAS_LIMIT = 300_000;
+/** The most gas a mint may be signed for, however high the simulation came back. */
+const GAS_CAP = 600_000n;
+/**
+ * The drift bound is "twice the quoted fee", which is meaningless when the quote was ~0: on an L2 a
+ * quoted tip of 1 wei would refuse a send at 2 wei. Below this floor, fee movement is noise.
+ */
+const DRIFT_FLOOR = 100_000_000n; // 0.1 gwei
 const QUOTE_TTL_MS = 2 * 60_000;
 const RECEIPT_TIMEOUT_MS = 3 * 60_000;
 const MAX_JOBS = 100;
@@ -26,6 +33,7 @@ export interface Rpc {
   getBalance(a: { address: `0x${string}` }): Promise<bigint>;
   estimateFeesPerGas(): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }>;
   getTransactionCount(a: { address: `0x${string}`; blockTag: 'pending' }): Promise<number>;
+  estimateGas(a: { account: `0x${string}`; to: `0x${string}`; data: `0x${string}`; value: bigint }): Promise<bigint>;
   sendRawTransaction(a: { serializedTransaction: `0x${string}` }): Promise<`0x${string}`>;
   getTransactionReceipt(a: { hash: `0x${string}` }): Promise<{ status: string; blockNumber: bigint; logs: { address: string; topics: readonly string[] }[] }>;
 }
@@ -54,7 +62,13 @@ const gwei = (wei: bigint): string => new Intl.NumberFormat('en-US', { maximumSi
  * An RPC URL can carry an API key in its path or query, and viem puts the URL it called into
  * transport error messages. Those messages are logged, so strip every URL before logging one.
  */
-export const redact = (s: string): string => s.replace(/https?:\/\/[^\s]+/gi, '<rpc>');
+export const redact = (s: string): string =>
+  s
+    .replace(/(?:https?|wss?):\/\/[^\s]+/gi, '<rpc>')
+    // Best effort for a URL quoted without its scheme ("rpc.example.com/v2/KEY timed out"): a
+    // host-looking token followed by a path. Anything with a key in it has a path, so this is the
+    // half worth catching.
+    .replace(/[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?::\d+)?\/\S*/gi, '<rpc>');
 
 /**
  * Only our own error types carry text that is safe to show: OpenSea's own sentences and the
@@ -145,12 +159,19 @@ export class Minter extends EventEmitter {
    * A fee the RPC quoted that is outside what this chain could plausibly need is treated as the RPC
    * lying or being broken, not as a fee to pay. Returns the sentence to fail with, or undefined.
    */
-  private overCeiling(info: ChainInfo, fees: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }): string | undefined {
+  private overCeiling(info: ChainInfo, fees: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }, gas: bigint): string | undefined {
     const tail = `; check ⚙ → Trading → OpenSea RPCs`;
     const capFee = BigInt(info.maxFeeGwei) * GWEI;
     const capTip = BigInt(info.maxTipGwei) * GWEI;
     if (fees.maxFeePerGas > capFee) return `the RPC quoted a gas price above the ${info.id} ceiling (${gwei(fees.maxFeePerGas)} gwei > ${info.maxFeeGwei} gwei)${tail}`;
     if (fees.maxPriorityFeePerGas > capTip) return `the RPC quoted a priority fee above the ${info.id} ceiling (${gwei(fees.maxPriorityFeePerGas)} gwei > ${info.maxTipGwei} gwei)${tail}`;
+    // A tip above the max fee is not a fee we could pay, it is a malformed answer; viem would also
+    // reject it at signing time, with a message that quotes the RPC URL.
+    if (fees.maxPriorityFeePerGas > fees.maxFeePerGas) return `the RPC returned a priority fee above the max fee (${gwei(fees.maxPriorityFeePerGas)} gwei > ${gwei(fees.maxFeePerGas)} gwei)${tail}`;
+    // The gwei ceilings leave room for congestion, so the money bound is the absolute worst case of
+    // this one transaction: max fee × gas limit.
+    const cost = fees.maxFeePerGas * gas;
+    if (cost > info.maxGasCostWei) return `the gas for this mint would exceed the ${info.id} ceiling (${fmt(cost)} > ${fmt(info.maxGasCostWei)} ${info.symbol})${tail}`;
     return undefined;
   }
 
@@ -205,7 +226,7 @@ export class Minter extends EventEmitter {
       job.price = { unitWei: unitWei.toString(), totalWei: totalWei.toString(), symbol: open.e.priceSymbol ?? info.symbol, usd: open.e.priceUsd !== undefined ? open.e.priceUsd * quantity : undefined };
       const client = this.deps.rpc(rpc);
       const [balance, fees] = await Promise.all([client.getBalance({ address: acct.address }), client.estimateFeesPerGas()]);
-      const tooDear = this.overCeiling(info, fees);
+      const tooDear = this.overCeiling(info, fees, BigInt(GAS_LIMIT));
       if (tooDear) return this.fail(job, tooDear);
       const estimate = fees.maxFeePerGas * BigInt(GAS_LIMIT);
       job.gas = { limit: GAS_LIMIT, maxFeeWei: fees.maxFeePerGas.toString(), maxPriorityWei: fees.maxPriorityFeePerGas.toString(), estimateWei: estimate.toString() };
@@ -234,11 +255,21 @@ export class Minter extends EventEmitter {
     // run in one tick) so two rapid send() calls on the same job cannot both pass the state check.
     this.put(job, { state: 'sending' });
     let hash: `0x${string}` | undefined;
+    let broadcastAttempted = false;
     try {
       const col = await this.deps.resolve(job.collection.slug, job.collection.chain);
       // Everything the user approved in the quote is pinned here. OpenSea answers the same slug, so
-      // a different contract, chain or drop contract coming back means the quote is not this mint.
-      if (col.address !== job.collection.address || col.chain !== job.collection.chain || col.networkId !== job.collection.networkId || col.drop?.address !== job.collection.address) {
+      // a different contract, chain, drop contract or drop *kind* coming back means the quote is not
+      // this mint. The kind is part of the pin because it selects how the calldata is read: a second
+      // lookup that answers with another kind would otherwise change what validation even means.
+      if (
+        col.address !== job.collection.address ||
+        col.chain !== job.collection.chain ||
+        col.networkId !== job.collection.networkId ||
+        col.drop?.address !== job.collection.address ||
+        col.drop?.kind !== job.collection.dropKind ||
+        job.collection.dropKind !== 'Erc721SeaDropV1'
+      ) {
         return this.fail(job, 'the collection changed since the quote');
       }
       const info = chainInfo(col.chain);
@@ -256,22 +287,66 @@ export class Minter extends EventEmitter {
         return this.fail(job, `OpenSea's transaction value (${fmt(BigInt(tx.value))}) does not match the quoted price (${fmt(BigInt(job.price!.totalWei))}); quote again`);
       }
       const [nonce, fees] = await Promise.all([client.getTransactionCount({ address: acct.address, blockTag: 'pending' }), client.estimateFeesPerGas()]);
-      const tooDear = this.overCeiling(info, fees);
+      // Simulate before signing. A mint that reverts (sold out, stage closed, a stale allowlist
+      // proof) costs the whole gas limit if it is broadcast, and OpenSea hands us calldata without
+      // promising it still applies; a successful simulation also gives us a real gas number instead
+      // of the flat limit. 25% headroom for state that moves between here and inclusion.
+      let gas = BigInt(GAS_LIMIT);
+      try {
+        const est = await client.estimateGas({ account: acct.address, to: tx.to as `0x${string}`, data: tx.data as `0x${string}`, value: BigInt(tx.value) });
+        gas = (est * 125n) / 100n;
+        if (gas < est) gas = est;
+        if (gas > GAS_CAP) gas = GAS_CAP;
+      } catch (e: unknown) {
+        console.warn('[osmint]', job.id, redact(rawMessage(e)));
+        const why = safeMessage(e)?.slice(0, 120);
+        return this.fail(job, `OpenSea's transaction reverts in simulation${why ? ` (${why})` : ''}; nothing was sent`);
+      }
+      const tooDear = this.overCeiling(info, fees, gas);
       if (tooDear) return this.fail(job, tooDear);
       // The user approved the quote's gas, not whatever the RPC says now. Under the ceiling there is
-      // still room for a quoted 1 gwei to become 4 gwei between quote and send, so bound the drift.
-      if (fees.maxFeePerGas > 2n * BigInt(job.gas!.maxFeeWei) || fees.maxPriorityFeePerGas > 2n * BigInt(job.gas!.maxPriorityWei)) {
-        return this.fail(job, `gas price moved too far since the quote (${gwei(fees.maxFeePerGas)} gwei vs ${gwei(BigInt(job.gas!.maxFeeWei))} gwei quoted); quote again`);
+      // still room for a quoted 1 gwei to become 4 gwei between quote and send, so bound the drift —
+      // at twice the quote, or the noise floor when the quote was at or near zero.
+      const bound = (quoted: bigint): bigint => (2n * quoted > DRIFT_FLOOR ? 2n * quoted : DRIFT_FLOOR);
+      const quotedTip = BigInt(job.gas!.maxPriorityWei);
+      const quotedMax = BigInt(job.gas!.maxFeeWei);
+      if (fees.maxPriorityFeePerGas > bound(quotedTip)) {
+        return this.fail(job, `gas moved too far since the quote: the priority fee is ${gwei(fees.maxPriorityFeePerGas)} gwei, ${gwei(quotedTip)} gwei quoted; quote again`);
+      }
+      if (fees.maxFeePerGas > bound(quotedMax)) {
+        return this.fail(job, `gas moved too far since the quote: the max fee is ${gwei(fees.maxFeePerGas)} gwei, ${gwei(quotedMax)} gwei quoted; quote again`);
       }
       const balance = await client.getBalance({ address: acct.address });
-      const estimate = fees.maxFeePerGas * BigInt(GAS_LIMIT);
+      const estimate = fees.maxFeePerGas * gas;
       if (balance < BigInt(tx.value) + estimate) return this.fail(job, `needs ${fmt(BigInt(tx.value) + estimate)} ${job.price!.symbol} (price + gas), wallet has ${fmt(balance)}`);
-      const unsigned: TransactionSerializableEIP1559 = { type: 'eip1559', chainId, nonce, gas: BigInt(GAS_LIMIT), maxFeePerGas: fees.maxFeePerGas, maxPriorityFeePerGas: fees.maxPriorityFeePerGas, to: tx.to as `0x${string}`, value: BigInt(tx.value), data: tx.data as `0x${string}` };
+      const unsigned: TransactionSerializableEIP1559 = { type: 'eip1559', chainId, nonce, gas, maxFeePerGas: fees.maxFeePerGas, maxPriorityFeePerGas: fees.maxPriorityFeePerGas, to: tx.to as `0x${string}`, value: BigInt(tx.value), data: tx.data as `0x${string}` };
       const signed = await acct.signTransaction(unsigned);
-      hash = await client.sendRawTransaction({ serializedTransaction: signed });
-      // Safe to record the signed fees over the quoted ones: both checks above passed, so they are
-      // inside the chain ceiling and within 2x of what the user approved.
-      this.put(job, { state: 'pending', txHash: hash, gas: { ...job.gas!, maxFeeWei: fees.maxFeePerGas.toString(), maxPriorityWei: fees.maxPriorityFeePerGas.toString() } });
+      // The hash of a signed EIP-1559 transaction is the keccak of the envelope, so we know it before
+      // the RPC does. Computing it here means a lost or failed broadcast response never leaves us
+      // without the one string the user needs to check whether their money moved.
+      hash = keccak256(signed);
+      let broadcastUnknown = false;
+      broadcastAttempted = true;
+      try {
+        const relayed = await client.sendRawTransaction({ serializedTransaction: signed });
+        if (relayed && relayed.toLowerCase() !== hash.toLowerCase()) {
+          console.warn(`[osmint] ${job.id} the RPC answered with a different hash than the signed transaction's; watching ${hash}`);
+        }
+      } catch (e: unknown) {
+        // "The request failed" is not "the transaction was not sent": the node may have accepted and
+        // propagated it and lost only the reply. Treat it as in flight — the job stays pending (so
+        // the per-wallet guard still blocks a second mint) and the receipt loop decides.
+        console.warn('[osmint]', job.id, redact(rawMessage(e)));
+        broadcastUnknown = true;
+      }
+      // Safe to record the signed fees and gas over the quoted ones: the checks above passed, so they
+      // are inside the chain ceilings and within the drift bound of what the user approved.
+      this.put(job, {
+        state: 'pending',
+        txHash: hash,
+        gas: { limit: Number(gas), maxFeeWei: fees.maxFeePerGas.toString(), maxPriorityWei: fees.maxPriorityFeePerGas.toString(), estimateWei: estimate.toString() },
+        error: broadcastUnknown ? `the broadcast result is unknown: the transaction may have been sent; check ${hash} on the explorer before minting again` : undefined,
+      });
       const started = this.deps.now();
       let delay = 250;
       while (this.deps.now() - started < RECEIPT_TIMEOUT_MS) {
@@ -285,15 +360,21 @@ export class Minter extends EventEmitter {
         // "not mined yet", and the job ended as 'no receipt' for a mint that had already confirmed.
         if (receipt) {
           if (receipt.status !== 'success') return this.fail(job, `the mint transaction reverted (${hash})`);
-          return this.put(job, { state: 'confirmed', blockNumber: blockOf(receipt.blockNumber), tokenIds: mintedTokenIds(receipt.logs, col.address, acct.address) });
+          // A receipt settles a lost broadcast response, so the note about it goes away with it.
+          return this.put(job, { state: 'confirmed', blockNumber: blockOf(receipt.blockNumber), tokenIds: mintedTokenIds(receipt.logs, col.address, acct.address), error: undefined });
         }
         await this.deps.sleep(delay);
         delay = Math.min(2000, delay * 2);
       }
-      return this.fail(job, `no receipt after three minutes; check ${hash} on the explorer`);
+      return this.fail(
+        job,
+        broadcastUnknown
+          ? `the broadcast result is unknown: the transaction may have been sent; check ${hash} on the explorer before minting again`
+          : `no receipt after three minutes; check ${hash} on the explorer`,
+      );
     } catch (e: unknown) {
       console.warn('[osmint]', job.id, redact(rawMessage(e)));
-      const where = hash ? ` (the transaction may have been sent: check the explorer for ${hash})` : ' (nothing was sent)';
+      const where = broadcastAttempted ? ` (the transaction may have been sent: check the explorer for ${hash})` : ' (nothing was sent)';
       return this.fail(job, safeMessage(e) ?? `the RPC or OpenSea call failed; check ⚙ → Trading → OpenSea RPCs${where}`);
     }
   }

@@ -8,14 +8,17 @@
  * at an RPC they trust instead of the bundled public default. `maxFeeGwei`/`maxTipGwei` are the
  * per-chain sanity ceiling on what such an RPC is allowed to quote: not a fee strategy, but far
  * above any healthy gas price on that chain, so that a hostile or broken RPC cannot talk a funded
- * wallet into signing an absurd fee.
+ * wallet into signing an absurd fee. They are deliberately loose enough to survive a real
+ * congestion spike (a refused mint during a busy drop is a cost of its own); what actually bounds
+ * the loss is `maxGasCostWei`, the most a single mint may spend on gas — `maxFeePerGas × gas limit`
+ * is checked against it, so a chain ceiling raised for congestion cannot also raise the worst case.
  */
-export interface ChainInfo { id: string; name: string; chainId: number; symbol: string; defaultRpc: string; explorerTx: string; maxFeeGwei: number; maxTipGwei: number }
+export interface ChainInfo { id: string; name: string; chainId: number; symbol: string; defaultRpc: string; explorerTx: string; maxFeeGwei: number; maxTipGwei: number; maxGasCostWei: bigint }
 export const CHAINS: Record<string, ChainInfo> = {
-  ethereum: { id: 'ethereum', name: 'Ethereum', chainId: 1, symbol: 'ETH', defaultRpc: 'https://ethereum-rpc.publicnode.com', explorerTx: 'https://etherscan.io/tx/', maxFeeGwei: 300, maxTipGwei: 50 },
-  base: { id: 'base', name: 'Base', chainId: 8453, symbol: 'ETH', defaultRpc: 'https://mainnet.base.org', explorerTx: 'https://basescan.org/tx/', maxFeeGwei: 5, maxTipGwei: 1 },
-  robinhood: { id: 'robinhood', name: 'Robinhood Chain', chainId: 4663, symbol: 'ETH', defaultRpc: 'https://rpc.mainnet.chain.robinhood.com', explorerTx: 'https://robinhoodchain.blockscout.com/tx/', maxFeeGwei: 5, maxTipGwei: 1 },
-  ink: { id: 'ink', name: 'Ink', chainId: 57073, symbol: 'ETH', defaultRpc: 'https://rpc-qnd.inkonchain.com', explorerTx: 'https://explorer.inkonchain.com/tx/', maxFeeGwei: 5, maxTipGwei: 1 },
+  ethereum: { id: 'ethereum', name: 'Ethereum', chainId: 1, symbol: 'ETH', defaultRpc: 'https://ethereum-rpc.publicnode.com', explorerTx: 'https://etherscan.io/tx/', maxFeeGwei: 500, maxTipGwei: 100, maxGasCostWei: 20_000_000_000_000_000n },
+  base: { id: 'base', name: 'Base', chainId: 8453, symbol: 'ETH', defaultRpc: 'https://mainnet.base.org', explorerTx: 'https://basescan.org/tx/', maxFeeGwei: 50, maxTipGwei: 10, maxGasCostWei: 2_000_000_000_000_000n },
+  robinhood: { id: 'robinhood', name: 'Robinhood Chain', chainId: 4663, symbol: 'ETH', defaultRpc: 'https://rpc.mainnet.chain.robinhood.com', explorerTx: 'https://robinhoodchain.blockscout.com/tx/', maxFeeGwei: 25, maxTipGwei: 5, maxGasCostWei: 2_000_000_000_000_000n },
+  ink: { id: 'ink', name: 'Ink', chainId: 57073, symbol: 'ETH', defaultRpc: 'https://rpc-qnd.inkonchain.com', explorerTx: 'https://explorer.inkonchain.com/tx/', maxFeeGwei: 25, maxTipGwei: 5, maxGasCostWei: 2_000_000_000_000_000n },
 };
 
 /** Own-property lookup: `chain` comes from external input, and a plain `obj[chain]` can be tricked into resolving `constructor`/`__proto__`/etc off the prototype chain instead of returning undefined. */

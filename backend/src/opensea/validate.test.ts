@@ -33,9 +33,12 @@ describe('validateMintTransaction', () => {
     expect(() => validateMintTransaction(ok(calldata('161ac21f', { minter: '0x2222222222222222222222222222222222222222' })), col, WALLET, pub, 1, 4663)).toThrow(/minter/);
     expect(() => validateMintTransaction(ok(calldata('161ac21f', { qty: 2 })), col, WALLET, pub, 1, 4663)).toThrow(/quantity/);
   });
-  it('only decodes calldata for ERC-721 SeaDrop v1', () => {
+  it('refuses a drop kind whose calldata it cannot decode, rather than passing it through', () => {
+    const pub = { type: 'PUBLIC_SALE', index: 0 };
     const c1155 = { ...col, drop: { ...col.drop, kind: 'Erc1155SeaDropV2' } };
-    expect(() => validateMintTransaction(ok('0xdeadbeef00'), c1155, WALLET, { type: 'PUBLIC_SALE', index: 0 }, 1, 4663)).not.toThrow();
+    expect(() => validateMintTransaction(ok('0xdeadbeef00'), c1155, WALLET, pub, 1, 4663)).toThrow(/unsupported drop kind Erc1155SeaDropV2/);
+    const dropless = { ...col, drop: undefined };
+    expect(() => validateMintTransaction(ok(calldata('161ac21f')), dropless, WALLET, pub, 1, 4663)).toThrow(/unsupported drop kind none/);
   });
 
   it('rejects a non-decimal value', () => {
@@ -87,7 +90,7 @@ describe('validateMintTransaction', () => {
 
   it('rejects a SeaDrop mint pointed at an unknown target contract', () => {
     const tx = { ...ok(calldata('161ac21f')).tx!, to: '0x1234567890123456789012345678901234567890' };
-    expect(() => validateMintTransaction({ ...ok(calldata('161ac21f')), tx }, col, WALLET, { type: 'PUBLIC_SALE', index: 0 }, 1, 4663)).toThrow(/unexpected mint target/);
+    expect(() => validateMintTransaction({ ...ok(calldata('161ac21f')), tx }, col, WALLET, { type: 'PUBLIC_SALE', index: 0 }, 1, 4663)).toThrow(/unexpected mint target 0x1234567890123456789012345678901234567890/);
   });
 
   it('accepts the canonical SeaDrop target in checksummed case', () => {
