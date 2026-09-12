@@ -843,8 +843,7 @@ button.reaction { color: var(--text); font: inherit; line-height: inherit; }
 .reaction.mine .reaction-n { color: var(--accent); }
 .react-add-wrap { position: relative; display: inline-flex; }
 .react-add { font-size: 11px; line-height: 1; }
-.react-picker { bottom: auto; top: 20px; }
-.react-picker { position: absolute; bottom: 24px; left: 0; z-index: 30; display: grid; grid-template-columns: repeat(8, 28px); gap: 2px; padding: 6px; background: #232b3b; border: 1px solid #3d4a66; border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6); }
+.react-picker { position: absolute; top: calc(100% + 4px); bottom: auto; left: 0; z-index: 30; display: grid; grid-template-columns: repeat(8, 28px); gap: 2px; padding: 6px; background: #232b3b; border: 1px solid #3d4a66; border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6); }
 .react-picker button { width: 28px; height: 28px; background: none; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; padding: 0; }
 .react-picker button:hover { background: rgba(255, 255, 255, 0.1); }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Reaction, FeedMessage, LinkPreview, MediaItem, TokenInfo } from '../types';
 import { fmtTime, isFavorite } from '../format';
 import { Avatar } from './Avatar';
@@ -99,6 +99,25 @@ export function MessageRow({
   mine?: Set<string>;
 }) {
   const [pick, setPick] = useState(false);
+  // The picker used to close on mouseleave, and its box was over-constrained to 14px tall, so the
+  // emoji overflowed it and any pointer movement across a gap counted as leaving. Now it closes on
+  // an outside click or Escape, like the other menus.
+  const pickRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!pick) return;
+    const onDoc = (e: MouseEvent) => {
+      if (pickRef.current && !pickRef.current.contains(e.target as Node)) setPick(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPick(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [pick]);
   const fav = !m.isBot && isFavorite(favorites, m.author);
   return (
     <div
@@ -124,12 +143,12 @@ export function MessageRow({
             </button>
           )}
           {onReact && (
-            <span className="react-add-wrap">
+            <span className="react-add-wrap" ref={pickRef}>
               <button className="row-reply react-add" title="add reaction" aria-label="add reaction" onClick={() => setPick((p) => !p)}>
                 ☺+
               </button>
               {pick && (
-                <div className="react-picker" onMouseLeave={() => setPick(false)}>
+                <div className="react-picker" role="menu">
                   {QUICK_EMOJI.map((e) => (
                     <button
                       key={e}

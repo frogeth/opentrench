@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Fix: the reaction picker vanished as soon as you moved the mouse over it. Two CSS rules fought over its position and left the box 14px tall with the emoji drawn outside it, so crossing any gap between emoji counted as leaving. The picker now sizes to its contents below the ☺+ button and closes on an outside click or Escape, like the other menus, instead of on mouse-leave.
+
 ## v0.5.0 — 2026-09-12
 
 - Two more chart providers: **Birdeye** and **GMGN** (⚙ → Feed → Chart provider). Both embed a live chart under contracts like BasedBot does, and both cover Solana, Ethereum, Base, BNB, Arbitrum and Robinhood Chain — so Pons launches on Robinhood Chain get an inline chart for the first time (Dexscreener has no data there). Chains a provider doesn't cover fall back to the Dexscreener chart. A cold chart can take up to half a minute to draw.
