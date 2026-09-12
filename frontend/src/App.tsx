@@ -1033,7 +1033,7 @@ export default function App() {
     <BuyContext.Provider value={onBuy}>
     <LinkInterceptContext.Provider value={interceptBotLink}>
     <CaMenuContext.Provider value={openCaMenu}>
-    <div className="app">
+    <div className={`app${dragCol ? ' col-drag' : ''}`}>
       <header className="top">
         <div className="brand">opentrench</div>
         <Tickers />

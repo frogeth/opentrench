@@ -101,6 +101,8 @@ b { font-weight: 600; }
 .col-drop { position: absolute; inset: 6px; pointer-events: none; z-index: 6; border-radius: 6px; background: rgba(65, 200, 146, 0.12); border: 1px dashed rgba(65, 200, 146, 0.55); }
 .col-drop-before { right: 50%; }
 .col-drop-stack { top: 50%; }
+/* an iframe swallows drag events, so a website column (or a chart embed) would never become a drop target */
+.app.col-drag iframe { pointer-events: none; }
 .col-grip { color: var(--muted); cursor: grab; display: inline-flex; padding: 4px; margin-left: -6px; border-radius: 4px; }
 .col-grip:hover { background: rgba(255, 255, 255, 0.1); }
 .col-grip:active { cursor: grabbing; }
