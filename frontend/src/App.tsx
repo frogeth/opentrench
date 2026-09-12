@@ -14,6 +14,7 @@ import { PROVIDER_LABEL, BASEDBOT_REFERRAL, BuyContext } from './components/BuyR
 import { CaMenuContext, LinkInterceptContext } from './components/RichText';
 import { J7View } from './components/J7View';
 import { MintFeed, mintPasses } from './components/MintFeed';
+import { NftRankings } from './components/NftRankings';
 import { PingsPanel } from './components/PingsPanel';
 import { BridgeNotice } from './components/BridgeNotice';
 import { Lightbox } from './components/Lightbox';
@@ -38,7 +39,7 @@ import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type Teleg
 import { beep, type ChartProvider } from './format';
 import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, tokenPasses } from './filters';
-import type { FeedMessage, Source, Status, TokenInfo } from './types';
+import type { FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
 
 function Pill({ label, state }: { label: string; state: string }) {
   return (
@@ -934,6 +935,34 @@ export default function App() {
           ) : (
             <div className="empty">No address yet — edit the column (✎) and paste one.</div>
           )}
+        </Column>
+      );
+    }
+    if (col.type === 'nftvol') {
+      const ranking = col.ranking ?? 'trending';
+      const timeframe = col.timeframe ?? '1h';
+      const key = `${ranking === 'top' ? 'TOP' : 'TRENDING'}:${timeframe === '1d' ? 'ONE_DAY' : 'ONE_HOUR'}` as RankingKey;
+      const hit = rankings[key];
+      const setTf = (tf: '1h' | '1d') => saveColumns(updateColumn(col.id, (c) => ({ ...c, timeframe: tf })));
+      return (
+        <Column
+          key={col.id}
+          title={col.title}
+          subtitle={`${ranking === 'top' ? 'Top' : 'Trending'} · ${timeframe.toUpperCase()}`}
+          kind="nftvol"
+          className="col-nftvol"
+          extra={
+            <span className="seg seg-sm">
+              {(['1h', '1d'] as const).map((tf) => (
+                <button key={tf} className={timeframe === tf ? 'active' : ''} onClick={() => setTf(tf)}>
+                  {tf.toUpperCase()}
+                </button>
+              ))}
+            </span>
+          }
+          {...actions}
+        >
+          <NftRankings rows={hit?.rows} at={hit?.at} now={now} timeframe={timeframe} onMint={undefined} />
         </Column>
       );
     }

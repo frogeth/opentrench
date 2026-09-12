@@ -1090,3 +1090,23 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .mint-links a, .mint-copy { display: inline-flex; align-items: center; gap: 3px; color: var(--text); text-decoration: none; background: var(--chrome); border: 1px solid var(--line-strong); border-radius: 6px; padding: 3px 7px; cursor: pointer; }
 .mint-links a:hover, .mint-copy:hover { border-color: var(--accent); color: var(--accent); }
 .mint-go { margin-left: auto; background: var(--accent); color: #04140d; border: 0; border-radius: 6px; padding: 4px 12px; font-weight: 600; cursor: pointer; }
+
+/* ---------- OpenSea volume column ---------- */
+.nftv { font-size: 12px; }
+.nftv-head, .nftv-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 72px 88px 44px 56px; gap: 6px; align-items: center; padding: 6px 10px; }
+.nftv-head { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--line); z-index: 1; }
+.nftv-row { border-bottom: 1px solid var(--line); color: var(--text); text-decoration: none; }
+.nftv-row:hover { background: var(--hover); }
+.nftv-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.nftv-name img, .nftv-noimg { width: 26px; height: 26px; border-radius: 6px; object-fit: cover; flex: none; background: var(--panel-2); }
+.nftv-name b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nftv-verified { color: var(--blue); font-size: 11px; }
+.nftv-chain { font-size: 9px; color: var(--dim); text-transform: uppercase; }
+.nftv-mint { display: inline-flex; align-items: center; gap: 3px; background: var(--accent); color: #04140d; border: 0; border-radius: 5px; padding: 1px 6px; font-size: 10px; font-weight: 600; cursor: pointer; }
+.nftv-minting { font-size: 9px; color: var(--accent); border: 1px solid rgba(65, 200, 146, 0.5); border-radius: 4px; padding: 0 4px; }
+.nftv-num { display: flex; flex-direction: column; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nftv-num small { font-size: 10px; }
+.nftv-num.up { color: var(--good); } .nftv-num.down { color: var(--err); }
+.nftv-foot { padding: 8px 10px; font-size: 10px; text-align: center; }
+.nftv-foot.err { color: var(--err); }
+.seg-sm button { padding: 2px 7px; font-size: 10px; }
