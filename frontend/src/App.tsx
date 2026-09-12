@@ -305,9 +305,17 @@ export default function App() {
   const [mintPrefill, setMintPrefill] = useState<{ locator: string; chain?: string } | null>(null);
   const [osAddr, setOsAddr] = useState<string | undefined>();
   useEffect(() => {
+    // keyed on the whole cfg object (not just hasWallet) so a key *replacement* — same hasWallet,
+    // new address — still triggers a refetch; cfg gets a new reference whenever Settings closes or reloads
     void api.opensea().then((o) => setOsAddr(o.walletAddress)).catch(() => {});
-  }, [cfg?.opensea?.hasWallet]);
+  }, [cfg]);
+  const lastMintFrom = useRef<{ locator: string; chain?: string; at: number } | null>(null);
   const mintFrom = (target: { locator: string; chain?: string }) => {
+    // ignore a second Mint-pill click on the same target within 500ms (double-click debounce)
+    const at = Date.now();
+    const last = lastMintFrom.current;
+    if (last && last.locator === target.locator && last.chain === target.chain && at - last.at < 500) return;
+    lastMintFrom.current = { ...target, at };
     if (!flatColumns.some((c) => c.type === 'osmint')) saveColumns([...columns, { id: 'osmint', type: 'osmint', title: 'OpenSea Mint', chats: [], width: 400 }]);
     setMintPrefill(target);
     setCoveFlash('osmint');
@@ -1298,6 +1306,10 @@ export default function App() {
           callers={knownCallers}
           onClose={() => setEditing(null)}
           onSave={(c) => {
+            if (c.type === 'osmint' && flatColumns.some((x) => x.type === 'osmint' && x.id !== c.id)) {
+              alert('There is already an OpenSea Mint column.');
+              return;
+            }
             const pid = editing.parentId;
             if (pid) saveColumns(columns.map((x) => (x.id === pid ? { ...x, split: { ...(x.split ?? {}), bottom: c } } : x)));
             else saveColumns(flatColumns.some((x) => x.id === c.id) ? updateColumn(c.id, () => c) : [...columns, c]);

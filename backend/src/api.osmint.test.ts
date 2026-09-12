@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express from 'express';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createApi } from './api.js';
+import { createApi, __resetOsmintQuoteThrottle } from './api.js';
 import { ConfigStore } from './config.js';
 import { MessageHub } from './hub.js';
 import type { MintJob } from './types.js';
@@ -70,6 +70,9 @@ describe('osmint + opensea settings API', () => {
   let base: string;
 
   beforeEach(async () => {
+    // the quote throttle is module-scoped (shared across every test in this process); reset it so
+    // one test's quote call never makes the next test's first quote look like a rapid repeat
+    __resetOsmintQuoteThrottle();
     file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tf-osmint-')), 'config.json');
     cfg = new ConfigStore(file);
     svc = makeStubServices(cfg);
@@ -186,6 +189,23 @@ describe('osmint + opensea settings API', () => {
     expect(job.state).toBe('ready');
     expect(job.quantity).toBe(2);
     expect(svc.minter.jobs.map((j) => j.id)).toContain(job.id);
+  });
+
+  it('rejects a second quote within 1.5 seconds as "slow down"', async () => {
+    const first = await fetch(`${base}/osmint/quote`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ locator: 'chump-nft-1', quantity: 1 }),
+    });
+    expect(first.status).toBe(200);
+    const second = await fetch(`${base}/osmint/quote`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ locator: 'chump-nft-2', quantity: 1 }),
+    });
+    expect(second.status).toBe(500);
+    const body = await second.json();
+    expect(body.error).toMatch(/slow down/);
   });
 
   it('rejects a send with a malformed job id', async () => {

@@ -265,5 +265,13 @@ export class ConfigStore {
   private save(): void {
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     fs.writeFileSync(this.file, JSON.stringify(this.cfg, null, 2), { mode: 0o600 });
+    try {
+      // writeFileSync's mode only applies when the file is created; an existing file (e.g. one left
+      // world-readable by an older version) keeps its old permissions unless we chmod it explicitly.
+      // Windows has no real POSIX mode bits and can throw here — that's fine, nothing to tighten.
+      fs.chmodSync(this.file, 0o600);
+    } catch {
+      /* best-effort */
+    }
   }
 }

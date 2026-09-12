@@ -1131,6 +1131,6 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .osj-err { margin-top: 6px; color: var(--err); font-size: 12px; }
 .osj-mint { background: var(--accent) !important; color: #04140d !important; border-color: transparent !important; font-weight: 600; }
 .osj-confirm { background: var(--warn) !important; color: #1a1200 !important; border-color: transparent !important; font-weight: 600; }
-.osm-composer .composer-row { display: flex; gap: 6px; align-items: center; }
+.osm-composer .composer-row { align-items: center; }
 .osm-composer input { flex: 1; min-width: 0; }
 .osm-qty { flex: 0 0 56px !important; }

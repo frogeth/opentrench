@@ -481,13 +481,25 @@ function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
 /** The OpenSea Mint column's signing wallet: a plain-text key on this machine, so keep it dedicated and small. */
 function OpenSeaSection({ onChange }: { onChange: () => void }) {
   const [os, setOs] = useState<MaskedConfig['opensea'] | null>(null);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
   const [key, setKey] = useState('');
   const [rpc, setRpc] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState(false);
   const { busy, err, run } = useAsync();
-  const load = () => api.opensea().then((o) => { setOs(o); setRpc(o.rpc); }).catch(() => {});
+  const load = () =>
+    api
+      .opensea()
+      .then((o) => { setOs(o); setRpc(o.rpc); setLoadErr(null); })
+      .catch((e: any) => setLoadErr(e?.message ?? String(e)));
   useEffect(() => { void load(); }, []);
-  if (!os) return null;
+  if (!os) {
+    return (
+      <section>
+        <h2>OpenSea mint wallet</h2>
+        {loadErr ? <div className="err">Could not load the mint wallet settings: {loadErr}</div> : <div className="hint">Loading…</div>}
+      </section>
+    );
+  }
   const copyAddress = async () => {
     if (!os.walletAddress) return;
     if (await copyText(os.walletAddress)) {
@@ -504,14 +516,14 @@ function OpenSeaSection({ onChange }: { onChange: () => void }) {
       {os.hasWallet && os.walletAddress && (
         <div className="row-inline">
           <span className="muted">Saved wallet</span>
-          <button className="mini" onClick={() => void copyAddress()} title={os.walletAddress}>
+          <button className="osm-wallet-chip" onClick={() => void copyAddress()} title={os.walletAddress}>
             {copied ? 'copied' : os.walletAddress}
           </button>
         </div>
       )}
       <div className="row-inline">
-        <input type="password" placeholder={os.hasWallet ? 'replace with a new private key (0x…)' : 'private key (0x…)'} value={key} onChange={(e) => setKey(e.target.value)} autoComplete="off" />
-        <button disabled={busy || !key} onClick={() => run(async () => { setOs(await api.setOpenSeaWallet(key.trim())); setKey(''); onChange(); })}>
+        <input type="password" placeholder={os.hasWallet ? 'replace with a new private key (0x…)' : 'private key (0x…)'} value={key} onChange={(e) => setKey(e.target.value)} autoComplete="new-password" />
+        <button disabled={busy || !key} onClick={() => void run(async () => { setOs(await api.setOpenSeaWallet(key.trim())); setKey(''); onChange(); })}>
           Save
         </button>
         {os.hasWallet && (
@@ -534,7 +546,7 @@ function OpenSeaSection({ onChange }: { onChange: () => void }) {
         <div className="row-inline" key={c.id}>
           <span className="muted" style={{ width: 120, fontSize: 12 }}>{c.name}</span>
           <input placeholder={c.defaultRpc} value={rpc[c.id] ?? ''} onChange={(e) => setRpc((r) => ({ ...r, [c.id]: e.target.value }))} spellCheck={false} />
-          <button disabled={busy} onClick={() => run(async () => { const o = await api.setOpenSeaRpc(c.id, rpc[c.id] ?? ''); setOs(o); setRpc(o.rpc); })}>
+          <button disabled={busy} onClick={() => void run(async () => { const o = await api.setOpenSeaRpc(c.id, rpc[c.id] ?? ''); setOs(o); setRpc(o.rpc); onChange(); })}>
             Save
           </button>
         </div>

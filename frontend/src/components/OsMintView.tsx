@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import type { MintJob } from '../types';
 import { api } from '../api';
 import { copyText } from '../format';
@@ -26,7 +26,11 @@ function JobCard({ j, now, onSend, sending }: { j: MintJob; now: number; onSend:
   useEffect(() => setConfirming(false), [j.state, j.id]);
   const head = j.state === 'quoting' ? '… Quoting' : j.state === 'ready' ? '◎ Ready to mint' : j.state === 'sending' ? '⏳ Sending' : j.state === 'pending' ? '🔵 Pending' : j.state === 'confirmed' ? '✓ Mint confirmed' : '✗ Mint failed';
   const tx = j.txHash && EXPLORER[j.collection.chain] ? `${EXPLORER[j.collection.chain]}${j.txHash}` : undefined;
-  const clickMint = () => {
+  const expired = j.state === 'ready' && now - j.ts > 120_000;
+  const clickMint = (e: MouseEvent) => {
+    // the confirm step must be a real pointer click (detail > 0); a synthetic/keyboard-dispatched
+    // click (e.g. a stray Enter bubbling to a focused button) has detail === 0 and is ignored here
+    if (confirming && e.detail === 0) return;
     if (!confirming) {
       setConfirming(true);
       window.clearTimeout(confirmTimer.current);
@@ -49,6 +53,7 @@ function JobCard({ j, now, onSend, sending }: { j: MintJob; now: number; onSend:
       </div>
       {j.price && (
         <div className="osj-lines">
+          <span>Pays from</span><b>{short(j.wallet)}</b>
           <span>Quantity</span><b>{j.quantity}</b>
           <span>Price</span><b>{eth(j.price.totalWei, sym)}{j.price.usd !== undefined ? <small className="muted"> ≈ ${j.price.usd.toFixed(2)}</small> : null}</b>
           {j.gas && <><span>Gas (max)</span><b>{eth(j.gas.estimateWei, sym)}</b></>}
@@ -59,11 +64,13 @@ function JobCard({ j, now, onSend, sending }: { j: MintJob; now: number; onSend:
       {j.state === 'confirmed' && <div className="osj-ok">{j.tokenIds?.length ? `#${j.tokenIds.join(', #')}` : 'minted'}{j.blockNumber ? ` · block ${j.blockNumber}` : ''}</div>}
       {j.state === 'failed' && j.error && <div className="osj-err">{j.error}</div>}
       <div className="bkeys"><div className="bkey-row">
-        {j.state === 'ready' && (
+        {j.state === 'ready' && (expired ? (
+          <span className="muted">Quote expired — quote again</span>
+        ) : (
           <button className={`bkey ${confirming ? 'osj-confirm' : 'osj-mint'}`} disabled={sending} onClick={clickMint}>
-            {confirming ? `Confirm: send ${eth(j.price?.totalWei, sym)}?` : `Mint ${j.quantity} for ${eth(j.price?.totalWei, sym)}`}
+            {confirming ? `Confirm: send ${eth(j.price?.totalWei, sym)} from ${short(j.wallet)}?` : `Mint ${j.quantity} for ${eth(j.price?.totalWei, sym)}`}
           </button>
-        )}
+        ))}
         {tx && <a className="bkey bkey-url" href={tx} target="_blank" rel="noreferrer">tx <Icon name="explorer" size={10} /></a>}
         {j.collection.slug && <a className="bkey bkey-url" href={`https://opensea.io/collection/${j.collection.slug}`} target="_blank" rel="noreferrer">OpenSea <Icon name="explorer" size={10} /></a>}
       </div></div>
@@ -81,6 +88,8 @@ export function OsMintView({ jobs, now, wallet, prefill, onPrefilled }: { jobs: 
   const [toast, setToast] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const body = useRef<HTMLDivElement>(null);
+  const nearBottom = useRef(true);
+  const lastPrefill = useRef<typeof prefill>(null);
   const toastTimer = useRef<number | undefined>(undefined);
   const copyTimer = useRef<number | undefined>(undefined);
   useEffect(
@@ -115,16 +124,23 @@ export function OsMintView({ jobs, now, wallet, prefill, onPrefilled }: { jobs: 
     }
   };
   useEffect(() => {
-    if (!prefill) return;
+    // guard by identity so a re-mount (or an unrelated re-render) never re-fires the same prefill twice
+    if (!prefill || lastPrefill.current === prefill) return;
+    lastPrefill.current = prefill;
     setLocator(prefill.locator);
     setChain(prefill.chain);
     onPrefilled();
     void quote(prefill.locator, prefill.chain, qty);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill]);
+  const onBodyScroll = () => {
+    const el = body.current;
+    if (!el) return;
+    nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  };
   useLayoutEffect(() => {
     const el = body.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && nearBottom.current) el.scrollTop = el.scrollHeight;
   }, [jobs]);
   const send = async (id: string) => {
     setSendingId(id);
@@ -148,7 +164,7 @@ export function OsMintView({ jobs, now, wallet, prefill, onPrefilled }: { jobs: 
           'no wallet — add one in ⚙ → Trading'
         )}
       </div>
-      <div className="cove-body" ref={body}>
+      <div className="cove-body" ref={body} onScroll={onBodyScroll}>
         {jobs.length === 0 && <div className="empty">Paste a collection below, or press Mint on a MintGo card or a minting row in OpenSea Volume.</div>}
         {jobs.map((j) => (
           <JobCard key={j.id} j={j} now={now} onSend={send} sending={sendingId === j.id} />

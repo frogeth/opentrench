@@ -5,6 +5,13 @@ import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
 const ohlcvCache = new Map<string, { at: number; v: unknown }>();
 const lastSend = new Map<string, number>();
 let tickers: { at: number; v: { sym: string; usd: number; change24h: number }[] } | undefined;
+// one OpenSea quote every 1.5s across the whole app: quoting hits a real RPC/API, and a user mashing
+// the Quote button (or a double-fired UI event) shouldn't fan that out.
+let lastQuote = 0;
+/** test-only: clear the quote throttle so test files aren't coupled to each other's timing. */
+export function __resetOsmintQuoteThrottle(): void {
+  lastQuote = 0;
+}
 import { sanitizeColumns } from './config.js';
 import type { ConfigStore } from './config.js';
 import type { MessageHub } from './hub.js';
@@ -405,6 +412,8 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       const chain = req.body?.chain ? String(req.body.chain).slice(0, 30) : undefined;
       const quantity = Number(req.body?.quantity ?? 1);
       if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) throw new Error('quantity must be 1–99');
+      if (Date.now() - lastQuote < 1500) throw new Error('slow down — one quote every 1.5 seconds');
+      lastQuote = Date.now();
       return svc.minter.quote({ locator, chain, quantity });
     }),
   );
@@ -443,6 +452,16 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       // parked under a name that looks like a chain; only chains in our table can have one.
       if (!/^[a-z0-9_]{1,30}$/.test(chain) || !Object.hasOwn(CHAINS, chain)) throw new Error('unknown chain');
       if (url && !/^https:\/\//i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(url)) throw new Error('RPC must be https:// (or a local http endpoint)');
+      // the regex above only checks the scheme; make sure the rest parses into a real URL with a host
+      if (url) {
+        let hostname = '';
+        try {
+          hostname = new URL(url).hostname;
+        } catch {
+          throw new Error('RPC URL is invalid');
+        }
+        if (!hostname) throw new Error('RPC URL is invalid');
+      }
       cfg.update((c) => {
         if (url) c.opensea.rpc[chain] = url;
         else delete c.opensea.rpc[chain];
