@@ -92,7 +92,7 @@ export class MessageHub extends EventEmitter {
   private tokens = new Map<string, TokenInfo>();
   /** address -> chat ids that have posted it */
   private tokenChats = new Map<string, Set<string>>();
-  private status: Status = { discord: 'disconnected', telegram: 'disconnected', loginStep: 'idle', error: {}, favorites: [] };
+  private status: Status = { discord: 'disconnected', telegram: 'disconnected', loginStep: 'idle', error: {}, favorites: [], mintgo: 'disconnected' };
   private retryDelays: number[];
   private cove: () => CoveOptions;
   private buyOpts: () => BuyOptions;
@@ -454,6 +454,10 @@ export class MessageHub extends EventEmitter {
       messages: [...this.buffer],
       tokens: [...this.tokens.values()].map((t) => ({ ...t })),
       mentions: this.mentions(),
+      // TODO(Task 3): replace with real MintGo / OpenSea providers
+      mints: [],
+      rankings: {},
+      mintJobs: [],
       boot: BOOT_ID,
     };
   }

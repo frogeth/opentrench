@@ -54,6 +54,7 @@ describe('MessageHub', () => {
       loginStep: 'idle',
       error: { discord: 'bad token' },
       favorites: [],
+      mintgo: 'disconnected',
     });
     expect(events.map((e) => e.type)).toEqual(['status', 'status']);
   });

@@ -81,15 +81,20 @@ export interface ColumnFilters {
   bundlersMin?: number; bundlersMax?: number;
   devMin?: number; devMax?: number;
   callsMin?: number; callsMax?: number;
+  // mints column
+  minQty?: number;
 }
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7' | 'web';
+  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
   /** web columns: the page to embed */
   url?: string;
+  /** nftvol: which OpenSea list, and which rolling window */
+  ranking?: 'trending' | 'top';
+  timeframe?: '1h' | '1d';
   /** a second column stacked under this one (one level only), sharing its width */
   split?: { bottom: ColumnDef; ratio?: number };
   /** fixed width in px (drag-resized); unset = share the space */
@@ -114,6 +119,7 @@ export interface MaskedConfig {
   railOrder: string[];
   columns: ColumnDef[];
   seenTokens: string[];
+  opensea: { hasWallet: boolean; walletAddress?: string; rpc: Record<string, string>; chains?: { id: string; name: string; defaultRpc: string; symbol: string }[] };
 }
 export interface WatchedChat {
   id: string;

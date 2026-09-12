@@ -23,3 +23,23 @@ describe('columns', () => {
     });
   });
 });
+
+describe('nft column types', () => {
+  it('accepts the three new types with their options', () => {
+    const cols = sanitizeColumns([
+      { id: 'a', type: 'mints', title: '', chats: [], filters: { chains: ['ethereum', 'bogus'], minQty: 2 } },
+      { id: 'b', type: 'nftvol', title: '', chats: [], ranking: 'top', timeframe: '1d' },
+      { id: 'c', type: 'osmint', title: '', chats: [] },
+    ]);
+    expect(cols.map((c) => c.type)).toEqual(['mints', 'nftvol', 'osmint']);
+    expect(cols.map((c) => c.title)).toEqual(['MintGo', 'OpenSea Volume', 'OpenSea Mint']);
+    expect(cols[0].filters).toEqual({ chains: ['ethereum'], minQty: 2 });
+    expect(cols[1].ranking).toBe('top');
+    expect(cols[1].timeframe).toBe('1d');
+  });
+  it('defaults a volume column to trending · 1h', () => {
+    const [c] = sanitizeColumns([{ id: 'b', type: 'nftvol', title: 'V', chats: [], ranking: 'nope', timeframe: '7d' }]);
+    expect(c.ranking).toBe('trending');
+    expect(c.timeframe).toBe('1h');
+  });
+});

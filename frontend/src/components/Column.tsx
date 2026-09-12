@@ -1,4 +1,5 @@
 import type { ReactNode, RefObject, UIEvent, DragEvent } from 'react';
+import type { ColumnDef } from '../api';
 import { Icon } from './Icon';
 
 /** The draggable right edge of a column (or a stack of two): live width while dragging, final on release, 0 on double-click = reset. */
@@ -85,7 +86,7 @@ export function Column({
   title: string;
   subtitle?: string;
   count?: number;
-  kind?: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7' | 'web';
+  kind?: ColumnDef['type'];
   extra?: ReactNode;
   children: ReactNode;
   className?: string;
