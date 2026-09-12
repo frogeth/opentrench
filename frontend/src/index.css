@@ -747,9 +747,14 @@ b { font-weight: 600; }
 .fed-body { flex: 1; display: grid; grid-template-columns: 46% minmax(0, 1fr); min-height: 0; }
 .fed-left { display: flex; flex-direction: column; min-height: 0; padding: 14px 16px; border-right: 1px solid var(--line); }
 .fed-right { overflow-y: auto; padding: 14px 18px; display: flex; flex-direction: column; gap: 16px; }
-.fed-type { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 3px; margin-bottom: 12px; }
-.fed-type button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: none; border: none; color: var(--muted); padding: 7px; border-radius: 6px; cursor: pointer; font-size: 13px; }
-.fed-type button.active { background: var(--panel-2); color: var(--text); font-weight: 600; box-shadow: 0 0 0 1px var(--line); }
+/* the type picker: a grid of cards, every card the same height, the chosen one lit in the accent */
+.fed-type { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
+.fed-type button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 64px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); padding: 9px 10px; border-radius: 8px; cursor: pointer; text-align: left; transition: border-color 0.12s, background 0.12s; }
+.fed-type button:hover { border-color: var(--muted); color: var(--text); }
+.fed-type button.active { border-color: var(--accent); background: rgba(65, 200, 146, 0.08); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); }
+.fed-card-head { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+.fed-type button.active .fed-card-head { color: var(--accent); }
+.fed-card-blurb { font-size: 11px; line-height: 1.25; color: var(--muted); }
 .fed-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin: 10px 0 6px; display: flex; align-items: center; gap: 8px; }
 .fed-links { margin-left: auto; display: inline-flex; gap: 10px; }
 .fed-links .fed-link { margin-left: 0; }
@@ -896,11 +901,11 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .ca-menu-addr { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; color: var(--muted); padding: 4px 8px 6px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
 .ca-menu button { display: flex; align-items: center; gap: 8px; background: none; border: none; color: var(--text); text-align: left; padding: 7px 8px; border-radius: 6px; cursor: pointer; font-size: 12px; }
 .ca-menu button:hover { background: rgba(255, 255, 255, 0.08); }
-.fed-type { grid-template-columns: repeat(5, 1fr); }
-.fed-compact { width: min(720px, 94vw); height: auto; max-height: 80vh; }
-.fed-compact .fed-body { grid-template-columns: 1fr; }
-.fed-compact .fed-left { border-right: none; }
-.fed-compact .fed-right { padding-top: 0; }
+/* the message right-click menu: a quick-reaction strip over the usual list */
+.msg-menu { width: 230px; }
+.msg-menu-emoji { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px 2px 6px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+.msg-menu-emoji button { padding: 4px 5px; font-size: 16px; line-height: 1; }
+.msg-menu-emoji button.mine { background: rgba(65, 200, 146, 0.18); }
 .fed-bot-note { margin-top: 10px; }
 
 /* ---------- J7 column ---------- */

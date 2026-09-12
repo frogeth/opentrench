@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useContext } from 'react';
+import { createPortal } from 'react-dom';
 import type { Reaction, FeedMessage, LinkPreview, MediaItem, TokenInfo } from '../types';
 import { fmtTime, isFavorite } from '../format';
 import { Avatar } from './Avatar';
@@ -9,7 +10,7 @@ import { Icon } from './Icon';
 const QUICK_EMOJI = ['👍', '🔥', '😂', '💀', '🚀', '👀', '💎', '🤝', '❤️', '😭', '🫡', '📈', '📉', '🐐', '🧠', '🤡', '💩', '😮', '🙏', '✅', '❌', '⚡', '🍀', '🎯'];
 import { AuthorMenu } from './AuthorMenu';
 import { openImage } from './Lightbox';
-import { RichText } from './RichText';
+import { RichText, CaMenuContext } from './RichText';
 import { Embed } from './Embed';
 
 const isVideoFile = (url: string, mime?: string) => (mime ? mime.startsWith('video/') : /\.(mp4|webm|mov)(\?|$)/i.test(url));
@@ -119,12 +120,93 @@ export function MessageRow({
     };
   }, [pick]);
   const fav = !m.isBot && isFavorite(favorites, m.author);
+  // Right-click anywhere on the row: quick reactions, reply, jump, open chat, copy, the original
+  // link, and the token menu for any contract in it. A contract address handles its own right-click.
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const caMenu = useContext(CaMenuContext);
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [menu]);
+  const closeMenu = () => setMenu(null);
+  const platform = m.source === 'discord' ? 'Discord' : 'Telegram';
+  const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+  const contextMenu =
+    menu &&
+    createPortal(
+      <div className="ca-menu-backdrop" onMouseDown={closeMenu} onContextMenu={(e) => { e.preventDefault(); closeMenu(); }}>
+        <div className="ca-menu msg-menu" style={{ left: Math.max(8, Math.min(menu.x, window.innerWidth - 240)), top: Math.max(8, Math.min(menu.y, window.innerHeight - 340)) }} onMouseDown={(e) => e.stopPropagation()}>
+          {onReact && (
+            <div className="msg-menu-emoji">
+              {QUICK_EMOJI.slice(0, 8).map((e) => {
+                const on = !!mine?.has(`${m.id}:${e}`);
+                return (
+                  <button key={e} className={on ? 'mine' : ''} title={on ? `remove your ${e}` : `react with ${e}`} onClick={() => { closeMenu(); onReact(m, e, e, !on); }}>
+                    {e}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {onReply && (
+            <button onClick={() => { closeMenu(); onReply(m); }}>
+              <Icon name="reply" size={12} /> Reply
+            </button>
+          )}
+          {m.replyTo && onJump && (
+            <button
+              onClick={() => {
+                closeMenu();
+                const pid = m.replyTo!.id?.split(':').pop();
+                onJump(m.replyTo!.id, pid && m.link ? m.link.replace(/\/[^/]+$/, `/${pid}`) : undefined);
+              }}
+            >
+              <Icon name="top" size={12} /> Jump to the original
+            </button>
+          )}
+          {onOpenChat && !discord && (
+            <button onClick={() => { closeMenu(); onOpenChat(m); }}>
+              <Icon name="chat" size={12} /> Open {m.chatName}
+            </button>
+          )}
+          <button onClick={() => { closeMenu(); void navigator.clipboard?.writeText(m.text); }}>
+            <Icon name="copy" size={12} /> Copy text
+          </button>
+          {m.link && (
+            <button onClick={() => { closeMenu(); void navigator.clipboard?.writeText(m.link!); }}>
+              <Icon name="copy" size={12} /> Copy link
+            </button>
+          )}
+          {m.link && (
+            <button onClick={() => { closeMenu(); window.open(m.link, '_blank', 'noopener'); }}>
+              <Icon name="explorer" size={12} /> Open in {platform}
+            </button>
+          )}
+          {caMenu &&
+            m.contracts.slice(0, 3).map((c) => (
+              <button key={c.address} onClick={() => { closeMenu(); caMenu(c.address, menu.x, menu.y); }} title={c.address}>
+                <Icon name="chart" size={12} /> Token {short(c.address)} ›
+              </button>
+            ))}
+        </div>
+      </div>,
+      document.body,
+    );
   return (
     <div
       className={`row row-${m.source}${m.repeat ? ' row-repeat' : ''}${m.isBot ? ' row-bot' : ''}${m.hidden ? ' row-hidden' : ''}${fav ? ' row-fav' : ''}${
         discord ? ' row-discord' : ''
       }${continued ? ' row-continued' : ''}`}
+      onContextMenu={(e) => {
+        if (e.defaultPrevented) return;
+        if ((e.target as HTMLElement).closest('input, textarea, video, .react-picker')) return;
+        e.preventDefault();
+        setMenu({ x: e.clientX, y: e.clientY });
+      }}
     >
+      {contextMenu}
       {continued ? (
         <span className="row-gutter-time">{fmtTime(m.ts).replace(/:\d\d(?=\s|$)/, '')}</span>
       ) : (

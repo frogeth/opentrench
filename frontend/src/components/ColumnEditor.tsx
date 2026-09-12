@@ -19,6 +19,17 @@ const LAUNCHPADS: [string, string][] = [
 const MUST: [string, string][] = [
   ['website', 'Website'], ['twitter', 'Twitter'], ['telegram', 'Telegram'], ['social', '≥1 social'], ['image', 'Image'], ['devSold', 'Dev sold'], ['lpLocked', 'LP locked'],
 ];
+/** The column types on offer, as cards: what each one shows in a few words. */
+const TYPE_CARDS: { t: ColumnDef['type']; icon: import('./Icon').IconName; name: string; blurb: string }[] = [
+  { t: 'chat', icon: 'chat', name: 'Messages', blurb: 'live chat from the channels you pick' },
+  { t: 'calls', icon: 'calls', name: 'Calls', blurb: 'every contract as it gets called' },
+  { t: 'callers', icon: 'people', name: 'Top Callers', blurb: 'who calls best, over a window' },
+  { t: 'cove', icon: 'send', name: 'Buy bot', blurb: 'Cove or BasedBot, one pane' },
+  { t: 'salpha', icon: 'search', name: 'Salpha', blurb: 'your research bot chat' },
+  { t: 'j7', icon: 'x', name: 'J7', blurb: 'J7Tracker’s tweet stream' },
+  { t: 'web', icon: 'globe', name: 'Website', blurb: 'any page, living in a column' },
+];
+
 /** Ready-made Website columns; "Custom" takes any address. */
 const WEB_PRESETS: { name: string; url: string; blurb: string }[] = [
   { name: 'MintGo', url: 'https://mintgo.fun', blurb: 'mint radar' },
@@ -199,7 +210,7 @@ export function ColumnEditor({
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal fed${isBot ? ' fed-compact' : ''}`}>
+      <div className="modal fed">
         <div className="fed-head">
           <b>{col ? 'Edit column' : 'Add column'}</b>
           <button className="close" onClick={onClose} title="close">
@@ -210,9 +221,12 @@ export function ColumnEditor({
           {/* ---------- left: what & where ---------- */}
           <div className="fed-left">
             <div className="fed-type">
-              {(['chat', 'calls', 'callers', 'cove', 'salpha', 'j7', 'web'] as const).map((t) => (
-                <button key={t} className={type === t ? 'active' : ''} onClick={() => setType(t)}>
-                  <Icon name={t === 'chat' ? 'chat' : t === 'calls' ? 'calls' : t === 'callers' ? 'people' : t === 'cove' ? 'send' : t === 'salpha' ? 'search' : t === 'web' ? 'globe' : 'x'} size={13} /> {t === 'chat' ? 'Messages' : t === 'calls' ? 'Calls' : t === 'callers' ? 'Top Callers' : t === 'cove' ? 'Buy bot' : t === 'salpha' ? 'Salpha' : t === 'web' ? 'Website' : 'J7'}
+              {TYPE_CARDS.map((c) => (
+                <button key={c.t} className={type === c.t ? 'active' : ''} onClick={() => setType(c.t)} aria-pressed={type === c.t}>
+                  <span className="fed-card-head">
+                    <Icon name={c.icon} size={14} /> <b>{c.name}</b>
+                  </span>
+                  <span className="fed-card-blurb">{c.blurb}</span>
                 </button>
               ))}
             </div>
