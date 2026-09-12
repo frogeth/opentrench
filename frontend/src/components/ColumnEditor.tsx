@@ -201,6 +201,10 @@ export function ColumnEditor({
     if (!isWeb && !isNft && none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
     const clean: ColumnFilters = {};
     for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== false && !(Array.isArray(v) && v.length === 0) && !(typeof v === 'string' && !v.trim())) (clean as any)[k] = v;
+    // filters don't carry across a type change when their vocabulary differs: minQty is mints-only,
+    // and chains means different things for mints (ethereum/robinhood/ink) vs calls/chat (token networks)
+    if (type !== 'mints') delete clean.minQty;
+    if (col && col.type !== type && (col.type === 'mints' || type === 'mints')) delete clean.chains;
     onSave({
       ...(col ?? {}),
       id: col?.id ?? `c${Date.now().toString(36)}`,

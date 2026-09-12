@@ -940,7 +940,7 @@ export default function App() {
     if (col.type === 'mints') {
       const shown = mints.filter((e) => mintPasses(e, col.filters));
       return (
-        <Column key={col.id} title={col.title} subtitle={`mintgo.fun · ${status.mintgo ?? 'off'}`} kind="mints" count={shown.length} className="col-mints" {...actions}>
+        <Column key={col.id} title={col.title} subtitle={`mintgo.fun · ${status.mintgo === 'error' ? 'reconnecting' : status.mintgo ?? 'off'}`} kind="mints" count={shown.length} className="col-mints" {...actions}>
           <MintFeed mints={mints} now={now} state={status.mintgo} error={status.error.mintgo} filters={col.filters} onMint={undefined} />
         </Column>
       );

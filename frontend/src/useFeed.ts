@@ -50,6 +50,17 @@ export function useFeed() {
   const [mintJobs, setMintJobs] = useState<MintJob[]>([]);
   const upsertJob = (job: MintJob) => setMintJobs((cur) => (cur.some((j) => j.id === job.id) ? cur.map((j) => (j.id === job.id ? job : j)) : [...cur, job].slice(-100)));
   const boot = useRef<string | null>(null);
+  // a burst of mints arrives as one event per tx; buffer them and flush through upsertMints every
+  // 200ms so the list (and its sort/dedupe) re-renders once per burst instead of once per event
+  const mintBuffer = useRef<MintEvent[]>([]);
+  const mintTimer = useRef<number | undefined>(undefined);
+  const flushMints = () => {
+    mintTimer.current = undefined;
+    if (mintBuffer.current.length === 0) return;
+    const pending = mintBuffer.current;
+    mintBuffer.current = [];
+    upsertMints(pending);
+  };
 
   useEffect(() => {
     let ws: WebSocket | undefined;
@@ -73,6 +84,9 @@ export function useFeed() {
           setMentions(ev.mentions ?? []);
           setTokens(Object.fromEntries(ev.tokens.map((t) => [t.address, t])));
           setStatus(ev.status);
+          mintBuffer.current = [];
+          window.clearTimeout(mintTimer.current);
+          mintTimer.current = undefined;
           setMints(ev.mints ?? []);
           setRankings(ev.rankings ?? {});
           setMintJobs(ev.mintJobs ?? []);
@@ -100,7 +114,10 @@ export function useFeed() {
         }
         else if (ev.type === 'ping') setPing(ev);
         else if (ev.type === 'status') setStatus(ev.status);
-        else if (ev.type === 'mint') upsertMints([ev.mint]);
+        else if (ev.type === 'mint') {
+          mintBuffer.current.push(ev.mint);
+          if (mintTimer.current === undefined) mintTimer.current = window.setTimeout(flushMints, 200);
+        }
         else if (ev.type === 'nftRankings') setRankings((r) => ({ ...r, [ev.key]: { rows: ev.rows, at: ev.at } }));
         else if (ev.type === 'mintJob') upsertJob(ev.job);
       };
@@ -113,6 +130,7 @@ export function useFeed() {
     return () => {
       closed = true;
       window.clearTimeout(timer);
+      window.clearTimeout(mintTimer.current);
       ws?.close();
     };
   }, []);
