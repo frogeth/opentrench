@@ -397,10 +397,12 @@ export default function App() {
     );
   };
   const [dragCol, setDragCol] = useState<string | null>(null);
-  const [overCol, setOverCol] = useState<string | null>(null);
+  /** the column under the drag: `before` = drop in front of it (accent on its left edge), `stack` = drop under it (accent along its bottom) */
+  const [overCol, setOverCol] = useState<{ id: string; zone: 'before' | 'stack' } | null>(null);
   const dragFor = (id: string) => ({
     dragging: dragCol === id,
-    over: overCol === id && dragCol !== id,
+    over: overCol?.id === id && overCol.zone === 'before' && dragCol !== id,
+    stack: overCol?.id === id && overCol.zone === 'stack' && dragCol !== id,
     onDragStart: (e: DragEvent) => {
       e.dataTransfer.setData('text/plain', id);
       e.dataTransfer.effectAllowed = 'move';
@@ -409,17 +411,29 @@ export default function App() {
     onDragOver: (e: DragEvent) => {
       if (!dragCol) return;
       e.preventDefault();
-      if (overCol !== id) setOverCol(id);
+      // two plain columns can stack: the lower half of the target means "put it under me"
+      const canStack = dragCol !== id && !columns.find((c) => c.id === dragCol)?.split && !columns.find((c) => c.id === id)?.split;
+      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const zone = canStack && e.clientY - r.top > r.height / 2 ? 'stack' : 'before';
+      if (overCol?.id !== id || overCol.zone !== zone) setOverCol({ id, zone });
     },
     onDrop: (e: DragEvent) => {
       e.preventDefault();
       const from = dragCol;
+      const zone = overCol?.id === id ? overCol.zone : 'before';
       setDragCol(null);
       setOverCol(null);
       if (!from || from === id) return;
+      const moving = columns.find((c) => c.id === from)!;
       const next = columns.filter((c) => c.id !== from);
+      if (zone === 'stack' && !moving.split && !columns.find((c) => c.id === id)?.split) {
+        // the top owns the width: keep the target's, or inherit the dragged one's if the target had none
+        const { width: w, ...bottom } = moving;
+        saveColumns(next.map((c) => (c.id === id ? { ...c, ...(!c.width && w ? { width: w } : {}), split: { bottom } } : c)));
+        return;
+      }
       const at = next.findIndex((c) => c.id === id);
-      next.splice(at, 0, columns.find((c) => c.id === from)!);
+      next.splice(at, 0, moving);
       saveColumns(next);
     },
   });
@@ -841,7 +855,7 @@ export default function App() {
       : cfg?.telegram.watch.includes(view.preview.id)
     : false;
 
-  type ColumnActions = Partial<Pick<Parameters<typeof Column>[0], 'onEdit' | 'onRemove' | 'onSplit' | 'alertOn' | 'onAlert' | 'drag' | 'filtered' | 'width' | 'onResize' | 'fill' | 'stacked' | 'stackShare'>>;
+  type ColumnActions = Partial<Pick<Parameters<typeof Column>[0], 'onEdit' | 'onRemove' | 'alertOn' | 'onAlert' | 'drag' | 'filtered' | 'width' | 'onResize' | 'fill' | 'stacked' | 'stackShare'>>;
   /** Header buttons for a column; a stacked bottom drags by its parent's id so the pair moves together. */
   const actionsFor = (col: ColumnDef, parentId?: string): ColumnActions => ({
     onEdit: () => setEditing({ col, parentId }),
@@ -1160,7 +1174,7 @@ export default function App() {
             <>
               {columns.map((col, i) => {
                 const layout = { width: liveWidths[col.id] ?? col.width, onResize: resizeFor(col.id), fill: i === fillIdx };
-                if (!col.split) return renderColumn(col, { ...actionsFor(col), ...layout, onSplit: () => setEditing({ parentId: col.id }) });
+                if (!col.split) return renderColumn(col, { ...actionsFor(col), ...layout });
                 // a stacked pair: the wrapper owns the width, resize handle and drag target; the divider sets the top's share
                 const share = liveRatios[col.id] ?? col.split.ratio ?? 0.5;
                 return (

@@ -98,6 +98,7 @@ b { font-weight: 600; }
 .col-chats { flex: 1 1 0; }
 .col-dragging { opacity: 0.5; }
 .col-over { box-shadow: inset 3px 0 0 var(--accent); }
+.col-over-stack { box-shadow: inset 0 -3px 0 var(--accent); }
 .col-grip { color: var(--muted); cursor: grab; display: inline-flex; padding: 4px; margin-left: -6px; border-radius: 4px; }
 .col-grip:hover { background: rgba(255, 255, 255, 0.1); }
 .col-grip:active { cursor: grabbing; }
