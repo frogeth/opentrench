@@ -15,6 +15,7 @@
     "express": "^4.21.2",
     "socket.io-client": "^4.8.3",
     "telegram": "^2.26.22",
+    "viem": "^2.56.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {

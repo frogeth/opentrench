@@ -24,6 +24,8 @@ every caller pinned where they called, and the full call list.
 
 > **Discord** connects through a small [Vencord plugin](vencord/) inside your own Discord app, so there is no token and no self-bot session. Discord has to be open for that side of the feed to work. A user token still works as a read-only fallback. Website and setup guides: **https://opentrench.app**
 
+> **OpenSea mint wallet**: use a dedicated wallet, not one holding real funds. The private key lives in plain text in `config.json` on this machine — anyone with file access on your machine can read it. Mint transactions are irreversible once sent. MintGo and OpenSea expose no official public API for any of this; opentrench reads their unofficial web endpoints, which can change without notice.
+
 ## Run
 
 ```bash
@@ -59,7 +61,8 @@ The search box matches text, authors, chats, tickers and addresses.
 
 Settings (⚙) is one modal with three tabs: **Accounts** (Discord bridge status,
 Telegram login), **Feed** (favorite callers & pings, blacklist), **Trading**
-(Cove amounts, o1 key). Channels are managed in the sidebar, not in settings.
+(Cove amounts, o1 key, OpenSea mint wallet and RPCs). Channels are managed in
+the sidebar, not in settings.
 
 - Newest on top. Discord and Telegram merged, with each platform's logo and the
   poster's avatar.
@@ -98,6 +101,16 @@ Telegram login), **Feed** (favorite callers & pings, blacklist), **Trading**
 - Charts come from **BasedBot** (token-address embeds on Robinhood, Base,
   Ethereum, Solana, BNB, Arbitrum); Dexscreener / GeckoTerminal is the
   fallback and can be made the default in Settings → Feed.
+- Three NFT column types, alongside Calls and Chats: **MintGo** (live mints
+  on Ethereum, Robinhood Chain and Ink, straight from mintgo.fun — click one
+  for its X, OpenSea and website links, the transaction, the deployer's
+  history, and a Mint button), **OpenSea Volume** (Trending or Top
+  collections with floor, volume, sales and floor change, and a 1H / 1D
+  switch; a collection with an open SeaDrop stage gets a Mint pill), and
+  **OpenSea Mint** (paste a collection or press Mint to quote and mint a
+  SeaDrop drop — the card shows the open stage, allowance, price, gas and
+  balance; Mint confirms once more, then sends with the wallet from
+  Settings → Trading, one mint in flight per wallet).
 - Live charts open automatically under every contract in Chats (only the
   ones on screen actually load; switch it off in Settings → Feed).
 - Replies show the quoted message above the text; reactions show as pills

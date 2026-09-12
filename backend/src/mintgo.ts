@@ -1,0 +1,370 @@
+import { EventEmitter } from 'node:events';
+import WebSocket from 'ws';
+import type { MintChain, MintEvent } from './types.js';
+
+/**
+ * MintGo (mintgo.fun): live NFT mints on Ethereum, Robinhood Chain and Ink, read the way its
+ * own page reads them: a browser-session cookie, then the realtime socket. Unofficial, so
+ * every field access is defensive. Read-only.
+ */
+export const MINTGO = 'https://mintgo.fun';
+const MAX = 300;
+const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+/** MintGo checks these to decide a request came from its own page. */
+export const SAME_ORIGIN_HEADERS: Record<string, string> = {
+  'user-agent': UA,
+  origin: MINTGO,
+  referer: `${MINTGO}/`,
+  'sec-fetch-site': 'same-origin',
+  'sec-fetch-mode': 'cors',
+  'sec-fetch-dest': 'empty',
+  accept: '*/*',
+};
+
+const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+const NUM_RE = /^-?\d+(\.\d+)?([eE][-+]?\d+)?$/;
+const num = (v: unknown): number | undefined => {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v === 'string') {
+    const s = v.trim();
+    return s && NUM_RE.test(s) ? Number(s) : undefined;
+  }
+  return undefined;
+};
+
+export function chainFromCode(code: unknown): MintChain {
+  const n = Number(code);
+  return n === 2 ? 'robinhood' : n === 3 ? 'stable' : n === 4 ? 'ink' : n === 5 ? 'arc' : 'ethereum';
+}
+
+/** `[1, cursor, chainCode, contracts[], rows[]]` → events. Mirrors MintGo's expandCompactRealtimeBatch. */
+export function decodeBatch(packet: unknown): MintEvent[] {
+  if (!Array.isArray(packet) || Number(packet[0]) !== 1) return [];
+  const chain = chainFromCode(packet[2]);
+  const contracts: unknown[][] = Array.isArray(packet[3]) ? packet[3] : [];
+  const rows: unknown[][] = Array.isArray(packet[4]) ? packet[4] : [];
+  const out: MintEvent[] = [];
+  for (const row of rows.slice(0, 500)) {
+    if (!Array.isArray(row)) continue;
+    const c = contracts[Number(row[4] ?? 0)];
+    const id = str(row[0]) ?? (typeof row[0] === 'number' && Number.isFinite(row[0]) ? String(row[0]) : undefined);
+    const address = str(c?.[0])?.toLowerCase();
+    if (!id || !address || !Array.isArray(c)) continue;
+    const flags = Number(row[11] ?? 0) || 0;
+    const tokenIds = Array.isArray(row[5])
+      ? row[5]
+          .filter((v) => (typeof v === 'string' ? v !== '' : typeof v === 'number' && Number.isFinite(v)))
+          .map(String)
+          .slice(0, 200)
+      : [];
+    const slug = str(c[4]);
+    const deployer = str(c[8]);
+    const surge = !!(flags & 128);
+    out.push({
+      id,
+      chain,
+      ts: Math.max(0, num(row[3]) ?? Date.now()),
+      txHash: str(row[1]) ?? '',
+      blockNumber: Math.max(0, num(row[2]) ?? 0),
+      contract: {
+        address,
+        name: str(c[1]) ?? address.slice(0, 10),
+        symbol: str(c[2]),
+        image: str(c[3]),
+        slug,
+        // MintGo's own decoder: index 12 overrides, else the slug; index 5 is the collection's external URL (unused here)
+        openSeaUrl: str(c[12]) ?? (slug ? `https://opensea.io/collection/${slug}` : undefined),
+        projectUrl: str(c[6]),
+        twitterUrl: str(c[7]),
+        standard: str(c[11]),
+        deployer: deployer ? { address: deployer, createdAgo: str(c[9]), projects: num(c[10]) } : undefined,
+      },
+      // Clamp negatives only; an explicit 0 is preserved — MintGo reports 0 for some airdrop/burn rows.
+      quantity: Math.max(0, num(row[6]) ?? Math.max(tokenIds.length, 1)),
+      tokenIds,
+      tokenIdsTotal: flags & 64 ? num(row[21]) : undefined,
+      minter: str(row[7]) ?? '',
+      valueEth: num(row[10]),
+      unitPriceEth: num(row[15]),
+      priceConfirmed: !!(flags & 1),
+      preview: !!(flags & 2),
+      airdrop: !!(flags & 4),
+      thirdParty: !!(flags & 8),
+      functionName: str(row[12]),
+      mintedSupply: num(row[13]),
+      maxSupply: num(row[14]),
+      surge: surge ? { mints: num(row[22]) ?? 0, events: num(row[23]) ?? 0, minters: num(row[24]) ?? 0, startedAt: num(row[29]) ?? 0 } : undefined,
+    });
+  }
+  return out;
+}
+
+/** Shallow-copies `obj`, keeping only its own keys whose value is not `undefined`. */
+function definedFieldsOf<T extends object>(obj: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const k of Object.keys(obj) as (keyof T)[]) {
+    if (obj[k] !== undefined) out[k] = obj[k];
+  }
+  return out;
+}
+
+/**
+ * Merge by id (MintGo re-sends a mint id as preview → confirmed, and a sparser later row must
+ * not erase what the preview carried), else newest first; capped. Returns the row now in the
+ * list — the merged row when `e.id` already existed, else `e` itself.
+ */
+export function upsertMint(list: MintEvent[], e: MintEvent, max = MAX): MintEvent {
+  const i = list.findIndex((x) => x.id === e.id);
+  if (i >= 0) {
+    const prev = list[i];
+    const merged: MintEvent = { ...prev, ...definedFieldsOf(e) };
+    merged.contract = { ...prev.contract, ...definedFieldsOf(e.contract) };
+    list[i] = merged;
+    return merged;
+  }
+  list.unshift(e);
+  if (list.length > max) list.length = max;
+  return e;
+}
+
+export type MintGoState = NonNullable<import('./types.js').Status['mintgo']>;
+
+/**
+ * Two independent defenses against a realtime stream that has gone quiet without closing:
+ * `armWatchdog` catches total silence (no frame at all for 60s), and the heartbeat gap check in
+ * `handleFrame` catches the narrower case where the socket keeps sending frames but has stopped
+ * delivering one chain's mints — MintGo's own `heartbeat.latestMintSequences` says a chain moved
+ * on while nothing for that chain reached us. Both close paths `terminate()` the socket and let
+ * the normal reconnect-with-cursor logic pick back up.
+ */
+export class MintGoClient extends EventEmitter {
+  state: MintGoState = 'disconnected';
+  readonly recent: MintEvent[] = [];
+  private cookie = '';
+  private renewAt = 0;
+  private cursor = '';
+  private socket?: WebSocket;
+  private attempts = 0;
+  private timer?: NodeJS.Timeout;
+  private watchdog?: NodeJS.Timeout;
+  private stopped = true;
+  /** Message from the socket's last `error` event; folded into the next close message. */
+  private socketError = '';
+  /** Overrides the close reason when we terminate the socket ourselves (the watchdog, or a stall). */
+  private closeReason?: string;
+  /** Highest type-1 frame sequence (`packet[1]`) received per chain, since the last `open`. */
+  private received: Record<string, number> = {};
+  /** The previous heartbeat's `latestMintSequences` per chain, since the last `open`. */
+  private serverSeq: Record<string, number> = {};
+  /** Consecutive heartbeats where a chain's server sequence advanced with nothing ever received for it. */
+  private silentAdvances: Record<string, number> = {};
+  /** Last (state, error) pair emitted, so repeats don't re-emit. */
+  private emittedError?: string;
+  /** Bumped on every start()/stop(); a connect() in flight from a previous generation bails out instead of racing a newer one. */
+  private gen = 0;
+  private readonly clientId = Math.random().toString(36).slice(2, 12);
+
+  constructor(private fetchImpl: typeof fetch = fetch) {
+    super();
+  }
+
+  /** A browser session cookie; MintGo hands one to any request that looks same-origin. */
+  async session(force = false): Promise<string> {
+    if (!force && this.cookie && Date.now() < this.renewAt) return this.cookie;
+    const r = await this.fetchImpl(`${MINTGO}/api/session`, {
+      method: 'POST',
+      headers: { ...SAME_ORIGIN_HEADERS, 'content-type': 'application/json' },
+      body: '{}',
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!r.ok) throw new Error(`MintGo session refused (${r.status})`);
+    const j: any = await r.json().catch(() => ({}));
+    const cookies = (r.headers as any).getSetCookie?.() as string[] | undefined;
+    const jar = (cookies ?? []).map((c) => c.split(';')[0]).filter((c) => /^mg_/.test(c));
+    if (!j.ok || jar.length === 0) throw new Error('MintGo session response had no cookie');
+    this.cookie = jar.join('; ');
+    this.renewAt = Number(j.renewAfter) > Date.now() ? Number(j.renewAfter) : Date.now() + 20 * 60_000;
+    return this.cookie;
+  }
+
+  start(): void {
+    if (!this.stopped) this.stop();
+    this.gen++;
+    this.stopped = false;
+    this.attempts = 0;
+    void this.connect();
+  }
+
+  stop(): void {
+    this.gen++;
+    this.stopped = true;
+    clearTimeout(this.timer);
+    clearTimeout(this.watchdog);
+    const ws = this.socket;
+    this.socket = undefined;
+    ws?.removeAllListeners();
+    // ws.close() on a CONNECTING socket emits 'error' on the next tick; removeAllListeners()
+    // just removed the only listener for it, so that error would otherwise throw and kill the process.
+    ws?.on('error', () => {});
+    ws?.close(1000, 'stopped');
+    this.setState('disconnected');
+  }
+
+  private setState(s: MintGoState, err?: string) {
+    if (this.state === s && this.emittedError === err) return;
+    this.state = s;
+    this.emittedError = err;
+    this.emit('state', s, err);
+  }
+
+  /** Resets the 60s no-frames watchdog; fires `ws.terminate()` so the normal close/retry path runs. */
+  private armWatchdog(ws: WebSocket): void {
+    clearTimeout(this.watchdog);
+    this.watchdog = setTimeout(() => {
+      this.closeReason = 'no frames for 60s';
+      ws.terminate();
+    }, 60_000);
+    this.watchdog.unref();
+  }
+
+  /** Terminates the live socket (if any) with `reason`; the existing close path reconnects with the cursor. */
+  private stall(reason: string): void {
+    this.closeReason = reason;
+    this.socket?.terminate();
+  }
+
+  /**
+   * `heartbeat`'s `latestMintSequences` is the server's own per-chain cursor. If the value it
+   * reported *last* heartbeat still hasn't shown up in anything we've received by *this*
+   * heartbeat, the stream has a per-chain gap even though frames keep arriving — the watchdog
+   * alone would never notice. A chain we have never received anything for doesn't trip that
+   * check (there's nothing to compare), so it's watched separately: three heartbeats in a row
+   * where the server's number for it keeps climbing and we still have nothing is treated the
+   * same way.
+   */
+  private checkHeartbeatGap(data: unknown): void {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+    const seqs = (data as { latestMintSequences?: unknown }).latestMintSequences;
+    if (!seqs || typeof seqs !== 'object' || Array.isArray(seqs)) return;
+    for (const [chain, v] of Object.entries(seqs as Record<string, unknown>)) {
+      const serverValue = Number(v);
+      if (!Number.isFinite(serverValue)) continue;
+      const prevServer = this.serverSeq[chain];
+      const got = this.received[chain];
+      if (got !== undefined) {
+        if (prevServer !== undefined && got < prevServer) {
+          this.stall('mint cursor stalled');
+          return;
+        }
+        this.silentAdvances[chain] = 0;
+      } else {
+        const advancing = prevServer !== undefined && serverValue > prevServer;
+        this.silentAdvances[chain] = advancing ? (this.silentAdvances[chain] ?? 0) + 1 : 0;
+        if (this.silentAdvances[chain] >= 3) {
+          this.stall('mint cursor stalled');
+          return;
+        }
+      }
+      this.serverSeq[chain] = serverValue;
+    }
+  }
+
+  private async connect(): Promise<void> {
+    if (this.stopped) return;
+    const gen = this.gen;
+    this.setState('connecting', this.emittedError);
+    let cookie: string;
+    try {
+      cookie = await this.session(this.attempts > 0);
+    } catch (e: any) {
+      if (this.stopped || gen !== this.gen) return;
+      const msg = e?.message ?? String(e);
+      if (this.attempts < 2) this.setState('connecting', msg);
+      else this.setState('error', msg);
+      return this.retry();
+    }
+    if (this.stopped || gen !== this.gen) return;
+    const url = new URL(`${MINTGO.replace('https', 'wss')}/api/realtime`);
+    url.searchParams.set('scope', 'all');
+    url.searchParams.set('client', this.clientId);
+    if (/^\d+$/.test(this.cursor)) url.searchParams.set('since', this.cursor);
+    const ws = new WebSocket(url, { headers: { ...SAME_ORIGIN_HEADERS, cookie }, maxPayload: 4 * 1024 * 1024, handshakeTimeout: 15_000 });
+    this.socket = ws;
+    ws.on('open', () => {
+      if (this.socket !== ws) return;
+      this.socketError = '';
+      this.received = {};
+      this.serverSeq = {};
+      this.silentAdvances = {};
+      this.armWatchdog(ws);
+    });
+    ws.on('message', (data) => {
+      if (this.socket !== ws) return;
+      this.armWatchdog(ws);
+      let packet: unknown;
+      try {
+        const buf =
+          data instanceof ArrayBuffer
+            ? Buffer.from(data)
+            : Buffer.isBuffer(data) || Array.isArray(data)
+              ? Buffer.concat(Array.isArray(data) ? data : [data])
+              : Buffer.from(String(data));
+        packet = JSON.parse(buf.toString('utf8'));
+      } catch {
+        return;
+      }
+      this.handleFrame(packet);
+    });
+    ws.on('close', (code, reason) => {
+      if (this.socket !== ws) return;
+      this.socket = undefined;
+      clearTimeout(this.watchdog);
+      if (this.stopped) return;
+      const reasonText = reason?.length ? reason.toString() : this.closeReason;
+      this.closeReason = undefined;
+      const msg = `socket closed (${code}${reasonText ? ` ${reasonText}` : ''}${this.socketError ? ` · ${this.socketError}` : ''})`;
+      if (this.attempts < 2) this.setState('connecting', msg);
+      else this.setState('error', msg);
+      this.retry();
+    });
+    ws.on('error', (e: any) => {
+      if (this.socket !== ws) return;
+      this.socketError = e?.message ?? String(e);
+      console.warn('[mintgo] socket error', this.socketError);
+    });
+  }
+
+  /** Handles one parsed realtime frame: keepalive/cursor/mint-batch/ready. Exposed for tests. */
+  handleFrame(packet: unknown): void {
+    if (!Array.isArray(packet)) return;
+    const type = Number(packet[0]);
+    if (type === 0) return;
+    const cursor = String(packet[1] ?? '');
+    if (/^\d+$/.test(cursor)) this.cursor = cursor;
+    if (type === 1) {
+      const chain = chainFromCode(packet[2]);
+      const seq = Number(packet[1]);
+      if (Number.isFinite(seq) && (this.received[chain] === undefined || seq > this.received[chain])) this.received[chain] = seq;
+      for (const e of decodeBatch(packet)) this.emit('mint', upsertMint(this.recent, e));
+    } else if (type === 2) {
+      const name = String(packet[3] ?? '');
+      if (name === 'ready') {
+        // Reset here, not on the socket 'open' event: a server that accepts the upgrade and
+        // immediately drops the connection must still climb the backoff ladder to 'error'.
+        this.attempts = 0;
+        this.setState('connected');
+      } else if (name === 'heartbeat') {
+        this.checkHeartbeatGap(packet[4]);
+      }
+    }
+  }
+
+  private retry() {
+    if (this.stopped) return;
+    this.attempts++;
+    const delay = Math.min(5000, 250 * 2 ** Math.min(5, this.attempts - 1));
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => void this.connect(), delay);
+    this.timer.unref();
+  }
+}

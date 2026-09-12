@@ -16,6 +16,10 @@ import type {
   FeedMessage,
   TokenSecurity,
   LoginStep,
+  MintEvent,
+  MintJob,
+  NftRanking,
+  RankingKey,
   Reaction,
   ServerEvent,
   Source,
@@ -63,6 +67,8 @@ export interface Snapshot {
   messages: FeedMessage[];
   tokens: TokenInfo[];
   tokenChats: Record<string, string[]>;
+  /** mints with a transaction hash, so a restart can pick the watch back up */
+  mintJobs?: MintJob[];
 }
 
 export interface HubOptions {
@@ -88,11 +94,22 @@ function normName(n: string): string {
  * Events: 'event' (ServerEvent for websocket clients), 'changed' (state worth persisting).
  */
 export class MessageHub extends EventEmitter {
+  /** filled by Services: what the NFT columns need in `hello` */
+  nftState: { mints: () => MintEvent[]; rankings: () => Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>>; mintJobs: () => MintJob[] } = {
+    mints: () => [],
+    rankings: () => ({}),
+    mintJobs: () => [],
+  };
+  /**
+   * Mint jobs read back from the state file, for the Minter to re-adopt after a restart
+   * (`minter.restore`). Empty until `load()` has run.
+   */
+  restoredMintJobs: MintJob[] = [];
   private buffer: FeedMessage[] = [];
   private tokens = new Map<string, TokenInfo>();
   /** address -> chat ids that have posted it */
   private tokenChats = new Map<string, Set<string>>();
-  private status: Status = { discord: 'disconnected', telegram: 'disconnected', loginStep: 'idle', error: {}, favorites: [] };
+  private status: Status = { discord: 'disconnected', telegram: 'disconnected', loginStep: 'idle', error: {}, favorites: [], mintgo: 'disconnected' };
   private retryDelays: number[];
   private cove: () => CoveOptions;
   private buyOpts: () => BuyOptions;
@@ -438,6 +455,13 @@ export class MessageHub extends EventEmitter {
     this.emitStatus();
   }
 
+  setMintGo(state: NonNullable<Status['mintgo']>, error?: string): void {
+    this.status.mintgo = state;
+    if (error) this.status.error.mintgo = error;
+    else delete this.status.error.mintgo;
+    this.emitStatus();
+  }
+
   setLoginStep(step: LoginStep): void {
     this.status.loginStep = step;
     this.emitStatus();
@@ -454,6 +478,9 @@ export class MessageHub extends EventEmitter {
       messages: [...this.buffer],
       tokens: [...this.tokens.values()].map((t) => ({ ...t })),
       mentions: this.mentions(),
+      mints: this.nftState.mints(),
+      rankings: this.nftState.rankings(),
+      mintJobs: this.nftState.mintJobs(),
       boot: BOOT_ID,
     };
   }
@@ -487,6 +514,13 @@ export class MessageHub extends EventEmitter {
       messages: this.buffer,
       tokens: [...this.tokens.values()],
       tokenChats: Object.fromEntries([...this.tokenChats].map(([a, s]) => [a, [...s]])),
+      // Only jobs with a transaction hash are worth keeping: a `pending` one is still watched after
+      // a restart, and a finished one is the user's record of where their money went. A `ready` or
+      // `quoting` job is a quote that expires in two minutes, so it dies with the process.
+      mintJobs: this.nftState
+        .mintJobs()
+        .filter((j) => j.txHash && (j.state === 'pending' || j.state === 'confirmed' || j.state === 'failed'))
+        .slice(-50),
     };
   }
 
@@ -498,6 +532,7 @@ export class MessageHub extends EventEmitter {
     for (const m of [...this.buffer].sort((a, b) => a.ts - b.ts)) if (m.mention) this.trackMention(m, false);
     this.tokens = new Map((snap.tokens ?? []).map((t) => [t.address, t]));
     this.tokenChats = new Map(Object.entries(snap.tokenChats ?? {}).map(([a, ids]) => [a, new Set(ids)]));
+    this.restoredMintJobs = (snap.mintJobs ?? []).filter((j) => j && typeof j.id === 'string' && !!j.txHash);
     for (const t of this.tokens.values()) {
       if (!this.tokenChats.has(t.address)) this.tokenChats.set(t.address, new Set());
       if (t.lastCallTs === undefined) t.lastCallTs = t.firstSeenTs;

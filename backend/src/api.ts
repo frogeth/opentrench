@@ -1,16 +1,24 @@
 import { Router, json, raw, type Request, type Response } from 'express';
 import type { HoverFetchers } from './hover.js';
 import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
-
-const ohlcvCache = new Map<string, { at: number; v: unknown }>();
-const lastSend = new Map<string, number>();
-let tickers: { at: number; v: { sym: string; usd: number; change24h: number }[] } | undefined;
 import { sanitizeColumns } from './config.js';
 import type { ConfigStore } from './config.js';
 import type { MessageHub } from './hub.js';
 import type { Services } from './services.js';
 import { IpfsCache } from './ipfs.js';
 import { createDeployFinder } from './deploys.js';
+import { CHAINS } from './opensea/chains.js';
+
+const ohlcvCache = new Map<string, { at: number; v: unknown }>();
+const lastSend = new Map<string, number>();
+let tickers: { at: number; v: { sym: string; usd: number; change24h: number }[] } | undefined;
+// one OpenSea quote every 1.5s across the whole app: quoting hits a real RPC/API, and a user mashing
+// the Quote button (or a double-fired UI event) shouldn't fan that out.
+let lastQuote = 0;
+/** test-only: clear the quote throttle so test files aren't coupled to each other's timing. */
+export function __resetOsmintQuoteThrottle(): void {
+  lastQuote = 0;
+}
 
 export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hover?: HoverFetchers): Router {
   const r = Router();
@@ -198,6 +206,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       cfg.update((c) => {
         c.columns = cols;
       });
+      svc.syncColumnFeeds();
       return cols;
     }),
   );
@@ -392,6 +401,84 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     }),
   );
   r.get('/j7/recent', wrap(() => svc.j7Recent()));
+  r.get('/mints/recent', wrap(() => svc.mintsRecent()));
+  // OpenSea mint window
+  r.get('/osmint/jobs', wrap(() => svc.minter.jobs));
+  r.post(
+    '/osmint/quote',
+    wrap((req) => {
+      const locator = String(req.body?.locator ?? '').trim().slice(0, 300);
+      if (!locator) throw new Error('locator required');
+      const chain = req.body?.chain ? String(req.body.chain).slice(0, 30) : undefined;
+      const quantity = Number(req.body?.quantity ?? 1);
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) throw new Error('quantity must be 1–99');
+      if (Date.now() - lastQuote < 1500) throw new Error('slow down — one quote every 1.5 seconds');
+      lastQuote = Date.now();
+      return svc.minter.quote({ locator, chain, quantity });
+    }),
+  );
+  r.post(
+    '/osmint/send',
+    wrap((req) => {
+      const jobId = String(req.body?.jobId ?? '');
+      if (!/^m[a-z0-9]{1,40}$/.test(jobId)) throw new Error('bad job id');
+      // surface the two synchronous refusals inside send() (no such quote / wrong state) to the caller;
+      // everything past that point is fire-and-forget, with the job's states arriving over the socket
+      const job = svc.minter.jobs.find((j) => j.id === jobId);
+      if (!job) throw new Error('no such quote');
+      if (job.state !== 'ready') throw new Error(`quote is ${job.state}`);
+      void svc.minter.send(jobId).catch((e) => console.warn('[osmint] send', e?.message ?? e));
+      return { ok: true };
+    }),
+  );
+  r.get('/opensea', wrap(() => svc.openseaMasked()));
+  r.put(
+    '/opensea/wallet',
+    wrap((req) => {
+      const key = String(req.body?.key ?? '').trim();
+      if (key && !/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error('a private key is 0x followed by 64 hex characters');
+      cfg.update((c) => {
+        c.opensea.walletKey = key || undefined;
+      });
+      return svc.openseaMasked();
+    }),
+  );
+  r.put(
+    '/opensea/rpc',
+    wrap((req) => {
+      const chain = String(req.body?.chain ?? '');
+      const url = String(req.body?.url ?? '').trim().slice(0, 500);
+      // An override for a chain we cannot mint on is dead config at best, and at worst an RPC URL
+      // parked under a name that looks like a chain; only chains in our table can have one.
+      if (!/^[a-z0-9_]{1,30}$/.test(chain) || !Object.hasOwn(CHAINS, chain)) throw new Error('unknown chain');
+      if (url && !/^https:\/\//i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(url)) throw new Error('RPC must be https:// (or a local http endpoint)');
+      // the regex above only checks the scheme; make sure the rest parses into a real URL with a host
+      if (url) {
+        let hostname = '';
+        try {
+          hostname = new URL(url).hostname;
+        } catch {
+          throw new Error('RPC URL is invalid');
+        }
+        if (!hostname) throw new Error('RPC URL is invalid');
+      }
+      cfg.update((c) => {
+        if (url) c.opensea.rpc[chain] = url;
+        else delete c.opensea.rpc[chain];
+      });
+      return svc.openseaMasked();
+    }),
+  );
+  r.get(
+    '/nft/rankings',
+    wrap((req) => {
+      const raw = String(req.query.key ?? '');
+      if (!/^(TRENDING|TOP):(ONE_HOUR|ONE_DAY)$/.test(raw)) throw new Error('bad key');
+      const key = raw as import('./types.js').RankingKey;
+      const hit = svc.rankings.latest[key];
+      return hit ?? { rows: [], at: 0 };
+    }),
+  );
   r.post(
     '/j7/favorites/toggle',
     wrap((req) => {

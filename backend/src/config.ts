@@ -5,11 +5,14 @@ import type { BotPolicy } from './types.js';
 /** One column of the terminal. `chats` are `<source>:<id>` keys of watched chats; empty = every watched chat. */
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7' | 'web';
+  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint';
   title: string;
   chats: string[];
   /** web columns: the page to embed (http/https only) */
   url?: string;
+  /** nftvol: which OpenSea list, and which rolling window */
+  ranking?: 'trending' | 'top';
+  timeframe?: '1h' | '1d';
   /** a second column stacked under this one (one level only), sharing its width */
   split?: { bottom: ColumnDef; ratio?: number };
   /** fixed width in px (drag-resized); unset = share the space */
@@ -27,8 +30,20 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
   { id: 'chats', type: 'chat', title: 'All Chats', chats: [] },
 ];
 
-const TYPES = ['calls', 'callers', 'cove', 'salpha', 'j7', 'web', 'chat'] as const;
-const DEFAULT_TITLE: Record<ColumnDef['type'], string> = { calls: 'Calls', callers: 'Top Callers', cove: 'Cove', salpha: 'Salpha', j7: 'J7', web: 'Web', chat: 'Chats' };
+const TYPES = ['calls', 'callers', 'cove', 'salpha', 'j7', 'web', 'chat', 'mints', 'nftvol', 'osmint'] as const;
+const DEFAULT_TITLE: Record<ColumnDef['type'], string> = {
+  calls: 'Calls',
+  callers: 'Top Callers',
+  cove: 'Cove',
+  salpha: 'Salpha',
+  j7: 'J7',
+  web: 'Web',
+  chat: 'Chats',
+  mints: 'MintGo',
+  nftvol: 'OpenSea Volume',
+  osmint: 'OpenSea Mint',
+};
+export const MINT_CHAINS = ['ethereum', 'robinhood', 'ink'] as const;
 
 /** One column definition from untrusted input; `allowSplit` is false for a stacked bottom (one level only). */
 function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): ColumnDef | undefined {
@@ -51,6 +66,10 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
     const u = String(raw.url ?? '').trim().slice(0, 2000);
     if (/^https?:\/\//i.test(u)) col.url = u;
   }
+  if (type === 'nftvol') {
+    col.ranking = raw.ranking === 'top' ? 'top' : 'trending';
+    col.timeframe = raw.timeframe === '1d' ? '1d' : '1h';
+  }
   const f = raw.filters;
   if (f && typeof f === 'object' && !Array.isArray(f)) {
     const out: NonNullable<ColumnDef['filters']> = {};
@@ -60,6 +79,20 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
       else if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
       else if (typeof v === 'boolean') out[k] = v;
       else if (Array.isArray(v)) out[k] = v.map(String).map((x) => x.slice(0, 80)).slice(0, 300);
+    }
+    if (type === 'mints') {
+      if (Array.isArray(out.chains)) {
+        out.chains = (out.chains as string[]).filter((c) => (MINT_CHAINS as readonly string[]).includes(c));
+        if (out.chains.length === 0) delete out.chains;
+      } else delete out.chains;
+      if (typeof out.minQty === 'number') {
+        out.minQty = Math.round(out.minQty);
+        if (out.minQty < 1 || out.minQty > 1000) delete out.minQty;
+      }
+    } else {
+      delete out.minQty;
+      // chains is also a valid token-network filter for calls/chat columns; only the others lose it
+      if (type !== 'calls' && type !== 'chat') delete out.chains;
     }
     if (Object.keys(out).length) col.filters = out;
   }
@@ -111,9 +144,28 @@ export interface Config {
   seenTokens: string[];
   /** J7Tracker: the account's session id (from its web app), read-only tweet stream */
   j7: { token?: string; /** X handles (no @) whose tweets ping you */ favorites: string[] };
+  /** OpenSea mint window: one wallet key (0x + 64 hex) and RPC overrides by OpenSea chain identifier.
+   * RPC overrides must be https (or http to localhost/127.0.0.1/[::1]): a plaintext RPC over the
+   * network can be tampered with in transit — a quoted balance/fee can be lied about, and a
+   * broadcast transaction can be silently dropped. */
+  opensea: { walletKey?: string; rpc: Record<string, string> };
 }
 
-const DEFAULT: Config = { discord: { watch: [] }, telegram: { watch: [] }, cove: { amounts: [25, 50, 100] }, buy: { provider: 'cove' }, blacklist: [], bots: { default: 'hide', allow: [] }, favorites: [], pingTelegram: true, railOrder: [], columns: DEFAULT_COLUMNS.map((c) => ({ ...c })), seenTokens: [], j7: { favorites: [] } };
+const DEFAULT: Config = {
+  discord: { watch: [] },
+  telegram: { watch: [] },
+  cove: { amounts: [25, 50, 100] },
+  buy: { provider: 'cove' },
+  blacklist: [],
+  bots: { default: 'hide', allow: [] },
+  favorites: [],
+  pingTelegram: true,
+  railOrder: [],
+  columns: DEFAULT_COLUMNS.map((c) => ({ ...c })),
+  seenTokens: [],
+  j7: { favorites: [] },
+  opensea: { rpc: {} },
+};
 
 export class ConfigStore {
   private cfg: Config;
@@ -153,6 +205,7 @@ export class ConfigStore {
       columns: this.cfg.columns,
       j7: { hasToken: !!this.cfg.j7.token, favorites: this.cfg.j7.favorites },
       seenTokens: this.cfg.seenTokens,
+      opensea: { hasWallet: !!this.cfg.opensea.walletKey, rpc: this.cfg.opensea.rpc },
     };
   }
 
@@ -186,6 +239,23 @@ export class ConfigStore {
           favorites: Array.isArray(raw.j7?.favorites) ? [...new Set((raw.j7.favorites as unknown[]).map((h) => String(h).replace(/^@/, '').trim().toLowerCase()).filter((h) => h.length > 0))].slice(0, 500) : [],
         },
         seenTokens: Array.isArray(raw.seenTokens) ? raw.seenTokens.map(String).slice(-3000) : [],
+        opensea: {
+          walletKey: (() => {
+            const wk = raw.opensea?.walletKey;
+            if (wk === undefined || wk === null) return undefined;
+            if (/^0x[0-9a-fA-F]{64}$/.test(String(wk))) return String(wk);
+            console.warn('[config] ignoring invalid opensea.walletKey');
+            return undefined;
+          })(),
+          // https only (or http to localhost/loopback): a plaintext RPC can be tampered with in
+          // transit — a lied-about balance/fee, or a broadcast silently dropped.
+          rpc: Object.fromEntries(
+            Object.entries(raw.opensea?.rpc ?? {})
+              .filter(([k, v]) => /^[a-z0-9_]{1,30}$/.test(k) && (/^https:\/\//i.test(String(v)) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(String(v))))
+              .slice(0, 40)
+              .map(([k, v]) => [k, String(v).slice(0, 500)]),
+          ),
+        },
       };
     } catch {
       return structuredClone(DEFAULT);
@@ -195,5 +265,13 @@ export class ConfigStore {
   private save(): void {
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     fs.writeFileSync(this.file, JSON.stringify(this.cfg, null, 2), { mode: 0o600 });
+    try {
+      // writeFileSync's mode only applies when the file is created; an existing file (e.g. one left
+      // world-readable by an older version) keeps its old permissions unless we chmod it explicitly.
+      // Windows has no real POSIX mode bits and can throw here — that's fine, nothing to tighten.
+      fs.chmodSync(this.file, 0o600);
+    } catch {
+      /* best-effort */
+    }
   }
 }

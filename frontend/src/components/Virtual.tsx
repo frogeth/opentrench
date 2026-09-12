@@ -29,7 +29,13 @@ export function VirtualItem({ id, estimate, children, domKey }: { id: string; es
     return () => io.disconnect();
   }, [id]);
   useLayoutEffect(() => {
-    if (near && ref.current) heights.set(id, ref.current.offsetHeight);
+    if (near && ref.current) {
+      heights.set(id, ref.current.offsetHeight);
+      if (heights.size > 4000) {
+        const oldest = heights.keys().next().value;
+        if (oldest !== undefined) heights.delete(oldest);
+      }
+    }
   });
   const h = heights.get(id) ?? estimate;
   return (

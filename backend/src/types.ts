@@ -293,13 +293,99 @@ export interface J7Deploy {
   url: string;
 }
 
+// ---- NFT columns ----
+export type MintChain = 'ethereum' | 'robinhood' | 'ink' | 'stable' | 'arc';
+
+/** One mint (one tx) seen by MintGo. `preview` rows are replaced by the confirmed row under the same id. */
+export interface MintEvent {
+  id: string;
+  chain: MintChain;
+  ts: number;
+  txHash: string;
+  blockNumber: number;
+  contract: {
+    address: string;
+    name: string;
+    symbol?: string;
+    image?: string;
+    slug?: string;
+    openSeaUrl?: string;
+    projectUrl?: string;
+    twitterUrl?: string;
+    standard?: string;
+    deployer?: { address: string; createdAgo?: string; projects?: number };
+  };
+  quantity: number;
+  tokenIds: string[];
+  tokenIdsTotal?: number;
+  minter: string;
+  valueEth?: number;
+  unitPriceEth?: number;
+  priceConfirmed: boolean;
+  preview: boolean;
+  airdrop: boolean;
+  thirdParty: boolean;
+  functionName?: string;
+  mintedSupply?: number;
+  maxSupply?: number;
+  surge?: { mints: number; events: number; minters: number; startedAt: number };
+}
+
+export type RankingSlug = 'TRENDING' | 'TOP';
+export type RankingTimeframe = 'ONE_HOUR' | 'ONE_DAY';
+export type RankingKey = `${RankingSlug}:${RankingTimeframe}`;
+
+export interface NftRanking {
+  rank: number;
+  slug: string;
+  name: string;
+  image?: string;
+  verified: boolean;
+  chain: string;
+  floor?: { usd: number; unit: number; symbol: string };
+  topOffer?: { usd: number; unit: number; symbol: string };
+  volume: { usd: number; unit: number; symbol: string };
+  sales: number;
+  floorChange?: number;
+  owners?: number;
+  supply?: number;
+  listed?: number;
+  minting?: { stageType: string; endTime?: string };
+}
+
+export type MintJobState = 'quoting' | 'ready' | 'sending' | 'pending' | 'confirmed' | 'failed';
+
+export interface MintJob {
+  id: string;
+  ts: number;
+  updatedAt: number;
+  state: MintJobState;
+  collection: { slug: string; name: string; image?: string; address: string; chain: string; networkId: number; dropKind: string };
+  stage?: { type: string; index: number; startTime?: string; endTime?: string; maxPerWallet?: number; alreadyMinted?: number };
+  quantity: number;
+  wallet: string;
+  price?: { unitWei: string; totalWei: string; symbol: string; usd?: number };
+  gas?: { limit: number; maxFeeWei: string; maxPriorityWei: string; estimateWei: string };
+  balanceWei?: string;
+  txHash?: string;
+  /** the nonce the transaction was signed with; a later nonce on chain means ours was replaced or dropped */
+  nonce?: number;
+  /** wall-clock deadline for watching a pending transaction, kept across restarts */
+  watchUntil?: number;
+  blockNumber?: number;
+  tokenIds?: string[];
+  error?: string;
+}
+
 export interface Status {
   discord: DiscordState;
   telegram: TelegramState;
   loginStep: LoginStep;
-  error: { discord?: string; telegram?: string; j7?: string };
+  error: { discord?: string; telegram?: string; j7?: string; mintgo?: string };
   /** J7Tracker stream */
   j7?: 'disconnected' | 'connecting' | 'connected' | 'auth_error';
+  /** MintGo realtime socket */
+  mintgo?: 'disconnected' | 'connecting' | 'connected' | 'error';
   /** favorite callers (crown + pings) */
   favorites: string[];
   /** who the Discord plugin is signed in as */
@@ -309,7 +395,18 @@ export interface Status {
 }
 
 export type ServerEvent =
-  | { type: 'hello'; status: Status; messages: FeedMessage[]; tokens: TokenInfo[]; mentions: Mention[]; /** changes on every server start: the page reloads to pick up new assets */ boot: string }
+  | {
+      type: 'hello';
+      status: Status;
+      messages: FeedMessage[];
+      tokens: TokenInfo[];
+      mentions: Mention[];
+      mints: MintEvent[];
+      rankings: Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>>;
+      mintJobs: MintJob[];
+      /** changes on every server start: the page reloads to pick up new assets */
+      boot: string;
+    }
   | { type: 'message'; msg: FeedMessage }
   | { type: 'token'; token: TokenInfo }
   | { type: 'reactions'; msgId: string; reactions: Reaction[] }
@@ -320,4 +417,7 @@ export type ServerEvent =
   | { type: 'j7'; tweet: J7Tweet }
   | { type: 'mention'; mention: Mention }
   | { type: 'botDelete'; ids: number[] }
-  | { type: 'status'; status: Status };
+  | { type: 'status'; status: Status }
+  | { type: 'mint'; mint: MintEvent }
+  | { type: 'nftRankings'; key: RankingKey; rows: NftRanking[]; at: number }
+  | { type: 'mintJob'; job: MintJob };

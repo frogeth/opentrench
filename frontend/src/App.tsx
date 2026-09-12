@@ -13,6 +13,9 @@ import { CoveView, COVE_BOT } from './components/CoveView';
 import { PROVIDER_LABEL, BASEDBOT_REFERRAL, BuyContext } from './components/BuyRow';
 import { CaMenuContext, LinkInterceptContext } from './components/RichText';
 import { J7View } from './components/J7View';
+import { MintFeed, mintPasses } from './components/MintFeed';
+import { NftRankings } from './components/NftRankings';
+import { OsMintView } from './components/OsMintView';
 import { PingsPanel } from './components/PingsPanel';
 import { BridgeNotice } from './components/BridgeNotice';
 import { Lightbox } from './components/Lightbox';
@@ -37,7 +40,7 @@ import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type Teleg
 import { beep, type ChartProvider } from './format';
 import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, tokenPasses } from './filters';
-import type { FeedMessage, Source, Status, TokenInfo } from './types';
+import type { FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
 
 function Pill({ label, state }: { label: string; state: string }) {
   return (
@@ -76,7 +79,7 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 export type ChatOrder = 'bottom' | 'top';
 
 export default function App() {
-  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead } = useFeed();
+  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState<Source | null>(null);
   const [view, setView] = useState<View>({ rail: 'all' });
@@ -227,6 +230,16 @@ export default function App() {
     setCfg((c) => (c ? { ...c, columns: next } : c));
     void api.setColumns(next).catch(() => {});
   };
+  /** the nftvol timeframe toggle updates the UI instantly but only PUTs after 300ms of no further clicks */
+  const tfSaveTimer = useRef<number | undefined>(undefined);
+  const saveColumnsDebounced = (next: ColumnDef[]) => {
+    setCfg((c) => (c ? { ...c, columns: next } : c));
+    window.clearTimeout(tfSaveTimer.current);
+    tfSaveTimer.current = window.setTimeout(() => {
+      void api.setColumns(next).catch(() => {});
+    }, 300);
+  };
+  useEffect(() => () => window.clearTimeout(tfSaveTimer.current), []);
   /** `col` = editing that column; `parentId` = it is (or will be) stacked under that top column */
   const [editing, setEditing] = useState<{ col?: ColumnDef; parentId?: string } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
@@ -285,6 +298,26 @@ export default function App() {
     const terminalHidden = !!(view.preview ?? view.chat) || !!openToken;
     if (terminalHidden) setBotDrawer(kind);
     setCoveFlash(type);
+    window.setTimeout(() => setCoveFlash(null), 1500);
+  };
+  // OpenSea mint window: one 'osmint' column, created on first use and flashed, prefilled by Mint buttons.
+  const [mintPrefill, setMintPrefill] = useState<{ locator: string; chain?: string } | null>(null);
+  const [osAddr, setOsAddr] = useState<string | undefined>();
+  useEffect(() => {
+    // keyed on the whole cfg object (not just hasWallet) so a key *replacement* — same hasWallet,
+    // new address — still triggers a refetch; cfg gets a new reference whenever Settings closes or reloads
+    void api.opensea().then((o) => setOsAddr(o.walletAddress)).catch(() => {});
+  }, [cfg]);
+  const lastMintFrom = useRef<{ locator: string; chain?: string; at: number } | null>(null);
+  const mintFrom = (target: { locator: string; chain?: string }) => {
+    // ignore a second Mint-pill click on the same target within 500ms (double-click debounce)
+    const at = Date.now();
+    const last = lastMintFrom.current;
+    if (last && last.locator === target.locator && last.chain === target.chain && at - last.at < 500) return;
+    lastMintFrom.current = { ...target, at };
+    if (!flatColumns.some((c) => c.type === 'osmint')) saveColumns([...columns, { id: 'osmint', type: 'osmint', title: 'OpenSea Mint', chats: [], width: 400 }]);
+    setMintPrefill(target);
+    setCoveFlash('osmint');
     window.setTimeout(() => setCoveFlash(null), 1500);
   };
   /** right-click → Buy (the chosen provider) or Research (Salpha) */
@@ -935,6 +968,42 @@ export default function App() {
         </Column>
       );
     }
+    if (col.type === 'nftvol') {
+      const ranking = col.ranking ?? 'trending';
+      const timeframe = col.timeframe ?? '1h';
+      const key = `${ranking === 'top' ? 'TOP' : 'TRENDING'}:${timeframe === '1d' ? 'ONE_DAY' : 'ONE_HOUR'}` as RankingKey;
+      const hit = rankings[key];
+      const setTf = (tf: '1h' | '1d') => saveColumnsDebounced(updateColumn(col.id, (c) => ({ ...c, timeframe: tf })));
+      return (
+        <Column
+          key={col.id}
+          title={col.title}
+          subtitle={`${ranking === 'top' ? 'Top' : 'Trending'} · ${timeframe.toUpperCase()}`}
+          kind="nftvol"
+          className="col-nftvol"
+          extra={
+            <span className="seg seg-sm">
+              {(['1h', '1d'] as const).map((tf) => (
+                <button key={tf} className={timeframe === tf ? 'active' : ''} onClick={() => setTf(tf)}>
+                  {tf.toUpperCase()}
+                </button>
+              ))}
+            </span>
+          }
+          {...actions}
+        >
+          <NftRankings rows={hit?.rows} at={hit?.at} now={now} timeframe={timeframe} onMint={(r) => mintFrom({ locator: r.slug, chain: r.chain })} />
+        </Column>
+      );
+    }
+    if (col.type === 'mints') {
+      const shown = mints.filter((e) => mintPasses(e, col.filters));
+      return (
+        <Column key={col.id} title={col.title} subtitle={`mintgo.fun · ${status.mintgo === 'error' ? 'reconnecting' : status.mintgo ?? 'off'}`} kind="mints" count={shown.length} className="col-mints" {...actions}>
+          <MintFeed mints={mints} now={now} state={status.mintgo} error={status.error.mintgo} filters={col.filters} onMint={(e) => e.contract.slug && mintFrom({ locator: e.contract.slug, chain: e.chain })} />
+        </Column>
+      );
+    }
     if (col.type === 'j7') {
       return (
         <Column key={col.id} title={col.title} subtitle="j7tracker.io · your session" kind="j7" className="col-j7" {...actions}>
@@ -949,6 +1018,13 @@ export default function App() {
       return (
         <Column key={col.id} title={title} subtitle={`@${bot} · your Telegram`} kind={col.type} className={`col-cove${coveFlash === col.type ? ' col-flash' : ''}`} {...actions}>
           <CoveView bot={bot} msgs={botMsgs[bot] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} />
+        </Column>
+      );
+    }
+    if (col.type === 'osmint') {
+      return (
+        <Column key={col.id} title={col.title} subtitle={osAddr ? `${osAddr.slice(0, 6)}…${osAddr.slice(-4)} · opensea.io` : 'no wallet yet'} kind="osmint" className={`col-cove col-osmint${coveFlash === 'osmint' ? ' col-flash' : ''}`} {...actions}>
+          <OsMintView jobs={mintJobs} now={now} wallet={osAddr} prefill={mintPrefill} onPrefilled={() => setMintPrefill(null)} />
         </Column>
       );
     }
@@ -1229,6 +1305,10 @@ export default function App() {
           callers={knownCallers}
           onClose={() => setEditing(null)}
           onSave={(c) => {
+            if (c.type === 'osmint' && flatColumns.some((x) => x.type === 'osmint' && x.id !== c.id)) {
+              alert('There is already an OpenSea Mint column.');
+              return;
+            }
             const pid = editing.parentId;
             if (pid) saveColumns(columns.map((x) => (x.id === pid ? { ...x, split: { ...(x.split ?? {}), bottom: c } } : x)));
             else saveColumns(flatColumns.some((x) => x.id === c.id) ? updateColumn(c.id, () => c) : [...columns, c]);
