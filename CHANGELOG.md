@@ -7,8 +7,6 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
-- Defined.fi is a chart provider (⚙ → Feed → Chart provider). Every "open chart" link goes to the token's Defined.fi page on Solana, Ethereum, Base, BNB and Arbitrum. Defined.fi refuses to be embedded in a frame, so the inline chart under contracts stays Dexscreener while it is selected; the setting says so.
-
 ## v0.4.0 — 2026-09-11
 
 - **Pick your buy bot: Cove or BasedBot** (⚙ → Trading → Buy buttons). Buy buttons on cards and in the drill-down, right-click → Buy on …, and the buy pane all follow the choice. There is one buy pane; it shows whichever bot is picked. BasedBot opens the token via its `r_<referral>_b_<mint>` deep link (the bot asks the amount); a web-app link is kept as a fallback. Cove keeps its one-click amounts.

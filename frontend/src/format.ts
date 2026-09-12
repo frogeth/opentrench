@@ -83,31 +83,7 @@ export function beep(): void {
   playSound('chirp');
 }
 
-export type ChartProvider = 'basedbot' | 'dexscreener' | 'defined';
-export const CHART_PROVIDERS: { id: ChartProvider; label: string }[] = [
-  { id: 'basedbot', label: 'BasedBot' },
-  { id: 'dexscreener', label: 'Dexscreener / GeckoTerminal' },
-  { id: 'defined', label: 'Defined.fi' },
-];
-
-/** Defined.fi token pages: https://www.defined.fi/token/<slug>/<address> (verified slugs). */
-const DEFINED_SLUG: Record<string, string> = {
-  solana: 'sol',
-  ethereum: 'eth',
-  base: 'base',
-  bsc: 'bsc',
-  arbitrum: 'arb',
-};
-
-/** Where "open chart" goes. Defined.fi has no embeddable chart, so it only changes this link. */
-export function chartOpenUrl(t: { network?: string; address: string; chartUrl?: string } | undefined, provider: ChartProvider): string | undefined {
-  if (!t) return undefined;
-  if (provider === 'defined') {
-    const slug = t.network ? DEFINED_SLUG[t.network] : undefined;
-    if (slug) return `https://www.defined.fi/token/${slug}/${t.address}`;
-  }
-  return t.chartUrl;
-}
+export type ChartProvider = 'basedbot' | 'dexscreener';
 
 /** BasedBot's embed keys on the token address + a chain slug. */
 const BASEDBOT_SLUG: Record<string, string> = {
@@ -138,6 +114,5 @@ export function chartEmbedUrl(
     const slug = t.network ? BASEDBOT_SLUG[t.network] : undefined;
     if (slug) return `https://basedbot.app/embed/token/${slug}/${t.address}?interval=${chartInterval(t.pairCreatedAt, now)}`;
   }
-  // Defined.fi refuses to be framed (X-Frame-Options), so its inline chart falls back to Dexscreener's.
   return t.embedUrl;
 }

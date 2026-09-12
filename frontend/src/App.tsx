@@ -11,7 +11,6 @@ import { Composer, type SendTarget } from './components/Composer';
 import { ShareModal } from './components/ShareModal';
 import { CoveView, COVE_BOT } from './components/CoveView';
 import { PROVIDER_LABEL, BASEDBOT_REFERRAL } from './components/BuyRow';
-import { ChartProviderContext } from './chartProvider';
 import { CaMenuContext } from './components/RichText';
 import { J7View } from './components/J7View';
 import { PingsPanel } from './components/PingsPanel';
@@ -194,8 +193,7 @@ export default function App() {
   };
   const [chartProvider, setChartProviderState] = useState<ChartProvider>(() => {
     try {
-      const v = localStorage.getItem('trenchfeed.chartProvider');
-      return v === 'dexscreener' || v === 'defined' ? v : 'basedbot';
+      return localStorage.getItem('trenchfeed.chartProvider') === 'dexscreener' ? 'dexscreener' : 'basedbot';
     } catch {
       return 'basedbot';
     }
@@ -804,7 +802,6 @@ export default function App() {
     : false;
 
   return (
-    <ChartProviderContext.Provider value={chartProvider}>
     <CaMenuContext.Provider value={openCaMenu}>
     <div className="app">
       <header className="top">
@@ -1201,6 +1198,5 @@ export default function App() {
       )}
     </div>
     </CaMenuContext.Provider>
-    </ChartProviderContext.Provider>
   );
 }

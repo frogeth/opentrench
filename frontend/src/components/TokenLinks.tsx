@@ -12,9 +12,6 @@ export function xHandle(url?: string): string | undefined {
   return h;
 }
 
-import { useChartProvider } from '../chartProvider';
-import { chartOpenUrl } from '../format';
-
 export function TokenLinks({
   t,
   showChart,
@@ -26,7 +23,6 @@ export function TokenLinks({
   onToggleChart: () => void;
   canChart?: boolean;
 }) {
-  const chartHref = chartOpenUrl(t, useChartProvider());
   const searchUrl = t ? `https://x.com/search?q=${encodeURIComponent(t.symbol ? `$${t.symbol} OR ${t.address}` : t.address)}&f=live` : undefined;
   const handle = xHandle(t?.twitter);
   const link = (icon: IconName, label: string, url: string) => (
@@ -43,7 +39,7 @@ export function TokenLinks({
           </button>
         </Tip>
       )}
-      {chartHref && <Tip text="open chart">{link('chart', 'open chart', chartHref)}</Tip>}
+      {t?.chartUrl && <Tip text="open chart">{link('chart', 'open chart', t.chartUrl)}</Tip>}
       {t?.website && <SiteLink url={t.website}>{link('globe', 'website', t.website)}</SiteLink>}
       {t?.twitter && (handle ? <XLink handle={handle}>{link('x', `@${handle}`, t.twitter)}</XLink> : <Tip text="X / Twitter">{link('x', 'X / Twitter', t.twitter)}</Tip>)}
       {searchUrl && <Tip text="Search on X">{link('search', 'search on X', searchUrl)}</Tip>}
