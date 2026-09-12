@@ -928,7 +928,7 @@ export default function App() {
           {...actions}
         >
           {col.url ? (
-            <iframe className="web-frame" src={col.url} title={col.title} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" />
+            <iframe className="web-frame" src={col.url} title={col.title} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" allow="clipboard-read; clipboard-write; fullscreen; autoplay" />
           ) : (
             <div className="empty">No address yet — edit the column (✎) and paste one.</div>
           )}

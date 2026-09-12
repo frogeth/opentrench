@@ -19,6 +19,11 @@ const LAUNCHPADS: [string, string][] = [
 const MUST: [string, string][] = [
   ['website', 'Website'], ['twitter', 'Twitter'], ['telegram', 'Telegram'], ['social', '≥1 social'], ['image', 'Image'], ['devSold', 'Dev sold'], ['lpLocked', 'LP locked'],
 ];
+/** Ready-made Website columns; "Custom" takes any address. */
+const WEB_PRESETS: { name: string; url: string; blurb: string }[] = [
+  { name: 'MintGo', url: 'https://mintgo.fun', blurb: 'mint radar' },
+  { name: 'Smart Money', url: 'https://smartmoney.sh', blurb: 'smart-money flows' },
+];
 type NumKey = { [K in keyof ColumnFilters]-?: NonNullable<ColumnFilters[K]> extends number ? K : never }[keyof ColumnFilters];
 const RANGES: { title: string; rows: [string, NumKey, NumKey, string][] }[] = [
   { title: 'Metrics', rows: [['Market cap', 'mcMin', 'mcMax', '$'], ['Liquidity', 'liqMin', 'liqMax', '$'], ['Volume 24h', 'volMin', 'volMax', '$'], ['MC / Liq', 'mcLiqMin', 'mcLiqMax', 'x'], ['Multiplier', 'multMin', 'multMax', 'x']] },
@@ -107,6 +112,20 @@ export function ColumnEditor({
   const [sound, setSound] = useState(col?.alert?.sound ?? 'ping');
   const [f, setF] = useState<ColumnFilters>(col?.filters ?? {});
   const [url, setUrl] = useState(col?.url ?? '');
+  // a saved address that is not one of the presets is a custom one; a fresh column starts on the presets
+  const [custom, setCustom] = useState(() => !!col?.url && !WEB_PRESETS.some((p) => p.url === col.url));
+  const preset = custom ? undefined : WEB_PRESETS.find((p) => p.url === url.trim());
+  const pickPreset = (p: (typeof WEB_PRESETS)[number]) => {
+    setCustom(false);
+    setUrl(p.url);
+    // a title that was blank or another preset's name follows the pick; a typed one stays
+    if (!title.trim() || WEB_PRESETS.some((q) => q.name === title.trim())) setTitle(p.name);
+  };
+  const pickCustom = () => {
+    setCustom(true);
+    if (WEB_PRESETS.some((p) => p.url === url.trim())) setUrl('');
+    if (WEB_PRESETS.some((q) => q.name === title.trim())) setTitle('');
+  };
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const set = <K extends keyof ColumnFilters>(k: K, v: ColumnFilters[K]) => setF((s) => ({ ...s, [k]: v }));
   const num = (k: NumKey) => (e: React.ChangeEvent<HTMLInputElement>) => set(k, e.target.value === '' ? undefined : Number(e.target.value));
@@ -157,7 +176,7 @@ export function ColumnEditor({
   })();
   const urlOk = /^https?:\/\/[^\s/]+/i.test(cleanUrl);
   const save = () => {
-    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'web' ? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website') : all ? 'All Chats' : 'Chats');
+    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : all ? 'All Chats' : 'Chats');
     if (isWeb && !urlOk) {
       window.alert('Paste the address of the page to show (http:// or https://).');
       return;
@@ -198,12 +217,27 @@ export function ColumnEditor({
               ))}
             </div>
             <div className="fed-label">Feed name</div>
-            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'web' ? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website') : 'All Chats'} maxLength={40} />
+            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : 'All Chats'} maxLength={40} />
             {isWeb && (
               <>
-                <div className="fed-label">Address</div>
-                <input className="fed-input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" spellCheck={false} autoFocus={!col} onKeyDown={(e) => e.key === 'Enter' && save()} />
-                <div className="fed-bot-note hint">The page lives inside the column, like a browser tab. Some sites refuse to be embedded and show up blank; the ↗ in the column header opens them in your browser instead.</div>
+                <div className="fed-label">Site</div>
+                <div className="fchips fed-sites">
+                  {WEB_PRESETS.map((p) => (
+                    <button key={p.url} className={`fchip${preset?.url === p.url ? ' on' : ''}`} onClick={() => pickPreset(p)} title={p.url}>
+                      <Icon name="globe" size={11} /> {p.name} <span className="muted">· {p.blurb}</span>
+                    </button>
+                  ))}
+                  <button className={`fchip${custom ? ' on' : ''}`} onClick={pickCustom}>
+                    <Icon name="pencil" size={11} /> Custom
+                  </button>
+                </div>
+                {custom && (
+                  <>
+                    <div className="fed-label">Address</div>
+                    <input className="fed-input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" spellCheck={false} autoFocus onKeyDown={(e) => e.key === 'Enter' && save()} />
+                  </>
+                )}
+                <div className="fed-bot-note hint">The page lives inside the column, like a browser tab, with clipboard access for its copy buttons. Sites that refuse embedding still load in the desktop app; the ↗ in the column header opens any of them in your browser.</div>
               </>
             )}
             {isBot && (

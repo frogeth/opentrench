@@ -7,6 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Website columns: pages inside a column can use the clipboard, so their copy buttons (a contract address, say) work instead of reporting the clipboard unavailable. Cross-origin frames get no clipboard access unless the host grants it; the column now does.
+- Website columns come with two ready picks, MintGo (mintgo.fun) and Smart Money (smartmoney.sh), plus Custom for any address. Picking one fills the title; a typed title stays.
+
 ## v0.6.1 — 2026-09-12
 
 - Fix: some sites in a Website column loaded their shell and then hung (mintgo.fun sat on "Loading…"). Inside a frame, Chromium withholds a site's own session cookies unless they are marked SameSite=None, so the site's realtime connection had no session. The desktop app now marks cookies set inside embedded pages that way, and those sites work like they do in a browser tab.

@@ -780,6 +780,8 @@ b { font-weight: 600; }
 .fchip { background: var(--bg); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
 .fchip:hover { color: var(--text); border-color: var(--muted); }
 .fchip.on { color: var(--accent); border-color: var(--accent); background: rgba(65, 200, 146, 0.1); }
+.fed-sites { margin-bottom: 10px; }
+.fed-sites .fchip { padding: 6px 10px; }
 .fed-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .fed-cols > div { display: flex; flex-direction: column; gap: 16px; }
 .franges { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
