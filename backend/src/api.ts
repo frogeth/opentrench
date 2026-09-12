@@ -394,6 +394,59 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
   );
   r.get('/j7/recent', wrap(() => svc.j7Recent()));
   r.get('/mints/recent', wrap(() => svc.mintsRecent()));
+  // OpenSea mint window
+  r.get('/osmint/jobs', wrap(() => svc.minter.jobs));
+  r.post(
+    '/osmint/quote',
+    wrap((req) => {
+      const locator = String(req.body?.locator ?? '').trim().slice(0, 300);
+      if (!locator) throw new Error('locator required');
+      const chain = req.body?.chain ? String(req.body.chain).slice(0, 30) : undefined;
+      const quantity = Number(req.body?.quantity ?? 1);
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) throw new Error('quantity must be 1–99');
+      return svc.minter.quote({ locator, chain, quantity });
+    }),
+  );
+  r.post(
+    '/osmint/send',
+    wrap((req) => {
+      const jobId = String(req.body?.jobId ?? '');
+      if (!/^m[a-z0-9]{1,40}$/.test(jobId)) throw new Error('bad job id');
+      // surface the two synchronous refusals inside send() (no such quote / wrong state) to the caller;
+      // everything past that point is fire-and-forget, with the job's states arriving over the socket
+      const job = svc.minter.jobs.find((j) => j.id === jobId);
+      if (!job) throw new Error('no such quote');
+      if (job.state !== 'ready') throw new Error(`quote is ${job.state}`);
+      void svc.minter.send(jobId).catch((e) => console.warn('[osmint] send', e?.message ?? e));
+      return { ok: true };
+    }),
+  );
+  r.get('/opensea', wrap(() => svc.openseaMasked()));
+  r.put(
+    '/opensea/wallet',
+    wrap((req) => {
+      const key = String(req.body?.key ?? '').trim();
+      if (key && !/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error('a private key is 0x followed by 64 hex characters');
+      cfg.update((c) => {
+        c.opensea.walletKey = key || undefined;
+      });
+      return svc.openseaMasked();
+    }),
+  );
+  r.put(
+    '/opensea/rpc',
+    wrap((req) => {
+      const chain = String(req.body?.chain ?? '');
+      const url = String(req.body?.url ?? '').trim().slice(0, 500);
+      if (!/^[a-z0-9_]{1,30}$/.test(chain)) throw new Error('bad chain');
+      if (url && !/^https:\/\//i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(url)) throw new Error('RPC must be https:// (or a local http endpoint)');
+      cfg.update((c) => {
+        if (url) c.opensea.rpc[chain] = url;
+        else delete c.opensea.rpc[chain];
+      });
+      return svc.openseaMasked();
+    }),
+  );
   r.get(
     '/nft/rankings',
     wrap((req) => {

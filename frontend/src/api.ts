@@ -210,4 +210,10 @@ export const api = {
   xProfile: (handle: string) => req<XProfile | null>('GET', `/x-profile/${encodeURIComponent(handle)}`),
   preview: (source: 'discord' | 'telegram', id: string) =>
     req<import('./types').FeedMessage[]>('GET', `/preview/${source}/${encodeURIComponent(id)}`),
+  opensea: () => req<MaskedConfig['opensea']>('GET', '/opensea'),
+  setOpenSeaWallet: (key: string) => req<MaskedConfig['opensea']>('PUT', '/opensea/wallet', { key }),
+  setOpenSeaRpc: (chain: string, url: string) => req<MaskedConfig['opensea']>('PUT', '/opensea/rpc', { chain, url }),
+  osQuote: (locator: string, quantity: number, chain?: string) => req<import('./types').MintJob>('POST', '/osmint/quote', { locator, quantity, chain }),
+  osSend: (jobId: string) => req<{ ok: true }>('POST', '/osmint/send', { jobId }),
+  osJobs: () => req<import('./types').MintJob[]>('GET', '/osmint/jobs'),
 };

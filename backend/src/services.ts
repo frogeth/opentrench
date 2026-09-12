@@ -11,6 +11,8 @@ import { createPreviewer, type Previewer } from './previews.js';
 import { J7Client } from './j7.js';
 import { MintGoClient } from './mintgo.js';
 import { RankingsPoller, keyFor } from './opensea/rankings.js';
+import { Minter } from './opensea/minter.js';
+import { CHAINS } from './opensea/chains.js';
 import { createLaunchWatcher } from './deploys.js';
 import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction } from './types.js';
@@ -25,6 +27,7 @@ export class Services {
   j7?: J7Client;
   mintgo?: MintGoClient;
   readonly rankings = new RankingsPoller();
+  readonly minter = new Minter(() => this.cfg.get().opensea.walletKey, () => this.cfg.get().opensea.rpc);
   private discordSelf?: DiscordSelf;
   private guildRoles = new Map<string, Map<string, string>>();
   /** names for mention markup in one guild */
@@ -48,6 +51,8 @@ export class Services {
     this.wireDiscord();
     this.rankings.on('rankings', (key, rows, at) => this.hub.emit('event', { type: 'nftRankings', key, rows, at }));
     this.hub.nftState.rankings = () => this.rankings.latest;
+    this.minter.on('job', (job) => this.hub.emit('event', { type: 'mintJob', job }));
+    this.hub.nftState.mintJobs = () => this.minter.jobs;
     hub.on('event', (e) => {
       if (e.type === 'ping') void this.ping(e.token, e.msg);
     });
@@ -232,6 +237,23 @@ export class Services {
   }
   mintsRecent() {
     return this.mintgo?.recent ?? [];
+  }
+
+  /** OpenSea mint window settings, masked for the UI: wallet presence/address and the RPC overrides + known chains. */
+  openseaMasked() {
+    const o = this.cfg.get().opensea;
+    let walletAddress: string | undefined;
+    try {
+      walletAddress = this.minter.address();
+    } catch {
+      walletAddress = undefined;
+    }
+    return {
+      hasWallet: !!o.walletKey,
+      walletAddress,
+      rpc: o.rpc,
+      chains: Object.values(CHAINS).map((c) => ({ id: c.id, name: c.name, defaultRpc: c.defaultRpc, symbol: c.symbol })),
+    };
   }
 
   /** Columns changed: start/stop the feeds that depend on which column types exist. */
