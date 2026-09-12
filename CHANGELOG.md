@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.8.0 — 2026-09-12
+
 - New column: **MintGo**. NFT mints on Ethereum, Robinhood Chain and Ink as they happen, straight from mintgo.fun's live feed: collection, quantity, price, minter and supply on each card; click one for its X, OpenSea and website links, the transaction, the deployer's history, and a Mint button. Filter by chain or minimum quantity in ✎. A mint whose price isn't confirmed yet says "price pending".
 - New column: **OpenSea Volume**. OpenSea's Trending or Top collections with floor, volume, sales and floor change, and a 1H / 1D switch in the header. Rows open the collection; a collection with an open SeaDrop stage gets a Mint pill.
 - New column: **OpenSea Mint**. Paste a collection (slug, link or address) or press Mint anywhere: the card shows the open stage, your allowance, price, gas and balance; Mint asks once more, then sends with the wallet from ⚙ → Trading. Cards go sent → pending → confirmed with the minted ids and explorer links. ERC-721 SeaDrop drops only, one wallet, one mint in flight at a time, gas capped per chain, and the transaction is refused if OpenSea's price or contract differs from the quote.
