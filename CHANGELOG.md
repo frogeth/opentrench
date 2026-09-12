@@ -7,7 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
-- Split a column in two. Drag a column by its grip onto the lower half of another one: the accent line moves to that column's bottom edge, and dropping there stacks the dragged column under it, sharing its width. Drag the divider between them to change the split, double-click it to even out, drag the stack's right edge to resize the pair, and drag the grip to move both together. One level only. Removing the top hands its slot to the bottom; removing the bottom just unsplits.
+- Split a column in two. Drag a column by its grip over another one: a translucent box shows where it lands, the front half to move in ahead of it, the lower half to stack underneath, sharing its width. Drag the divider between the pair to change the split, double-click it to even out, drag the stack's right edge to resize the pair. Either half can be dragged back out onto any column's front half to be a full column again. One level only. Removing the top hands its slot to the bottom; removing the bottom just unsplits.
 - New column type: Website. Paste any address and the page lives inside the column like a browser tab; the ↗ in its header opens it in your real browser. Sites that forbid embedding (X-Frame-Options, frame-ancestors) still load in the desktop app, which drops those refusals for embedded pages only.
 - DMs are chats now. Telegram private chats (people, not bots) and Discord DMs and group DMs show up under + → add chats, with a Direct Messages entry on the rail, so a column can be scoped to one person on either platform. Sending, reactions and pings work the same as in any chat. Discord DMs need the plugin rebuilt (vencord/README.md), since the client is what lists them.
 

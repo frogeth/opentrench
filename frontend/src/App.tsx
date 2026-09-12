@@ -397,24 +397,51 @@ export default function App() {
     );
   };
   const [dragCol, setDragCol] = useState<string | null>(null);
-  /** the column under the drag: `before` = drop in front of it (accent on its left edge), `stack` = drop under it (accent along its bottom) */
+  /** the column under the drag and what a drop there does: `before` = land in front of it, `stack` = land under it */
   const [overCol, setOverCol] = useState<{ id: string; zone: 'before' | 'stack' } | null>(null);
+  /** the top-level column that holds `id` (itself, or the top it is stacked under) */
+  const topOf = (cols: ColumnDef[], id: string) => cols.find((c) => c.id === id || c.split?.bottom.id === id);
+  /** pull one column out of the layout: a plain one just leaves, a stacked half leaves its partner as a plain column in the slot */
+  const extract = (cols: ColumnDef[], id: string): [ColumnDef[], ColumnDef | undefined] => {
+    let moving: ColumnDef | undefined;
+    const rest = cols.flatMap((c) => {
+      if (c.id === id) {
+        const { split, ...self } = c;
+        if (!split) return ((moving = self), []);
+        // the top leaves: its bottom takes the slot and the width
+        const { width: _w, ...top } = self;
+        moving = top;
+        return [{ ...split.bottom, ...(c.width ? { width: c.width } : {}) }];
+      }
+      if (c.split?.bottom.id === id) {
+        const { split, ...top } = c;
+        moving = split.bottom;
+        return [top];
+      }
+      return [c];
+    });
+    return [rest, moving];
+  };
   const dragFor = (id: string) => ({
     dragging: dragCol === id,
-    over: overCol?.id === id && overCol.zone === 'before' && dragCol !== id,
-    stack: overCol?.id === id && overCol.zone === 'stack' && dragCol !== id,
+    zone: overCol?.id === id && dragCol !== id ? overCol.zone : undefined,
     onDragStart: (e: DragEvent) => {
       e.dataTransfer.setData('text/plain', id);
       e.dataTransfer.effectAllowed = 'move';
       setDragCol(id);
     },
+    // a drag let go anywhere else (Escape, off the terminal) leaves no ghost behind
+    onDragEnd: () => {
+      setDragCol(null);
+      setOverCol(null);
+    },
     onDragOver: (e: DragEvent) => {
-      if (!dragCol) return;
+      if (!dragCol || dragCol === id) return;
       e.preventDefault();
-      // two plain columns can stack: the lower half of the target means "put it under me"
-      const canStack = dragCol !== id && !columns.find((c) => c.id === dragCol)?.split && !columns.find((c) => c.id === id)?.split;
+      // only a plain column takes a partner: its lower half means "put it under me"
+      const target = columns.find((c) => c.id === id);
       const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      const zone = canStack && e.clientY - r.top > r.height / 2 ? 'stack' : 'before';
+      const zone = target && !target.split && e.clientY - r.top > r.height / 2 ? 'stack' : 'before';
       if (overCol?.id !== id || overCol.zone !== zone) setOverCol({ id, zone });
     },
     onDrop: (e: DragEvent) => {
@@ -424,17 +451,18 @@ export default function App() {
       setDragCol(null);
       setOverCol(null);
       if (!from || from === id) return;
-      const moving = columns.find((c) => c.id === from)!;
-      const next = columns.filter((c) => c.id !== from);
-      if (zone === 'stack' && !moving.split && !columns.find((c) => c.id === id)?.split) {
-        // the top owns the width: keep the target's, or inherit the dragged one's if the target had none
+      const [rest, moving] = extract(columns, from);
+      const anchor = moving && topOf(rest, id);
+      if (!moving || !anchor) return;
+      if (zone === 'stack' && anchor.id === id && !anchor.split) {
+        // the top owns the width: keep the anchor's, or inherit the dragged one's if the anchor had none
         const { width: w, ...bottom } = moving;
-        saveColumns(next.map((c) => (c.id === id ? { ...c, ...(!c.width && w ? { width: w } : {}), split: { bottom } } : c)));
+        saveColumns(rest.map((c) => (c.id === anchor.id ? { ...c, ...(!c.width && w ? { width: w } : {}), split: { bottom } } : c)));
         return;
       }
-      const at = next.findIndex((c) => c.id === id);
-      next.splice(at, 0, moving);
-      saveColumns(next);
+      const at = rest.findIndex((c) => c.id === anchor.id);
+      rest.splice(at, 0, moving);
+      saveColumns(rest);
     },
   });
   const reorderRail = (keys: string[]) => {
@@ -856,7 +884,7 @@ export default function App() {
     : false;
 
   type ColumnActions = Partial<Pick<Parameters<typeof Column>[0], 'onEdit' | 'onRemove' | 'alertOn' | 'onAlert' | 'drag' | 'filtered' | 'width' | 'onResize' | 'fill' | 'stacked' | 'stackShare'>>;
-  /** Header buttons for a column; a stacked bottom drags by its parent's id so the pair moves together. */
+  /** Header buttons for a column; every grip drags its own column, so either half of a pair can be pulled out. */
   const actionsFor = (col: ColumnDef, parentId?: string): ColumnActions => ({
     onEdit: () => setEditing({ col, parentId }),
     onRemove: () => setConfirmRemove(col.id),
@@ -870,7 +898,7 @@ export default function App() {
           },
         }
       : {}),
-    drag: dragFor(parentId ?? col.id),
+    drag: dragFor(col.id),
     filtered: filtersActive(col.filters),
   });
   /** One column of any type. `actions` carries the header buttons plus either the row layout (width/fill/resize) or the stack share. */

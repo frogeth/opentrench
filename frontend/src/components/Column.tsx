@@ -95,7 +95,7 @@ export function Column({
   onEdit?: () => void;
   onRemove?: () => void;
   /** drag-to-reorder wiring from the parent */
-  drag?: { onDragStart: (e: DragEvent) => void; onDragOver: (e: DragEvent) => void; onDrop: (e: DragEvent) => void; dragging?: boolean; over?: boolean; /** the drag would stack under this column */ stack?: boolean };
+  drag?: { onDragStart: (e: DragEvent) => void; onDragEnd?: () => void; onDragOver: (e: DragEvent) => void; onDrop: (e: DragEvent) => void; dragging?: boolean; /** where a drop lands: in front of this column, or stacked under it */ zone?: 'before' | 'stack' };
   /** fixed width (px); unset shares the row */
   width?: number;
   /** drag the right edge: called with the live width, and once more with `done` on release (0 = reset) */
@@ -115,14 +115,14 @@ export function Column({
 }) {
   return (
     <section
-      className={`col ${className}${drag?.dragging ? ' col-dragging' : ''}${drag?.over ? ' col-over' : ''}${drag?.stack ? ' col-over-stack' : ''}${width ? ' col-fixed' : ''}${stacked ? ' col-stacked' : ''}`}
+      className={`col ${className}${drag?.dragging ? ' col-dragging' : ''}${width ? ' col-fixed' : ''}${stacked ? ' col-stacked' : ''}`}
       style={stacked ? { flex: `${stackShare} 1 0px` } : fill ? { flex: `1 1 ${width ?? 380}px` } : width ? { flex: `0 0 ${width}px` } : undefined}
       onDragOver={drag?.onDragOver}
       onDrop={drag?.onDrop}
     >
       <div className="col-head">
         {drag && (
-          <span className="col-grip" draggable onDragStart={drag.onDragStart} title="drag to reorder · drop on the lower half of a column to stack under it" aria-label="Drag to reorder or stack">
+          <span className="col-grip" draggable onDragStart={drag.onDragStart} onDragEnd={drag.onDragEnd} title="drag onto another column: its left half puts this one in front, its lower half stacks it underneath" aria-label="Drag to move or stack">
             <Icon name="grip" size={14} />
           </span>
         )}
@@ -167,6 +167,7 @@ export function Column({
       </div>
       {composer}
       {footer}
+      {drag?.zone && <div className={`col-drop col-drop-${drag.zone}`} aria-hidden />}
       {onResize && !stacked && <ResizeHandle onResize={onResize} />}
     </section>
   );
