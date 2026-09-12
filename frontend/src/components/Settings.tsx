@@ -5,7 +5,7 @@ import { Logo } from './Logo';
 import { Avatar } from './Avatar';
 import { DOCS } from '../site';
 import { PeoplePicker } from './PeoplePicker';
-import { CHART_PROVIDERS, type ChartProvider } from '../format';
+import { CHART_PROVIDERS, copyText, type ChartProvider } from '../format';
 
 type Tab = 'accounts' | 'feed' | 'trading';
 
@@ -123,6 +123,7 @@ export function Settings({
           {cfg && tab === 'trading' && (
             <>
               <CoveSection cfg={cfg} onChange={reload} />
+              <OpenSeaSection onChange={reload} />
               <LaunchpadSection cfg={cfg} onChange={reload} />
             </>
           )}
@@ -472,6 +473,72 @@ function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
       ) : (
         <div className="hint">BasedBot opens the token in @based_eth_bot and asks the amount there.</div>
       )}
+      {err && <div className="err">{err}</div>}
+    </section>
+  );
+}
+
+/** The OpenSea Mint column's signing wallet: a plain-text key on this machine, so keep it dedicated and small. */
+function OpenSeaSection({ onChange }: { onChange: () => void }) {
+  const [os, setOs] = useState<MaskedConfig['opensea'] | null>(null);
+  const [key, setKey] = useState('');
+  const [rpc, setRpc] = useState<Record<string, string>>({});
+  const [copied, setCopied] = useState(false);
+  const { busy, err, run } = useAsync();
+  const load = () => api.opensea().then((o) => { setOs(o); setRpc(o.rpc); }).catch(() => {});
+  useEffect(() => { void load(); }, []);
+  if (!os) return null;
+  const copyAddress = async () => {
+    if (!os.walletAddress) return;
+    if (await copyText(os.walletAddress)) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    }
+  };
+  return (
+    <section>
+      <h2>OpenSea mint wallet</h2>
+      <div className="hint">
+        The OpenSea Mint column signs mints with this key and pays from this wallet. Use a <b>dedicated wallet</b> holding only what you mean to spend: the key is stored in plain text in config.json on this machine, and a mint is irreversible once sent.
+      </div>
+      {os.hasWallet && os.walletAddress && (
+        <div className="row-inline">
+          <span className="muted">Saved wallet</span>
+          <button className="mini" onClick={() => void copyAddress()} title={os.walletAddress}>
+            {copied ? 'copied' : os.walletAddress}
+          </button>
+        </div>
+      )}
+      <div className="row-inline">
+        <input type="password" placeholder={os.hasWallet ? 'replace with a new private key (0x…)' : 'private key (0x…)'} value={key} onChange={(e) => setKey(e.target.value)} autoComplete="off" />
+        <button disabled={busy || !key} onClick={() => run(async () => { setOs(await api.setOpenSeaWallet(key.trim())); setKey(''); onChange(); })}>
+          Save
+        </button>
+        {os.hasWallet && (
+          <button
+            disabled={busy}
+            onClick={() => {
+              if (!window.confirm('Remove the mint wallet key from this app? Make sure you have it backed up.')) return;
+              void run(async () => {
+                setOs(await api.setOpenSeaWallet(''));
+                onChange();
+              });
+            }}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+      <div className="hint" style={{ marginTop: 8 }}>RPC endpoints. Blank uses the public default.</div>
+      {(os.chains ?? []).map((c) => (
+        <div className="row-inline" key={c.id}>
+          <span className="muted" style={{ width: 120, fontSize: 12 }}>{c.name}</span>
+          <input placeholder={c.defaultRpc} value={rpc[c.id] ?? ''} onChange={(e) => setRpc((r) => ({ ...r, [c.id]: e.target.value }))} spellCheck={false} />
+          <button disabled={busy} onClick={() => run(async () => { const o = await api.setOpenSeaRpc(c.id, rpc[c.id] ?? ''); setOs(o); setRpc(o.rpc); })}>
+            Save
+          </button>
+        </div>
+      ))}
       {err && <div className="err">{err}</div>}
     </section>
   );

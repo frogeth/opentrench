@@ -1109,3 +1109,28 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .nftv-foot { padding: 8px 10px; font-size: 10px; text-align: center; }
 .nftv-foot.err { color: var(--err); }
 .seg-sm button { padding: 2px 7px; font-size: 10px; }
+
+/* ---------- OpenSea mint window ---------- */
+.osm-bar { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 11px; border-bottom: 1px solid var(--line); }
+.osm-wallet-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--chrome); color: var(--text); border: 1px solid var(--line-strong); border-radius: 6px; padding: 2px 7px; font: inherit; font-size: 11px; cursor: pointer; }
+.osm-wallet-chip:hover { border-color: var(--accent); color: var(--accent); }
+.osm-hint { padding: 0 2px 4px; font-size: 11px; }
+.osj { width: 100%; max-width: 100%; align-self: stretch; }
+.osj-head { display: flex; justify-content: space-between; font-size: 13px; }
+.osj-ready { border-color: rgba(65, 200, 146, 0.45); }
+.osj-confirmed { border-color: rgba(65, 200, 146, 0.7); }
+.osj-failed { border-color: rgba(242, 102, 130, 0.5); }
+.osj-pending, .osj-sending { border-color: rgba(100, 126, 255, 0.5); }
+.osj-col { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: 12px; }
+.osj-col img { width: 32px; height: 32px; border-radius: 7px; object-fit: cover; }
+.osj-lines { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-top: 6px; font-size: 12px; }
+.osj-lines span { color: var(--muted); }
+.osj-lines b { text-align: right; font-variant-numeric: tabular-nums; }
+.osj-spin { margin-top: 6px; text-align: center; letter-spacing: 3px; font-size: 12px; }
+.osj-ok { margin-top: 6px; color: var(--good); font-size: 12px; }
+.osj-err { margin-top: 6px; color: var(--err); font-size: 12px; }
+.osj-mint { background: var(--accent) !important; color: #04140d !important; border-color: transparent !important; font-weight: 600; }
+.osj-confirm { background: var(--warn) !important; color: #1a1200 !important; border-color: transparent !important; font-weight: 600; }
+.osm-composer .composer-row { display: flex; gap: 6px; align-items: center; }
+.osm-composer input { flex: 1; min-width: 0; }
+.osm-qty { flex: 0 0 56px !important; }

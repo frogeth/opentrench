@@ -15,6 +15,7 @@ import { CaMenuContext, LinkInterceptContext } from './components/RichText';
 import { J7View } from './components/J7View';
 import { MintFeed, mintPasses } from './components/MintFeed';
 import { NftRankings } from './components/NftRankings';
+import { OsMintView } from './components/OsMintView';
 import { PingsPanel } from './components/PingsPanel';
 import { BridgeNotice } from './components/BridgeNotice';
 import { Lightbox } from './components/Lightbox';
@@ -298,6 +299,18 @@ export default function App() {
     const terminalHidden = !!(view.preview ?? view.chat) || !!openToken;
     if (terminalHidden) setBotDrawer(kind);
     setCoveFlash(type);
+    window.setTimeout(() => setCoveFlash(null), 1500);
+  };
+  // OpenSea mint window: one 'osmint' column, created on first use and flashed, prefilled by Mint buttons.
+  const [mintPrefill, setMintPrefill] = useState<{ locator: string; chain?: string } | null>(null);
+  const [osAddr, setOsAddr] = useState<string | undefined>();
+  useEffect(() => {
+    void api.opensea().then((o) => setOsAddr(o.walletAddress)).catch(() => {});
+  }, [cfg?.opensea?.hasWallet]);
+  const mintFrom = (target: { locator: string; chain?: string }) => {
+    if (!flatColumns.some((c) => c.type === 'osmint')) saveColumns([...columns, { id: 'osmint', type: 'osmint', title: 'OpenSea Mint', chats: [], width: 400 }]);
+    setMintPrefill(target);
+    setCoveFlash('osmint');
     window.setTimeout(() => setCoveFlash(null), 1500);
   };
   /** right-click → Buy (the chosen provider) or Research (Salpha) */
@@ -972,7 +985,7 @@ export default function App() {
           }
           {...actions}
         >
-          <NftRankings rows={hit?.rows} at={hit?.at} now={now} timeframe={timeframe} onMint={undefined} />
+          <NftRankings rows={hit?.rows} at={hit?.at} now={now} timeframe={timeframe} onMint={(r) => mintFrom({ locator: r.slug, chain: r.chain })} />
         </Column>
       );
     }
@@ -980,7 +993,7 @@ export default function App() {
       const shown = mints.filter((e) => mintPasses(e, col.filters));
       return (
         <Column key={col.id} title={col.title} subtitle={`mintgo.fun · ${status.mintgo === 'error' ? 'reconnecting' : status.mintgo ?? 'off'}`} kind="mints" count={shown.length} className="col-mints" {...actions}>
-          <MintFeed mints={mints} now={now} state={status.mintgo} error={status.error.mintgo} filters={col.filters} onMint={undefined} />
+          <MintFeed mints={mints} now={now} state={status.mintgo} error={status.error.mintgo} filters={col.filters} onMint={(e) => e.contract.slug && mintFrom({ locator: e.contract.slug, chain: e.chain })} />
         </Column>
       );
     }
@@ -998,6 +1011,13 @@ export default function App() {
       return (
         <Column key={col.id} title={title} subtitle={`@${bot} · your Telegram`} kind={col.type} className={`col-cove${coveFlash === col.type ? ' col-flash' : ''}`} {...actions}>
           <CoveView bot={bot} msgs={botMsgs[bot] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} />
+        </Column>
+      );
+    }
+    if (col.type === 'osmint') {
+      return (
+        <Column key={col.id} title={col.title} subtitle={osAddr ? `${osAddr.slice(0, 6)}…${osAddr.slice(-4)} · opensea.io` : 'no wallet yet'} kind="osmint" className={`col-cove col-osmint${coveFlash === 'osmint' ? ' col-flash' : ''}`} {...actions}>
+          <OsMintView jobs={mintJobs} now={now} wallet={osAddr} prefill={mintPrefill} onPrefilled={() => setMintPrefill(null)} />
         </Column>
       );
     }
