@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.7.0 — 2026-09-12
+
 - Website columns: pages inside a column can use the clipboard, so their copy buttons (a contract address, say) work instead of reporting the clipboard unavailable. Cross-origin frames get no clipboard access unless the host grants it; the column now does.
 - The Add/Edit column dialog keeps one size whatever type you pick (bot types used to shrink it), and the type picker is a grid of cards, each with an icon, its name and a line on what it shows.
 - Right-click a message for its menu: a strip of quick reactions, Reply, jump to the message it answers, open its chat, copy the text, copy or open the original link on Discord or Telegram, and the token menu (open, buy, research, copy) for any contract it mentions. A contract address keeps its own right-click.
