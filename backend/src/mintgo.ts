@@ -95,3 +95,135 @@ export function upsertMint(list: MintEvent[], e: MintEvent, max = MAX): 'new' | 
   if (list.length > max) list.length = max;
   return 'new';
 }
+
+export type MintGoState = NonNullable<import('./types.js').Status['mintgo']>;
+
+export class MintGoClient extends EventEmitter {
+  state: MintGoState = 'disconnected';
+  readonly recent: MintEvent[] = [];
+  private cookie = '';
+  private renewAt = 0;
+  private cursor = '';
+  private socket?: WebSocket;
+  private attempts = 0;
+  private timer?: NodeJS.Timeout;
+  private stopped = true;
+  private readonly clientId = Math.random().toString(36).slice(2, 12);
+
+  constructor(private fetchImpl: typeof fetch = fetch) {
+    super();
+  }
+
+  /** A browser session cookie; MintGo hands one to any request that looks same-origin. */
+  async session(force = false): Promise<string> {
+    if (!force && this.cookie && Date.now() < this.renewAt) return this.cookie;
+    const r = await this.fetchImpl(`${MINTGO}/api/session`, { method: 'POST', headers: { ...SAME_ORIGIN_HEADERS, 'content-type': 'application/json' }, body: '{}' });
+    if (!r.ok) throw new Error(`MintGo session refused (${r.status})`);
+    const j: any = await r.json().catch(() => ({}));
+    const cookies = (r.headers as any).getSetCookie?.() as string[] | undefined;
+    const jar = (cookies ?? []).map((c) => c.split(';')[0]).filter((c) => /^mg_/.test(c));
+    if (!j.ok || jar.length === 0) throw new Error('MintGo session response had no cookie');
+    this.cookie = jar.join('; ');
+    this.renewAt = Number(j.renewAfter) > Date.now() ? Number(j.renewAfter) : Date.now() + 20 * 60_000;
+    return this.cookie;
+  }
+
+  /** GET one of MintGo's JSON endpoints with the session (used by the mint window later). */
+  async get<T>(path: string): Promise<T> {
+    const go = async () => this.fetchImpl(`${MINTGO}${path}`, { headers: { ...SAME_ORIGIN_HEADERS, cookie: await this.session() } });
+    let r = await go();
+    if (r.status === 401) {
+      await this.session(true);
+      r = await go();
+    }
+    if (!r.ok) throw new Error(`MintGo ${path} → ${r.status}`);
+    return (await r.json()) as T;
+  }
+
+  start(): void {
+    this.stopped = false;
+    void this.connect();
+  }
+
+  stop(): void {
+    this.stopped = true;
+    clearTimeout(this.timer);
+    this.socket?.close(1000, 'stopped');
+    this.socket = undefined;
+    this.setState('disconnected');
+  }
+
+  private setState(s: MintGoState, err?: string) {
+    if (this.state === s && !err) return;
+    this.state = s;
+    this.emit('state', s, err);
+  }
+
+  private async connect(): Promise<void> {
+    if (this.stopped) return;
+    this.setState('connecting');
+    let cookie: string;
+    try {
+      cookie = await this.session(this.attempts > 0);
+    } catch (e: any) {
+      this.setState('error', e?.message ?? String(e));
+      return this.retry();
+    }
+    const url = new URL(`${MINTGO.replace('https', 'wss')}/api/realtime`);
+    url.searchParams.set('scope', 'all');
+    url.searchParams.set('client', this.clientId);
+    if (/^\d+$/.test(this.cursor)) url.searchParams.set('since', this.cursor);
+    const ws = new WebSocket(url, { headers: { ...SAME_ORIGIN_HEADERS, cookie } });
+    this.socket = ws;
+    ws.on('open', () => {
+      this.attempts = 0;
+    });
+    ws.on('message', (data) => {
+      let packet: unknown;
+      try {
+        const buf =
+          data instanceof ArrayBuffer
+            ? Buffer.from(data)
+            : Buffer.isBuffer(data) || Array.isArray(data)
+              ? Buffer.concat(Array.isArray(data) ? data : [data])
+              : Buffer.from(String(data));
+        packet = JSON.parse(buf.toString('utf8'));
+      } catch {
+        return;
+      }
+      if (!Array.isArray(packet)) return;
+      const type = Number(packet[0]);
+      if (type === 0) return;
+      const cursor = String(packet[1] ?? '');
+      if (/^\d+$/.test(cursor)) this.cursor = cursor;
+      if (type === 1) {
+        for (const e of decodeBatch(packet)) {
+          upsertMint(this.recent, e);
+          this.emit('mint', e);
+        }
+      } else if (type === 2) {
+        const name = String(packet[3] ?? '');
+        if (name === 'ready') this.setState('connected');
+      }
+    });
+    ws.on('close', (code, reason) => {
+      if (this.socket !== ws) return;
+      this.socket = undefined;
+      if (this.stopped) return;
+      this.setState('error', `socket closed (${code}${reason?.length ? ` ${reason.toString()}` : ''})`);
+      this.retry();
+    });
+    ws.on('error', (e) => {
+      console.warn('[mintgo] socket error', e?.message ?? e);
+    });
+  }
+
+  private retry() {
+    if (this.stopped) return;
+    this.attempts++;
+    const delay = Math.min(5000, 250 * 2 ** Math.min(5, this.attempts - 1));
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => void this.connect(), delay);
+    this.timer.unref();
+  }
+}

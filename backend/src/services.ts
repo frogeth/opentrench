@@ -9,6 +9,7 @@ import { isWatched } from './telegram/ids.js';
 import { extractLinks, type ExtractedMeta } from './links.js';
 import { createPreviewer, type Previewer } from './previews.js';
 import { J7Client } from './j7.js';
+import { MintGoClient } from './mintgo.js';
 import { createLaunchWatcher } from './deploys.js';
 import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction } from './types.js';
@@ -21,6 +22,7 @@ export class Services {
   private gatewayTimer?: NodeJS.Timeout;
   telegram?: TelegramWrapper;
   j7?: J7Client;
+  mintgo?: MintGoClient;
   private discordSelf?: DiscordSelf;
   private guildRoles = new Map<string, Map<string, string>>();
   /** names for mention markup in one guild */
@@ -204,6 +206,28 @@ export class Services {
   }
   j7Recent() {
     return (this.j7?.recent ?? []).map((t) => ({ ...t, contracts: detectContracts(t.text) }));
+  }
+
+  /** MintGo live mints (no account needed). Started when a MintGo or mint-window column exists, stopped when none does. */
+  startMintGo(): void {
+    const wanted = this.cfg.get().columns.flatMap((c) => (c.split ? [c, c.split.bottom] : [c])).some((c) => c.type === 'mints' || c.type === 'osmint');
+    if (!wanted) {
+      this.mintgo?.stop();
+      this.mintgo = undefined;
+      this.hub.nftState.mints = () => [];
+      this.hub.setMintGo('disconnected');
+      return;
+    }
+    if (this.mintgo) return;
+    const c = new MintGoClient();
+    c.on('state', (s: any, err?: string) => this.hub.setMintGo(s, err));
+    c.on('mint', (mint: import('./types.js').MintEvent) => this.hub.emit('event', { type: 'mint', mint }));
+    this.mintgo = c;
+    this.hub.nftState.mints = () => c.recent;
+    c.start();
+  }
+  mintsRecent() {
+    return this.mintgo?.recent ?? [];
   }
 
   /** Conversation with a Telegram bot (Cove) through the user's own session. */

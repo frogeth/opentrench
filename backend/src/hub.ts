@@ -16,6 +16,10 @@ import type {
   FeedMessage,
   TokenSecurity,
   LoginStep,
+  MintEvent,
+  MintJob,
+  NftRanking,
+  RankingKey,
   Reaction,
   ServerEvent,
   Source,
@@ -88,6 +92,12 @@ function normName(n: string): string {
  * Events: 'event' (ServerEvent for websocket clients), 'changed' (state worth persisting).
  */
 export class MessageHub extends EventEmitter {
+  /** filled by Services: what the NFT columns need in `hello` */
+  nftState: { mints: () => MintEvent[]; rankings: () => Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>>; mintJobs: () => MintJob[] } = {
+    mints: () => [],
+    rankings: () => ({}),
+    mintJobs: () => [],
+  };
   private buffer: FeedMessage[] = [];
   private tokens = new Map<string, TokenInfo>();
   /** address -> chat ids that have posted it */
@@ -438,6 +448,13 @@ export class MessageHub extends EventEmitter {
     this.emitStatus();
   }
 
+  setMintGo(state: NonNullable<Status['mintgo']>, error?: string): void {
+    this.status.mintgo = state;
+    if (error) this.status.error.mintgo = error;
+    else delete this.status.error.mintgo;
+    this.emit('event', { type: 'status', status: this.getStatus() } satisfies ServerEvent);
+  }
+
   setLoginStep(step: LoginStep): void {
     this.status.loginStep = step;
     this.emitStatus();
@@ -454,10 +471,9 @@ export class MessageHub extends EventEmitter {
       messages: [...this.buffer],
       tokens: [...this.tokens.values()].map((t) => ({ ...t })),
       mentions: this.mentions(),
-      // TODO(Task 3): replace with real MintGo / OpenSea providers
-      mints: [],
-      rankings: {},
-      mintJobs: [],
+      mints: this.nftState.mints(),
+      rankings: this.nftState.rankings(),
+      mintJobs: this.nftState.mintJobs(),
       boot: BOOT_ID,
     };
   }

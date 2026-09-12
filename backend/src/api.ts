@@ -198,6 +198,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       cfg.update((c) => {
         c.columns = cols;
       });
+      svc.startMintGo();
       return cols;
     }),
   );
@@ -392,6 +393,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     }),
   );
   r.get('/j7/recent', wrap(() => svc.j7Recent()));
+  r.get('/mints/recent', wrap(() => svc.mintsRecent()));
   r.post(
     '/j7/favorites/toggle',
     wrap((req) => {
