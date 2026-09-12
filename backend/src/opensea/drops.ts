@@ -3,8 +3,13 @@ import type { OpenSeaSession } from './session.js';
 
 export interface DropStage { kind: string; type: string; index: number; startTime?: string; endTime?: string; maxPerWallet?: number }
 export interface DropCollection { slug: string; name: string; image?: string; address: string; chain: string; networkId: number; drop?: { kind: string; address: string; stages: DropStage[] } }
-export interface StageEligibility { type: string; index: number; eligible: boolean; maxPerWallet?: number; eligibleMax?: number; priceUnit?: number; priceUsd?: number; priceSymbol?: string }
-export interface Eligibility { kind: string; minted: number; stages: StageEligibility[] }
+export interface StageEligibility { type: string; index: number; eligible: boolean; maxPerWallet?: number; eligibleMax?: number; eligibleMinter?: string; priceUnit?: number; priceUsd?: number; priceSymbol?: string }
+export interface Eligibility {
+  kind: string;
+  /** From `minterQuantityMinted`, which OpenSea only returns for `Erc721SeaDropV1` drops; other kinds get 0 here, so callers must gate on `kind` before trusting this number. */
+  minted: number;
+  stages: StageEligibility[];
+}
 export interface MintTx { to: string; data: string; value: string; networkId: number; chain: string }
 
 /** Returns `undefined` for null/undefined/non-finite, unlike `Number()` which coerces null to 0. */
@@ -13,21 +18,34 @@ const num = (v: unknown): number | undefined => {
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
 };
-const int = num;
+/** Like `num`, but truncates toward zero so a fractional value (e.g. from a sloppy upstream payload) never leaks into an index/count field. */
+const int = (v: unknown): number | undefined => {
+  const n = num(v);
+  return n === undefined ? undefined : Math.trunc(n);
+};
+
+const ADDRESS_RE = /^0x[0-9a-f]{40}$/;
 
 export function parseLocator(s: string): { slug: string } | { address: string } | undefined {
   const t = s.trim();
   if (!t) return undefined;
-  if (/^0x[0-9a-fA-F]{40}$/.test(t)) return { address: t.toLowerCase() };
+  if (/^0x[0-9a-fA-F]{40}$/i.test(t)) return { address: t.toLowerCase() };
   if (/^[A-Za-z0-9_-]{1,200}$/.test(t)) return { slug: t };
-  try {
-    const u = new URL(t);
-    if (u.hostname !== 'opensea.io' && u.hostname !== 'www.opensea.io') return undefined;
-    const m = /^\/collection\/([A-Za-z0-9_-]{1,200})/.exec(u.pathname);
-    return m ? { slug: m[1] } : undefined;
-  } catch {
-    return undefined;
-  }
+  const tryUrl = (x: string): URL | undefined => {
+    try {
+      return new URL(x);
+    } catch {
+      return undefined;
+    }
+  };
+  let u = tryUrl(t);
+  // A scheme-less "opensea.io/collection/x" fails the bare parse above (no protocol); retry with
+  // https:// prepended. Also retry when the input looks like an opensea.io path even if the first
+  // parse unexpectedly succeeded under some other interpretation.
+  if (!u || /^(?:www\.)?opensea\.io\//i.test(t)) u = tryUrl(`https://${t}`) ?? u;
+  if (!u || (u.hostname !== 'opensea.io' && u.hostname !== 'www.opensea.io')) return undefined;
+  const m = /^\/collection\/([A-Za-z0-9_-]{1,200})/.exec(u.pathname);
+  return m ? { slug: m[1] } : undefined;
 }
 
 const COLLECTION_QUERY = `query MintCollectionMetadata($slug: String!) { collectionBySlug(slug: $slug) { __typename ... on Collection { slug name imageUrl address chain { identifier networkId } drop { __typename identifier { contractAddress chain { identifier } } stages { __typename stageType stageIndex startTime endTime maxTotalMintableByWallet } } } } }`;
@@ -37,6 +55,10 @@ const MINT_ACTION_QUERY = `query MintActionTimelineQuery($address: Address!, $fr
 
 export function decodeCollection(c: any): DropCollection | undefined {
   if (!c || c.__typename !== 'Collection' || typeof c.slug !== 'string') return undefined;
+  const address = String(c.address ?? '').toLowerCase();
+  if (!ADDRESS_RE.test(address)) return undefined;
+  const networkId = Number(c.chain?.networkId ?? 0);
+  if (!Number.isInteger(networkId) || networkId <= 0) return undefined;
   const stages: DropStage[] = (c.drop?.stages ?? []).map((s: any) => ({
     kind: String(s.__typename ?? ''),
     type: String(s.stageType ?? ''),
@@ -45,14 +67,25 @@ export function decodeCollection(c: any): DropCollection | undefined {
     endTime: s.endTime ?? undefined,
     maxPerWallet: int(s.maxTotalMintableByWallet),
   }));
+  let drop: DropCollection['drop'];
+  const rawDropAddress = c.drop?.identifier?.contractAddress;
+  if (rawDropAddress) {
+    const dropAddress = String(rawDropAddress).toLowerCase();
+    if (!ADDRESS_RE.test(dropAddress)) return undefined;
+    const kind = String(c.drop.__typename ?? '');
+    // The validator pins mint calldata's contract word to `col.address`, so a SeaDrop contract
+    // living at a different address than the collection must never be treated as mintable.
+    if (kind === 'Erc721SeaDropV1' && dropAddress !== address) return undefined;
+    drop = { kind, address: dropAddress, stages };
+  }
   return {
     slug: c.slug,
     name: String(c.name ?? c.slug),
     image: c.imageUrl || undefined,
-    address: String(c.address ?? '').toLowerCase(),
+    address,
     chain: String(c.chain?.identifier ?? ''),
-    networkId: Number(c.chain?.networkId ?? 0),
-    drop: c.drop?.identifier?.contractAddress ? { kind: String(c.drop.__typename ?? ''), address: String(c.drop.identifier.contractAddress).toLowerCase(), stages } : undefined,
+    networkId,
+    drop,
   };
 }
 
@@ -64,16 +97,20 @@ export async function resolveCollection(locator: string, chain?: string, fetchIm
   if ('slug' in p) slug = p.slug;
   else {
     const d = await gql<{ collectionsByQuery: any[] }>('MintCollectionSearch', SEARCH_QUERY, { query: p.address }, { referer: `${OPENSEA}/`, fetchImpl });
-    const hits = (d.collectionsByQuery ?? []).filter((c) => String(c?.address ?? '').toLowerCase() === p.address && c.slug && c.slug.toLowerCase() !== p.address);
+    const hits = (d.collectionsByQuery ?? []).filter(
+      (c) => c?.__typename === 'Collection' && String(c?.address ?? '').toLowerCase() === p.address && c.slug && c.slug.toLowerCase() !== p.address,
+    );
     // Stable default when no chain is requested and several hits exist: ethereum first.
-    hits.sort((a, b) => (a.chain?.identifier === 'ethereum' ? -1 : 0) - (b.chain?.identifier === 'ethereum' ? -1 : 0));
-    const hit = (chain ? hits.find((c) => c.chain?.identifier === chain) : undefined) ?? hits[0];
-    if (!hit) throw new OpenSeaError('compat', 'OpenSea has no collection at that address.');
+    hits.sort((a, b) => Number(b.chain?.identifier === 'ethereum') - Number(a.chain?.identifier === 'ethereum'));
+    const hit = chain ? hits.find((c) => c.chain?.identifier === chain) : hits[0];
+    if (!hit) throw new OpenSeaError('compat', chain ? `OpenSea has no collection at that address on ${chain}.` : 'OpenSea has no collection at that address.');
+    if (!/^[A-Za-z0-9_-]{1,200}$/.test(hit.slug)) throw new OpenSeaError('compat', 'OpenSea returned an unusable collection slug.');
     slug = hit.slug;
   }
   const d = await gql<{ collectionBySlug: any }>('MintCollectionMetadata', COLLECTION_QUERY, { slug }, { referer: `${OPENSEA}/collection/${slug}/overview`, fetchImpl });
   const col = decodeCollection(d.collectionBySlug);
   if (!col) throw new OpenSeaError('compat', `OpenSea has no collection called ${slug}.`);
+  if ('address' in p && col.address !== p.address) throw new OpenSeaError('compat', 'OpenSea resolved that address to a different contract.');
   return col;
 }
 
@@ -90,6 +127,7 @@ export async function eligibility(session: OpenSeaSession, col: DropCollection):
       eligible: s.isEligible === true,
       maxPerWallet: int(s.maxTotalMintableByWallet),
       eligibleMax: int(s.eligibleMaxTotalMintableByWallet),
+      eligibleMinter: s.eligibleMinterAddress ? String(s.eligibleMinterAddress).toLowerCase() : undefined,
       priceUnit: num(s.eligiblePrice?.token?.unit),
       priceUsd: num(s.eligiblePrice?.usd),
       priceSymbol: s.eligiblePrice?.token?.symbol ?? undefined,
@@ -105,14 +143,25 @@ const ERROR_SENTENCES: Record<string, string> = {
 };
 export function mintErrorSentence(types: string[]): string | undefined {
   if (!types.length) return undefined;
-  return types.map((t) => ERROR_SENTENCES[t] ?? `OpenSea refused the mint (${t})`).join('; ');
+  // OpenSea's error typenames land in interpolated sentences (and, via validate.ts, error
+  // messages surfaced to the UI); bound both their length and count so a malformed/huge payload
+  // can't produce an unbounded or unexpected string.
+  const safe = (t: string) => (/^[A-Za-z0-9_]{1,64}$/.test(t) ? t : 'UnknownError');
+  return types
+    .slice(0, 8)
+    .map((t) => {
+      const s = safe(t);
+      return ERROR_SENTENCES[s] ?? `OpenSea refused the mint (${s})`;
+    })
+    .join('; ');
 }
 
-/** OpenSea's raw tx.value may be a decimal string or hex; normalise to a decimal string, or undefined if neither. */
+/** OpenSea's raw tx.value may be a decimal string or hex, or absent for a free mint; normalise to a decimal string, or undefined if neither. */
 function normaliseValue(v: unknown): string | undefined {
-  const s = String(v ?? '');
+  if (v === null || v === undefined) return '0';
+  const s = String(v);
   if (/^0x[0-9a-f]+$/i.test(s)) return BigInt(s).toString();
-  if (/^\d+$/.test(s)) return s;
+  if (/^\d{1,78}$/.test(s)) return s;
   return undefined;
 }
 
@@ -127,12 +176,18 @@ export async function mintAction(session: OpenSeaSession, col: DropCollection, q
     recipient: null,
   });
   const actions: any[] = d.swap?.actions ?? [];
+  // Only trust a transaction when the whole timeline is exactly the one MintAction we expect; an
+  // extra action (e.g. a leading ApproveAction) alongside a transaction must not produce a tx.
+  const single = actions.length === 1 && actions[0]?.__typename === 'MintAction';
   const txs = actions.map((a) => a?.transactionSubmissionData).filter(Boolean);
   const t = txs[0];
   const value = t ? normaliseValue(t.value) : undefined;
+  const tx = single && txs.length === 1 && t && value !== undefined
+    ? { to: String(t.to ?? ''), data: String(t.data ?? ''), value, networkId: Number(t.chain?.networkId ?? 0), chain: String(t.chain?.identifier ?? '') }
+    : undefined;
   return {
     actionTypes: actions.map((a) => String(a?.__typename ?? '')),
     errors: (d.swap?.errors ?? []).map((e: any) => String(e?.__typename ?? '')),
-    tx: txs.length === 1 && t && value !== undefined ? { to: String(t.to ?? ''), data: String(t.data ?? ''), value, networkId: Number(t.chain?.networkId ?? 0), chain: String(t.chain?.identifier ?? '') } : undefined,
+    tx,
   };
 }
