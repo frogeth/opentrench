@@ -156,6 +156,161 @@ describe('Minter', () => {
     expect(r.error).toMatch(/not supported/);
   });
 
+  it('refuses a quote whose gas price is above the chain ceiling', async () => {
+    const d = deps({ rpc: () => ({ ...deps().rpc('x'), estimateFeesPerGas: async () => ({ maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000n * 1_000_000n }) }) });
+    const r = await new Minter(() => KEY, () => ({}), d).quote({ locator: 'chump', quantity: 1 });
+    expect(r.state).toBe('failed');
+    expect(r.error).toMatch(/ceiling/);
+  });
+
+  it('refuses a send whose gas price drifted more than 2x from the quote', async () => {
+    let n = 0;
+    const fees = () => (++n === 1 ? { maxFeePerGas: 1_000_000_000n, maxPriorityFeePerGas: 1_000_000n } : { maxFeePerGas: 3_000_000_000n, maxPriorityFeePerGas: 3_000_000n });
+    const d = deps({ rpc: () => ({ ...deps().rpc('x'), estimateFeesPerGas: async () => fees() }) });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    expect(q.state).toBe('ready');
+    const r = await m.send(q.id);
+    expect(r.state).toBe('failed');
+    expect(r.error).toMatch(/moved too far/);
+    expect(r.txHash).toBeUndefined();
+    // the quoted gas is left untouched when the send is refused
+    expect(r.gas).toMatchObject({ maxFeeWei: '1000000000', maxPriorityWei: '1000000' });
+  });
+
+  it('confirms a mint even when a receipt log is malformed, with no token ids', async () => {
+    const logs = [{ address: col.address, topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', '0x' + '0'.repeat(64), '0x' + WALLET.slice(2).padStart(64, '0'), 'not-a-token-id'] }];
+    const d = deps({ rpc: () => ({ ...deps().rpc('x'), getTransactionReceipt: async () => ({ status: 'success', blockNumber: 99n, logs }) }) });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    const r = await m.send(q.id);
+    expect(r.state).toBe('confirmed');
+    expect(r.tokenIds).toEqual([]);
+    expect(r.blockNumber).toBe(99);
+  });
+
+  it('reads token ids out of checksummed-case receipt topics', async () => {
+    const logs = [{
+      address: '0x9D2A003322874163CbB18f7F538a1aAEa49B75D1',
+      topics: ['0xDDF252AD1BE2C89B69C2B068FC378DAA952BA7F163C4A11628F55A4DF523B3EF', '0x' + '0'.repeat(64), '0x' + WALLET.slice(2).toUpperCase().padStart(64, '0'), '0x' + (462).toString(16).padStart(64, '0')],
+    }];
+    const d = deps({ rpc: () => ({ ...deps().rpc('x'), getTransactionReceipt: async () => ({ status: 'success', blockNumber: 2n ** 60n, logs }) }) });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    const r = await m.send(q.id);
+    expect(r.state).toBe('confirmed');
+    expect(r.tokenIds).toEqual(['462']);
+    expect(r.blockNumber).toBe(0); // an absurd block height becomes 0, never NaN
+  });
+
+  it('fails a send when the collection resolves to something else', async () => {
+    let n = 0;
+    const d = deps({ resolve: async () => (++n === 1 ? col : { ...col, address: '0x1111111111111111111111111111111111111111' }) });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    const r = await m.send(q.id);
+    expect(r.state).toBe('failed');
+    expect(r.error).toMatch(/collection changed/);
+  });
+
+  it('fails a send when the drop contract is no longer the collection contract', async () => {
+    let n = 0;
+    const d = deps({ resolve: async () => (++n === 1 ? col : { ...col, drop: { ...col.drop!, address: '0x1111111111111111111111111111111111111111' } }) });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    const r = await m.send(q.id);
+    expect(r.error).toMatch(/collection changed/);
+  });
+
+  it('refuses a chain that is not in the table, even with an RPC override for it', async () => {
+    const d = deps({ resolve: async () => ({ ...col, chain: 'zora', networkId: 7777777 }) });
+    const r = await new Minter(() => KEY, () => ({ zora: 'https://zora.example' }), d).quote({ locator: 'chump', quantity: 1 });
+    expect(r.state).toBe('failed');
+    expect(r.error).toMatch(/minting on zora is not supported yet/);
+  });
+
+  it("refuses a collection whose networkId disagrees with our chain table", async () => {
+    const d = deps({ resolve: async () => ({ ...col, networkId: 9999 }) });
+    const r = await new Minter(() => KEY, () => ({}), d).quote({ locator: 'chump', quantity: 1 });
+    expect(r.error).toMatch(/chain id mismatch/);
+  });
+
+  it('never puts an RPC URL or its api key into the job error or the log', async () => {
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, 'warn').mockImplementation((...a: any[]) => { logs.push(a.join(' ')); });
+    try {
+      const d = deps({ resolve: async () => { throw new Error('HTTP request failed: https://rpc.example/v2/SECRETKEY returned 503'); } });
+      const r = await new Minter(() => KEY, () => ({}), d).quote({ locator: 'chump', quantity: 1 });
+      expect(r.state).toBe('failed');
+      expect(r.error).not.toContain('SECRETKEY');
+      expect(r.error).not.toContain('rpc.example');
+      expect(r.error).toMatch(/OpenSea RPCs/);
+      for (const line of logs) expect(line).not.toContain('SECRETKEY');
+      expect(logs.join('\n')).toContain('<rpc>');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('says nothing was sent when a send fails before broadcast', async () => {
+    const d = deps({ mintAction: async () => { throw new Error('boom at https://rpc.example/KEY'); } });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 1 });
+    const r = await m.send(q.id);
+    expect(r.error).toMatch(/nothing was sent/);
+    expect(r.error).not.toContain('rpc.example');
+  });
+
+  it('allows only one in-flight mint per wallet', async () => {
+    const m = new Minter(() => KEY, () => ({}), deps());
+    const a = await m.quote({ locator: 'chump', quantity: 1 });
+    const b = await m.quote({ locator: 'chump', quantity: 1 });
+    m.jobs.find((j) => j.id === a.id)!.state = 'pending';
+    const r = await m.send(b.id);
+    expect(r.state).toBe('failed');
+    expect(r.error).toMatch(/still pending/);
+  });
+
+  it('refuses eligibility returned for a different drop type', async () => {
+    const d = deps({ eligibility: async () => ({ kind: 'Erc1155SeaDropV2', minted: 0, stages: [{ type: 'PUBLIC_SALE', index: 0, eligible: true, eligibleMax: 3, priceUnit: 0.002 }] }) });
+    const r = await new Minter(() => KEY, () => ({}), d).quote({ locator: 'chump', quantity: 1 });
+    expect(r.error).toMatch(/different drop type/);
+  });
+
+  it('refuses a stage whose eligible minter is another wallet', async () => {
+    const d = deps({ eligibility: async () => ({ kind: 'Erc721SeaDropV1', minted: 0, stages: [{ type: 'PUBLIC_SALE', index: 0, eligible: true, eligibleMax: 3, eligibleMinter: '0x2222222222222222222222222222222222222222', priceUnit: 0.002 }] }) });
+    const r = await new Minter(() => KEY, () => ({}), d).quote({ locator: 'chump', quantity: 1 });
+    expect(r.error).toMatch(/eligible minter is another wallet/);
+  });
+
+  it('fails a send whose valid calldata carries twice the quoted value', async () => {
+    const data = '0x161ac21f' + ['9d2a003322874163cbb18f7f538a1aaea49b75d1', 'fee', '0', '2', '0', '0', '0', '0', '0'].map((h) => h.padStart(64, '0')).join('');
+    const d = deps({ mintAction: async () => ({ actionTypes: ['MintAction'], errors: [], tx: { to: '0x00005ea00ac477b1030ce78506496e8c2de24bf5', data, value: '8000000000000000', networkId: 4663, chain: 'robinhood' } }) });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const q = await m.quote({ locator: 'chump', quantity: 2 });
+    const r = await m.send(q.id);
+    expect(r.state).toBe('failed');
+    expect(r.error).toMatch(/does not match the quoted price/);
+  });
+
+  it('clamps the quantity and rejects one that is not a number', async () => {
+    const m = new Minter(() => KEY, () => ({}), deps());
+    const nan = await m.quote({ locator: 'chump', quantity: Number.NaN });
+    expect(nan.error).toMatch(/1 to 99/);
+    const big = await m.quote({ locator: 'chump', quantity: 1e9 });
+    expect(big.quantity).toBe(99);
+    expect(big.error).toMatch(/not 99/);
+  });
+
+  it('never evicts a job whose transaction is still in flight', async () => {
+    const m = new Minter(() => KEY, () => ({}), deps());
+    const first = await m.quote({ locator: 'chump', quantity: 1 });
+    m.jobs.find((j) => j.id === first.id)!.state = 'pending';
+    for (let i = 0; i < 105; i++) await m.quote({ locator: 'chump', quantity: 1 });
+    expect(m.jobs.length).toBe(100);
+    expect(m.jobs.find((j) => j.id === first.id)).toBeDefined();
+  });
+
   it('never logs the private key', async () => {
     const logs: string[] = [];
     const spyLog = vi.spyOn(console, 'log').mockImplementation((...a: any[]) => { logs.push(a.join(' ')); });

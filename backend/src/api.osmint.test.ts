@@ -143,6 +143,18 @@ describe('osmint + opensea settings API', () => {
     expect(res.status).toBe(500);
   });
 
+  it('rejects an RPC override for a chain that is not in our table', async () => {
+    const res = await fetch(`${base}/opensea/rpc`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chain: 'zora', url: 'https://zora.example.com' }),
+    });
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toMatch(/unknown chain/);
+    expect(cfg.get().opensea.rpc.zora).toBeUndefined();
+  });
+
   it('rejects a quote with quantity 0', async () => {
     const res = await fetch(`${base}/osmint/quote`, {
       method: 'POST',

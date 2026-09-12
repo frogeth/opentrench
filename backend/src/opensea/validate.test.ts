@@ -80,6 +80,21 @@ describe('validateMintTransaction', () => {
     expect(tx).toEqual(ok(calldata('161ac21f')).tx);
   });
 
+  it('rejects a transaction whose chain identifier is not the collection chain', () => {
+    const tx = { ...ok(calldata('161ac21f')).tx!, chain: 'base' };
+    expect(() => validateMintTransaction({ ...ok(calldata('161ac21f')), tx }, col, WALLET, { type: 'PUBLIC_SALE', index: 0 }, 1, 4663)).toThrow(/chain mismatch/);
+  });
+
+  it('rejects a SeaDrop mint pointed at an unknown target contract', () => {
+    const tx = { ...ok(calldata('161ac21f')).tx!, to: '0x1234567890123456789012345678901234567890' };
+    expect(() => validateMintTransaction({ ...ok(calldata('161ac21f')), tx }, col, WALLET, { type: 'PUBLIC_SALE', index: 0 }, 1, 4663)).toThrow(/unexpected mint target/);
+  });
+
+  it('accepts the canonical SeaDrop target in checksummed case', () => {
+    const tx = { ...ok(calldata('161ac21f')).tx!, to: '0x00005EA00Ac477B1030CE78506496e8C2dE24bf5' };
+    expect(() => validateMintTransaction({ ...ok(calldata('161ac21f')), tx }, col, WALLET, { type: 'PUBLIC_SALE', index: 0 }, 1, 4663)).not.toThrow();
+  });
+
   it('sanity-checks quantity and stage index', () => {
     expect(() => validateMintTransaction(ok(calldata('161ac21f')), col, WALLET, { type: 'PUBLIC_SALE', index: 0 }, 0, 4663)).toThrow();
     expect(() => validateMintTransaction(ok(calldata('161ac21f')), col, WALLET, { type: 'PUBLIC_SALE', index: 0 }, -1, 4663)).toThrow();

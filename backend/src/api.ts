@@ -11,6 +11,7 @@ import type { MessageHub } from './hub.js';
 import type { Services } from './services.js';
 import { IpfsCache } from './ipfs.js';
 import { createDeployFinder } from './deploys.js';
+import { CHAINS } from './opensea/chains.js';
 
 export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hover?: HoverFetchers): Router {
   const r = Router();
@@ -438,7 +439,9 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     wrap((req) => {
       const chain = String(req.body?.chain ?? '');
       const url = String(req.body?.url ?? '').trim().slice(0, 500);
-      if (!/^[a-z0-9_]{1,30}$/.test(chain)) throw new Error('bad chain');
+      // An override for a chain we cannot mint on is dead config at best, and at worst an RPC URL
+      // parked under a name that looks like a chain; only chains in our table can have one.
+      if (!/^[a-z0-9_]{1,30}$/.test(chain) || !Object.hasOwn(CHAINS, chain)) throw new Error('unknown chain');
       if (url && !/^https:\/\//i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(url)) throw new Error('RPC must be https:// (or a local http endpoint)');
       cfg.update((c) => {
         if (url) c.opensea.rpc[chain] = url;
