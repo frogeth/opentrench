@@ -7,11 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
-- Fix: the buy buttons on the token strip inside chat messages still opened Telegram. In-app routing is now the default for every buy row in the app, not something each screen has to opt into, and any Cove or BasedBot deep link that appears anywhere — including one somebody pastes into a chat — runs in the in-app pane or drawer instead of Telegram.
-
-- Buy and Research from a focused chat or the token drill-down now open the bot right there, as a drawer on the right, instead of silently landing in a column you can't see. Cove, BasedBot and Salpha all behave this way; on the main view the column flashes as before.
-
 - Two more chart providers: **Birdeye** and **GMGN** (⚙ → Feed → Chart provider). Both embed a live chart under contracts like BasedBot does, and both cover Solana, Ethereum, Base, BNB, Arbitrum and Robinhood Chain — so Pons launches on Robinhood Chain get an inline chart for the first time (Dexscreener has no data there). Chains a provider doesn't cover fall back to the Dexscreener chart. A cold chart can take up to half a minute to draw.
+- Buy and Research from a focused chat or the token drill-down now open the bot right there, as a drawer on the right, instead of silently landing in a column you can't see. Cove, BasedBot and Salpha all behave this way; on the main view the column flashes as before.
+- Fix: the buy buttons on the token strip inside chat messages still opened Telegram. In-app routing is now the default for every buy row in the app, not something each screen has to opt into, and any Cove or BasedBot deep link that appears anywhere — including one somebody pastes into a chat — runs in the in-app pane or drawer instead of Telegram.
 
 ## v0.4.0 — 2026-09-11
 
