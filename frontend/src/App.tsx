@@ -10,8 +10,8 @@ import { CallersList } from './components/CallersColumn';
 import { Composer, type SendTarget } from './components/Composer';
 import { ShareModal } from './components/ShareModal';
 import { CoveView, COVE_BOT } from './components/CoveView';
-import { PROVIDER_LABEL, BASEDBOT_REFERRAL } from './components/BuyRow';
-import { CaMenuContext } from './components/RichText';
+import { PROVIDER_LABEL, BASEDBOT_REFERRAL, BuyContext } from './components/BuyRow';
+import { CaMenuContext, LinkInterceptContext } from './components/RichText';
 import { J7View } from './components/J7View';
 import { PingsPanel } from './components/PingsPanel';
 import { BridgeNotice } from './components/BridgeNotice';
@@ -292,6 +292,12 @@ export default function App() {
       if (m) return { kind, payload: m[1] };
     }
     return null;
+  };
+  /** Any bot deep link anywhere in the UI (a Cove link pasted in a chat, a card, an embed) runs in-app. */
+  const interceptBotLink = (href: string): boolean => {
+    if (!botLink(href)) return false;
+    onBuy(href);
+    return true;
   };
   // Every Cove/Salpha buy opens inside opentrench: route it to that bot's column, never out to Telegram.
   const onBuy = (url: string) => {
@@ -808,6 +814,8 @@ export default function App() {
     : false;
 
   return (
+    <BuyContext.Provider value={onBuy}>
+    <LinkInterceptContext.Provider value={interceptBotLink}>
     <CaMenuContext.Provider value={openCaMenu}>
     <div className="app">
       <header className="top">
@@ -1219,5 +1227,7 @@ export default function App() {
       )}
     </div>
     </CaMenuContext.Provider>
+    </LinkInterceptContext.Provider>
+    </BuyContext.Provider>
   );
 }
