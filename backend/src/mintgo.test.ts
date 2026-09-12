@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decodeBatch, upsertMint } from './mintgo.js';
+import { decodeBatch, upsertMint, MintGoClient } from './mintgo.js';
 import type { MintEvent } from './types.js';
 
 // A real frame captured from wss://mintgo.fun/api/realtime?scope=all on 2026-09-12 (two contracts, two rows).
@@ -115,5 +115,46 @@ describe('upsertMint', () => {
     expect(list[0].preview).toBe(false);
     expect(list[0].mintedSupply).toBe(120);
     expect(list[0].surge).toEqual({ mints: 1, events: 1, minters: 1, startedAt: 1 });
+  });
+});
+
+describe('MintGoClient.handleFrame', () => {
+  it('ignores keepalives, tracks the cursor, and goes connected on ready', () => {
+    const c = new MintGoClient(async () => { throw new Error('no network'); });
+    const states: string[] = [];
+    c.on('state', (s: string) => states.push(s));
+    c.handleFrame([0]);
+    c.handleFrame([2, 'abc', 1, 'heartbeat', {}]); // non-numeric cursor ignored
+    c.handleFrame([2, 1789121431284166, 1, 'ready', {}]);
+    expect(c.state).toBe('connected');
+    expect(states).toEqual(['connected']);
+    expect((c as any).cursor).toBe('1789121431284166');
+  });
+  it('emits the merged row for a re-sent mint', () => {
+    const c = new MintGoClient(async () => { throw new Error('no network'); });
+    const seen: MintEvent[] = [];
+    c.on('mint', (e: MintEvent) => seen.push(e));
+    const contract = ['0xabc', 'X', '', 'https://img', 'x-slug', '', '', '', '', '', null, 'erc721'];
+    c.handleFrame([1, 1, 1, [contract], [['id1', '0xt', 1, 2, 0, ['1'], 1, '0xm', '', '', '0', 2, 'mint', 120, 1000]]]);
+    c.handleFrame([1, 2, 1, [contract], [['id1', '0xt', 1, 2, 0, ['1'], 1, '0xm', '', '', '0.01', 1, 'mint', null, null]]]);
+    expect(seen).toHaveLength(2);
+    expect(seen[1].preview).toBe(false);
+    expect(seen[1].mintedSupply).toBe(120);
+    expect(c.recent).toHaveLength(1);
+    expect(c.recent[0]).toEqual(seen[1]);
+  });
+});
+describe('MintGoClient.session', () => {
+  const res = (status: number, body: unknown, cookies: string[]) => ({ ok: status < 400, status, json: async () => body, headers: { getSetCookie: () => cookies } }) as any;
+  it('keeps only mg_ cookies and honours renewAfter', async () => {
+    const c = new MintGoClient(async () => res(200, { ok: true, renewAfter: Date.now() + 60_000 }, ['mg_access=a1; Path=/; HttpOnly', 'mg_vid=v1; Path=/', 'other=x']));
+    expect(await c.session()).toBe('mg_access=a1; mg_vid=v1');
+  });
+  it('rejects a response without cookies or ok', async () => {
+    await expect(new MintGoClient(async () => res(200, { ok: false }, [])).session()).rejects.toThrow(/cookie/);
+    await expect(new MintGoClient(async () => res(403, {}, [])).session()).rejects.toThrow(/403/);
+  });
+  it('refuses non-site-relative paths in get()', async () => {
+    await expect(new MintGoClient(async () => res(200, {}, [])).get('@evil.com/x')).rejects.toThrow(/site-relative/);
   });
 });

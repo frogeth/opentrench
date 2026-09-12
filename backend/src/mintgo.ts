@@ -53,7 +53,7 @@ export function decodeBatch(packet: unknown): MintEvent[] {
     const flags = Number(row[11] ?? 0) || 0;
     const tokenIds = Array.isArray(row[5])
       ? row[5]
-          .filter((v) => typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v)))
+          .filter((v) => (typeof v === 'string' ? v !== '' : typeof v === 'number' && Number.isFinite(v)))
           .map(String)
           .slice(0, 200)
       : [];
@@ -79,7 +79,7 @@ export function decodeBatch(packet: unknown): MintEvent[] {
         standard: str(c[11]),
         deployer: deployer ? { address: deployer, createdAgo: str(c[9]), projects: num(c[10]) } : undefined,
       },
-      quantity: Math.max(num(row[6]) ?? 0, tokenIds.length, 1),
+      quantity: num(row[6]) ?? Math.max(tokenIds.length, 1),
       tokenIds,
       tokenIdsTotal: flags & 64 ? num(row[21]) : undefined,
       minter: str(row[7]) ?? '',
@@ -109,19 +109,21 @@ function definedFieldsOf<T extends object>(obj: T): Partial<T> {
 
 /**
  * Merge by id (MintGo re-sends a mint id as preview → confirmed, and a sparser later row must
- * not erase what the preview carried), else newest first; capped.
+ * not erase what the preview carried), else newest first; capped. Returns the row now in the
+ * list — the merged row when `e.id` already existed, else `e` itself.
  */
-export function upsertMint(list: MintEvent[], e: MintEvent, max = MAX): void {
+export function upsertMint(list: MintEvent[], e: MintEvent, max = MAX): MintEvent {
   const i = list.findIndex((x) => x.id === e.id);
   if (i >= 0) {
     const prev = list[i];
     const merged: MintEvent = { ...prev, ...definedFieldsOf(e) };
     merged.contract = { ...prev.contract, ...definedFieldsOf(e.contract) };
     list[i] = merged;
-    return;
+    return merged;
   }
   list.unshift(e);
   if (list.length > max) list.length = max;
+  return e;
 }
 
 export type MintGoState = NonNullable<import('./types.js').Status['mintgo']>;
@@ -135,7 +137,14 @@ export class MintGoClient extends EventEmitter {
   private socket?: WebSocket;
   private attempts = 0;
   private timer?: NodeJS.Timeout;
+  private watchdog?: NodeJS.Timeout;
   private stopped = true;
+  /** Message from the socket's last `error` event; folded into the next close message. */
+  private lastError = '';
+  /** Overrides the close reason when we terminate the socket ourselves (the watchdog). */
+  private closeReason?: string;
+  /** Last (state, error) pair emitted, so repeats don't re-emit. */
+  private lastErr?: string;
   private readonly clientId = Math.random().toString(36).slice(2, 12);
 
   constructor(private fetchImpl: typeof fetch = fetch) {
@@ -145,7 +154,12 @@ export class MintGoClient extends EventEmitter {
   /** A browser session cookie; MintGo hands one to any request that looks same-origin. */
   async session(force = false): Promise<string> {
     if (!force && this.cookie && Date.now() < this.renewAt) return this.cookie;
-    const r = await this.fetchImpl(`${MINTGO}/api/session`, { method: 'POST', headers: { ...SAME_ORIGIN_HEADERS, 'content-type': 'application/json' }, body: '{}' });
+    const r = await this.fetchImpl(`${MINTGO}/api/session`, {
+      method: 'POST',
+      headers: { ...SAME_ORIGIN_HEADERS, 'content-type': 'application/json' },
+      body: '{}',
+      signal: AbortSignal.timeout(10_000),
+    });
     if (!r.ok) throw new Error(`MintGo session refused (${r.status})`);
     const j: any = await r.json().catch(() => ({}));
     const cookies = (r.headers as any).getSetCookie?.() as string[] | undefined;
@@ -158,6 +172,7 @@ export class MintGoClient extends EventEmitter {
 
   /** GET one of MintGo's JSON endpoints with the session (used by the mint window later). */
   async get<T>(path: string): Promise<T> {
+    if (!path.startsWith('/') || path.startsWith('//')) throw new Error('mintgo path must be site-relative');
     const go = async () => this.fetchImpl(`${MINTGO}${path}`, { headers: { ...SAME_ORIGIN_HEADERS, cookie: await this.session() } });
     let r = await go();
     if (r.status === 401) {
@@ -169,22 +184,38 @@ export class MintGoClient extends EventEmitter {
   }
 
   start(): void {
+    if (!this.stopped) this.stop();
     this.stopped = false;
+    this.attempts = 0;
     void this.connect();
   }
 
   stop(): void {
     this.stopped = true;
     clearTimeout(this.timer);
-    this.socket?.close(1000, 'stopped');
+    clearTimeout(this.watchdog);
+    const ws = this.socket;
     this.socket = undefined;
+    ws?.removeAllListeners();
+    ws?.close(1000, 'stopped');
     this.setState('disconnected');
   }
 
   private setState(s: MintGoState, err?: string) {
-    if (this.state === s && !err) return;
+    if (this.state === s && this.lastErr === err) return;
     this.state = s;
+    this.lastErr = err;
     this.emit('state', s, err);
+  }
+
+  /** Resets the 60s no-frames watchdog; fires `ws.terminate()` so the normal close/retry path runs. */
+  private armWatchdog(ws: WebSocket): void {
+    clearTimeout(this.watchdog);
+    this.watchdog = setTimeout(() => {
+      this.closeReason = 'no frames for 60s';
+      ws.terminate();
+    }, 60_000);
+    this.watchdog.unref();
   }
 
   private async connect(): Promise<void> {
@@ -194,19 +225,25 @@ export class MintGoClient extends EventEmitter {
     try {
       cookie = await this.session(this.attempts > 0);
     } catch (e: any) {
-      this.setState('error', e?.message ?? String(e));
+      const msg = e?.message ?? String(e);
+      if (this.attempts < 2) this.setState('connecting', msg);
+      else this.setState('error', msg);
       return this.retry();
     }
+    if (this.stopped) return;
     const url = new URL(`${MINTGO.replace('https', 'wss')}/api/realtime`);
     url.searchParams.set('scope', 'all');
     url.searchParams.set('client', this.clientId);
     if (/^\d+$/.test(this.cursor)) url.searchParams.set('since', this.cursor);
-    const ws = new WebSocket(url, { headers: { ...SAME_ORIGIN_HEADERS, cookie } });
+    const ws = new WebSocket(url, { headers: { ...SAME_ORIGIN_HEADERS, cookie }, maxPayload: 4 * 1024 * 1024 });
     this.socket = ws;
     ws.on('open', () => {
       this.attempts = 0;
+      this.lastError = '';
+      this.armWatchdog(ws);
     });
     ws.on('message', (data) => {
+      this.armWatchdog(ws);
       let packet: unknown;
       try {
         const buf =
@@ -219,31 +256,39 @@ export class MintGoClient extends EventEmitter {
       } catch {
         return;
       }
-      if (!Array.isArray(packet)) return;
-      const type = Number(packet[0]);
-      if (type === 0) return;
-      const cursor = String(packet[1] ?? '');
-      if (/^\d+$/.test(cursor)) this.cursor = cursor;
-      if (type === 1) {
-        for (const e of decodeBatch(packet)) {
-          upsertMint(this.recent, e);
-          this.emit('mint', e);
-        }
-      } else if (type === 2) {
-        const name = String(packet[3] ?? '');
-        if (name === 'ready') this.setState('connected');
-      }
+      this.handleFrame(packet);
     });
     ws.on('close', (code, reason) => {
       if (this.socket !== ws) return;
       this.socket = undefined;
+      clearTimeout(this.watchdog);
       if (this.stopped) return;
-      this.setState('error', `socket closed (${code}${reason?.length ? ` ${reason.toString()}` : ''})`);
+      const reasonText = reason?.length ? reason.toString() : this.closeReason;
+      this.closeReason = undefined;
+      const msg = `socket closed (${code}${reasonText ? ` ${reasonText}` : ''}${this.lastError ? ` · ${this.lastError}` : ''})`;
+      if (this.attempts < 2) this.setState('connecting', msg);
+      else this.setState('error', msg);
       this.retry();
     });
-    ws.on('error', (e) => {
-      console.warn('[mintgo] socket error', e?.message ?? e);
+    ws.on('error', (e: any) => {
+      this.lastError = e?.message ?? String(e);
+      console.warn('[mintgo] socket error', this.lastError);
     });
+  }
+
+  /** Handles one parsed realtime frame: keepalive/cursor/mint-batch/ready. Exposed for tests. */
+  handleFrame(packet: unknown): void {
+    if (!Array.isArray(packet)) return;
+    const type = Number(packet[0]);
+    if (type === 0) return;
+    const cursor = String(packet[1] ?? '');
+    if (/^\d+$/.test(cursor)) this.cursor = cursor;
+    if (type === 1) {
+      for (const e of decodeBatch(packet)) this.emit('mint', upsertMint(this.recent, e));
+    } else if (type === 2) {
+      const name = String(packet[3] ?? '');
+      if (name === 'ready') this.setState('connected');
+    }
   }
 
   private retry() {

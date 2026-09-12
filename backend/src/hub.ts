@@ -452,7 +452,7 @@ export class MessageHub extends EventEmitter {
     this.status.mintgo = state;
     if (error) this.status.error.mintgo = error;
     else delete this.status.error.mintgo;
-    this.emit('event', { type: 'status', status: this.getStatus() } satisfies ServerEvent);
+    this.emitStatus();
   }
 
   setLoginStep(step: LoginStep): void {
