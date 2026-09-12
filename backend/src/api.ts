@@ -198,7 +198,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       cfg.update((c) => {
         c.columns = cols;
       });
-      svc.startMintGo();
+      svc.syncColumnFeeds();
       return cols;
     }),
   );
@@ -394,6 +394,17 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
   );
   r.get('/j7/recent', wrap(() => svc.j7Recent()));
   r.get('/mints/recent', wrap(() => svc.mintsRecent()));
+  r.get(
+    '/nft/rankings',
+    wrap((req) => {
+      const raw = String(req.query.key ?? '');
+      if (!/^(TRENDING|TOP):(ONE_HOUR|ONE_DAY)$/.test(raw)) throw new Error('bad key');
+      const key = raw as import('./types.js').RankingKey;
+      const hit = svc.rankings.latest[key];
+      if (!hit) throw new Error('no rankings yet for ' + key);
+      return hit;
+    }),
+  );
   r.post(
     '/j7/favorites/toggle',
     wrap((req) => {

@@ -70,7 +70,7 @@ setInterval(() => {
 }, 60 * 1000).unref();
 const svc: Services = new Services(cfg, hub);
 svc.startJ7();
-svc.startMintGo();
+svc.syncColumnFeeds();
 const hover = createHoverFetchers();
 const store = new StateStore(process.env.TRENCHFEED_STATE ?? path.join(root, 'state.json'));
 hub.load(store.load());

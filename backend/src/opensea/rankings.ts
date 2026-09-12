@@ -54,7 +54,10 @@ export function normalizeRankings(items: any[], timeframe: RankingTimeframe, now
   return out;
 }
 
+const KEY_RE = /^(TRENDING|TOP):(ONE_HOUR|ONE_DAY)$/;
+
 export const parseKey = (key: RankingKey): { slug: RankingSlug; timeframe: RankingTimeframe } => {
+  if (!KEY_RE.test(key)) throw new Error('bad ranking key: ' + key);
   const [slug, timeframe] = key.split(':') as [RankingSlug, RankingTimeframe];
   return { slug, timeframe };
 };
@@ -64,3 +67,69 @@ export async function fetchRankings(key: RankingKey, fetchImpl?: typeof fetch): 
   const data = await gql<{ collectionRankings: { items: any[] } }>('CollectionRankingsQuery', RANKINGS_QUERY, { slug, timeframe, limit: 50 }, { referer: `${OPENSEA}/collections`, fetchImpl });
   return normalizeRankings(data.collectionRankings?.items ?? [], timeframe, Date.now());
 }
+
+const POLL_MS = 60_000;
+
+/** Polls collectionRankings once a minute for every key a column wants; emits 'rankings' (key, rows, at). */
+export class RankingsPoller extends EventEmitter {
+  readonly latest: Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>> = {};
+  private wanted = new Set<RankingKey>();
+  private timers = new Map<RankingKey, NodeJS.Timeout>();
+  private firstPolls = new Map<RankingKey, NodeJS.Timeout>();
+  private inFlight = new Set<RankingKey>();
+  private failing = new Set<RankingKey>();
+  constructor(private fetchImpl?: typeof fetch) {
+    super();
+  }
+  want(keys: RankingKey[]): void {
+    const next = new Set(keys);
+    for (const k of this.timers.keys()) if (!next.has(k)) {
+      clearInterval(this.timers.get(k));
+      this.timers.delete(k);
+    }
+    for (const k of this.firstPolls.keys()) if (!next.has(k)) {
+      clearTimeout(this.firstPolls.get(k));
+      this.firstPolls.delete(k);
+    }
+    this.wanted = next;
+    let i = 0;
+    for (const k of next) {
+      if (this.timers.has(k)) continue;
+      const t = setInterval(() => void this.poll(k), POLL_MS);
+      t.unref();
+      this.timers.set(k, t);
+      const ft = setTimeout(() => {
+        this.firstPolls.delete(k);
+        void this.poll(k);
+      }, 2000 * i++); // stagger the first fetches
+      ft.unref();
+      this.firstPolls.set(k, ft);
+    }
+  }
+  stop(): void {
+    for (const t of this.timers.values()) clearInterval(t);
+    this.timers.clear();
+    for (const t of this.firstPolls.values()) clearTimeout(t);
+    this.firstPolls.clear();
+  }
+  async poll(key: RankingKey): Promise<void> {
+    if (!this.wanted.has(key)) return;
+    if (this.inFlight.has(key)) return;
+    if (!KEY_RE.test(key)) return;
+    this.inFlight.add(key);
+    try {
+      const rows = await fetchRankings(key, this.fetchImpl);
+      const at = Date.now();
+      this.latest[key] = { rows, at };
+      this.failing.delete(key);
+      this.emit('rankings', key, rows, at);
+    } catch (e: any) {
+      if (!this.failing.has(key)) console.warn('[opensea] rankings', key, e?.message ?? e);
+      this.failing.add(key);
+    } finally {
+      this.inFlight.delete(key);
+    }
+  }
+}
+
+export const keyFor = (c: { ranking?: 'trending' | 'top'; timeframe?: '1h' | '1d' }): RankingKey => `${c.ranking === 'top' ? 'TOP' : 'TRENDING'}:${c.timeframe === '1d' ? 'ONE_DAY' : 'ONE_HOUR'}`;

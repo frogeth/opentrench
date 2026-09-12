@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { normalizeRankings, RANKINGS_QUERY } from './rankings.js';
+import { describe, it, expect, vi } from 'vitest';
+import { normalizeRankings, RANKINGS_QUERY, RankingsPoller, keyFor } from './rankings.js';
 
 const item = (over: any = {}) => ({
   score: '1',
@@ -37,5 +37,47 @@ describe('normalizeRankings', () => {
     expect(RANKINGS_QUERY).toContain('oneHour');
     expect(RANKINGS_QUERY).toContain('oneDay');
     expect(RANKINGS_QUERY).toContain('stages');
+  });
+});
+
+describe('RankingsPoller', () => {
+  const okBody = { data: { collectionRankings: { items: [{ collection: { slug: 'a', name: 'A', stats: { oneHour: { volume: { usd: 1, native: { unit: 1, symbol: 'ETH' } }, sales: 1 } } } }] } } };
+  const fakeFetch = (calls: string[]) => (async (_url: any, init: any) => { calls.push(JSON.parse(init.body).variables.slug + ':' + JSON.parse(init.body).variables.timeframe); return { ok: true, status: 200, headers: new Headers(), json: async () => okBody } as any; }) as typeof fetch;
+  it('polls wanted keys, emits rows, and stops polling un-wanted keys', async () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    const p = new RankingsPoller(fakeFetch(calls));
+    const got: string[] = [];
+    p.on('rankings', (k: string, rows: any[]) => got.push(`${k}=${rows.length}`));
+    p.want(['TRENDING:ONE_HOUR']);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(calls).toEqual(['TRENDING:ONE_HOUR']);
+    expect(got).toEqual(['TRENDING:ONE_HOUR=1']);
+    expect(p.latest['TRENDING:ONE_HOUR']?.rows[0].slug).toBe('a');
+    p.want([]);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(calls).toHaveLength(1);
+    p.stop();
+    vi.useRealTimers();
+  });
+  it('keeps old rows and warns once when a poll fails', async () => {
+    vi.useFakeTimers();
+    let fail = false;
+    const f = (async () => { if (fail) throw new Error('down'); return { ok: true, status: 200, headers: new Headers(), json: async () => okBody } as any; }) as typeof fetch;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const p = new RankingsPoller(f);
+    p.want(['TOP:ONE_DAY']);
+    await vi.advanceTimersByTimeAsync(10);
+    fail = true;
+    await vi.advanceTimersByTimeAsync(60_000 * 3 + 10);
+    expect(p.latest['TOP:ONE_DAY']?.rows).toHaveLength(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+    p.stop();
+    vi.useRealTimers();
+  });
+  it('maps column options to keys', () => {
+    expect(keyFor({})).toBe('TRENDING:ONE_HOUR');
+    expect(keyFor({ ranking: 'top', timeframe: '1d' })).toBe('TOP:ONE_DAY');
   });
 });

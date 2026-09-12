@@ -10,6 +10,7 @@ import { extractLinks, type ExtractedMeta } from './links.js';
 import { createPreviewer, type Previewer } from './previews.js';
 import { J7Client } from './j7.js';
 import { MintGoClient } from './mintgo.js';
+import { RankingsPoller, keyFor } from './opensea/rankings.js';
 import { createLaunchWatcher } from './deploys.js';
 import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction } from './types.js';
@@ -23,6 +24,7 @@ export class Services {
   telegram?: TelegramWrapper;
   j7?: J7Client;
   mintgo?: MintGoClient;
+  readonly rankings = new RankingsPoller();
   private discordSelf?: DiscordSelf;
   private guildRoles = new Map<string, Map<string, string>>();
   /** names for mention markup in one guild */
@@ -44,6 +46,8 @@ export class Services {
   ) {
     this.previewer = previewer ?? createPreviewer();
     this.wireDiscord();
+    this.rankings.on('rankings', (key, rows, at) => this.hub.emit('event', { type: 'nftRankings', key, rows, at }));
+    this.hub.nftState.rankings = () => this.rankings.latest;
     hub.on('event', (e) => {
       if (e.type === 'ping') void this.ping(e.token, e.msg);
     });
@@ -228,6 +232,13 @@ export class Services {
   }
   mintsRecent() {
     return this.mintgo?.recent ?? [];
+  }
+
+  /** Columns changed: start/stop the feeds that depend on which column types exist. */
+  syncColumnFeeds(): void {
+    this.startMintGo();
+    const cols = this.cfg.get().columns.flatMap((c) => (c.split ? [c, c.split.bottom] : [c]));
+    this.rankings.want([...new Set(cols.filter((c) => c.type === 'nftvol').map(keyFor))]);
   }
 
   /** Conversation with a Telegram bot (Cove) through the user's own session. */
