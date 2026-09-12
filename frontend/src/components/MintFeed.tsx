@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { MintEvent, Status } from '../types';
 import type { ColumnFilters } from '../api';
 import { copyText, timeAgo } from '../format';
@@ -8,7 +8,7 @@ import { VirtualItem } from './Virtual';
 const EXPLORER: Record<string, string> = { ethereum: 'https://etherscan.io/tx/', robinhood: 'https://robinhoodchain.blockscout.com/tx/', ink: 'https://explorer.inkonchain.com/tx/' };
 const CHAIN_LABEL: Record<string, string> = { ethereum: 'ETH', robinhood: 'RH', ink: 'INK', stable: 'STB', arc: 'ARC' };
 const short = (a: string) => (a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
-const ethFmt = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 4, maximumFractionDigits: 9 });
+const ethFmt = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 4 });
 const eth = (n?: number) => (n === undefined ? '' : n === 0 ? 'free' : `Ξ${ethFmt.format(n)}`);
 
 export function mintPasses(e: MintEvent, f?: ColumnFilters): boolean {
@@ -21,12 +21,16 @@ function MintCard({ e, now, open, onToggle, onMint }: { e: MintEvent; now: numbe
   const c = e.contract;
   const [copied, setCopied] = useState(false);
   const [imgBroken, setImgBroken] = useState(false);
+  const copyTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(copyTimer.current), []);
   const copy = async (t: string) => {
-    await copyText(t);
+    const ok = await copyText(t);
+    if (!ok) return;
     setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
+    window.clearTimeout(copyTimer.current);
+    copyTimer.current = window.setTimeout(() => setCopied(false), 1200);
   };
-  const unit = e.unitPriceEth ?? (e.priceConfirmed && e.quantity ? (e.valueEth ?? 0) / e.quantity : undefined);
+  const unit = e.unitPriceEth ?? (e.priceConfirmed && e.valueEth !== undefined && e.quantity ? e.valueEth / e.quantity : undefined);
   const priceText = unit === undefined ? 'price pending' : eth(unit);
   return (
     <div className={`mint${open ? ' mint-open' : ''}${e.preview ? ' mint-preview' : ''}`} onClick={onToggle}>

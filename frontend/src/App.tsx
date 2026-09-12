@@ -230,6 +230,16 @@ export default function App() {
     setCfg((c) => (c ? { ...c, columns: next } : c));
     void api.setColumns(next).catch(() => {});
   };
+  /** the nftvol timeframe toggle updates the UI instantly but only PUTs after 300ms of no further clicks */
+  const tfSaveTimer = useRef<number | undefined>(undefined);
+  const saveColumnsDebounced = (next: ColumnDef[]) => {
+    setCfg((c) => (c ? { ...c, columns: next } : c));
+    window.clearTimeout(tfSaveTimer.current);
+    tfSaveTimer.current = window.setTimeout(() => {
+      void api.setColumns(next).catch(() => {});
+    }, 300);
+  };
+  useEffect(() => () => window.clearTimeout(tfSaveTimer.current), []);
   /** `col` = editing that column; `parentId` = it is (or will be) stacked under that top column */
   const [editing, setEditing] = useState<{ col?: ColumnDef; parentId?: string } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
@@ -943,7 +953,7 @@ export default function App() {
       const timeframe = col.timeframe ?? '1h';
       const key = `${ranking === 'top' ? 'TOP' : 'TRENDING'}:${timeframe === '1d' ? 'ONE_DAY' : 'ONE_HOUR'}` as RankingKey;
       const hit = rankings[key];
-      const setTf = (tf: '1h' | '1d') => saveColumns(updateColumn(col.id, (c) => ({ ...c, timeframe: tf })));
+      const setTf = (tf: '1h' | '1d') => saveColumnsDebounced(updateColumn(col.id, (c) => ({ ...c, timeframe: tf })));
       return (
         <Column
           key={col.id}

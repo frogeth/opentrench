@@ -57,11 +57,28 @@ export function netLabel(network: string | undefined, chain: 'sol' | 'evm'): str
   return NETWORK_LABEL[network] ?? network.toUpperCase().slice(0, 5);
 }
 
-export async function copyText(text: string): Promise<void> {
+/** Copies `text` to the clipboard; resolves true only when it actually landed there. */
+export async function copyText(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
+    return true;
   } catch {
-    /* clipboard unavailable */
+    /* clipboard API unavailable or denied — fall back to the legacy textarea trick */
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
   }
 }
 

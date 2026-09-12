@@ -49,6 +49,10 @@ describe('nft column types', () => {
     const [c] = sanitizeColumns([{ id: 'a', type: 'mints', title: '', chats: [], filters: { chains: 'ethereum', minQty: 2.6 } }]);
     expect(c.filters).toEqual({ minQty: 3 });
   });
+  it('strips minQty and chains from a column type that does not use them', () => {
+    const [c] = sanitizeColumns([{ id: 'a', type: 'nftvol', title: '', chats: [], filters: { chains: ['ethereum'], minQty: 2 } }]);
+    expect(c.filters).toBeUndefined();
+  });
 });
 
 describe('ConfigStore opensea block', () => {

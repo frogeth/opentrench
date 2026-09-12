@@ -55,6 +55,7 @@ export function useFeed() {
   const mintBuffer = useRef<MintEvent[]>([]);
   const mintTimer = useRef<number | undefined>(undefined);
   const flushMints = () => {
+    window.clearTimeout(mintTimer.current);
     mintTimer.current = undefined;
     if (mintBuffer.current.length === 0) return;
     const pending = mintBuffer.current;
@@ -116,7 +117,8 @@ export function useFeed() {
         else if (ev.type === 'status') setStatus(ev.status);
         else if (ev.type === 'mint') {
           mintBuffer.current.push(ev.mint);
-          if (mintTimer.current === undefined) mintTimer.current = window.setTimeout(flushMints, 200);
+          if (mintBuffer.current.length >= 300) flushMints();
+          else if (mintTimer.current === undefined) mintTimer.current = window.setTimeout(flushMints, 200);
         }
         else if (ev.type === 'nftRankings') setRankings((r) => ({ ...r, [ev.key]: { rows: ev.rows, at: ev.at } }));
         else if (ev.type === 'mintJob') upsertJob(ev.job);

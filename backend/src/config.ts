@@ -89,6 +89,10 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
         out.minQty = Math.round(out.minQty);
         if (out.minQty < 1 || out.minQty > 1000) delete out.minQty;
       }
+    } else {
+      delete out.minQty;
+      // chains is also a valid token-network filter for calls/chat columns; only the others lose it
+      if (type !== 'calls' && type !== 'chat') delete out.chains;
     }
     if (Object.keys(out).length) col.filters = out;
   }
