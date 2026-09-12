@@ -62,7 +62,8 @@ session cookie**, not by a wallet:
     reconnect), `market` (patch of the runners tables), `trending`.
   - `[1, <cursor>, <chainCode>, <contracts[]>, <rows[]>]` — a **mint batch**.
     chainCode: 1/undefined ethereum, 2 robinhood, 3 stable, 4 ink, 5 arc.
-    Each contract tuple: `[address, name, symbol, image, openSeaSlug, openSeaUrl, projectUrl, twitterUrl, deployerAddress, deployerCreatedAgo, deployerNftProjectCount, standard, openSeaUrlOverride?]`.
+    Each contract tuple: `[address, name, symbol, image, openSeaSlug, externalUrl, projectUrl, twitterUrl, deployerAddress, deployerCreatedAgo, deployerNftProjectCount, standard, openSeaUrlOverride?]`.
+    Index 5 is the collection's own external URL (its website), not an OpenSea link; index 12 is the actual `openSeaUrl` override, present only when MintGo can't derive it. Otherwise the decoder builds `openSeaUrl` itself from `openSeaSlug`.
     Each row: `[id, txHash, blockNumber, timestampMs, contractIndex, tokenIds[], tokenCount, minter, transactionFrom, tokenImage, valueEth, flags, functionName, mintedSupply, maxSupply, unitPriceEth, unitPriceSource, streamId, streamRevision, streamAbsoluteCount, streamAbsoluteEventCount, tokenIdsTotal, …surge fields 22–29]`.
     flags bits: 1 priceConfirmed, 2 realtimePreview, 4 airdrop, 8 thirdPartyMint, 16 unitPriceConfirmed, 32 unitPriceEstimated, 64 tokenIdsTruncated, 128 mintSurge.
     The same `id` arrives more than once (preview, then confirmed with price): upsert by id.
