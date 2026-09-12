@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Fix: some sites in a Website column loaded their shell and then hung (mintgo.fun sat on "Loading…"). Inside a frame, Chromium withholds a site's own session cookies unless they are marked SameSite=None, so the site's realtime connection had no session. The desktop app now marks cookies set inside embedded pages that way, and those sites work like they do in a browser tab.
+
 ## v0.6.0 — 2026-09-12
 
 - Split a column in two. Drag a column by its grip over another one: a translucent box shows where it lands, the front half to move in ahead of it, the lower half to stack underneath, sharing its width. Drag the divider between the pair to change the split, double-click it to even out, drag the stack's right edge to resize the pair. Either half can be dragged back out onto any column's front half to be a full column again. One level only. Removing the top hands its slot to the bottom; removing the bottom just unsplits.

@@ -103,23 +103,42 @@ function createWindow() {
     trafficLightPosition: { x: 14, y: 14 },
     webPreferences: { contextIsolation: true, sandbox: true },
   });
-  // Website columns embed pages in iframes. Many sites refuse that with X-Frame-Options or a
-  // frame-ancestors CSP, which a browser turns into a blank box, so inside opentrench those
-  // refusals are dropped for sub-frames only (the app's own page keeps every header it gets).
+  // Website columns embed pages in iframes, and two things break sites there. Many refuse
+  // framing with X-Frame-Options or a frame-ancestors CSP (a blank box), so those refusals are
+  // dropped for sub-frame documents. And Chromium treats a cross-site frame's requests to its
+  // own origin as cross-site, withholding any cookie that isn't SameSite=None, so a site's
+  // session never sticks (mintgo.fun sat on "Loading…" forever): cookies set by responses to
+  // requests made inside a frame are rewritten to SameSite=None; Secure. The app's own page
+  // keeps every header it gets.
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-    if (details.resourceType !== 'subFrame' || !details.responseHeaders) return callback({});
+    if (!details.responseHeaders) return callback({});
+    const inFrame = !!details.frame && details.frame !== win.webContents.mainFrame;
+    const isFrameDoc = details.resourceType === 'subFrame';
+    if (!inFrame && !isFrameDoc) return callback({});
+    const https = /^https:/i.test(details.url);
+    let changed = false;
     const headers = {};
     for (const [k, v] of Object.entries(details.responseHeaders)) {
       const key = k.toLowerCase();
-      if (key === 'x-frame-options') continue;
-      if (key === 'content-security-policy' || key === 'content-security-policy-report-only') {
+      if (isFrameDoc && key === 'x-frame-options') {
+        changed = true;
+        continue;
+      }
+      if (isFrameDoc && (key === 'content-security-policy' || key === 'content-security-policy-report-only')) {
         const kept = (Array.isArray(v) ? v : [v]).map((line) => line.split(';').filter((d) => !/^\s*frame-ancestors\b/i.test(d)).join(';').trim()).filter(Boolean);
         if (kept.length) headers[k] = kept;
+        changed = true;
+        continue;
+      }
+      if (key === 'set-cookie' && https) {
+        // SameSite=None is only honoured with Secure, so plain-http cookies are left alone
+        headers[k] = (Array.isArray(v) ? v : [v]).map((line) => line.replace(/;\s*samesite=[^;]*/gi, '').replace(/;\s*secure(?=;|$)/gi, '') + '; SameSite=None; Secure');
+        changed = true;
         continue;
       }
       headers[k] = v;
     }
-    callback({ responseHeaders: headers });
+    callback(changed ? { responseHeaders: headers } : {});
   });
   win.loadURL(URL);
   // Every external link (Cove, X, charts, explorers) opens in the default browser.
