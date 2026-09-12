@@ -193,7 +193,8 @@ export default function App() {
   };
   const [chartProvider, setChartProviderState] = useState<ChartProvider>(() => {
     try {
-      return localStorage.getItem('trenchfeed.chartProvider') === 'dexscreener' ? 'dexscreener' : 'basedbot';
+      const v = localStorage.getItem('trenchfeed.chartProvider');
+      return v === 'dexscreener' || v === 'birdeye' || v === 'gmgn' ? v : 'basedbot';
     } catch {
       return 'basedbot';
     }

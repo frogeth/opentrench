@@ -83,7 +83,33 @@ export function beep(): void {
   playSound('chirp');
 }
 
-export type ChartProvider = 'basedbot' | 'dexscreener';
+export type ChartProvider = 'basedbot' | 'dexscreener' | 'birdeye' | 'gmgn';
+export const CHART_PROVIDERS: { id: ChartProvider; label: string }[] = [
+  { id: 'basedbot', label: 'BasedBot' },
+  { id: 'dexscreener', label: 'Dexscreener / GeckoTerminal' },
+  { id: 'birdeye', label: 'Birdeye' },
+  { id: 'gmgn', label: 'GMGN' },
+];
+
+/** Birdeye's embed host keys on the token address + a chain name (each verified to render in a frame). */
+const BIRDEYE_CHAIN: Record<string, string> = {
+  solana: 'solana',
+  ethereum: 'ethereum',
+  base: 'base',
+  bsc: 'bsc',
+  arbitrum: 'arbitrum',
+  robinhood: 'robinhood',
+};
+
+/** GMGN's kline embed keys on the token address + a chain slug (note: 'arbitrum', not 'arb'). */
+const GMGN_SLUG: Record<string, string> = {
+  solana: 'sol',
+  ethereum: 'eth',
+  base: 'base',
+  bsc: 'bsc',
+  arbitrum: 'arbitrum',
+  robinhood: 'robinhood',
+};
 
 /** BasedBot's embed keys on the token address + a chain slug. */
 const BASEDBOT_SLUG: Record<string, string> = {
@@ -110,9 +136,19 @@ export function chartEmbedUrl(
   now = Date.now(),
 ): string | undefined {
   if (!t) return undefined;
+  const interval = chartInterval(t.pairCreatedAt, now);
   if (provider === 'basedbot') {
     const slug = t.network ? BASEDBOT_SLUG[t.network] : undefined;
-    if (slug) return `https://basedbot.app/embed/token/${slug}/${t.address}?interval=${chartInterval(t.pairCreatedAt, now)}`;
+    if (slug) return `https://basedbot.app/embed/token/${slug}/${t.address}?interval=${interval}`;
   }
+  if (provider === 'birdeye') {
+    const chain = t.network ? BIRDEYE_CHAIN[t.network] : undefined;
+    if (chain) return `https://embed.birdeye.so/tv-widget/${t.address}?chain=${chain}&viewMode=pair&chartInterval=${interval}&chartType=CANDLE&chartTimezone=UTC&chartLeftToolbar=show&theme=dark`;
+  }
+  if (provider === 'gmgn') {
+    const slug = t.network ? GMGN_SLUG[t.network] : undefined;
+    if (slug) return `https://www.gmgn.cc/kline/${slug}/${t.address}?theme=dark&interval=${interval}`;
+  }
+  // a chain the chosen provider doesn't cover (or not known yet): Dexscreener's embed
   return t.embedUrl;
 }
