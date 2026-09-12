@@ -261,9 +261,14 @@ export default function App() {
   /** which column type a bot lives in */
   const colTypeFor = (kind: BotKind): 'cove' | 'salpha' => (kind === 'salpha' ? 'salpha' : 'cove');
   /** make sure a bot column exists and flash it */
+  // When the column terminal isn't on screen (a focused chat, or the token drill-down is open),
+  // the bot's conversation slides in as a drawer instead, so you never lose your place.
+  const [botDrawer, setBotDrawer] = useState<BotKind | null>(null);
   const ensureBotColumn = (kind: BotKind) => {
     const type = colTypeFor(kind);
     if (!columns.some((c) => c.type === type)) saveColumns([...columns, { id: type, type, title: type === 'salpha' ? 'Salpha' : buyLabel, chats: [], width: 420 }]);
+    const terminalHidden = !!(view.preview ?? view.chat) || !!openToken;
+    if (terminalHidden) setBotDrawer(kind);
     setCoveFlash(type);
     window.setTimeout(() => setCoveFlash(null), 1500);
   };
@@ -1167,6 +1172,21 @@ export default function App() {
         </div>
       )}
       {cfg && status.discordMode !== undefined && <BridgeNotice cfg={cfg} status={status} onOpenSettings={() => setSettingsOpen(true)} />}
+      {botDrawer && (
+        <div className="bot-drawer">
+          <div className="bot-drawer-head">
+            <Icon name={botDrawer === 'salpha' ? 'search' : 'send'} size={13} />
+            <b>{botDrawer === 'salpha' ? 'Salpha' : buyLabel}</b>
+            <span className="muted">@{BOTS[botDrawer]} · your Telegram</span>
+            <button className="bot-drawer-x" onClick={() => setBotDrawer(null)} title="close" aria-label="close">
+              ×
+            </button>
+          </div>
+          <div className="bot-drawer-body">
+            <CoveView bot={BOTS[botDrawer]} msgs={botMsgs[BOTS[botDrawer]] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} />
+          </div>
+        </div>
+      )}
       {settingsOpen && (
         <Settings
           status={status}

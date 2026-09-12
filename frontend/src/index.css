@@ -1037,3 +1037,12 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .ppl-tag { font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; border: 1px solid var(--line-strong); color: var(--muted); border-radius: 4px; padding: 0 4px; }
 .ppl-crown { flex: none; color: var(--muted); font-size: 13px; }
 .ppl-raw .ppl-name { color: var(--muted); font-style: italic; }
+
+/* ---------- bot drawer (Cove / BasedBot / Salpha over a focused chat or the drill-down) ---------- */
+.bot-drawer { position: fixed; top: 64px; right: 12px; bottom: 12px; width: min(440px, 92vw); z-index: 60; display: flex; flex-direction: column; background: var(--panel-2); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65); overflow: hidden; animation: drawer-in 0.18s ease-out; }
+@keyframes drawer-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+.bot-drawer-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.bot-drawer-head .muted { font-size: 11px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bot-drawer-x { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px; width: 24px; height: 24px; line-height: 1; font-size: 15px; cursor: pointer; }
+.bot-drawer-x:hover { color: var(--text); border-color: var(--muted); }
+.bot-drawer-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }

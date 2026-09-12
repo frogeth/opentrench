@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Buy and Research from a focused chat or the token drill-down now open the bot right there, as a drawer on the right, instead of silently landing in a column you can't see. Cove, BasedBot and Salpha all behave this way; on the main view the column flashes as before.
+
 - Two more chart providers: **Birdeye** and **GMGN** (⚙ → Feed → Chart provider). Both embed a live chart under contracts like BasedBot does, and both cover Solana, Ethereum, Base, BNB, Arbitrum and Robinhood Chain — so Pons launches on Robinhood Chain get an inline chart for the first time (Dexscreener has no data there). Chains a provider doesn't cover fall back to the Dexscreener chart. A cold chart can take up to half a minute to draw.
 
 ## v0.4.0 — 2026-09-11
