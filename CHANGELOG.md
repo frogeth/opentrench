@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.6.1 — 2026-09-12
+
 - Fix: some sites in a Website column loaded their shell and then hung (mintgo.fun sat on "Loading…"). Inside a frame, Chromium withholds a site's own session cookies unless they are marked SameSite=None, so the site's realtime connection had no session. The desktop app now marks cookies set inside embedded pages that way, and those sites work like they do in a browser tab.
 
 ## v0.6.0 — 2026-09-12
