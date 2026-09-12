@@ -1,6 +1,13 @@
 import { Router, json, raw, type Request, type Response } from 'express';
 import type { HoverFetchers } from './hover.js';
 import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
+import { sanitizeColumns } from './config.js';
+import type { ConfigStore } from './config.js';
+import type { MessageHub } from './hub.js';
+import type { Services } from './services.js';
+import { IpfsCache } from './ipfs.js';
+import { createDeployFinder } from './deploys.js';
+import { CHAINS } from './opensea/chains.js';
 
 const ohlcvCache = new Map<string, { at: number; v: unknown }>();
 const lastSend = new Map<string, number>();
@@ -12,13 +19,6 @@ let lastQuote = 0;
 export function __resetOsmintQuoteThrottle(): void {
   lastQuote = 0;
 }
-import { sanitizeColumns } from './config.js';
-import type { ConfigStore } from './config.js';
-import type { MessageHub } from './hub.js';
-import type { Services } from './services.js';
-import { IpfsCache } from './ipfs.js';
-import { createDeployFinder } from './deploys.js';
-import { CHAINS } from './opensea/chains.js';
 
 export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hover?: HoverFetchers): Router {
   const r = Router();

@@ -12,15 +12,15 @@ describe('allowLocalOrigin', () => {
     expect(allowLocalOrigin(origin('http://localhost:5173'))).toBe(true);
     expect(allowLocalOrigin(origin('http://127.0.0.1:3210'))).toBe(true);
     expect(allowLocalOrigin(origin('http://[::1]:3210'))).toBe(true);
-    expect(allowLocalOrigin(origin('file://'))).toBe(true);
-    expect(allowLocalOrigin(origin('null'))).toBe(true); // a file: page
   });
 
-  it('refuses a page on the open web, and anything unparseable', () => {
+  it('refuses a page on the open web, a sandboxed iframe, and anything unparseable', () => {
     expect(allowLocalOrigin(origin('https://evil.example'))).toBe(false);
     expect(allowLocalOrigin(origin('http://localhost.evil.example'))).toBe(false);
     expect(allowLocalOrigin(origin('http://127.0.0.1.evil.example'))).toBe(false);
     expect(allowLocalOrigin(origin('not an origin'))).toBe(false);
+    expect(allowLocalOrigin(origin('null'))).toBe(false); // any sandboxed iframe sends this
+    expect(allowLocalOrigin(origin('file://'))).toBe(false);
   });
 });
 

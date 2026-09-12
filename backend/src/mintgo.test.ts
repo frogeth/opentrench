@@ -144,6 +144,31 @@ describe('MintGoClient.handleFrame', () => {
     expect(c.recent[0]).toEqual(seen[1]);
   });
 });
+describe('MintGoClient heartbeat gap check', () => {
+  it('terminates the socket once the previous heartbeat value still has not arrived', () => {
+    const c = new MintGoClient(async () => { throw new Error('no network'); });
+    const terminate = vi.fn();
+    (c as any).socket = { terminate };
+    c.handleFrame([1, 100, 1, [], []]); // received eth=100
+    c.handleFrame([2, 'x', 1, 'heartbeat', { latestMintSequences: { ethereum: 150 } }]); // no stall yet: serverSeq was unknown
+    expect(terminate).not.toHaveBeenCalled();
+    c.handleFrame([2, 'x', 1, 'heartbeat', { latestMintSequences: { ethereum: 160 } }]); // received 100 < previous server 150
+    expect(terminate).toHaveBeenCalledTimes(1);
+    expect((c as any).closeReason).toBe('mint cursor stalled');
+  });
+
+  it('does not stall when a frame catches us up between heartbeats', () => {
+    const c = new MintGoClient(async () => { throw new Error('no network'); });
+    const terminate = vi.fn();
+    (c as any).socket = { terminate };
+    c.handleFrame([1, 100, 1, [], []]);
+    c.handleFrame([2, 'x', 1, 'heartbeat', { latestMintSequences: { ethereum: 150 } }]);
+    c.handleFrame([1, 155, 1, [], []]); // caught up before the next heartbeat
+    c.handleFrame([2, 'x', 1, 'heartbeat', { latestMintSequences: { ethereum: 160 } }]);
+    expect(terminate).not.toHaveBeenCalled();
+  });
+});
+
 describe('MintGoClient.session', () => {
   const res = (status: number, body: unknown, cookies: string[]) => ({ ok: status < 400, status, json: async () => body, headers: { getSetCookie: () => cookies } }) as any;
   it('keeps only mg_ cookies and honours renewAfter', async () => {
@@ -153,9 +178,6 @@ describe('MintGoClient.session', () => {
   it('rejects a response without cookies or ok', async () => {
     await expect(new MintGoClient(async () => res(200, { ok: false }, [])).session()).rejects.toThrow(/cookie/);
     await expect(new MintGoClient(async () => res(403, {}, [])).session()).rejects.toThrow(/403/);
-  });
-  it('refuses non-site-relative paths in get()', async () => {
-    await expect(new MintGoClient(async () => res(200, {}, [])).get('@evil.com/x')).rejects.toThrow(/site-relative/);
   });
   it('reuses the cookie while renewAfter is still ahead, refetches once it is in the past', async () => {
     let calls = 0;

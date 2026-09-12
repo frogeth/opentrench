@@ -35,17 +35,19 @@ export function isLoopbackHost(host: string): boolean {
  * not cover at all) to localhost, carrying whatever the page wants with them — and this API can
  * spend the trading wallet. So an origin, when the client sends one, has to be local.
  *
- * A missing `origin` is allowed: that is a non-browser client (curl, the Electron main process, a
- * script), which a malicious web page cannot impersonate. `file:` pages send `origin: null`.
+ * A missing `origin` header (no key at all) is allowed: that is a non-browser client (curl, the
+ * Electron main process, a script), which a malicious web page cannot impersonate. A literal
+ * `Origin: null` is different — a sandboxed iframe on any site sends that, so it proves nothing
+ * about the page hosting it, and is refused like any other non-loopback origin. The packaged
+ * Electron app loads from `http://127.0.0.1:PORT`, so it never needs either of these.
  */
 export function allowLocalOrigin(req: { headers: { origin?: string | string[] } }): boolean {
   const raw = req.headers.origin;
   const origin = Array.isArray(raw) ? raw[0] : raw;
   if (!origin) return true; // not a browser
-  if (origin === 'null' || origin === 'file://') return true; // a file: page (packaged Electron)
   try {
     const u = new URL(origin);
-    return u.protocol === 'file:' || LOOPBACK_HOSTS.has(u.hostname);
+    return LOOPBACK_HOSTS.has(u.hostname);
   } catch {
     return false;
   }

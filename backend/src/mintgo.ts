@@ -129,6 +129,14 @@ export function upsertMint(list: MintEvent[], e: MintEvent, max = MAX): MintEven
 
 export type MintGoState = NonNullable<import('./types.js').Status['mintgo']>;
 
+/**
+ * Two independent defenses against a realtime stream that has gone quiet without closing:
+ * `armWatchdog` catches total silence (no frame at all for 60s), and the heartbeat gap check in
+ * `handleFrame` catches the narrower case where the socket keeps sending frames but has stopped
+ * delivering one chain's mints — MintGo's own `heartbeat.latestMintSequences` says a chain moved
+ * on while nothing for that chain reached us. Both close paths `terminate()` the socket and let
+ * the normal reconnect-with-cursor logic pick back up.
+ */
 export class MintGoClient extends EventEmitter {
   state: MintGoState = 'disconnected';
   readonly recent: MintEvent[] = [];
@@ -142,8 +150,14 @@ export class MintGoClient extends EventEmitter {
   private stopped = true;
   /** Message from the socket's last `error` event; folded into the next close message. */
   private socketError = '';
-  /** Overrides the close reason when we terminate the socket ourselves (the watchdog). */
+  /** Overrides the close reason when we terminate the socket ourselves (the watchdog, or a stall). */
   private closeReason?: string;
+  /** Highest type-1 frame sequence (`packet[1]`) received per chain, since the last `open`. */
+  private received: Record<string, number> = {};
+  /** The previous heartbeat's `latestMintSequences` per chain, since the last `open`. */
+  private serverSeq: Record<string, number> = {};
+  /** Consecutive heartbeats where a chain's server sequence advanced with nothing ever received for it. */
+  private silentAdvances: Record<string, number> = {};
   /** Last (state, error) pair emitted, so repeats don't re-emit. */
   private emittedError?: string;
   /** Bumped on every start()/stop(); a connect() in flight from a previous generation bails out instead of racing a newer one. */
@@ -171,19 +185,6 @@ export class MintGoClient extends EventEmitter {
     this.cookie = jar.join('; ');
     this.renewAt = Number(j.renewAfter) > Date.now() ? Number(j.renewAfter) : Date.now() + 20 * 60_000;
     return this.cookie;
-  }
-
-  /** GET one of MintGo's JSON endpoints with the session (used by the mint window later). */
-  async get<T>(path: string): Promise<T> {
-    if (!path.startsWith('/') || path.startsWith('//')) throw new Error('mintgo path must be site-relative');
-    const go = async () => this.fetchImpl(`${MINTGO}${path}`, { headers: { ...SAME_ORIGIN_HEADERS, cookie: await this.session() } });
-    let r = await go();
-    if (r.status === 401) {
-      await this.session(true);
-      r = await go();
-    }
-    if (!r.ok) throw new Error(`MintGo ${path} → ${r.status}`);
-    return (await r.json()) as T;
   }
 
   start(): void {
@@ -226,6 +227,48 @@ export class MintGoClient extends EventEmitter {
     this.watchdog.unref();
   }
 
+  /** Terminates the live socket (if any) with `reason`; the existing close path reconnects with the cursor. */
+  private stall(reason: string): void {
+    this.closeReason = reason;
+    this.socket?.terminate();
+  }
+
+  /**
+   * `heartbeat`'s `latestMintSequences` is the server's own per-chain cursor. If the value it
+   * reported *last* heartbeat still hasn't shown up in anything we've received by *this*
+   * heartbeat, the stream has a per-chain gap even though frames keep arriving — the watchdog
+   * alone would never notice. A chain we have never received anything for doesn't trip that
+   * check (there's nothing to compare), so it's watched separately: three heartbeats in a row
+   * where the server's number for it keeps climbing and we still have nothing is treated the
+   * same way.
+   */
+  private checkHeartbeatGap(data: unknown): void {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+    const seqs = (data as { latestMintSequences?: unknown }).latestMintSequences;
+    if (!seqs || typeof seqs !== 'object' || Array.isArray(seqs)) return;
+    for (const [chain, v] of Object.entries(seqs as Record<string, unknown>)) {
+      const serverValue = Number(v);
+      if (!Number.isFinite(serverValue)) continue;
+      const prevServer = this.serverSeq[chain];
+      const got = this.received[chain];
+      if (got !== undefined) {
+        if (prevServer !== undefined && got < prevServer) {
+          this.stall('mint cursor stalled');
+          return;
+        }
+        this.silentAdvances[chain] = 0;
+      } else {
+        const advancing = prevServer !== undefined && serverValue > prevServer;
+        this.silentAdvances[chain] = advancing ? (this.silentAdvances[chain] ?? 0) + 1 : 0;
+        if (this.silentAdvances[chain] >= 3) {
+          this.stall('mint cursor stalled');
+          return;
+        }
+      }
+      this.serverSeq[chain] = serverValue;
+    }
+  }
+
   private async connect(): Promise<void> {
     if (this.stopped) return;
     const gen = this.gen;
@@ -250,6 +293,9 @@ export class MintGoClient extends EventEmitter {
     ws.on('open', () => {
       if (this.socket !== ws) return;
       this.socketError = '';
+      this.received = {};
+      this.serverSeq = {};
+      this.silentAdvances = {};
       this.armWatchdog(ws);
     });
     ws.on('message', (data) => {
@@ -296,6 +342,9 @@ export class MintGoClient extends EventEmitter {
     const cursor = String(packet[1] ?? '');
     if (/^\d+$/.test(cursor)) this.cursor = cursor;
     if (type === 1) {
+      const chain = chainFromCode(packet[2]);
+      const seq = Number(packet[1]);
+      if (Number.isFinite(seq) && (this.received[chain] === undefined || seq > this.received[chain])) this.received[chain] = seq;
       for (const e of decodeBatch(packet)) this.emit('mint', upsertMint(this.recent, e));
     } else if (type === 2) {
       const name = String(packet[3] ?? '');
@@ -304,6 +353,8 @@ export class MintGoClient extends EventEmitter {
         // immediately drops the connection must still climb the backoff ladder to 'error'.
         this.attempts = 0;
         this.setState('connected');
+      } else if (name === 'heartbeat') {
+        this.checkHeartbeatGap(packet[4]);
       }
     }
   }

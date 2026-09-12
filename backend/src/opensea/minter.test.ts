@@ -273,6 +273,17 @@ describe('Minter', () => {
     expect(m.jobs.find((j) => j.id === 'mnonce')!.state).toBe('pending'); // left alone, guard intact
   });
 
+  it('drops a restored job that never reached the chain (quoting/ready/sending)', async () => {
+    const m = new Minter(() => KEY, () => ({}), deps());
+    await m.restore([
+      restored({ id: 'a', state: 'quoting' }),
+      restored({ id: 'b', state: 'ready' }),
+      restored({ id: 'c', state: 'sending' }),
+      restored({ id: 'd', state: 'failed', txHash: undefined, nonce: undefined }),
+    ]);
+    expect(m.jobs.map((j) => j.id)).toEqual(['d']);
+  });
+
   it('leaves a restored mint pending when there is no RPC left to watch it with', async () => {
     const m = new Minter(() => KEY, () => ({}), deps());
     await m.restore([restored({ collection: { ...restored().collection, chain: 'zora' } })]);

@@ -132,6 +132,8 @@ const blockOf = (b: unknown): number => (typeof b === 'bigint' && b >= 0n && b <
  *
  * Jobs live in memory, and the hub persists the ones with a transaction hash; `restore()` takes
  * them back after a restart and resumes the watch.
+ *
+ * Follow-up: no same-nonce fee replacement in v1; a stuck transaction is watched, not bumped.
  */
 export class Minter extends EventEmitter {
   readonly jobs: MintJob[] = [];
@@ -408,6 +410,9 @@ export class Minter extends EventEmitter {
     const resumed: Promise<unknown>[] = [];
     for (const j of jobs ?? []) {
       if (!j || typeof j.id !== 'string' || !j.id || this.jobs.some((x) => x.id === j.id)) continue;
+      // A restored 'quoting'/'ready'/'sending' job never reached the chain — nothing to watch, and
+      // re-adopting it would hold the per-wallet guard for a mint that was never actually sent.
+      if (j.state !== 'pending' && j.state !== 'confirmed' && j.state !== 'failed') continue;
       this.jobs.push(j);
       if (j.state === 'pending' && j.txHash && typeof j.nonce === 'number') resumed.push(this.resume(j));
     }
