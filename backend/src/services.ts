@@ -385,7 +385,7 @@ export class Services {
     const cfg = this.cfg.get();
     for (const id of cfg.discord.watch) {
       const ch = this.discordChannels.get(id);
-      if (ch) out.push({ id, name: `#${ch.name} (${ch.guildName})`, source: 'discord', avatar: ch.guildIcon });
+      if (ch) out.push({ id, name: ch.dm ? `${ch.name} (DM)` : `#${ch.name} (${ch.guildName})`, source: 'discord', avatar: ch.dm ? ch.avatar : ch.guildIcon });
     }
     if (cfg.telegram.watch.length) {
       const dialogs = await this.listTelegramDialogs().catch(() => [] as TelegramDialog[]);

@@ -84,10 +84,14 @@ export interface ColumnFilters {
 }
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7';
+  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7' | 'web';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
+  /** web columns: the page to embed */
+  url?: string;
+  /** a second column stacked under this one (one level only), sharing its width */
+  split?: { bottom: ColumnDef; ratio?: number };
   /** fixed width in px (drag-resized); unset = share the space */
   width?: number;
   /** callers leaderboard window */
@@ -125,11 +129,14 @@ export interface DiscordChannel {
   guildIcon?: string;
   category?: string;
   position: number;
+  /** a DM or group DM (guildId 'dm') */
+  dm?: boolean;
+  avatar?: string;
 }
 export interface TelegramDialog {
   id: string;
   title: string;
-  type: 'group' | 'channel';
+  type: 'group' | 'channel' | 'dm';
 }
 
 export const api = {

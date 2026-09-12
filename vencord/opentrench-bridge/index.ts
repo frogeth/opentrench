@@ -82,9 +82,22 @@ function hello() {
                 })),
         };
     });
+    // DMs and group DMs, so they can be watched like any channel
+    const priv: any[] = (ChannelStore as any).getSortedPrivateChannels?.() ?? Object.values((ChannelStore as any).getMutablePrivateChannels?.() ?? {});
+    const dms = priv
+        .filter(c => c && (c.type === 1 || c.type === 3))
+        .slice(0, 200)
+        .map(c => {
+            const users = (c.recipients ?? []).map((id: string) => UserStore.getUser(id)).filter(Boolean);
+            const first: any = users[0];
+            const name = c.type === 3 ? (c.name || users.map((u: any) => u.globalName || u.username).join(", ")) : (first ? first.globalName || first.username : "Direct message");
+            const avatar = c.type === 1 && first?.avatar ? `https://cdn.discordapp.com/avatars/${first.id}/${first.avatar}.png?size=64` : undefined;
+            return { id: String(c.id), name: String(name), group: c.type === 3, avatar };
+        });
     send({
         t: "hello",
         version: VERSION,
+        dms,
         user: { id: String(me.id), username: String(me.username), globalName: me.globalName ?? undefined, avatar: me.avatar ?? undefined },
         guilds,
     });

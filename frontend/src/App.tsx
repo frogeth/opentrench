@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useFeed } from './useFeed';
-import { Column } from './components/Column';
+import { Column, ResizeHandle, SplitHandle } from './components/Column';
 import { TokenModal } from './components/TokenModal';
 import { Tickers } from './components/Tickers';
 import { CallCard } from './components/CallCard';
@@ -227,8 +227,23 @@ export default function App() {
     setCfg((c) => (c ? { ...c, columns: next } : c));
     void api.setColumns(next).catch(() => {});
   };
-  const [editing, setEditing] = useState<{ col?: ColumnDef } | null>(null);
+  /** `col` = editing that column; `parentId` = it is (or will be) stacked under that top column */
+  const [editing, setEditing] = useState<{ col?: ColumnDef; parentId?: string } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  /** every column including stacked bottoms, for anything that does not care about layout */
+  const flatColumns = useMemo(() => columns.flatMap((c) => (c.split ? [c, c.split.bottom] : [c])), [columns]);
+  const updateColumn = (id: string, fn: (c: ColumnDef) => ColumnDef): ColumnDef[] =>
+    columns.map((c) => (c.id === id ? fn(c) : c.split?.bottom.id === id ? { ...c, split: { ...c.split, bottom: fn(c.split.bottom) } } : c));
+  /** drop a column; a split top hands its slot (and width) to its bottom, a dropped bottom just unsplits */
+  const removeColumn = (id: string): ColumnDef[] =>
+    columns.flatMap((c) => {
+      if (c.id === id) return c.split ? [{ ...c.split.bottom, ...(c.width ? { width: c.width } : {}) }] : [];
+      if (c.split?.bottom.id === id) {
+        const { split: _s, ...rest } = c;
+        return [rest];
+      }
+      return [c];
+    });
   // Inbox-style seen marks (persisted in config; optimistic locally)
   const seen = useMemo(() => new Set(cfg?.seenTokens ?? []), [cfg?.seenTokens]);
   const setSeen = (addresses: string[], on: boolean) => {
@@ -266,7 +281,7 @@ export default function App() {
   const [botDrawer, setBotDrawer] = useState<BotKind | null>(null);
   const ensureBotColumn = (kind: BotKind) => {
     const type = colTypeFor(kind);
-    if (!columns.some((c) => c.type === type)) saveColumns([...columns, { id: type, type, title: type === 'salpha' ? 'Salpha' : buyLabel, chats: [], width: 420 }]);
+    if (!flatColumns.some((c) => c.type === type)) saveColumns([...columns, { id: type, type, title: type === 'salpha' ? 'Salpha' : buyLabel, chats: [], width: 420 }]);
     const terminalHidden = !!(view.preview ?? view.chat) || !!openToken;
     if (terminalHidden) setBotDrawer(kind);
     setCoveFlash(type);
@@ -342,6 +357,19 @@ export default function App() {
     />
   );
   const [liveWidths, setLiveWidths] = useState<Record<string, number>>({});
+  const [liveRatios, setLiveRatios] = useState<Record<string, number>>({});
+  /** the divider of a stacked pair: live share while dragging, persisted on release */
+  const ratioFor = (id: string) => (r: number, done: boolean) => {
+    if (!done) {
+      setLiveRatios((m) => ({ ...m, [id]: r }));
+      return;
+    }
+    setLiveRatios((m) => {
+      const { [id]: _drop, ...rest } = m;
+      return rest;
+    });
+    saveColumns(columns.map((c) => (c.id === id && c.split ? { ...c, split: { ...c.split, ratio: Math.round(r * 100) / 100 } } : c)));
+  };
   /**
    * One column soaks up the leftover width so the row has no gap: the last one the user has not
    * given an explicit width. That keeps every sized column (the buy pane arrives at 420) fixed
@@ -559,7 +587,7 @@ export default function App() {
       j7Seen.current.add(t.id);
       if (t.deleted || nowMs - t.ts > 120_000 || !favs.has(t.author.handle.toLowerCase())) continue;
       // the J7 column's bell is the switch: no J7 column with its bell on → no ping, no notification
-      const col = columns.find((c) => c.type === 'j7' && c.alert?.on);
+      const col = flatColumns.find((c) => c.type === 'j7' && c.alert?.on);
       if (!col) continue;
       playSound(col.alert?.sound ?? 'ping');
       if (notify === 'granted') {
@@ -597,7 +625,7 @@ export default function App() {
     let played = false;
     for (const m of fresh) {
       if (m.hidden || m.repeat || m.contracts.length === 0 || now - m.ts > 60_000) continue;
-      for (const col of columns) {
+      for (const col of flatColumns) {
         // only chat/calls columns announce calls; a J7 or bot pane's bell is not a call alert
         if (!col.alert?.on || (col.type !== 'chat' && col.type !== 'calls') || !inScope(m.chatName, namesFor(col))) continue;
         if (!played && now - alerted.current.lastPlay > 1200) {
@@ -813,6 +841,152 @@ export default function App() {
       : cfg?.telegram.watch.includes(view.preview.id)
     : false;
 
+  type ColumnActions = Partial<Pick<Parameters<typeof Column>[0], 'onEdit' | 'onRemove' | 'onSplit' | 'alertOn' | 'onAlert' | 'drag' | 'filtered' | 'width' | 'onResize' | 'fill' | 'stacked' | 'stackShare'>>;
+  /** Header buttons for a column; a stacked bottom drags by its parent's id so the pair moves together. */
+  const actionsFor = (col: ColumnDef, parentId?: string): ColumnActions => ({
+    onEdit: () => setEditing({ col, parentId }),
+    onRemove: () => setConfirmRemove(col.id),
+    ...(col.type === 'chat' || col.type === 'calls' || col.type === 'j7'
+      ? {
+          alertOn: !!col.alert?.on,
+          onAlert: () => {
+            const next = { on: !col.alert?.on, sound: col.alert?.sound ?? 'ping' };
+            if (next.on) playSound(next.sound, { force: true });
+            saveColumns(updateColumn(col.id, (c) => ({ ...c, alert: next })));
+          },
+        }
+      : {}),
+    drag: dragFor(parentId ?? col.id),
+    filtered: filtersActive(col.filters),
+  });
+  /** One column of any type. `actions` carries the header buttons plus either the row layout (width/fill/resize) or the stack share. */
+  const renderColumn = (col: ColumnDef, actions: ColumnActions) => {
+    const names = namesFor(col);
+    if (col.type === 'web') {
+      let host = '';
+      try {
+        host = col.url ? new URL(col.url).hostname.replace(/^www\./, '') : '';
+      } catch {
+        /* keep blank */
+      }
+      return (
+        <Column
+          key={col.id}
+          title={col.title}
+          subtitle={host || 'no address yet'}
+          kind="web"
+          className="col-web"
+          extra={
+            col.url ? (
+              <a className="col-open" href={col.url} target="_blank" rel="noreferrer" title="open in your browser">
+                open ↗
+              </a>
+            ) : undefined
+          }
+          {...actions}
+        >
+          {col.url ? (
+            <iframe className="web-frame" src={col.url} title={col.title} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" />
+          ) : (
+            <div className="empty">No address yet — edit the column (✎) and paste one.</div>
+          )}
+        </Column>
+      );
+    }
+    if (col.type === 'j7') {
+      return (
+        <Column key={col.id} title={col.title} subtitle="j7tracker.io · your session" kind="j7" className="col-j7" {...actions}>
+          <J7View tweets={j7} tokens={tokens} now={now} connected={status.j7 === 'connected'} error={status.error.j7} hasToken={!!cfg?.j7?.hasToken} favorites={cfg?.j7?.favorites ?? []} onFavorite={(h) => void api.j7Favorite(h).then((r) => setCfg((c) => (c ? { ...c, j7: { ...c.j7, favorites: r.favorites } } : c))).catch((e) => alert(`J7: ${e?.message ?? e}`))} onLoaded={mergeJ7} onSelect={select} onShare={(t, onSent) => setShare({ text: t.url ?? `https://x.com/${t.author.handle}/status/${t.id.replace(/^deleted:/, '')}`, title: 'Share tweet', preview: `@${t.author.handle}: ${t.text.replace(/\s+/g, ' ').slice(0, 90)}${t.text.length > 90 ? '…' : ''}`, hint: 'The tweet link is sent; Discord and Telegram unfurl it.', onSent })} />
+        </Column>
+      );
+    }
+    if (col.type === 'cove' || col.type === 'salpha') {
+      const bot = col.type === 'salpha' ? BOTS.salpha : buyBot;
+      // a default-titled buy pane follows the provider; a custom title is kept
+      const title = col.type === 'cove' && (col.title === 'Cove' || col.title === 'BasedBot') ? buyLabel : col.title;
+      return (
+        <Column key={col.id} title={title} subtitle={`@${bot} · your Telegram`} kind={col.type} className={`col-cove${coveFlash === col.type ? ' col-flash' : ''}`} {...actions}>
+          <CoveView bot={bot} msgs={botMsgs[bot] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} />
+        </Column>
+      );
+    }
+    if (col.type === 'callers') {
+      return (
+        <Column key={col.id} title={col.title} subtitle={`${col.window ?? '7d'} · ${subtitleFor(col)}`} kind="callers" className="col-callers" {...actions}>
+          <CallersList tokens={tokens} window={col.window ?? '7d'} inScope={(name) => inScope(name, names)} now={now} favorites={status.favorites} onSearch={setQuery} />
+        </Column>
+      );
+    }
+    if (col.type === 'calls') {
+      const list = callsFor(names, col.filters);
+      const unseen = list.filter((t) => !seen.has(t.address));
+      return (
+        <Column
+          key={col.id}
+          title={col.title}
+          subtitle={subtitleFor(col)}
+          kind="calls"
+          count={list.length}
+          className="col-calls"
+          extra={
+            unseen.length > 0 && (
+              <button className="seen-all" onClick={() => setSeen(unseen.map((t) => t.address), true)} title="mark every call in this column as seen">
+                {unseen.length} new · mark seen
+              </button>
+            )
+          }
+          {...actions}
+        >
+          {list.length === 0 && <div className="empty">No contracts seen yet.</div>}
+          {list.map((t) => (
+            <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
+              <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} onBuy={onBuy} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
+            </VirtualItem>
+          ))}
+        </Column>
+      );
+    }
+    const msgs = chatMsgsFor(names, col.filters);
+    return (
+      <ChatFeed
+        key={col.id}
+        msgs={msgs}
+        order={chatOrder}
+        tokens={tokens}
+        favorites={status.favorites}
+        autoChart={autoChart}
+        compactEmbeds={compactEmbeds}
+        chartProvider={chartProvider}
+        onSelect={select}
+        onAuthorChanged={reloadLists}
+        onReply={(m) => setReplyByCol((r) => ({ ...r, [col.id]: m }))}
+        onOpenChat={(m) => openChat(m.chatName, m.source, m.chatId)}
+        onReveal={revealMessage}
+        onReact={canSend.discord || canSend.telegram ? react : undefined}
+        canReact={canSend}
+        mine={myReactions}
+        empty={<div className="empty">{watched.length === 0 ? 'No chats in your feed yet. Use the + in the rail.' : 'Nothing here yet.'}</div>}
+        render={(body, bodyRef, onScroll, footer) => (
+          <Column
+            title={col.title}
+            subtitle={subtitleFor(col)}
+            kind="chat"
+            count={msgs.length}
+            className="col-chats"
+            bodyRef={bodyRef}
+            onScroll={onScroll}
+            footer={footer}
+            extra={<FeedToggles />}
+            composer={composerFor(col.id, names)}
+            {...actions}
+          >
+            {body}
+          </Column>
+        )}
+      />
+    );
+  };
+
   return (
     <BuyContext.Provider value={onBuy}>
     <LinkInterceptContext.Provider value={interceptBotLink}>
@@ -985,118 +1159,17 @@ export default function App() {
           ) : (
             <>
               {columns.map((col, i) => {
-                const names = namesFor(col);
-                const last = i === columns.length - 1;
-                const actions = {
-                  onEdit: () => setEditing({ col }),
-                  onRemove: () => setConfirmRemove(col.id),
-                  ...(col.type === 'chat' || col.type === 'calls' || col.type === 'j7'
-                    ? {
-                        alertOn: !!col.alert?.on,
-                        onAlert: () => {
-                          const next = { on: !col.alert?.on, sound: col.alert?.sound ?? 'ping' };
-                          if (next.on) playSound(next.sound, { force: true });
-                          saveColumns(columns.map((c) => (c.id === col.id ? { ...c, alert: next } : c)));
-                        },
-                      }
-                    : {}),
-                  drag: dragFor(col.id),
-                  filtered: filtersActive(col.filters),
-                  width: liveWidths[col.id] ?? col.width,
-                  onResize: resizeFor(col.id),
-                  fill: i === fillIdx,
-                };
-                if (col.type === 'j7') {
-                  return (
-                    <Column key={col.id} title={col.title} subtitle="j7tracker.io · your session" kind="j7" className="col-j7" {...actions}>
-                      <J7View tweets={j7} tokens={tokens} now={now} connected={status.j7 === 'connected'} error={status.error.j7} hasToken={!!cfg?.j7?.hasToken} favorites={cfg?.j7?.favorites ?? []} onFavorite={(h) => void api.j7Favorite(h).then((r) => setCfg((c) => (c ? { ...c, j7: { ...c.j7, favorites: r.favorites } } : c))).catch((e) => alert(`J7: ${e?.message ?? e}`))} onLoaded={mergeJ7} onSelect={select} onShare={(t, onSent) => setShare({ text: t.url ?? `https://x.com/${t.author.handle}/status/${t.id.replace(/^deleted:/, '')}`, title: 'Share tweet', preview: `@${t.author.handle}: ${t.text.replace(/\s+/g, ' ').slice(0, 90)}${t.text.length > 90 ? '…' : ''}`, hint: 'The tweet link is sent; Discord and Telegram unfurl it.', onSent })} />
-                    </Column>
-                  );
-                }
-                if (col.type === 'cove' || col.type === 'salpha') {
-                  const bot = col.type === 'salpha' ? BOTS.salpha : buyBot;
-                  // a default-titled buy pane follows the provider; a custom title is kept
-                  const title = col.type === 'cove' && (col.title === 'Cove' || col.title === 'BasedBot') ? buyLabel : col.title;
-                  return (
-                    <Column key={col.id} title={title} subtitle={`@${bot} · your Telegram`} kind={col.type} className={`col-cove${coveFlash === col.type ? ' col-flash' : ''}`} {...actions}>
-                      <CoveView bot={bot} msgs={botMsgs[bot] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} />
-                    </Column>
-                  );
-                }
-                if (col.type === 'callers') {
-                  return (
-                    <Column key={col.id} title={col.title} subtitle={`${col.window ?? '7d'} · ${subtitleFor(col)}`} kind="callers" className="col-callers" {...actions}>
-                      <CallersList tokens={tokens} window={col.window ?? '7d'} inScope={(name) => inScope(name, names)} now={now} favorites={status.favorites} onSearch={setQuery} />
-                    </Column>
-                  );
-                }
-                if (col.type === 'calls') {
-                  const list = callsFor(names, col.filters);
-                  const unseen = list.filter((t) => !seen.has(t.address));
-                  return (
-                    <Column
-                      key={col.id}
-                      title={col.title}
-                      subtitle={subtitleFor(col)}
-                      kind="calls"
-                      count={list.length}
-                      className="col-calls"
-                      extra={
-                        unseen.length > 0 && (
-                          <button className="seen-all" onClick={() => setSeen(unseen.map((t) => t.address), true)} title="mark every call in this column as seen">
-                            {unseen.length} new · mark seen
-                          </button>
-                        )
-                      }
-                      {...actions}
-                    >
-                      {list.length === 0 && <div className="empty">No contracts seen yet.</div>}
-                      {list.map((t) => (
-                        <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
-                          <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} onBuy={onBuy} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
-                        </VirtualItem>
-                      ))}
-                    </Column>
-                  );
-                }
-                const msgs = chatMsgsFor(names, col.filters);
+                const layout = { width: liveWidths[col.id] ?? col.width, onResize: resizeFor(col.id), fill: i === fillIdx };
+                if (!col.split) return renderColumn(col, { ...actionsFor(col), ...layout, onSplit: () => setEditing({ parentId: col.id }) });
+                // a stacked pair: the wrapper owns the width, resize handle and drag target; the divider sets the top's share
+                const share = liveRatios[col.id] ?? col.split.ratio ?? 0.5;
                 return (
-                  <ChatFeed
-                    key={col.id}
-                    msgs={msgs}
-                    order={chatOrder}
-                    tokens={tokens}
-                    favorites={status.favorites}
-                    autoChart={autoChart}
-                    compactEmbeds={compactEmbeds}
-                    chartProvider={chartProvider}
-                    onSelect={select}
-                    onAuthorChanged={reloadLists}
-                    onReply={(m) => setReplyByCol((r) => ({ ...r, [col.id]: m }))}
-                    onOpenChat={(m) => openChat(m.chatName, m.source, m.chatId)}
-                    onReveal={revealMessage}
-                    onReact={canSend.discord || canSend.telegram ? react : undefined}
-                    canReact={canSend}
-                    mine={myReactions}
-                    empty={<div className="empty">{watched.length === 0 ? 'No chats in your feed yet. Use the + in the rail.' : 'Nothing here yet.'}</div>}
-                    render={(body, bodyRef, onScroll, footer) => (
-                      <Column
-                        title={col.title}
-                        subtitle={subtitleFor(col)}
-                        kind="chat"
-                        count={msgs.length}
-                        className="col-chats"
-                        bodyRef={bodyRef}
-                        onScroll={onScroll}
-                        footer={footer}
-                        extra={<FeedToggles />}
-                        composer={composerFor(col.id, names)}
-                        {...actions}
-                      >
-                        {body}
-                      </Column>
-                    )}
-                  />
+                  <div key={col.id} className={`col-stack${layout.width ? ' col-fixed' : ''}`} style={layout.fill ? { flex: `1 1 ${layout.width ?? 380}px` } : layout.width ? { flex: `0 0 ${layout.width}px` } : undefined}>
+                    {renderColumn(col, { ...actionsFor(col), stacked: true, stackShare: share })}
+                    <SplitHandle onRatio={ratioFor(col.id)} />
+                    {renderColumn(col.split.bottom, { ...actionsFor(col.split.bottom, col.id), stacked: true, stackShare: 1 - share })}
+                    <ResizeHandle onResize={layout.onResize} />
+                  </div>
                 );
               })}
               <button className="col-add" onClick={() => setEditing({})} title="Add a column" aria-label="Add a column">
@@ -1114,8 +1187,9 @@ export default function App() {
           callers={knownCallers}
           onClose={() => setEditing(null)}
           onSave={(c) => {
-            const exists = columns.some((x) => x.id === c.id);
-            saveColumns(exists ? columns.map((x) => (x.id === c.id ? c : x)) : [...columns, c]);
+            const pid = editing.parentId;
+            if (pid) saveColumns(columns.map((x) => (x.id === pid ? { ...x, split: { ...(x.split ?? {}), bottom: c } } : x)));
+            else saveColumns(flatColumns.some((x) => x.id === c.id) ? updateColumn(c.id, () => c) : [...columns, c]);
             setEditing(null);
           }}
         />
@@ -1127,14 +1201,14 @@ export default function App() {
               <b>Remove column?</b>
             </div>
             <div className="modal-body-pad">
-              “{columns.find((c) => c.id === confirmRemove)?.title}” goes away. Your chats and calls stay; you can add it back any time.
+              “{flatColumns.find((c) => c.id === confirmRemove)?.title}” goes away. Your chats and calls stay; you can add it back any time.
             </div>
             <div className="modal-foot">
               <button onClick={() => setConfirmRemove(null)}>Cancel</button>
               <button
                 className="danger"
                 onClick={() => {
-                  saveColumns(columns.filter((c) => c.id !== confirmRemove));
+                  saveColumns(removeColumn(confirmRemove));
                   setConfirmRemove(null);
                 }}
               >

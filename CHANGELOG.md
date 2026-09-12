@@ -7,6 +7,10 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Split a column in two. The new ⊟ button in a column's header stacks a second column of any type under it, sharing its width. Drag the divider between them to change the split, double-click it to even out, drag the stack's right edge to resize the pair, and drag the grip to move both together. One level only. Removing the top hands its slot to the bottom; removing the bottom just unsplits.
+- New column type: Website. Paste any address and the page lives inside the column like a browser tab; the ↗ in its header opens it in your real browser for sites that refuse to be embedded.
+- DMs are chats now. Telegram private chats (people, not bots) and Discord DMs and group DMs show up under + → add chats, with a Direct Messages entry on the rail, so a column can be scoped to one person on either platform. Sending, reactions and pings work the same as in any chat. Discord DMs need the plugin rebuilt (vencord/README.md), since the client is what lists them.
+
 ## v0.5.1 — 2026-09-12
 
 - Fix: the reaction picker vanished as soon as you moved the mouse over it. Two CSS rules fought over its position and left the box 14px tall with the emoji drawn outside it, so crossing any gap between emoji counted as leaving. The picker now sizes to its contents below the ☺+ button and closes on an outside click or Escape, like the other menus, instead of on mouse-leave.

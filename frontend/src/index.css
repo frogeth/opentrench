@@ -1045,3 +1045,16 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .bot-drawer-x { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px; width: 24px; height: 24px; line-height: 1; font-size: 15px; cursor: pointer; }
 .bot-drawer-x:hover { color: var(--text); border-color: var(--muted); }
 .bot-drawer-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ---- stacked columns: one column split in two, sharing a width ---- */
+.col-stack { display: flex; flex-direction: column; min-width: 320px; flex: 1 1 0; min-height: 0; position: relative; border-right: 1px solid var(--line); }
+.col-stack > .col { border-right: none; min-height: 0; min-width: 0; }
+.col-split { flex: none; height: 7px; margin: -3px 0; cursor: row-resize; z-index: 5; position: relative; }
+.col-split::after { content: ''; position: absolute; left: 0; right: 0; top: 3px; height: 1px; background: var(--line); }
+.col-split:hover, .col-split:active { background: rgba(65, 200, 146, 0.35); }
+
+/* ---- web column: the page fills the body ---- */
+.col-web .col-body { overflow: hidden; display: flex; }
+.web-frame { flex: 1; width: 100%; height: 100%; border: 0; background: #fff; }
+.col-open { font-size: 11px; color: var(--muted); text-decoration: none; white-space: nowrap; }
+.col-open:hover { color: var(--text); }

@@ -106,10 +106,12 @@ export function ColumnEditor({
   const [alertOn, setAlertOn] = useState(col?.alert?.on ?? false);
   const [sound, setSound] = useState(col?.alert?.sound ?? 'ping');
   const [f, setF] = useState<ColumnFilters>(col?.filters ?? {});
+  const [url, setUrl] = useState(col?.url ?? '');
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const set = <K extends keyof ColumnFilters>(k: K, v: ColumnFilters[K]) => setF((s) => ({ ...s, [k]: v }));
   const num = (k: NumKey) => (e: React.ChangeEvent<HTMLInputElement>) => set(k, e.target.value === '' ? undefined : Number(e.target.value));
   const isBot = type === 'cove' || type === 'salpha' || type === 'j7';
+  const isWeb = type === 'web';
   const all = chats.length === 0;
   const none = chats.includes('none');
   // "All channels" is stored as an empty list and shows as every box ticked; "none" is a
@@ -128,7 +130,8 @@ export function ColumnEditor({
     const cat = new Map(channels.map((c) => [c.id, c.category]));
     const m = new Map<string, { source: 'discord' | 'telegram'; avatar?: string; items: { w: WatchedChat; category?: string }[] }>();
     for (const w of watched) {
-      const server = w.source === 'discord' ? (/\(([^)]*)\)\s*$/.exec(w.name)?.[1] ?? 'Discord') : 'Telegram';
+      const tail = w.source === 'discord' ? /\(([^)]*)\)\s*$/.exec(w.name)?.[1] : undefined;
+      const server = w.source === 'discord' ? (tail === 'DM' ? 'Direct Messages' : tail ?? 'Discord') : 'Telegram';
       const g = m.get(server) ?? { source: w.source, avatar: undefined, items: [] };
       if (!g.avatar && w.avatar && w.source === 'discord') g.avatar = w.avatar;
       g.items.push({ w, category: w.source === 'discord' ? cat.get(w.id) : undefined });
@@ -146,9 +149,20 @@ export function ColumnEditor({
     commit(groupState(items) === 'all' ? selected.filter((k) => !keys.includes(k)) : [...new Set([...selected, ...keys])]);
   };
 
+  // a pasted address without a scheme gets https://; anything that still is not http(s) is refused
+  const cleanUrl = (() => {
+    const u = url.trim();
+    if (!u) return '';
+    return /^[a-z][a-z0-9+.-]*:/i.test(u) ? u : `https://${u}`;
+  })();
+  const urlOk = /^https?:\/\/[^\s/]+/i.test(cleanUrl);
   const save = () => {
-    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : all ? 'All Chats' : 'Chats');
-    if (none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
+    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'web' ? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website') : all ? 'All Chats' : 'Chats');
+    if (isWeb && !urlOk) {
+      window.alert('Paste the address of the page to show (http:// or https://).');
+      return;
+    }
+    if (!isWeb && none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
     const clean: ColumnFilters = {};
     for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== false && !(Array.isArray(v) && v.length === 0) && !(typeof v === 'string' && !v.trim())) (clean as any)[k] = v;
     onSave({
@@ -156,7 +170,8 @@ export function ColumnEditor({
       id: col?.id ?? `c${Date.now().toString(36)}`,
       type,
       title: t,
-      chats,
+      chats: isWeb ? [] : chats,
+      ...(isWeb ? { url: cleanUrl } : {}),
       ...(type === 'callers' ? { window: win } : {}),
       ...(type === 'calls' || type === 'chat' || type === 'j7' ? { alert: { on: alertOn, sound } } : {}),
       filters: Object.keys(clean).length ? clean : undefined,
@@ -176,20 +191,27 @@ export function ColumnEditor({
           {/* ---------- left: what & where ---------- */}
           <div className="fed-left">
             <div className="fed-type">
-              {(['chat', 'calls', 'callers', 'cove', 'salpha', 'j7'] as const).map((t) => (
+              {(['chat', 'calls', 'callers', 'cove', 'salpha', 'j7', 'web'] as const).map((t) => (
                 <button key={t} className={type === t ? 'active' : ''} onClick={() => setType(t)}>
-                  <Icon name={t === 'chat' ? 'chat' : t === 'calls' ? 'calls' : t === 'callers' ? 'people' : t === 'cove' ? 'send' : t === 'salpha' ? 'search' : 'x'} size={13} /> {t === 'chat' ? 'Messages' : t === 'calls' ? 'Calls' : t === 'callers' ? 'Top Callers' : t === 'cove' ? 'Buy bot' : t === 'salpha' ? 'Salpha' : 'J7'}
+                  <Icon name={t === 'chat' ? 'chat' : t === 'calls' ? 'calls' : t === 'callers' ? 'people' : t === 'cove' ? 'send' : t === 'salpha' ? 'search' : t === 'web' ? 'globe' : 'x'} size={13} /> {t === 'chat' ? 'Messages' : t === 'calls' ? 'Calls' : t === 'callers' ? 'Top Callers' : t === 'cove' ? 'Buy bot' : t === 'salpha' ? 'Salpha' : t === 'web' ? 'Website' : 'J7'}
                 </button>
               ))}
             </div>
             <div className="fed-label">Feed name</div>
-            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : 'All Chats'} maxLength={40} />
+            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'web' ? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website') : 'All Chats'} maxLength={40} />
+            {isWeb && (
+              <>
+                <div className="fed-label">Address</div>
+                <input className="fed-input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" spellCheck={false} autoFocus={!col} onKeyDown={(e) => e.key === 'Enter' && save()} />
+                <div className="fed-bot-note hint">The page lives inside the column, like a browser tab. Some sites refuse to be embedded and show up blank; the ↗ in the column header opens them in your browser instead.</div>
+              </>
+            )}
             {isBot && (
               <div className="fed-bot-note hint">
                 {type === 'cove' ? 'Your buy bot — Cove or BasedBot, whichever is picked in ⚙ → Trading. Buy buttons and right-click → Buy land here.' : type === 'salpha' ? 'Your conversation with @salpha_research_bot. Right-click a contract → Research sends it here.' : 'J7Tracker’s live tweet feed, with the calls each tweet touches. Needs your J7 session id in ⚙ → Accounts.'}
               </div>
             )}
-            {!isBot && (
+            {!isBot && !isWeb && (
             <>
             <div className="fed-label">
               Channels <span className="muted">({all ? 'all' : none ? 'none' : `${chats.length} of ${allKeys.length}`})</span>
@@ -231,7 +253,7 @@ export function ColumnEditor({
                             {showCat && category && <div className="ftree-cat">{category}</div>}
                             <label className="ftree-item">
                               <input type="checkbox" checked={selected.includes(chatKey(w))} onChange={() => toggle(chatKey(w))} />
-                              {w.source === 'discord' ? <span className="muted">#</span> : w.avatar ? <Avatar src={w.avatar} name={w.name} size={14} /> : <Logo source="telegram" size={12} />}
+                              {w.source === 'discord' && !/\(DM\)\s*$/.test(w.name) ? <span className="muted">#</span> : w.avatar ? <Avatar src={w.avatar} name={w.name} size={14} /> : <Logo source={w.source} size={12} />}
                               <span className="ftree-name">{shortName(w)}</span>
                             </label>
                           </div>
@@ -249,6 +271,7 @@ export function ColumnEditor({
           {/* ---------- right: filters & alerts ---------- */}
           <div className="fed-right">
             {isBot && type !== 'j7' && <div className="hint">Nothing to filter here — this column shows one bot conversation.</div>}
+            {isWeb && <div className="hint">Nothing to filter here — this column shows a web page.</div>}
             {type === 'j7' && (
               <div className="fsec">
                 <div className="fsec-title">Alert</div>

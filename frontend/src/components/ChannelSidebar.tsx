@@ -13,8 +13,14 @@ export interface View {
   preview?: { name: string; id: string; source: Source };
 }
 
+/** The display name messages carry: `#chan (Server)`, or `Name (DM)` for a direct message. */
 export function discordChatName(c: DiscordChannel): string {
-  return `#${c.name} (${c.guildName})`;
+  return c.dm ? `${c.name} (DM)` : `#${c.name} (${c.guildName})`;
+}
+
+/** The row glyph: a hash for a server channel, the person's avatar for a DM. */
+export function discordGlyph(c: DiscordChannel, size = 20): ReactNode {
+  return c.dm ? <Avatar src={c.avatar} name={c.name} size={size} /> : <span className="chan-hash">#</span>;
 }
 
 interface RailItem {
@@ -141,6 +147,8 @@ export function ChannelSidebar({
         >
           {it.icon ? (
             <img src={it.icon} alt="" loading="lazy" draggable={false} />
+          ) : it.key === 'g:dm' ? (
+            <span>@</span>
           ) : (
             <span>{it.name.slice(0, 2).toUpperCase()}</span>
           )}
@@ -191,7 +199,7 @@ export function ChannelSidebar({
             </div>
             {chs.map((c) => {
               const name = discordChatName(c);
-              return row(c.id, view.chat?.id === c.id, () => onView({ rail: 'all', chat: { name, id: c.id, source: 'discord' } }), <span className="chan-hash">#</span>, c.name, counts.get(name) ?? 0);
+              return row(c.id, view.chat?.id === c.id, () => onView({ rail: 'all', chat: { name, id: c.id, source: 'discord' } }), discordGlyph(c), c.name, counts.get(name) ?? 0);
             })}
           </div>
         ))}
@@ -244,7 +252,7 @@ export function ChannelSidebar({
     }
     head = (
       <>
-        {active?.icon ? <img className="sidebar-icon" src={active.icon} alt="" /> : <Logo source="discord" size={16} />}
+        {active?.icon ? <img className="sidebar-icon" src={active.icon} alt="" /> : active?.id === 'dm' ? <span className="chan-hash">@</span> : <Logo source="discord" size={16} />}
         <b>{active?.name ?? 'Discord'}</b>
         <Logo source="discord" size={11} />
       </>
@@ -256,7 +264,7 @@ export function ChannelSidebar({
             {cat && <div className="chan-cat">{cat}</div>}
             {chs.map((c) => {
               const name = discordChatName(c);
-              return row(c.id, view.chat?.id === c.id, () => onView({ rail: `g:${c.guildId}`, chat: { name, id: c.id, source: 'discord' } }), <span className="chan-hash">#</span>, c.name, counts.get(name) ?? 0);
+              return row(c.id, view.chat?.id === c.id, () => onView({ rail: `g:${c.guildId}`, chat: { name, id: c.id, source: 'discord' } }), discordGlyph(c), c.name, counts.get(name) ?? 0);
             })}
           </div>
         ))}

@@ -4,6 +4,7 @@ import type { Source } from '../types';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 import { Icon } from './Icon';
+import { discordChatName, discordGlyph } from './ChannelSidebar';
 
 /**
  * Popup picker for both platforms: every Discord server & channel, or every
@@ -109,7 +110,7 @@ export function AddChatsModal({
               title={`${g.name}${g.watched ? ` · ${g.watched} in feed` : ''}`}
               onClick={() => setGuild(g.id)}
             >
-              {g.icon ? <img src={g.icon} alt="" loading="lazy" /> : <span>{g.name.slice(0, 2).toUpperCase()}</span>}
+              {g.icon ? <img src={g.icon} alt="" loading="lazy" /> : g.id === 'dm' ? <span>@</span> : <span>{g.name.slice(0, 2).toUpperCase()}</span>}
             </button>
           ))}
         </div>
@@ -121,11 +122,11 @@ export function AddChatsModal({
                 {cat && <div className="chan-cat">{cat}</div>}
                 {chs.map((c) => {
                   const on = cfg?.discord.watch.includes(c.id) ?? false;
-                  const name = `#${c.name} (${c.guildName})`;
+                  const name = discordChatName(c);
                   return (
                     <div key={c.id} className={`pick${on ? ' on' : ''}`}>
                       <button className="pick-main" onClick={() => onPreview('discord', c.id, name, c.guildId)} title="preview without adding">
-                        <span className="chan-hash">#</span>
+                        {discordGlyph(c, 22)}
                         <span className="pick-name">{c.name}</span>
                       </button>
                       <button className="pick-eye" onClick={() => onPreview('discord', c.id, name, c.guildId)} title="preview">

@@ -13,7 +13,17 @@ import { extractLinks, type ExtractedMeta, type LinkIn } from '../links.js';
 export interface TelegramDialog {
   id: string;
   title: string;
-  type: 'group' | 'channel';
+  type: 'group' | 'channel' | 'dm';
+}
+
+/** What the feed calls a chat: a group's title, or a person's name / @username for a DM. */
+function chatDisplayName(chat: any, fallback: string): string {
+  if (!chat) return fallback;
+  if (chat.title) return String(chat.title);
+  const name = [chat.firstName, chat.lastName].filter(Boolean).join(' ').trim();
+  if (name) return name;
+  if (chat.username) return `@${chat.username}`;
+  return fallback;
 }
 
 const FATAL_AUTH = [
@@ -162,11 +172,11 @@ export class TelegramWrapper extends EventEmitter {
     if (!this.client || this.state !== 'connected') return [];
     const dialogs = await this.client.getDialogs({ limit: 500 });
     return dialogs
-      .filter((d) => d.isGroup || d.isChannel)
+      .filter((d) => d.isGroup || d.isChannel || (d.isUser && !(d.entity as any)?.bot))
       .map((d) => ({
         id: String(d.id),
-        title: d.title ?? '(untitled)',
-        type: d.isChannel && !d.isGroup ? ('channel' as const) : ('group' as const),
+        title: d.isUser ? chatDisplayName(d.entity, d.title ?? String(d.id)) : (d.title ?? '(untitled)'),
+        type: d.isUser ? ('dm' as const) : d.isChannel && !d.isGroup ? ('channel' as const) : ('group' as const),
       }));
   }
 
@@ -511,7 +521,7 @@ export class TelegramWrapper extends EventEmitter {
     const plain: TelegramPlain = {
       id: m.id,
       chatId,
-      chatTitle: chat?.title ?? chatId,
+      chatTitle: chatDisplayName(chat, chatId),
       chatUsername: chat?.username ?? undefined,
       senderId,
       senderName,

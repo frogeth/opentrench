@@ -17,6 +17,9 @@ export interface DiscordChannel {
   guildIcon?: string;
   category?: string;
   position: number;
+  /** a direct message or group DM rather than a server channel */
+  dm?: boolean;
+  avatar?: string;
 }
 
 export interface DiscordSelf {
@@ -104,6 +107,19 @@ export class DiscordBridge extends EventEmitter {
               position: Number(c.position ?? 0),
             });
           }
+        }
+        for (const d of msg.dms ?? []) {
+          if (!d?.id) continue;
+          this.channels.set(String(d.id), {
+            id: String(d.id),
+            name: String(d.name ?? 'Direct message'),
+            guildId: 'dm',
+            guildName: 'Direct Messages',
+            category: d.group ? 'Group DMs' : undefined,
+            position: 0,
+            dm: true,
+            avatar: typeof d.avatar === 'string' ? d.avatar : undefined,
+          });
         }
         this.self = msg.user?.id ? { id: String(msg.user.id), username: String(msg.user.globalName ?? msg.user.username ?? ''), roles } : undefined;
         this.emit('self', this.self);

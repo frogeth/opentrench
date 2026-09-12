@@ -4,6 +4,9 @@ export interface DiscordChannelInfo {
   name: string;
   guildName: string;
   guildIcon?: string;
+  /** a DM: named after the person, no # */
+  dm?: boolean;
+  avatar?: string;
 }
 
 const MEDIA_URL_RE = /https?:\/\/[^\s<>()]+?\.(?:gif|png|jpe?g|webp)(?:\?[^\s<>()]*)?/gi;
@@ -193,7 +196,7 @@ export function normalizeDiscord(d: any, ch: DiscordChannelInfo, me?: DiscordMe,
     id: `discord:${d.id}`,
     source: 'discord',
     chatId: String(d.channel_id),
-    chatName: `#${ch.name} (${ch.guildName})`,
+    chatName: ch.dm ? `${ch.name} (DM)` : `#${ch.name} (${ch.guildName})`,
     author: authorName(d.author, d.member),
     avatar: avatarUrl(d),
     // Webhooks carry bot:true too, but a webhook channel *is* the feed (alert bots, scanners
@@ -207,7 +210,7 @@ export function normalizeDiscord(d: any, ch: DiscordChannelInfo, me?: DiscordMe,
     hasAttachment: (d.attachments?.length ?? 0) > 0,
     replyTo: replyContext(d, names),
     mention: discordMention(d, me),
-    chatAvatar: ch.guildIcon,
+    chatAvatar: ch.dm ? ch.avatar : ch.guildIcon,
     media: discordMedia(d),
     previews: discordPreviews(d),
   };

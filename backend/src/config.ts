@@ -5,9 +5,13 @@ import type { BotPolicy } from './types.js';
 /** One column of the terminal. `chats` are `<source>:<id>` keys of watched chats; empty = every watched chat. */
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7';
+  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7' | 'web';
   title: string;
   chats: string[];
+  /** web columns: the page to embed (http/https only) */
+  url?: string;
+  /** a second column stacked under this one (one level only), sharing its width */
+  split?: { bottom: ColumnDef; ratio?: number };
   /** fixed width in px (drag-resized); unset = share the space */
   width?: number;
   /** callers leaderboard window */
@@ -23,39 +27,59 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
   { id: 'chats', type: 'chat', title: 'All Chats', chats: [] },
 ];
 
+const TYPES = ['calls', 'callers', 'cove', 'salpha', 'j7', 'web', 'chat'] as const;
+const DEFAULT_TITLE: Record<ColumnDef['type'], string> = { calls: 'Calls', callers: 'Top Callers', cove: 'Cove', salpha: 'Salpha', j7: 'J7', web: 'Web', chat: 'Chats' };
+
+/** One column definition from untrusted input; `allowSplit` is false for a stacked bottom (one level only). */
+function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): ColumnDef | undefined {
+  if (!r || typeof r !== 'object') return undefined;
+  const raw = r as any;
+  const id = String(raw.id ?? '').trim().slice(0, 40);
+  const type: ColumnDef['type'] = (TYPES as readonly string[]).includes(raw.type) ? raw.type : 'chat';
+  const title = String(raw.title ?? '').trim().slice(0, 40) || DEFAULT_TITLE[type];
+  // empty = every watched chat; the 'none' sentinel = nothing selected (a column being set up)
+  const chats = Array.isArray(raw.chats) ? raw.chats.map(String).filter((k: string) => /^(discord|telegram):/.test(k) || k === 'none').slice(0, 200) : [];
+  if (!id || seen.has(id)) return undefined;
+  seen.add(id);
+  const col: ColumnDef = { id, type, title, chats };
+  const w = Number(raw.width);
+  if (Number.isFinite(w) && w >= 320 && w <= 1600) col.width = Math.round(w);
+  if (['24h', '7d', '30d'].includes(raw.window)) col.window = raw.window;
+  const al = raw.alert;
+  if (al && typeof al === 'object') col.alert = { on: !!al.on, sound: String(al.sound ?? 'ping').slice(0, 20) || 'ping' };
+  if (type === 'web') {
+    const u = String(raw.url ?? '').trim().slice(0, 2000);
+    if (/^https?:\/\//i.test(u)) col.url = u;
+  }
+  const f = raw.filters;
+  if (f && typeof f === 'object' && !Array.isArray(f)) {
+    const out: NonNullable<ColumnDef['filters']> = {};
+    for (const [k, v] of Object.entries(f).slice(0, 60)) {
+      if (!/^[a-zA-Z0-9_]{1,40}$/.test(k)) continue;
+      if (typeof v === 'string') out[k] = v.slice(0, 200);
+      else if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+      else if (typeof v === 'boolean') out[k] = v;
+      else if (Array.isArray(v)) out[k] = v.map(String).map((x) => x.slice(0, 80)).slice(0, 300);
+    }
+    if (Object.keys(out).length) col.filters = out;
+  }
+  if (allowSplit && raw.split && typeof raw.split === 'object') {
+    const bottom = parseColumn(raw.split.bottom, seen, false);
+    if (bottom) {
+      const ratio = Number(raw.split.ratio);
+      col.split = { bottom, ...(Number.isFinite(ratio) ? { ratio: Math.min(0.8, Math.max(0.2, ratio)) } : {}) };
+    }
+  }
+  return col;
+}
+
 export function sanitizeColumns(raw: unknown): ColumnDef[] {
   if (!Array.isArray(raw)) return DEFAULT_COLUMNS.map((c) => ({ ...c }));
   const out: ColumnDef[] = [];
   const seen = new Set<string>();
   for (const r of raw.slice(0, 8)) {
-    if (!r || typeof r !== 'object') continue;
-    const id = String((r as any).id ?? '').trim().slice(0, 40);
-    const rawType = (r as any).type;
-    const type = rawType === 'calls' ? 'calls' : rawType === 'callers' ? 'callers' : rawType === 'cove' ? 'cove' : rawType === 'salpha' ? 'salpha' : rawType === 'j7' ? 'j7' : 'chat';
-    const title = String((r as any).title ?? '').trim().slice(0, 40) || (type === 'calls' ? 'Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : 'Chats');
-    // empty = every watched chat; the 'none' sentinel = nothing selected (a column being set up)
-    const chats = Array.isArray((r as any).chats) ? (r as any).chats.map(String).filter((k: string) => /^(discord|telegram):/.test(k) || k === 'none').slice(0, 200) : [];
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    const col: ColumnDef = { id, type, title, chats };
-    const w = Number((r as any).width);
-    if (Number.isFinite(w) && w >= 320 && w <= 1600) col.width = Math.round(w);
-    if (['24h', '7d', '30d'].includes((r as any).window)) col.window = (r as any).window;
-    const al = (r as any).alert;
-    if (al && typeof al === 'object') col.alert = { on: !!al.on, sound: String(al.sound ?? 'ping').slice(0, 20) || 'ping' };
-    const f = (r as any).filters;
-    if (f && typeof f === 'object' && !Array.isArray(f)) {
-      const out: NonNullable<ColumnDef['filters']> = {};
-      for (const [k, v] of Object.entries(f).slice(0, 60)) {
-        if (!/^[a-zA-Z0-9_]{1,40}$/.test(k)) continue;
-        if (typeof v === 'string') out[k] = v.slice(0, 200);
-        else if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
-        else if (typeof v === 'boolean') out[k] = v;
-        else if (Array.isArray(v)) out[k] = v.map(String).map((x) => x.slice(0, 80)).slice(0, 300);
-      }
-      if (Object.keys(out).length) col.filters = out;
-    }
-    out.push(col);
+    const col = parseColumn(r, seen, true);
+    if (col) out.push(col);
   }
   return out.length ? out : DEFAULT_COLUMNS.map((c) => ({ ...c }));
 }
