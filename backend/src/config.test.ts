@@ -67,6 +67,13 @@ describe('ConfigStore opensea block', () => {
     expect((s.masked() as any).opensea).toEqual({ hasWallet: true, rpc: { ethereum: 'https://e.io', b3: 'https://b3.io' } });
     fs.unlinkSync(f);
   });
+  it('keeps an http override only for localhost/loopback, drops it for anything else', () => {
+    const f = tmp();
+    fs.writeFileSync(f, JSON.stringify({ opensea: { rpc: { evil: 'http://evil.example/rpc', local: 'http://127.0.0.1:8545', secure: 'https://e.io' } } }));
+    const s = new ConfigStore(f);
+    expect(s.get().opensea.rpc).toEqual({ local: 'http://127.0.0.1:8545', secure: 'https://e.io' });
+    fs.unlinkSync(f);
+  });
   it('drops an invalid wallet key and loads an old config without opensea', () => {
     const f = tmp();
     fs.writeFileSync(f, JSON.stringify({ discord: { watch: [] }, telegram: { watch: [] }, columns: [{ id: 'calls', type: 'calls', title: 'All Calls', chats: [] }] }));

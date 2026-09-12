@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
-import { buildSiweMessage, checkVerifyResponse, SIWE_STATEMENT, OpenSeaSession } from './session.js';
-import { OPENSEA, GQL_URL } from './gql.js';
+import { buildSiweMessage, checkVerifyResponse, collectionUrl, SIWE_STATEMENT, OpenSeaSession } from './session.js';
+import { GQL_URL } from './gql.js';
 
 describe('siwe', () => {
   it('builds the exact text osnm-z signs', () => {
@@ -16,13 +16,29 @@ describe('siwe', () => {
   });
 });
 
+describe('collectionUrl', () => {
+  it('accepts a plain slug', () => {
+    expect(collectionUrl('chump-nft-310989788')).toBe('https://opensea.io/collection/chump-nft-310989788/overview');
+  });
+  it('rejects anything that is not a plain token', () => {
+    for (const bad of ['a\nb', '../etc', '', 'x'.repeat(201)]) {
+      expect(() => collectionUrl(bad)).toThrow(/bad collection slug/);
+    }
+  });
+});
+
 describe('OpenSeaSession', () => {
-  function makeFake(addr: string) {
+  /** `verifyCookies[n]` is the access_token set-cookie value used on the (n+1)th successful
+   * verify call (clamped to the last entry); `null` means the verify response sets no cookie. */
+  function makeFake(addr: string, opts: { verifyCookies?: (string | null)[] } = {}) {
     const lower = addr.toLowerCase();
-    const calls: { url: string; body: any; headers: Record<string, string> }[] = [];
+    const verifyCookies = opts.verifyCookies ?? ['tok'];
     let nonceCalls = 0;
+    let verifyCalls = 0;
     let gqlCalls = 0;
     let failGqlOnce = false;
+    let failNonceOnce = false;
+    const gqlCookiesSeen: string[] = [];
 
     const fetchImpl = (async (url: any, init: any = {}) => {
       const u = String(url);
@@ -30,10 +46,13 @@ describe('OpenSeaSession', () => {
       const h = init.headers ?? {};
       for (const k of Object.keys(h)) headers[k.toLowerCase()] = h[k];
       const body = init.body ? JSON.parse(init.body) : undefined;
-      calls.push({ url: u, body, headers });
 
       if (u.endsWith('/__api/auth/siwe/nonce')) {
         nonceCalls++;
+        if (failNonceOnce) {
+          failNonceOnce = false;
+          return new Response('', { status: 500 });
+        }
         return new Response(JSON.stringify({ nonce: 'abcDEF123456' }), { status: 200, headers: [['content-type', 'application/json']] });
       }
       if (u.endsWith('/__api/auth/siwe/verify')) {
@@ -42,17 +61,14 @@ describe('OpenSeaSession', () => {
         expect(body.chainArch).toBe('EVM');
         expect(body.signature).toMatch(/^0x[0-9a-fA-F]+$/);
         expect(headers.cookie).toContain(`connected-account-server-hint=${lower}`);
-        return new Response(JSON.stringify({ user: { address: lower } }), {
-          status: 200,
-          headers: [
-            ['set-cookie', 'access_token=tok; Path=/'],
-            ['content-type', 'application/json'],
-          ],
-        });
+        const tok = verifyCookies[Math.min(verifyCalls, verifyCookies.length - 1)];
+        verifyCalls++;
+        const setCookie: [string, string][] = tok === null ? [] : [['set-cookie', `access_token=${tok}; Path=/`]];
+        return new Response(JSON.stringify({ user: { address: lower } }), { status: 200, headers: [...setCookie, ['content-type', 'application/json']] });
       }
       if (u === GQL_URL) {
         gqlCalls++;
-        expect(headers.cookie).toContain('access_token=tok');
+        gqlCookiesSeen.push(headers.cookie ?? '');
         if (failGqlOnce) {
           failGqlOnce = false;
           return new Response(JSON.stringify({}), { status: 401, headers: [['content-type', 'application/json']] });
@@ -64,10 +80,11 @@ describe('OpenSeaSession', () => {
 
     return {
       fetchImpl,
-      calls,
       get nonceCalls() { return nonceCalls; },
       get gqlCalls() { return gqlCalls; },
+      get gqlCookiesSeen() { return gqlCookiesSeen; },
       failNextGql() { failGqlOnce = true; },
+      failNextNonce() { failNonceOnce = true; },
     };
   }
 
@@ -88,5 +105,63 @@ describe('OpenSeaSession', () => {
     const r3 = await session.gql<{ ok: boolean }>(4663, 'chump-nft-310989788', 'Op', 'query Op { ok }', {});
     expect(r3).toEqual({ ok: true });
     expect(fake.nonceCalls).toBe(2);
+  });
+
+  it('shares one in-flight sign-in across concurrent callers', async () => {
+    const account = privateKeyToAccount(generatePrivateKey());
+    const fake = makeFake(account.address);
+    const session = new OpenSeaSession(account, fake.fetchImpl);
+
+    const [r1, r2, r3] = await Promise.all([
+      session.gql<{ ok: boolean }>(4663, 'slug-a', 'Op', 'query Op { ok }', {}),
+      session.gql<{ ok: boolean }>(4663, 'slug-a', 'Op', 'query Op { ok }', {}),
+      session.gql<{ ok: boolean }>(4663, 'slug-a', 'Op', 'query Op { ok }', {}),
+    ]);
+    expect([r1, r2, r3]).toEqual([{ ok: true }, { ok: true }, { ok: true }]);
+    expect(fake.nonceCalls).toBe(1);
+  });
+
+  it('clears the in-flight sign-in promise after a failure, so the next call retries', async () => {
+    const account = privateKeyToAccount(generatePrivateKey());
+    const fake = makeFake(account.address);
+    fake.failNextNonce();
+    const session = new OpenSeaSession(account, fake.fetchImpl);
+
+    await expect(session.gql<{ ok: boolean }>(4663, 'slug-a', 'Op', 'query Op { ok }', {})).rejects.toThrow(/nonce failed/);
+    expect(fake.nonceCalls).toBe(1);
+
+    const r = await session.gql<{ ok: boolean }>(4663, 'slug-a', 'Op', 'query Op { ok }', {});
+    expect(r).toEqual({ ok: true });
+    expect(fake.nonceCalls).toBe(2);
+  });
+
+  it('re-signs on a 401 and carries the fresh cookie on the retried request', async () => {
+    const account = privateKeyToAccount(generatePrivateKey());
+    const fake = makeFake(account.address, { verifyCookies: ['tok1', 'tok2'] });
+    const session = new OpenSeaSession(account, fake.fetchImpl);
+
+    await session.gql<{ ok: boolean }>(4663, 'slug-a', 'Op', 'query Op { ok }', {});
+    expect(fake.gqlCookiesSeen[0]).toContain('access_token=tok1');
+
+    fake.failNextGql();
+    await session.gql<{ ok: boolean }>(4663, 'slug-a', 'Op', 'query Op { ok }', {});
+    expect(fake.gqlCookiesSeen.at(-1)).toContain('access_token=tok2');
+    expect(fake.nonceCalls).toBe(2);
+  });
+
+  it('requires a session cookie from the verify response', async () => {
+    const account = privateKeyToAccount(generatePrivateKey());
+    const fake = makeFake(account.address, { verifyCookies: [null] });
+    const session = new OpenSeaSession(account, fake.fetchImpl);
+
+    await expect(session.gql<{ ok: boolean }>(4663, 'slug-a', 'Op', 'query Op { ok }', {})).rejects.toThrow(/no session cookie/);
+  });
+
+  it('wraps a rejected fetch during sign-in as a transport OpenSeaError', async () => {
+    const account = privateKeyToAccount(generatePrivateKey());
+    const fetchImpl = (async () => { throw new Error('ECONNRESET'); }) as unknown as typeof fetch;
+    const session = new OpenSeaSession(account, fetchImpl);
+
+    await expect(session.gql<{ ok: boolean }>(4663, 'slug-a', 'Op', 'query Op { ok }', {})).rejects.toMatchObject({ code: 'transport' });
   });
 });

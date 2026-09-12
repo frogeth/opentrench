@@ -50,10 +50,11 @@ export async function gql<T>(operationName: string, query: string, variables: Re
   if (Array.isArray(j?.errors) && j.errors.length) {
     const first = j.errors[0];
     const code = String(first?.extensions?.code ?? '');
-    if (/UNAUTHENTICATED|AUTH/.test(code)) throw new OpenSeaError('auth_required', String(first?.message ?? 'not signed in'));
-    throw new OpenSeaError('graphql', String(first?.message ?? 'GraphQL error'));
+    const msg = String(first?.message ?? 'GraphQL error').slice(0, 200);
+    if (/UNAUTHENTICATED|AUTH/.test(code)) throw new OpenSeaError('auth_required', msg);
+    throw new OpenSeaError('graphql', msg);
   }
-  if (authErr) throw new OpenSeaError('auth_required', String(authErr));
+  if (authErr) throw new OpenSeaError('auth_required', String(authErr).slice(0, 200));
   if (!j || j.data === undefined || j.data === null) throw new OpenSeaError('compat', 'OpenSea response had no data');
   return j.data as T;
 }

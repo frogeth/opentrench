@@ -31,20 +31,38 @@ export class OpenSeaSession {
   private cookie() {
     return [...this.jar.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
   }
-  private take(res: Response) {
+  private cookieString(jar: Map<string, string>) {
+    return [...jar.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
+  }
+  /** Applies a response's Set-Cookie headers to `jar`. An empty value clears the key instead of storing ''. */
+  private take(jar: Map<string, string>, res: Response) {
     for (const c of (res.headers as any).getSetCookie?.() ?? []) {
       const kv = String(c).split(';')[0];
       const i = kv.indexOf('=');
-      if (i > 0) this.jar.set(kv.slice(0, i).trim(), kv.slice(i + 1).trim());
+      if (i <= 0) continue;
+      const key = kv.slice(0, i).trim();
+      const value = kv.slice(i + 1).trim();
+      if (value === '') jar.delete(key);
+      else jar.set(key, value);
     }
   }
-  private async post(url: string, body: unknown, referer: string) {
-    const r = await this.fetchImpl(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json', origin: OPENSEA, referer, 'user-agent': UA, cookie: this.cookie() }, body: JSON.stringify(body), signal: AbortSignal.timeout(10_000) });
-    this.take(r);
+  private async post(url: string, body: unknown, referer: string, jar: Map<string, string>) {
+    const cookie = this.cookieString(jar);
+    let r: Response;
+    try {
+      r = await this.fetchImpl(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json', origin: OPENSEA, referer, 'user-agent': UA, ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body), signal: AbortSignal.timeout(10_000) });
+    } catch (e: any) {
+      throw new OpenSeaError('transport', e?.message ?? 'network error');
+    }
+    this.take(jar, r);
     return r;
   }
 
-  /** Serialised: concurrent callers share the one in-flight sign-in instead of each signing in. */
+  /**
+   * Serialised: concurrent callers share the one in-flight sign-in instead of each signing in.
+   * OpenSea's session is wallet-scoped, not chain-scoped, so a follower asking for another
+   * chain/slug can share the leader's sign-in.
+   */
   async signIn(chainId: number, slug: string): Promise<void> {
     if (this.signInPromise) return this.signInPromise;
     const p = this.doSignIn(chainId, slug);
@@ -57,20 +75,25 @@ export class OpenSeaSession {
   }
 
   private async doSignIn(chainId: number, slug: string): Promise<void> {
+    if (!Number.isSafeInteger(chainId) || chainId <= 0) throw new OpenSeaError('compat', 'bad chain id');
     this.signedIn = false;
-    this.jar.clear();
-    this.jar.set('connected-account-server-hint', this.account.address.toLowerCase());
+    // Built up separately from `this.jar` so a transient failure here (bad nonce, a verify that
+    // 500s, a network blip) never discards a session that was still working.
+    const jar = new Map<string, string>();
+    jar.set('connected-account-server-hint', this.account.address.toLowerCase());
     const uri = collectionUrl(slug);
-    const nr = await this.post(`${OPENSEA}/__api/auth/siwe/nonce`, {}, uri);
+    const nr = await this.post(`${OPENSEA}/__api/auth/siwe/nonce`, {}, uri, jar);
     if (!nr.ok) throw new OpenSeaError('http', `OpenSea nonce failed (${nr.status})`, nr.status);
     const nonce = String(((await nr.json().catch(() => ({}))) as any).nonce ?? '');
     if (!/^[A-Za-z0-9]{8,256}$/.test(nonce)) throw new OpenSeaError('compat', 'OpenSea nonce looked wrong');
     const issuedAt = new Date().toISOString();
     const message = buildSiweMessage({ address: this.account.address, uri, chainId, nonce, issuedAt });
     const signature = await this.account.signMessage({ message });
-    const vr = await this.post(`${OPENSEA}/__api/auth/siwe/verify`, { message: { domain: 'opensea.io', address: this.account.address, statement: SIWE_STATEMENT, uri, version: '1', chainId: String(chainId), nonce, issuedAt, accountType: 'Ethereum' }, signature, chainArch: 'EVM' }, uri);
+    const vr = await this.post(`${OPENSEA}/__api/auth/siwe/verify`, { message: { domain: 'opensea.io', address: this.account.address, statement: SIWE_STATEMENT, uri, version: '1', chainId: String(chainId), nonce, issuedAt, accountType: 'Ethereum' }, signature, chainArch: 'EVM' }, uri, jar);
     if (!vr.ok) throw new OpenSeaError('http', `OpenSea sign-in failed (${vr.status})`, vr.status);
     checkVerifyResponse(await vr.json().catch(() => ({})), this.account.address);
+    if (!jar.has('access_token')) throw new OpenSeaError('compat', 'OpenSea sign-in returned no session cookie');
+    this.jar = jar;
     this.signedIn = true;
   }
 

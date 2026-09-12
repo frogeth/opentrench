@@ -144,7 +144,10 @@ export interface Config {
   seenTokens: string[];
   /** J7Tracker: the account's session id (from its web app), read-only tweet stream */
   j7: { token?: string; /** X handles (no @) whose tweets ping you */ favorites: string[] };
-  /** OpenSea mint window: one wallet key (0x + 64 hex) and RPC overrides by OpenSea chain identifier */
+  /** OpenSea mint window: one wallet key (0x + 64 hex) and RPC overrides by OpenSea chain identifier.
+   * RPC overrides must be https (or http to localhost/127.0.0.1/[::1]): a plaintext RPC over the
+   * network can be tampered with in transit — a quoted balance/fee can be lied about, and a
+   * broadcast transaction can be silently dropped. */
   opensea: { walletKey?: string; rpc: Record<string, string> };
 }
 
@@ -244,9 +247,11 @@ export class ConfigStore {
             console.warn('[config] ignoring invalid opensea.walletKey');
             return undefined;
           })(),
+          // https only (or http to localhost/loopback): a plaintext RPC can be tampered with in
+          // transit — a lied-about balance/fee, or a broadcast silently dropped.
           rpc: Object.fromEntries(
             Object.entries(raw.opensea?.rpc ?? {})
-              .filter(([k, v]) => /^[a-z0-9_]{1,30}$/.test(k) && /^https?:\/\//i.test(String(v)))
+              .filter(([k, v]) => /^[a-z0-9_]{1,30}$/.test(k) && (/^https:\/\//i.test(String(v)) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(String(v))))
               .slice(0, 40)
               .map(([k, v]) => [k, String(v).slice(0, 500)]),
           ),
