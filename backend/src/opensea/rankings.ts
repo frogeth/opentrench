@@ -70,7 +70,10 @@ export async function fetchRankings(key: RankingKey, fetchImpl?: typeof fetch): 
 
 const POLL_MS = 60_000;
 
-/** Polls collectionRankings once a minute for every key a column wants; emits 'rankings' (key, rows, at). */
+/**
+ * Polls collectionRankings once a minute for every key a column wants; emits 'rankings' (key, rows, at).
+ * `stop()` is used by tests only — production relies on unref'd timers and never calls it.
+ */
 export class RankingsPoller extends EventEmitter {
   readonly latest: Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>> = {};
   private wanted = new Set<RankingKey>();
@@ -90,6 +93,10 @@ export class RankingsPoller extends EventEmitter {
     for (const k of this.firstPolls.keys()) if (!next.has(k)) {
       clearTimeout(this.firstPolls.get(k));
       this.firstPolls.delete(k);
+    }
+    for (const k of Object.keys(this.latest) as RankingKey[]) if (!next.has(k)) {
+      delete this.latest[k];
+      this.failing.delete(k);
     }
     this.wanted = next;
     let i = 0;
@@ -111,6 +118,8 @@ export class RankingsPoller extends EventEmitter {
     this.timers.clear();
     for (const t of this.firstPolls.values()) clearTimeout(t);
     this.firstPolls.clear();
+    this.wanted.clear();
+    this.failing.clear();
   }
   async poll(key: RankingKey): Promise<void> {
     if (!this.wanted.has(key)) return;

@@ -80,4 +80,36 @@ describe('RankingsPoller', () => {
     expect(keyFor({})).toBe('TRENDING:ONE_HOUR');
     expect(keyFor({ ranking: 'top', timeframe: '1d' })).toBe('TOP:ONE_DAY');
   });
+  it('forgets a removed key: clears its rows and makes no request once its pending first poll would have fired', async () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    const p = new RankingsPoller(fakeFetch(calls));
+    p.want(['TRENDING:ONE_HOUR']);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(p.latest['TRENDING:ONE_HOUR']).toBeDefined();
+    // Remove it, then re-add it before its (now unrelated) interval would have ticked again.
+    p.want([]);
+    expect(p.latest['TRENDING:ONE_HOUR']).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(2000); // the original staggered first-poll delay, if it still fired, would show up here
+    expect(calls).toEqual(['TRENDING:ONE_HOUR']); // still just the one call from before removal
+    p.stop();
+    vi.useRealTimers();
+  });
+  it('in-flight guard: a poll still running when the 60s interval ticks is not joined by a second request', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const f = (async () => {
+      calls++;
+      await new Promise<void>((resolve) => setTimeout(resolve, 70_000));
+      return { ok: true, status: 200, headers: new Headers(), json: async () => okBody } as any;
+    }) as typeof fetch;
+    const p = new RankingsPoller(f);
+    p.want(['TRENDING:ONE_HOUR']);
+    // First poll fires near t=0 and hangs for 70s; the interval ticks at 60s while it is still in flight.
+    await vi.advanceTimersByTimeAsync(65_000);
+    expect(calls).toBe(1);
+    await vi.advanceTimersByTimeAsync(10_000); // let the first poll's fetch resolve at ~70s
+    p.stop();
+    vi.useRealTimers();
+  });
 });

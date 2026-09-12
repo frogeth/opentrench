@@ -401,8 +401,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       if (!/^(TRENDING|TOP):(ONE_HOUR|ONE_DAY)$/.test(raw)) throw new Error('bad key');
       const key = raw as import('./types.js').RankingKey;
       const hit = svc.rankings.latest[key];
-      if (!hit) throw new Error('no rankings yet for ' + key);
-      return hit;
+      return hit ?? { rows: [], at: 0 };
     }),
   );
   r.post(

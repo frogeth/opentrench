@@ -79,7 +79,8 @@ export function decodeBatch(packet: unknown): MintEvent[] {
         standard: str(c[11]),
         deployer: deployer ? { address: deployer, createdAgo: str(c[9]), projects: num(c[10]) } : undefined,
       },
-      quantity: num(row[6]) ?? Math.max(tokenIds.length, 1),
+      // Clamp negatives only; an explicit 0 is preserved — MintGo reports 0 for some airdrop/burn rows.
+      quantity: Math.max(0, num(row[6]) ?? Math.max(tokenIds.length, 1)),
       tokenIds,
       tokenIdsTotal: flags & 64 ? num(row[21]) : undefined,
       minter: str(row[7]) ?? '',
@@ -140,11 +141,13 @@ export class MintGoClient extends EventEmitter {
   private watchdog?: NodeJS.Timeout;
   private stopped = true;
   /** Message from the socket's last `error` event; folded into the next close message. */
-  private lastError = '';
+  private socketError = '';
   /** Overrides the close reason when we terminate the socket ourselves (the watchdog). */
   private closeReason?: string;
   /** Last (state, error) pair emitted, so repeats don't re-emit. */
-  private lastErr?: string;
+  private emittedError?: string;
+  /** Bumped on every start()/stop(); a connect() in flight from a previous generation bails out instead of racing a newer one. */
+  private gen = 0;
   private readonly clientId = Math.random().toString(36).slice(2, 12);
 
   constructor(private fetchImpl: typeof fetch = fetch) {
@@ -185,26 +188,31 @@ export class MintGoClient extends EventEmitter {
 
   start(): void {
     if (!this.stopped) this.stop();
+    this.gen++;
     this.stopped = false;
     this.attempts = 0;
     void this.connect();
   }
 
   stop(): void {
+    this.gen++;
     this.stopped = true;
     clearTimeout(this.timer);
     clearTimeout(this.watchdog);
     const ws = this.socket;
     this.socket = undefined;
     ws?.removeAllListeners();
+    // ws.close() on a CONNECTING socket emits 'error' on the next tick; removeAllListeners()
+    // just removed the only listener for it, so that error would otherwise throw and kill the process.
+    ws?.on('error', () => {});
     ws?.close(1000, 'stopped');
     this.setState('disconnected');
   }
 
   private setState(s: MintGoState, err?: string) {
-    if (this.state === s && this.lastErr === err) return;
+    if (this.state === s && this.emittedError === err) return;
     this.state = s;
-    this.lastErr = err;
+    this.emittedError = err;
     this.emit('state', s, err);
   }
 
@@ -220,29 +228,32 @@ export class MintGoClient extends EventEmitter {
 
   private async connect(): Promise<void> {
     if (this.stopped) return;
-    this.setState('connecting');
+    const gen = this.gen;
+    this.setState('connecting', this.emittedError);
     let cookie: string;
     try {
       cookie = await this.session(this.attempts > 0);
     } catch (e: any) {
+      if (this.stopped || gen !== this.gen) return;
       const msg = e?.message ?? String(e);
       if (this.attempts < 2) this.setState('connecting', msg);
       else this.setState('error', msg);
       return this.retry();
     }
-    if (this.stopped) return;
+    if (this.stopped || gen !== this.gen) return;
     const url = new URL(`${MINTGO.replace('https', 'wss')}/api/realtime`);
     url.searchParams.set('scope', 'all');
     url.searchParams.set('client', this.clientId);
     if (/^\d+$/.test(this.cursor)) url.searchParams.set('since', this.cursor);
-    const ws = new WebSocket(url, { headers: { ...SAME_ORIGIN_HEADERS, cookie }, maxPayload: 4 * 1024 * 1024 });
+    const ws = new WebSocket(url, { headers: { ...SAME_ORIGIN_HEADERS, cookie }, maxPayload: 4 * 1024 * 1024, handshakeTimeout: 15_000 });
     this.socket = ws;
     ws.on('open', () => {
-      this.attempts = 0;
-      this.lastError = '';
+      if (this.socket !== ws) return;
+      this.socketError = '';
       this.armWatchdog(ws);
     });
     ws.on('message', (data) => {
+      if (this.socket !== ws) return;
       this.armWatchdog(ws);
       let packet: unknown;
       try {
@@ -265,14 +276,15 @@ export class MintGoClient extends EventEmitter {
       if (this.stopped) return;
       const reasonText = reason?.length ? reason.toString() : this.closeReason;
       this.closeReason = undefined;
-      const msg = `socket closed (${code}${reasonText ? ` ${reasonText}` : ''}${this.lastError ? ` · ${this.lastError}` : ''})`;
+      const msg = `socket closed (${code}${reasonText ? ` ${reasonText}` : ''}${this.socketError ? ` · ${this.socketError}` : ''})`;
       if (this.attempts < 2) this.setState('connecting', msg);
       else this.setState('error', msg);
       this.retry();
     });
     ws.on('error', (e: any) => {
-      this.lastError = e?.message ?? String(e);
-      console.warn('[mintgo] socket error', this.lastError);
+      if (this.socket !== ws) return;
+      this.socketError = e?.message ?? String(e);
+      console.warn('[mintgo] socket error', this.socketError);
     });
   }
 
@@ -287,7 +299,12 @@ export class MintGoClient extends EventEmitter {
       for (const e of decodeBatch(packet)) this.emit('mint', upsertMint(this.recent, e));
     } else if (type === 2) {
       const name = String(packet[3] ?? '');
-      if (name === 'ready') this.setState('connected');
+      if (name === 'ready') {
+        // Reset here, not on the socket 'open' event: a server that accepts the upgrade and
+        // immediately drops the connection must still climb the backoff ladder to 'error'.
+        this.attempts = 0;
+        this.setState('connected');
+      }
     }
   }
 

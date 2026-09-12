@@ -98,6 +98,10 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   });
 }
 
+// Safety net: log rather than let an unexpected error take the whole backend down.
+process.on('uncaughtException', (e) => console.error('[backend] uncaught', e));
+process.on('unhandledRejection', (e) => console.error('[backend] unhandled', e));
+
 const app = express();
 app.use('/api', createApi(cfg, hub, svc, hover));
 

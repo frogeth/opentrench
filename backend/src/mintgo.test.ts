@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { decodeBatch, upsertMint, MintGoClient } from './mintgo.js';
 import type { MintEvent } from './types.js';
 
@@ -156,5 +156,78 @@ describe('MintGoClient.session', () => {
   });
   it('refuses non-site-relative paths in get()', async () => {
     await expect(new MintGoClient(async () => res(200, {}, [])).get('@evil.com/x')).rejects.toThrow(/site-relative/);
+  });
+  it('reuses the cookie while renewAfter is still ahead, refetches once it is in the past', async () => {
+    let calls = 0;
+    const c = new MintGoClient(async () => {
+      calls++;
+      return res(200, { ok: true, renewAfter: Date.now() + 1000 }, ['mg_access=a1']);
+    });
+    await c.session();
+    await c.session();
+    expect(calls).toBe(1); // renewAfter still in the future: cached cookie reused
+
+    vi.useFakeTimers({ now: Date.now() });
+    try {
+      vi.advanceTimersByTime(2000); // renewAfter is now in the past
+      await c.session();
+      expect(calls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('MintGoClient.stop', () => {
+  it('stopping while a session fetch is still pending leaves the client disconnected, with no socket and no further state events', async () => {
+    let resolveFetch: (r: any) => void = () => {};
+    const pending = new Promise<any>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const c = new MintGoClient((() => pending) as unknown as typeof fetch);
+    const states: Array<[string, string | undefined]> = [];
+    c.on('state', (s: string, err?: string) => states.push([s, err]));
+    c.start();
+    c.stop();
+    const afterStop = states.length;
+    resolveFetch({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, renewAfter: Date.now() + 60_000 }),
+      headers: { getSetCookie: () => ['mg_access=a1'] },
+    });
+    // Flush the microtask queue so the pending connect(), if it were going to act, has the chance to.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect((c as any).socket).toBeUndefined();
+    expect(c.state).toBe('disconnected');
+    expect(states.length).toBe(afterStop);
+  });
+});
+
+describe('MintGoClient status ladder', () => {
+  it('carries the error through connecting, then reports error on the third failure, with growing backoff', async () => {
+    vi.useFakeTimers();
+    try {
+      const c = new MintGoClient((async () => {
+        throw new Error('down');
+      }) as unknown as typeof fetch);
+      const states: Array<[string, string | undefined]> = [];
+      c.on('state', (s: string, err?: string) => states.push([s, err]));
+      c.start();
+      await vi.advanceTimersByTimeAsync(0); // 1st failure: attempts 0 -> 1, delay 250
+      await vi.advanceTimersByTimeAsync(250); // 2nd failure: attempts 1 -> 2, delay 500
+      await vi.advanceTimersByTimeAsync(500); // 3rd failure: attempts 2 -> 3, delay 1000
+      expect(states).toEqual([
+        ['connecting', undefined],
+        ['connecting', 'down'],
+        ['error', 'down'],
+      ]);
+      expect((c as any).attempts).toBe(3);
+      c.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
