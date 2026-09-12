@@ -1129,6 +1129,7 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .osj-spin { margin-top: 6px; text-align: center; letter-spacing: 3px; font-size: 12px; }
 .osj-ok { margin-top: 6px; color: var(--good); font-size: 12px; }
 .osj-err { margin-top: 6px; color: var(--err); font-size: 12px; }
+.osj-note { margin-top: 6px; color: var(--warn); font-size: 12px; }
 .osj-mint { background: var(--accent) !important; color: #04140d !important; border-color: transparent !important; font-weight: 600; }
 .osj-confirm { background: var(--warn) !important; color: #1a1200 !important; border-color: transparent !important; font-weight: 600; }
 .osm-composer .composer-row { align-items: center; }

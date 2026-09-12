@@ -341,6 +341,8 @@ export interface MintJob {
   gas?: { limit: number; maxFeeWei: string; maxPriorityWei: string; estimateWei: string };
   balanceWei?: string;
   txHash?: string;
+  nonce?: number;
+  watchUntil?: number;
   blockNumber?: number;
   tokenIds?: string[];
   error?: string;

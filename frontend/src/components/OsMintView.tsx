@@ -24,7 +24,7 @@ function JobCard({ j, now, onSend, sending }: { j: MintJob; now: number; onSend:
   useEffect(() => () => window.clearTimeout(confirmTimer.current), []);
   // a fresh quote/state transition retracts a stale confirmation prompt
   useEffect(() => setConfirming(false), [j.state, j.id]);
-  const head = j.state === 'quoting' ? '… Quoting' : j.state === 'ready' ? '◎ Ready to mint' : j.state === 'sending' ? '⏳ Sending' : j.state === 'pending' ? '🔵 Pending' : j.state === 'confirmed' ? '✓ Mint confirmed' : '✗ Mint failed';
+  const head = j.state === 'quoting' ? '… Quoting' : j.state === 'ready' ? '◎ Ready to mint' : j.state === 'sending' ? '⏳ Sending' : j.state === 'pending' ? (j.error ? '🔵 Pending · watching' : '🔵 Pending') : j.state === 'confirmed' ? '✓ Mint confirmed' : '✗ Mint failed';
   const tx = j.txHash && EXPLORER[j.collection.chain] ? `${EXPLORER[j.collection.chain]}${j.txHash}` : undefined;
   const expired = j.state === 'ready' && now - j.ts > 120_000;
   const clickMint = (e: MouseEvent) => {
@@ -62,6 +62,7 @@ function JobCard({ j, now, onSend, sending }: { j: MintJob; now: number; onSend:
       )}
       {(j.state === 'sending' || j.state === 'pending') && <div className="osj-spin muted">…</div>}
       {j.state === 'confirmed' && <div className="osj-ok">{j.tokenIds?.length ? `#${j.tokenIds.join(', #')}` : 'minted'}{j.blockNumber ? ` · block ${j.blockNumber}` : ''}</div>}
+      {(j.state === 'pending' || j.state === 'sending') && j.error && <div className="osj-note">{j.error}</div>}
       {j.state === 'failed' && j.error && <div className="osj-err">{j.error}</div>}
       <div className="bkeys"><div className="bkey-row">
         {j.state === 'ready' && (expired ? (
