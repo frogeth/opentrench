@@ -113,3 +113,17 @@ describe('column zoom', () => {
     expect(z('big')).toBeUndefined();
   });
 });
+
+describe('tgbot columns', () => {
+  it('keeps a valid bot username without its @ and drops a bad one', () => {
+    const [a, b, c] = sanitizeColumns([
+      { id: 'a', type: 'tgbot', title: 'Cielo', bot: '@evmtrackerbot' },
+      { id: 'b', type: 'tgbot', bot: 'no spaces here' },
+      { id: 'c', type: 'chat', bot: 'evmtrackerbot' },
+    ]);
+    expect(a).toMatchObject({ type: 'tgbot', title: 'Cielo', bot: 'evmtrackerbot' });
+    expect(b).toMatchObject({ type: 'tgbot', title: 'Telegram bot' });
+    expect(b.bot).toBeUndefined();
+    expect(c.bot).toBeUndefined();
+  });
+});

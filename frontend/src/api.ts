@@ -86,12 +86,14 @@ export interface ColumnFilters {
 }
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint';
+  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
   /** web columns: the page to embed */
   url?: string;
+  /** tgbot columns: the bot's username (no @) */
+  bot?: string;
   /** nftvol: which OpenSea list, and which rolling window */
   ranking?: 'trending' | 'top';
   timeframe?: '1h' | '1d';

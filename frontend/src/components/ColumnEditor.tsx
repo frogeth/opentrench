@@ -26,6 +26,7 @@ const TYPE_CARDS: { t: ColumnDef['type']; icon: import('./Icon').IconName; name:
   { t: 'callers', icon: 'people', name: 'Top Callers', blurb: 'who calls best, over a window' },
   { t: 'cove', icon: 'send', name: 'Buy bot', blurb: 'Cove or BasedBot, one pane' },
   { t: 'salpha', icon: 'search', name: 'Salpha', blurb: 'your research bot chat' },
+  { t: 'tgbot', icon: 'telegram', name: 'Telegram bot', blurb: 'Cielo alerts, or any bot you talk to' },
   { t: 'j7', icon: 'x', name: 'J7', blurb: 'J7Tracker’s tweet stream' },
   { t: 'web', icon: 'globe', name: 'Website', blurb: 'any page, living in a column' },
   { t: 'mints', icon: 'mint', name: 'MintGo', blurb: 'NFT mints as they happen' },
@@ -38,6 +39,8 @@ const WEB_PRESETS: { name: string; url: string; blurb: string }[] = [
   { name: 'MintGo', url: 'https://mintgo.fun', blurb: 'mint radar' },
   { name: 'Smart Money', url: 'https://smartmoney.sh', blurb: 'smart-money flows' },
 ];
+/** Ready-made Telegram bot columns; "Custom" takes any bot's username. */
+const BOT_PRESETS: { name: string; bot: string; blurb: string }[] = [{ name: 'Cielo', bot: 'evmtrackerbot', blurb: 'wallet tracker alerts' }];
 type NumKey = { [K in keyof ColumnFilters]-?: NonNullable<ColumnFilters[K]> extends number ? K : never }[keyof ColumnFilters];
 const RANGES: { title: string; rows: [string, NumKey, NumKey, string][] }[] = [
   { title: 'Metrics', rows: [['Market cap', 'mcMin', 'mcMax', '$'], ['Liquidity', 'liqMin', 'liqMax', '$'], ['Volume 24h', 'volMin', 'volMax', '$'], ['MC / Liq', 'mcLiqMin', 'mcLiqMax', 'x'], ['Multiplier', 'multMin', 'multMax', 'x']] },
@@ -140,12 +143,27 @@ export function ColumnEditor({
     if (WEB_PRESETS.some((p) => p.url === url.trim())) setUrl('');
     if (WEB_PRESETS.some((q) => q.name === title.trim())) setTitle('');
   };
+  const [bot, setBot] = useState(col?.bot ?? '');
+  const cleanBot = bot.trim().replace(/^@/, '');
+  const botOk = /^[A-Za-z0-9_]{3,32}$/.test(cleanBot);
+  const [customBot, setCustomBot] = useState(() => !!col?.bot && !BOT_PRESETS.some((p) => p.bot === col.bot));
+  const botPreset = customBot ? undefined : BOT_PRESETS.find((p) => p.bot === cleanBot);
+  const pickBotPreset = (p: (typeof BOT_PRESETS)[number]) => {
+    setCustomBot(false);
+    setBot(p.bot);
+    if (!title.trim() || BOT_PRESETS.some((q) => q.name === title.trim())) setTitle(p.name);
+  };
+  const pickCustomBot = () => {
+    setCustomBot(true);
+    if (BOT_PRESETS.some((p) => p.bot === cleanBot)) setBot('');
+    if (BOT_PRESETS.some((q) => q.name === title.trim())) setTitle('');
+  };
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [ranking, setRanking] = useState<NonNullable<ColumnDef['ranking']>>(col?.ranking ?? 'trending');
   const [timeframe, setTimeframe] = useState<NonNullable<ColumnDef['timeframe']>>(col?.timeframe ?? '1h');
   const set = <K extends keyof ColumnFilters>(k: K, v: ColumnFilters[K]) => setF((s) => ({ ...s, [k]: v }));
   const num = (k: NumKey) => (e: React.ChangeEvent<HTMLInputElement>) => set(k, e.target.value === '' ? undefined : Number(e.target.value));
-  const isBot = type === 'cove' || type === 'salpha' || type === 'j7';
+  const isBot = type === 'cove' || type === 'salpha' || type === 'j7' || type === 'tgbot';
   const isWeb = type === 'web';
   const isNft = type === 'mints' || type === 'nftvol' || type === 'osmint';
   const all = chats.length === 0;
@@ -193,9 +211,13 @@ export function ColumnEditor({
   })();
   const urlOk = /^https?:\/\/[^\s/]+/i.test(cleanUrl);
   const save = () => {
-    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'OpenSea Volume' : type === 'osmint' ? 'OpenSea Mint' : all ? 'All Chats' : 'Chats');
+    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'OpenSea Volume' : type === 'osmint' ? 'OpenSea Mint' : all ? 'All Chats' : 'Chats');
     if (isWeb && !urlOk) {
       window.alert('Paste the address of the page to show (http:// or https://).');
+      return;
+    }
+    if (type === 'tgbot' && !botOk) {
+      window.alert('Enter the bot\'s username (letters, digits and _, like evmtrackerbot).');
       return;
     }
     if (!isWeb && !isNft && none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
@@ -212,6 +234,7 @@ export function ColumnEditor({
       title: t,
       chats: isWeb || isNft ? [] : chats,
       ...(isWeb ? { url: cleanUrl } : {}),
+      ...(type === 'tgbot' ? { bot: cleanBot } : {}),
       ...(type === 'callers' ? { window: win } : {}),
       ...(type === 'nftvol' ? { ranking, timeframe } : {}),
       ...(type === 'calls' || type === 'chat' || type === 'j7' ? { alert: { on: alertOn, sound } } : {}),
@@ -242,7 +265,7 @@ export function ColumnEditor({
               ))}
             </div>
             <div className="fed-label">Feed name</div>
-            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'OpenSea Volume' : type === 'osmint' ? 'OpenSea Mint' : 'All Chats'} maxLength={40} />
+            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'OpenSea Volume' : type === 'osmint' ? 'OpenSea Mint' : 'All Chats'} maxLength={40} />
             {isWeb && (
               <>
                 <div className="fed-label">Site</div>
@@ -265,9 +288,30 @@ export function ColumnEditor({
                 <div className="fed-bot-note hint">The page lives inside the column, like a browser tab, with clipboard access for its copy buttons. Sites that refuse embedding still load in the desktop app; the ↗ in the column header opens any of them in your browser.</div>
               </>
             )}
+            {type === 'tgbot' && (
+              <>
+                <div className="fed-label">Bot</div>
+                <div className="fchips fed-sites">
+                  {BOT_PRESETS.map((p) => (
+                    <button key={p.bot} className={`fchip${botPreset?.bot === p.bot ? ' on' : ''}`} onClick={() => pickBotPreset(p)} title={`@${p.bot}`}>
+                      <Icon name="telegram" size={11} /> {p.name} <span className="muted">· {p.blurb}</span>
+                    </button>
+                  ))}
+                  <button className={`fchip${customBot ? ' on' : ''}`} onClick={pickCustomBot}>
+                    <Icon name="pencil" size={11} /> Custom
+                  </button>
+                </div>
+                {customBot && (
+                  <>
+                    <div className="fed-label">Username</div>
+                    <input className="fed-input" value={bot} onChange={(e) => setBot(e.target.value)} placeholder="@bot_username" spellCheck={false} autoFocus onKeyDown={(e) => e.key === 'Enter' && save()} />
+                  </>
+                )}
+              </>
+            )}
             {isBot && (
               <div className="fed-bot-note hint">
-                {type === 'cove' ? 'Your buy bot — Cove or BasedBot, whichever is picked in ⚙ → Trading. Buy buttons and right-click → Buy land here.' : type === 'salpha' ? 'Your conversation with @salpha_research_bot. Right-click a contract → Research sends it here.' : 'J7Tracker’s live tweet feed, with the calls each tweet touches. Needs your J7 session id in ⚙ → Accounts.'}
+                {type === 'cove' ? 'Your buy bot — Cove or BasedBot, whichever is picked in ⚙ → Trading. Buy buttons and right-click → Buy land here.' : type === 'salpha' ? 'Your conversation with @salpha_research_bot. Right-click a contract → Research sends it here.' : type === 'tgbot' ? `Your Telegram conversation with ${botOk ? `@${cleanBot}` : 'the bot'}, live, with its buttons. Start the bot in Telegram once (press Start there) if you never have; Cielo's is @evmtrackerbot.` : 'J7Tracker’s live tweet feed, with the calls each tweet touches. Needs your J7 session id in ⚙ → Accounts.'}
               </div>
             )}
             {isNft && (

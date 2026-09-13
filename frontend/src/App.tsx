@@ -1032,6 +1032,14 @@ export default function App() {
         </Column>
       );
     }
+    if (col.type === 'tgbot') {
+      const bot = col.bot ?? '';
+      return (
+        <Column key={col.id} title={col.title} subtitle={bot ? `@${bot} · your Telegram` : 'no bot picked'} kind="tgbot" className="col-cove" {...actions}>
+          {bot ? <CoveView bot={bot} msgs={botMsgs[bot] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} /> : <div className="empty">Edit this column and pick the bot to show.</div>}
+        </Column>
+      );
+    }
     if (col.type === 'osmint') {
       return (
         <Column key={col.id} title={col.title} subtitle={osAddr ? `${osAddr.slice(0, 6)}…${osAddr.slice(-4)} · opensea.io` : 'no wallet yet'} kind="osmint" className={`col-cove col-osmint${coveFlash === 'osmint' ? ' col-flash' : ''}`} {...actions}>

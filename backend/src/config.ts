@@ -5,11 +5,13 @@ import type { BotPolicy } from './types.js';
 /** One column of the terminal. `chats` are `<source>:<id>` keys of watched chats; empty = every watched chat. */
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint';
+  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot';
   title: string;
   chats: string[];
   /** web columns: the page to embed (http/https only) */
   url?: string;
+  /** tgbot columns: the bot's username (no @) whose conversation this column shows */
+  bot?: string;
   /** nftvol: which OpenSea list, and which rolling window */
   ranking?: 'trending' | 'top';
   timeframe?: '1h' | '1d';
@@ -32,7 +34,7 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
   { id: 'chats', type: 'chat', title: 'All Chats', chats: [] },
 ];
 
-const TYPES = ['calls', 'callers', 'cove', 'salpha', 'j7', 'web', 'chat', 'mints', 'nftvol', 'osmint'] as const;
+const TYPES = ['calls', 'callers', 'cove', 'salpha', 'j7', 'web', 'chat', 'mints', 'nftvol', 'osmint', 'tgbot'] as const;
 const DEFAULT_TITLE: Record<ColumnDef['type'], string> = {
   calls: 'Calls',
   callers: 'Top Callers',
@@ -44,6 +46,7 @@ const DEFAULT_TITLE: Record<ColumnDef['type'], string> = {
   mints: 'MintGo',
   nftvol: 'OpenSea Volume',
   osmint: 'OpenSea Mint',
+  tgbot: 'Telegram bot',
 };
 export const MINT_CHAINS = ['ethereum', 'robinhood', 'ink'] as const;
 
@@ -70,6 +73,10 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
   if (type === 'web') {
     const u = String(raw.url ?? '').trim().slice(0, 2000);
     if (/^https?:\/\//i.test(u)) col.url = u;
+  }
+  if (type === 'tgbot') {
+    const b = String(raw.bot ?? '').trim().replace(/^@/, '');
+    if (/^[A-Za-z0-9_]{3,32}$/.test(b)) col.bot = b;
   }
   if (type === 'nftvol') {
     col.ranking = raw.ranking === 'top' ? 'top' : 'trending';

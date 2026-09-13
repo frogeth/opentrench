@@ -8,7 +8,8 @@ app shows the same text in its update prompt.
 ## Unreleased
 
 - Fix: J7 tweets showed broken image tiles (the feed now sends media as objects; their urls are read instead of the object being stringified).
-- Fix: a big Telegram supergroup (thousands of members) showed only your own messages and replies to you. Telegram stops pushing such a group's updates to a client that isn't looking at it and expects the client to poll; every watched chat that goes quiet is now polled for what it missed every 10 seconds, on top of the live stream.
+- Fix: a big Telegram supergroup (thousands of members) showed only your own messages and replies to you. Telegram does not push such a group's messages to a client at all; its own apps poll the group's difference while the chat is open. opentrench now does the same for every watched supergroup: a group Telegram has proved it will not push is asked every 3 seconds, the rest every 30 as a safety net, and Telegram's flood limits are honoured.
+- Telegram bot column: any bot you talk to, as a column, with its buttons — Cielo's wallet tracker (@evmtrackerbot) is a preset, Custom takes any bot username.
 - Fix: removing every column no longer brings All Calls and All Chats back, and adding one column to an empty terminal no longer adds the two defaults with it. An empty terminal stays empty until you add a column or pick a layout.
 - Layouts menu: a save icon on each saved layout writes the current columns over it (no retyping the name), and "Clear all columns" at the bottom closes every column at once, after a confirm. Switching layouts also resets the feed scope to all channels instead of leaving it on whichever server was selected.
 
