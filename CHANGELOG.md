@@ -7,6 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Website columns have a ⟳ in the header that reloads the page, for a page that went blank or turned into Chromium's sad face.
+- Desktop: a log of what the app shell does, including any renderer or helper process Chromium loses and why, in the app's log folder (desktop.log). Open Log Folder in the app menu (File on Windows) takes you there. Please attach it when reporting a blank or crashed Website column.
+
 ## v0.8.4 — 2026-09-13
 
 - Every Discord, Telegram and bot link stays in the app. A message link scrolls the chat to that message (or opens the chat when the message is no longer in the feed), a channel or group link opens it (focused if you watch it, a preview otherwise), and a bot link drives that bot's column, creating one for a bot you have not got a column for. That covers links in message text, embeds, call cards, the calls list and time stamps. Hold ⌘/Ctrl while clicking to open one in the browser anyway; invite links still open outside.

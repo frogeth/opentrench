@@ -1118,6 +1118,7 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .web-frame { flex: 1; width: 100%; height: 100%; border: 0; background: #fff; }
 .col-open { font-size: 11px; color: var(--muted); text-decoration: none; white-space: nowrap; }
 .col-open:hover { color: var(--text); }
+button.col-open { background: none; border: none; padding: 0; font: inherit; font-size: 13px; line-height: 1; cursor: pointer; }
 
 /* ---------- MintGo column ---------- */
 .mint { padding: 8px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }

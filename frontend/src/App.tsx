@@ -288,6 +288,8 @@ export default function App() {
   // Cove buttons: send the deep link's /start payload through our own Telegram session and show
   // Cove's reply in a Cove column (added on first use).
   const [coveFlash, setCoveFlash] = useState<string | null>(null);
+  /** Website columns: bumping a column's nonce remounts its frame (the ⟳ in its header) */
+  const [frameNonce, setFrameNonce] = useState<Record<string, number>>({});
   const [caMenu, setCaMenu] = useState<{ address: string; x: number; y: number } | null>(null);
   const openCaMenu = (address: string, x: number, y: number) => setCaMenu({ address, x, y });
   // The buy provider: Cove or BasedBot. There is ONE buy pane (column type 'cove', kept for old
@@ -1037,15 +1039,20 @@ export default function App() {
           className="col-web"
           extra={
             col.url ? (
-              <a className="col-open" href={col.url} target="_blank" rel="noreferrer" title="open in your browser">
-                open ↗
-              </a>
+              <>
+                <button className="col-open" onClick={() => setFrameNonce((n) => ({ ...n, [col.id]: (n[col.id] ?? 0) + 1 }))} title="reload the page (a page that went blank or shows Chromium's sad face comes back)">
+                  ⟳
+                </button>
+                <a className="col-open" href={col.url} target="_blank" rel="noreferrer" title="open in your browser">
+                  open ↗
+                </a>
+              </>
             ) : undefined
           }
           {...actions}
         >
           {col.url ? (
-            <iframe className="web-frame" src={col.url} title={col.title} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" allow="clipboard-read; clipboard-write; fullscreen; autoplay" />
+            <iframe key={frameNonce[col.id] ?? 0} className="web-frame" src={col.url} title={col.title} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" allow="clipboard-read; clipboard-write; fullscreen; autoplay" />
           ) : (
             <div className="empty">No address yet — edit the column (✎) and paste one.</div>
           )}

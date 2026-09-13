@@ -11,6 +11,41 @@ const RELEASES_URL = 'https://github.com/frogeth/opentrench/releases/latest';
 let child = null;
 let win = null;
 
+// A plain-text log next to the backend's (app.getPath('logs')): what the desktop shell prints,
+// plus every renderer or helper process Chromium loses, with its reason. A Website column that
+// turns into Chromium's sad page on Windows is invisible otherwise.
+const LOG_MAX = 2 * 1024 * 1024;
+let logFile = null;
+function openLog() {
+  try {
+    const dir = app.getPath('logs');
+    fs.mkdirSync(dir, { recursive: true });
+    logFile = path.join(dir, 'desktop.log');
+    try {
+      if (fs.statSync(logFile).size > LOG_MAX) fs.renameSync(logFile, `${logFile}.1`);
+    } catch {}
+    const orig = { log: console.log.bind(console), error: console.error.bind(console) };
+    const write = (level, args) => {
+      const line = `${new Date().toISOString()} ${level} ${args.map((a) => (a instanceof Error ? a.stack ?? a.message : typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}\n`;
+      try {
+        fs.appendFileSync(logFile, line);
+      } catch {}
+    };
+    console.log = (...args) => {
+      orig.log(...args);
+      write('INFO', args);
+    };
+    console.error = (...args) => {
+      orig.error(...args);
+      write('ERROR', args);
+    };
+  } catch {}
+  console.log(`[desktop] opentrench ${app.getVersion()} electron ${process.versions.electron} ${process.platform} ${require('node:os').release()} ${process.arch} packaged=${app.isPackaged} exe=${process.execPath}`);
+  // Chromium losing a process: a renderer (the app page or a Website column's frame) or a helper (GPU, network…)
+  app.on('render-process-gone', (_e, contents, d) => console.error(`[desktop] renderer gone: ${d.reason} exit=${d.exitCode} url=${contents?.getURL?.() ?? '?'}`));
+  app.on('child-process-gone', (_e, d) => console.error(`[desktop] ${d.type} process gone: ${d.reason} exit=${d.exitCode} ${d.name ?? ''} ${d.serviceName ?? ''}`));
+}
+
 function paths() {
   const packaged = app.isPackaged;
   const backendDir = packaged ? path.join(process.resourcesPath, 'backend') : path.resolve(__dirname, '..', 'backend');
@@ -195,6 +230,8 @@ function createWindow() {
       shell.openExternal(url);
     }
   });
+  win.webContents.on('unresponsive', () => console.error('[desktop] page unresponsive'));
+  win.webContents.on('responsive', () => console.log('[desktop] page responsive again'));
   win.on('closed', () => (win = null));
 }
 
@@ -307,6 +344,7 @@ function buildMenu() {
             submenu: [
               { role: 'about' },
               { label: 'Check for Updates…', click: checkForUpdatesNow },
+              { label: 'Open Log Folder', click: () => shell.openPath(app.getPath('logs')) },
               { type: 'separator' },
               { role: 'services' },
               { type: 'separator' },
@@ -318,7 +356,7 @@ function buildMenu() {
             ],
           },
         ]
-      : [{ label: 'File', submenu: [{ label: 'Check for Updates…', click: checkForUpdatesNow }, { type: 'separator' }, { role: 'quit' }] }]),
+      : [{ label: 'File', submenu: [{ label: 'Check for Updates…', click: checkForUpdatesNow }, { label: 'Open Log Folder', click: () => shell.openPath(app.getPath('logs')) }, { type: 'separator' }, { role: 'quit' }] }]),
     { role: 'editMenu' },
     { role: 'viewMenu' },
     { role: 'windowMenu' },
@@ -327,6 +365,7 @@ function buildMenu() {
 }
 
 app.whenReady().then(async () => {
+  openLog();
   buildMenu();
   try {
     if (!(await startBackend())) {
