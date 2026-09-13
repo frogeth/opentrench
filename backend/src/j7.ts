@@ -22,7 +22,10 @@ export function normalizeJ7(raw: any): J7Tweet | undefined {
   if (!id) return undefined;
   const text = str(raw.body?.text) ?? str(raw.text) ?? str(raw.full_text) ?? '';
   const media = raw.media ?? {};
-  const images: string[] = Array.isArray(media) ? media.map(String) : [...(media.images ?? []), ...(media.thumbnails ?? [])].map(String);
+  // media entries come as urls or as objects ({ url } / { src } / twitter's media_url_https); a video without a still is skipped
+  const mediaUrl = (x: any): string | undefined =>
+    typeof x === 'string' ? str(x) : str(x?.url) ?? str(x?.src) ?? str(x?.media_url_https) ?? str(x?.media_url) ?? str(x?.thumbnail) ?? str(x?.preview) ?? str(x?.poster);
+  const images: string[] = (Array.isArray(media) ? media : [...(media.images ?? []), ...(media.thumbnails ?? [])]).map(mediaUrl).filter((u): u is string => !!u);
   const q = raw.quotedTweet ?? raw.quoted_tweet;
   const qa = q?.author ?? {};
   const created = raw.created_at ?? raw.timestamp ?? raw.createdAt ?? raw.time;
