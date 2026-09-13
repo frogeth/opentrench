@@ -143,7 +143,7 @@ export function ColumnEditor({
     if (WEB_PRESETS.some((p) => p.url === url.trim())) setUrl('');
     if (WEB_PRESETS.some((q) => q.name === title.trim())) setTitle('');
   };
-  const [bot, setBot] = useState(col?.bot ?? '');
+  const [bot, setBot] = useState(col?.bot ?? BOT_PRESETS[0].bot); // a fresh column starts on the first preset
   const cleanBot = bot.trim().replace(/^@/, '');
   const botOk = /^[A-Za-z0-9_]{3,32}$/.test(cleanBot);
   const [customBot, setCustomBot] = useState(() => !!col?.bot && !BOT_PRESETS.some((p) => p.bot === col.bot));
