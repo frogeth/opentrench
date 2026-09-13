@@ -15,6 +15,7 @@ import { CaMenuContext, LinkInterceptContext } from './components/RichText';
 import { J7View } from './components/J7View';
 import { MintFeed, mintPasses } from './components/MintFeed';
 import { LayoutsMenu, sameColumns } from './components/LayoutsMenu';
+import { LayoutDashboard } from 'lucide-react';
 import { NftRankings } from './components/NftRankings';
 import { OsMintView } from './components/OsMintView';
 import { PingsPanel } from './components/PingsPanel';
@@ -1141,7 +1142,7 @@ export default function App() {
           @{mentions.some((m) => !m.read) && <span className="pings-badge">{mentions.filter((m) => !m.read).length}</span>}
         </button>
         <button className={`gear layouts-btn${layoutsOpen ? ' on' : ''}`} onClick={() => setLayoutsOpen((o) => !o)} title={`layouts: save this arrangement of columns, or switch to a saved one${currentLayout ? ` · on ${currentLayout.name}` : ''}`}>
-          <Icon name="layout" size={14} />
+          <LayoutDashboard size={15} strokeWidth={2} aria-hidden />
           {currentLayout && <span className="layouts-current">{currentLayout.name}</span>}
         </button>
         <button className="gear" onClick={() => setSettingsOpen(true)} title="settings">
