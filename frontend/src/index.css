@@ -117,7 +117,16 @@ b { font-weight: 600; }
   display: flex; align-items: center; gap: 8px; padding: 0 16px; height: 48px; flex: none;
   border-bottom: 1px solid var(--line); background: var(--bg);
 }
-.col-title { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; flex: 1 1 auto; }
+/* the title shrinks last: a crowded header (toggles + buttons) ellipsizes it instead of squeezing it to nothing */
+.col-title { display: flex; flex-direction: column; line-height: 1.2; min-width: 48px; flex: 1 1 auto; }
+.col-actions { flex: none; }
+/* narrow columns (or a zoomed-in window): tighter header chrome so the title keeps its room */
+.col { container-type: inline-size; }
+@container (max-width: 470px) {
+  .col-head { gap: 6px; padding: 0 10px; }
+  .hdr-toggle { padding: 1px 6px; font-size: 10px; }
+  .col-count { display: none; }
+}
 .col-head h2 { font-size: 14px; margin: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .col-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .col-head .col-extra { margin-left: 0; flex: none; }
@@ -223,9 +232,10 @@ b { font-weight: 600; }
 /* repeats are badged on the token strip, not dimmed */
 .row-repeat { opacity: 1; }
 .row-main { flex: 1; min-width: 0; }
-.row-meta { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--muted); }
-.author { color: var(--text); font-weight: 600; font-size: 13px; }
-.time, .time a { color: var(--dim); text-decoration: none; font-size: 11px; }
+.row-meta { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--muted); min-width: 0; }
+/* on a narrow row the name gives way, the time never wraps */
+.author { color: var(--text); font-weight: 600; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.time, .time a { color: var(--dim); text-decoration: none; font-size: 11px; white-space: nowrap; flex: none; }
 .time a:hover { text-decoration: underline; }
 .chat-tag-name { overflow: hidden; text-overflow: ellipsis; }
 .chat-tag {
