@@ -627,9 +627,13 @@ export default function App() {
    * Scroll whichever column shows this message to it (revealing it if a filter hid it). If no
    * column on screen carries its chat, focus that chat first, then scroll.
    */
-  const jumpToMessage = (id: string) => {
+  const jumpToMessage = (id: string, link?: string) => {
     const m = messages.find((x) => x.id === id);
-    if (!m) return;
+    if (!m) {
+      // no longer in the feed's buffer: the original in Telegram / Discord is the best we can do
+      if (link) window.open(link, '_blank', 'noopener');
+      return;
+    }
     revealMessage(id);
     let tries = 0;
     let focused = false;
@@ -1077,7 +1081,7 @@ export default function App() {
           {list.length === 0 && <div className="empty">No contracts seen yet.</div>}
           {list.map((t) => (
             <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
-              <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} onBuy={onBuy} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
+              <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} onJump={jumpToMessage} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} onBuy={onBuy} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
             </VirtualItem>
           ))}
         </Column>
@@ -1270,7 +1274,7 @@ export default function App() {
                 )}
                 {allCalls.map((t) => (
                   <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
-                    <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} onBuy={onBuy} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
+                    <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} onJump={jumpToMessage} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} onBuy={onBuy} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
                   </VirtualItem>
                 ))}
               </Column>

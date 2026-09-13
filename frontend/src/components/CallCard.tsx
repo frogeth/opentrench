@@ -16,8 +16,8 @@ import { SecurityStrip } from './SecurityStrip';
 const chatOf = (c: CallRecord) => c.chatName.replace(/\s*\([^)]*\)\s*$/, '');
 const fmtX = (x: number) => `${x >= 10 ? x.toFixed(0) : x.toFixed(1)}x`;
 
-/** Every counted call, newest first: who, where, MC at the time, when. */
-function CallsList({ t, now }: { t: TokenInfo; now: number }) {
+/** Every counted call, newest first: who, where, MC at the time, when. A row jumps the chat to that call. */
+function CallsList({ t, now, onJump }: { t: TokenInfo; now: number; onJump?: (msgId: string, link?: string) => void }) {
   const calls = [...t.calls].reverse();
   return (
     <div className="hc-calls">
@@ -27,7 +27,19 @@ function CallsList({ t, now }: { t: TokenInfo; now: number }) {
       <div className="hc-calls-list">
         {calls.length === 0 && <div className="hint">no calls recorded</div>}
         {calls.map((c) => (
-          <a key={c.msgId} className="hc-call" href={c.link} target="_blank" rel="noreferrer">
+          <a
+            key={c.msgId}
+            className="hc-call"
+            href={c.link}
+            target="_blank"
+            rel="noreferrer"
+            title="show this call in the chat"
+            onClick={(e) => {
+              if (!onJump) return;
+              e.preventDefault();
+              onJump(c.msgId, c.link);
+            }}
+          >
             <Avatar src={c.avatar} name={c.author} size={22} />
             <span className="hc-call-who">
               <b>{c.author}</b>
@@ -57,6 +69,7 @@ export function CallCard({
   onOpen,
   onShare,
   onBuy,
+  onJump,
   seen = true,
   onSeen,
 }: {
@@ -71,6 +84,8 @@ export function CallCard({
   onShare?: (address: string, symbol?: string) => void;
   /** Cove buttons open the in-app Cove tab */
   onBuy?: (url: string) => void;
+  /** scroll the chat to the message that made a call (the chat name, and the rows of the calls list) */
+  onJump?: (msgId: string, link?: string) => void;
   /** inbox-style: false = not looked at yet (card tinted), toggled by the check button */
   seen?: boolean;
   onSeen?: (on: boolean) => void;
@@ -116,10 +131,17 @@ export function CallCard({
               <AuthorMenu author={c.author} link={c.link} favorite={isFavorite(favorites, c.author)} />
             </span>
             <span className="call-dot">·</span>
-            <span className="call-chat" title={c.chatName}>
-              <Logo source={c.source} size={10} />
-              {chatOf(c)}
-            </span>
+            {onJump ? (
+              <button className="call-chat call-chat-jump" title={`${c.chatName} · show this call in the chat`} onClick={() => onJump(c.msgId, c.link)}>
+                <Logo source={c.source} size={10} />
+                {chatOf(c)}
+              </button>
+            ) : (
+              <span className="call-chat" title={c.chatName}>
+                <Logo source={c.source} size={10} />
+                {chatOf(c)}
+              </span>
+            )}
             <span className="call-dot">·</span>
           </>
         ) : null}
@@ -127,7 +149,7 @@ export function CallCard({
         {isFirst ? (
           <span className="first-badge">1st</span>
         ) : (
-          <HoverCard width={300} card={<CallsList t={t} now={now} />}>
+          <HoverCard width={300} card={<CallsList t={t} now={now} onJump={onJump} />}>
             <span className={`call-seen${t.seen >= 2 ? ' call-seen-hot' : ''}`}>🔥{t.seen}×</span>
           </HoverCard>
         )}

@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Call cards: click the chat name on a card, or a row of the "N calls for $X" list, to scroll the chat to the message that made the call (it flashes). A call that has aged out of the feed opens the original in Telegram or Discord instead.
 - Fix: J7 tweets showed broken image tiles (the feed now sends media as objects; their urls are read instead of the object being stringified).
 - Fix: a big Telegram supergroup (thousands of members) showed only your own messages and replies to you. Telegram does not push such a group's messages to a client at all; its own apps poll the group's difference while the chat is open. opentrench now does the same for every watched supergroup: a group Telegram has proved it will not push is asked every 2 seconds, the rest every 30 as a safety net, and Telegram's flood limits are honoured.
 - Telegram bot column: any bot you talk to, as a column, with its buttons — Cielo's wallet tracker (@evmtrackerbot) is a preset, Custom takes any bot username.

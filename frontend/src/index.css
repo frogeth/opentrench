@@ -172,6 +172,8 @@ b { font-weight: 600; }
 .call-dot { opacity: 0.35; }
 .call-chat { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 140px; }
 .call-chat .avatar { width: 12px !important; height: 12px !important; font-size: 7px !important; }
+.call-chat-jump { background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; border-radius: 4px; }
+.call-chat-jump:hover { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
 .call-age { white-space: nowrap; flex: none; }
 .first-badge { font-size: 9px; font-weight: 800; color: #000; background: var(--gold); border-radius: 4px; padding: 1px 4px; flex: none; line-height: 1.1; }
 .call-seen { white-space: nowrap; font-weight: 700; color: var(--muted); cursor: default; flex: none; }
