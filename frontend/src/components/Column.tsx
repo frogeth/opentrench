@@ -1,4 +1,4 @@
-import type { ReactNode, RefObject, UIEvent, DragEvent } from 'react';
+import { useEffect, useRef, type ReactNode, type RefObject, type UIEvent, type DragEvent } from 'react';
 import type { ColumnDef } from '../api';
 import { Icon } from './Icon';
 
@@ -82,6 +82,8 @@ export function Column({
   composer,
   stacked = false,
   stackShare = 0.5,
+  zoom,
+  onZoom,
 }: {
   title: string;
   subtitle?: string;
@@ -113,9 +115,35 @@ export function Column({
   /** one half of a vertical stack: the stack owns the width, this takes `stackShare` of the height */
   stacked?: boolean;
   stackShare?: number;
+  /** content scale for this column only (0.5–1.5); ctrl/⌘ + wheel over the column changes it, the header chip resets it */
+  zoom?: number;
+  onZoom?: (zoom: number) => void;
 }) {
+  const section = useRef<HTMLElement>(null);
+  const latest = useRef({ zoom: zoom ?? 1, onZoom });
+  latest.current = { zoom: zoom ?? 1, onZoom };
+  // ctrl/⌘ + wheel (and a trackpad pinch, which arrives as a ctrl-wheel) zooms this column, not the page.
+  // A React onWheel is passive and could not preventDefault the browser's own zoom, so the listener is attached by hand.
+  useEffect(() => {
+    const el = section.current;
+    if (!el || !onZoom) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      const { zoom: cur, onZoom: set } = latest.current;
+      if (!set || e.deltaY === 0) return;
+      const step = Math.abs(e.deltaY) < 10 ? 0.02 : 0.05; // pinch sends small deltas
+      const next = Math.min(1.5, Math.max(0.5, Math.round((cur + (e.deltaY > 0 ? -step : step)) * 100) / 100));
+      if (next === cur) return;
+      latest.current.zoom = next; // ticks inside one frame compound instead of all starting from the rendered value
+      set(next);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [!!onZoom]);
   return (
     <section
+      ref={section}
       className={`col ${className}${drag?.dragging ? ' col-dragging' : ''}${width ? ' col-fixed' : ''}${stacked ? ' col-stacked' : ''}`}
       style={stacked ? { flex: `${stackShare} 1 0px` } : fill ? { flex: `1 1 ${width ?? 380}px` } : width ? { flex: `0 0 ${width}px` } : undefined}
       onDragOver={drag?.onDragOver}
@@ -137,6 +165,11 @@ export function Column({
           {subtitle && <span className="col-sub">{subtitle}</span>}
         </div>
         {count !== undefined && <span className="col-count">{count}</span>}
+        {zoom !== undefined && zoom !== 1 && onZoom && (
+          <button className="col-zoom" onClick={() => onZoom(1)} title="this column's zoom — click to reset · ctrl/⌘ + scroll over the column to change">
+            {Math.round(zoom * 100)}%
+          </button>
+        )}
         <div className="col-extra">{extra}</div>
         {(onEdit || onRemove || onAlert) && (
           <div className="col-actions">
@@ -163,7 +196,7 @@ export function Column({
           </div>
         )}
       </div>
-      <div className="col-body" ref={bodyRef} onScroll={onScroll}>
+      <div className="col-body" ref={bodyRef} onScroll={onScroll} style={zoom !== undefined && zoom !== 1 ? { zoom } : undefined}>
         {children}
       </div>
       {composer}

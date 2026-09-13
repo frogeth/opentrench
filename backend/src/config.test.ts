@@ -100,3 +100,15 @@ describe('sanitizeLayouts', () => {
     expect(sanitizeLayouts(undefined)).toEqual([]);
   });
 });
+
+describe('column zoom', () => {
+  it('keeps a zoom inside 50–150% rounded to a percent, and drops 100% or junk', () => {
+    const z = (zoom: unknown) => sanitizeColumns([{ id: 'a', type: 'chat', title: 'x', chats: [], zoom }])[0].zoom;
+    expect(z(0.7)).toBe(0.7);
+    expect(z(0.7049)).toBe(0.7);
+    expect(z(1)).toBeUndefined();
+    expect(z(0.2)).toBeUndefined();
+    expect(z(3)).toBeUndefined();
+    expect(z('big')).toBeUndefined();
+  });
+});

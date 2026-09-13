@@ -101,6 +101,8 @@ export interface ColumnDef {
   width?: number;
   /** callers leaderboard window */
   window?: '24h' | '7d' | '30d';
+  /** content scale for this column only (ctrl/⌘ + wheel), 0.5–1.5; unset = 1 */
+  zoom?: number;
   /** play a sound when a new call lands in this column */
   alert?: { on: boolean; sound: string };
   filters?: ColumnFilters;

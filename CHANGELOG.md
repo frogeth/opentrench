@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- **Zoom one column.** Hold Ctrl (⌘ on a Mac, or pinch on a trackpad) and scroll over a column to scale just that column's content, 50%–150%, remembered per column. A chip in the column header shows the level and resets it on click. The page and the other columns stay as they are.
 - The message boxes under Chats, the bot panes and the mint window line up: one 34px row, same control heights and gaps, and no blank footer line under the chat box when there is nothing to say.
 - Header: the Discord and Telegram connection pills are their logos now, green / amber / red by state, with the words in the tooltip. The Layouts button uses a proper icon (lucide) instead of a text glyph.
 - **Layouts.** Save the column terminal as a named arrangement and switch between them from the Layouts button in the header: every column's channels, splits, widths and filters come along, so a calls-and-chats setup and an NFT setup are one click apart. Saving under an existing name overwrites it; the menu marks the layout that matches what is on screen and warns before switching away from an arrangement you have not saved.

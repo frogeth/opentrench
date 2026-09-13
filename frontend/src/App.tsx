@@ -923,7 +923,7 @@ export default function App() {
       : cfg?.telegram.watch.includes(view.preview.id)
     : false;
 
-  type ColumnActions = Partial<Pick<Parameters<typeof Column>[0], 'onEdit' | 'onRemove' | 'alertOn' | 'onAlert' | 'drag' | 'filtered' | 'width' | 'onResize' | 'fill' | 'stacked' | 'stackShare'>>;
+  type ColumnActions = Partial<Pick<Parameters<typeof Column>[0], 'onEdit' | 'onRemove' | 'alertOn' | 'onAlert' | 'drag' | 'filtered' | 'width' | 'onResize' | 'fill' | 'stacked' | 'stackShare' | 'zoom' | 'onZoom'>>;
   /** Header buttons for a column; every grip drags its own column, so either half of a pair can be pulled out. */
   const actionsFor = (col: ColumnDef, parentId?: string): ColumnActions => ({
     onEdit: () => setEditing({ col, parentId }),
@@ -940,6 +940,9 @@ export default function App() {
       : {}),
     drag: dragFor(col.id),
     filtered: filtersActive(col.filters),
+    // ctrl/⌘ + wheel over a column scales that column alone; 100% is stored as "unset"
+    zoom: col.zoom,
+    onZoom: (z) => saveColumnsDebounced(updateColumn(col.id, (c) => ({ ...c, zoom: z === 1 ? undefined : z }))),
   });
   /** One column of any type. `actions` carries the header buttons plus either the row layout (width/fill/resize) or the stack share. */
   const renderColumn = (col: ColumnDef, actions: ColumnActions) => {

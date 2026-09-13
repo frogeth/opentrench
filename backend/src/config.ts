@@ -19,6 +19,8 @@ export interface ColumnDef {
   width?: number;
   /** callers leaderboard window */
   window?: '24h' | '7d' | '30d';
+  /** content scale for this column only (ctrl/⌘ + wheel), 0.5–1.5; unset = 1 */
+  zoom?: number;
   /** play a sound when a new call lands in this column */
   alert?: { on: boolean; sound: string };
   /** per-column filters (shape owned by the UI; values are strings, numbers, booleans or string arrays) */
@@ -60,6 +62,9 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
   const w = Number(raw.width);
   if (Number.isFinite(w) && w >= 320 && w <= 1600) col.width = Math.round(w);
   if (['24h', '7d', '30d'].includes(raw.window)) col.window = raw.window;
+  // per-column zoom (ctrl/⌘ + wheel over the column), 50%–150%; 1 = default and is not stored
+  const z = Number(raw.zoom);
+  if (Number.isFinite(z) && z >= 0.5 && z <= 1.5 && Math.round(z * 100) !== 100) col.zoom = Math.round(z * 100) / 100;
   const al = raw.alert;
   if (al && typeof al === 'object') col.alert = { on: !!al.on, sound: String(al.sound ?? 'ping').slice(0, 20) || 'ping' };
   if (type === 'web') {
