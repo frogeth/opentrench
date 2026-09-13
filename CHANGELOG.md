@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Charts in chat can stay collapsed: with ⚙ → Feed → "Live charts in chat" off, every contract under a message keeps its one-line stats and gets a ▾ chart bar that opens the live chart in place; ▴ folds it back. With the setting on, the same bar collapses a chart you don't need right now.
+
 ## v0.8.0 — 2026-09-12
 
 - New column: **MintGo**. NFT mints on Ethereum, Robinhood Chain and Ink as they happen, straight from mintgo.fun's live feed: collection, quantity, price, minter and supply on each card; click one for its X, OpenSea and website links, the transaction, the deployer's history, and a Mint button. Filter by chain or minimum quantity in ✎. A mint whose price isn't confirmed yet says "price pending".

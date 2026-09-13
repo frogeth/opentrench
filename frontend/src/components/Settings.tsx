@@ -106,6 +106,7 @@ export function Settings({
                   <input type="checkbox" checked={autoChart} onChange={(e) => onAutoChart(e.target.checked)} /> Open the
                   live chart under every contract in Chats (only loads while on screen)
                 </label>
+                <div className="hint">Off keeps chats compact: every contract gets a ▾ chart bar that opens its chart on demand, and ▴ folds it back.</div>
               </section>
               <section>
                 <h2>Bot embeds</h2>

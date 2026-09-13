@@ -4,9 +4,33 @@
     {
       "name": "trenchfeed",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["start"],
+      "runtimeArgs": [
+        "start"
+      ],
       "port": 3210
     },
-    { "name": "site", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "3215", "-d", "site"], "port": 3215 }
+    {
+      "name": "site",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "3215",
+        "-d",
+        "site"
+      ],
+      "port": 3215
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "frontend"
+      ],
+      "port": 5173
+    }
   ]
 }

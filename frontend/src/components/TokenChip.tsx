@@ -121,6 +121,11 @@ export function TokenChip({
           <BuyRow buy={t?.buy} compact />
         </div>
       </div>
+      {embed && (
+        <button className="chip-expand" onClick={() => setShowChart((s) => !s)} title={showChart ? 'collapse the chart' : 'open the live chart'}>
+          {showChart ? '▴ hide chart' : '▾ chart'}
+        </button>
+      )}
       {showChart && embed && (
         <div className="chip-chart">
           {visible ? (

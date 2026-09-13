@@ -298,7 +298,10 @@ b { font-weight: 600; }
 .chip-seen { font-weight: 700; color: var(--muted); }
 .chip-seen.hot { color: var(--ok); }
 .chip-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
-.chip-chart { margin: 8px -10px -8px; }
+.chip-expand { display: block; width: calc(100% + 20px); margin: 6px -10px -8px; padding: 3px 0; background: transparent; border: 0; border-top: 1px solid var(--line); border-radius: 0 0 10px 10px; color: var(--dim); font-size: 11px; cursor: pointer; text-align: center; }
+.chip-expand:hover { color: var(--accent); background: var(--hover); }
+.chip-open .chip-expand { margin-bottom: 0; border-radius: 0; }
+.chip-chart { margin: 0 -10px -8px; }
 .chip-chart .token-chart { height: 460px; margin-top: 0; border: none; border-top: 1px solid var(--line); border-radius: 0 0 10px 10px; }
 .chip-open .chip-img { width: 28px; height: 28px; border-radius: 7px; }
 .chip-open .chip-row { align-items: center; }
