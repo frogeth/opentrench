@@ -45,7 +45,7 @@ const HEALTH_INTERVAL_MS = 30_000;
  * for chats that do push). A live message within PUSH_MEMORY_MS marks a chat as pushed.
  */
 const POLL_TICK_MS = 1_000;
-const POLL_FAST_MS = 3_000;
+const POLL_FAST_MS = 2_000;
 const POLL_SLOW_MS = 30_000;
 const PUSH_MEMORY_MS = 30 * 60 * 1000;
 const STEP_WAIT_MS = 20_000;

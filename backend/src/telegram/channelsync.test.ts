@@ -75,7 +75,7 @@ describe('TelegramWrapper.syncChannel', () => {
 });
 
 describe('TelegramWrapper.pollTick', () => {
-  it('polls a chat every 30s until a poll finds a message the live stream never pushed, then every 3s', async () => {
+  it('polls a chat every 30s until a poll finds a message the live stream never pushed, then every 2s', async () => {
     const { w, invoked } = wrapper({ pts: 10, diffs: [] });
     w.watchList = () => [TNC];
     const t0 = 1_000_000;
@@ -92,10 +92,10 @@ describe('TelegramWrapper.pollTick', () => {
     };
     await w.pollTick(t0 + 31_000);
     expect(diffs()).toBe(2);
-    expect(w.pollInterval(TNC, t0 + 31_000)).toBe(3_000);
-    await w.pollTick(t0 + 33_000);
+    expect(w.pollInterval(TNC, t0 + 31_000)).toBe(2_000);
+    await w.pollTick(t0 + 32_000);
     expect(diffs()).toBe(2);
-    await w.pollTick(t0 + 34_500);
+    await w.pollTick(t0 + 33_500);
     expect(diffs()).toBe(3);
     // a live push later on says the chat is delivered after all: back to the slow safety net
     (w as any).noteSeen(TNC, 60, 'push');
