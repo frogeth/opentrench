@@ -131,17 +131,10 @@ export function CallCard({
               <AuthorMenu author={c.author} link={c.link} favorite={isFavorite(favorites, c.author)} />
             </span>
             <span className="call-dot">·</span>
-            {onJump ? (
-              <button className="call-chat call-chat-jump" title={`${c.chatName} · show this call in the chat`} onClick={() => onJump(c.msgId, c.link)}>
-                <Logo source={c.source} size={10} />
-                {chatOf(c)}
-              </button>
-            ) : (
-              <span className="call-chat" title={c.chatName}>
-                <Logo source={c.source} size={10} />
-                {chatOf(c)}
-              </span>
-            )}
+            <span className={`call-chat${onJump ? ' call-chat-jump' : ''}`} title={onJump ? `${c.chatName} · show this call in the chat` : c.chatName} onClick={onJump ? () => onJump(c.msgId, c.link) : undefined}>
+              <Logo source={c.source} size={10} />
+              {chatOf(c)}
+            </span>
             <span className="call-dot">·</span>
           </>
         ) : null}
