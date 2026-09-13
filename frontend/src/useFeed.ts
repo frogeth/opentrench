@@ -122,6 +122,7 @@ export function useFeed() {
         }
         else if (ev.type === 'nftRankings') setRankings((r) => ({ ...r, [ev.key]: { rows: ev.rows, at: ev.at } }));
         else if (ev.type === 'mintJob') upsertJob(ev.job);
+        else if (ev.type === 'mintJobGone') setMintJobs((cur) => cur.filter((j) => j.id !== ev.id));
       };
       ws.onclose = () => {
         setWsOpen(false);

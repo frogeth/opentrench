@@ -7,6 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- OpenSea Mint: a failed or confirmed card has a Dismiss button, and a failed one also offers Quote again. A mint that is still sending or pending stays until the chain answers, since it holds the wallet's one-mint-at-a-time guard.
+- Fix: a narrow (or zoomed-in) chat column lost its title — the header's hidden / repeats / media toggles and buttons never shrank, so the title was squeezed to nothing. It now ellipsizes instead, narrow columns get tighter header chrome, and in message rows the author name gives way before the timestamp wraps.
+
 ## v0.8.1 — 2026-09-13
 
 - Charts in chat can stay collapsed: with ⚙ → Feed → "Live charts in chat" off, every contract under a message keeps its one-line stats and gets a ▾ chart bar that opens the live chart in place; ▴ folds it back. With the setting on, the same bar collapses a chart you don't need right now.

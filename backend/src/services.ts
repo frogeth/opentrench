@@ -52,6 +52,7 @@ export class Services {
     this.rankings.on('rankings', (key, rows, at) => this.hub.emit('event', { type: 'nftRankings', key, rows, at }));
     this.hub.nftState.rankings = () => this.rankings.latest;
     this.minter.on('job', (job) => this.hub.emit('event', { type: 'mintJob', job }));
+    this.minter.on('gone', (id: string) => this.hub.emit('event', { type: 'mintJobGone', id }));
     this.hub.nftState.mintJobs = () => this.minter.jobs;
     hub.on('event', (e) => {
       if (e.type === 'ping') void this.ping(e.token, e.msg);

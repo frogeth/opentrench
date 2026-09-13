@@ -17,7 +17,7 @@ const until = (iso?: string, now = Date.now()) => {
   return d > 0 ? `${d}d ${h % 24}h` : h > 0 ? `${h}h ${Math.floor((ms % 3600e3) / 60e3)}m` : `${Math.floor(ms / 60e3)}m`;
 };
 
-function JobCard({ j, now, onSend, sending }: { j: MintJob; now: number; onSend: (id: string) => void; sending: boolean }) {
+function JobCard({ j, now, onSend, sending, onDismiss, onRequote }: { j: MintJob; now: number; onSend: (id: string) => void; sending: boolean; onDismiss?: (id: string) => void; onRequote?: (j: MintJob) => void }) {
   const sym = j.price?.symbol ?? 'ETH';
   const [confirming, setConfirming] = useState(false);
   const confirmTimer = useRef<number | undefined>(undefined);
@@ -74,6 +74,12 @@ function JobCard({ j, now, onSend, sending }: { j: MintJob; now: number; onSend:
         ))}
         {tx && <a className="bkey bkey-url" href={tx} target="_blank" rel="noreferrer">tx <Icon name="explorer" size={10} /></a>}
         {j.collection.slug && <a className="bkey bkey-url" href={`https://opensea.io/collection/${j.collection.slug}`} target="_blank" rel="noreferrer">OpenSea <Icon name="explorer" size={10} /></a>}
+        {j.state === 'failed' && j.collection.slug && onRequote && (
+          <button className="bkey" onClick={() => onRequote(j)} title="quote this collection again">Quote again</button>
+        )}
+        {(j.state === 'failed' || j.state === 'confirmed' || (j.state === 'ready' && expired)) && onDismiss && (
+          <button className="bkey osj-dismiss" onClick={() => onDismiss(j.id)} title="remove this card">Dismiss</button>
+        )}
       </div></div>
     </div>
   );
@@ -143,6 +149,13 @@ export function OsMintView({ jobs, now, wallet, prefill, onPrefilled }: { jobs: 
     const el = body.current;
     if (el && nearBottom.current) el.scrollTop = el.scrollHeight;
   }, [jobs]);
+  const dismiss = async (id: string) => {
+    try {
+      await api.osDismiss(id);
+    } catch (e: any) {
+      flash(e?.message ?? 'could not dismiss');
+    }
+  };
   const send = async (id: string) => {
     setSendingId(id);
     try {
@@ -168,7 +181,7 @@ export function OsMintView({ jobs, now, wallet, prefill, onPrefilled }: { jobs: 
       <div className="cove-body" ref={body} onScroll={onBodyScroll}>
         {jobs.length === 0 && <div className="empty">Paste a collection below, or press Mint on a MintGo card or a minting row in OpenSea Volume.</div>}
         {jobs.map((j) => (
-          <JobCard key={j.id} j={j} now={now} onSend={send} sending={sendingId === j.id} />
+          <JobCard key={j.id} j={j} now={now} onSend={send} sending={sendingId === j.id} onDismiss={dismiss} onRequote={(job) => void quote(job.collection.slug, job.collection.chain, job.quantity)} />
         ))}
       </div>
       {toast && <div className="cove-toast">{toast}</div>}

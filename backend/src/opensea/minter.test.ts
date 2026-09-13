@@ -665,3 +665,23 @@ describe('Minter', () => {
     expect(redact('boom at rpc.example.com:8545/v2/SECRETKEY now')).toBe('boom at <rpc> now');
   });
 });
+
+describe('Minter.dismiss', () => {
+  it('removes a finished job and announces it, but never one in flight', async () => {
+    const m = new Minter(() => undefined, () => ({}), deps());
+    const gone: string[] = [];
+    m.on('gone', (id: string) => gone.push(id));
+    const failed = await m.quote({ locator: 'chump', quantity: 1 }); // no wallet → failed
+    expect(failed.state).toBe('failed');
+    expect(m.dismiss(failed.id)).toBe(true);
+    expect(gone).toEqual([failed.id]);
+    expect(m.jobs.find((j) => j.id === failed.id)).toBeUndefined();
+    expect(m.dismiss('m-nope')).toBe(false);
+
+    const live = new Minter(() => KEY, () => ({}), deps());
+    const ready = await live.quote({ locator: 'chump', quantity: 2 });
+    expect(ready.state).toBe('ready');
+    expect(live.dismiss(ready.id)).toBe(false); // a sendable quote is kept; only failed/confirmed go
+    expect(live.jobs).toHaveLength(1);
+  });
+});

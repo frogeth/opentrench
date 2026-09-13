@@ -420,4 +420,5 @@ export type ServerEvent =
   | { type: 'status'; status: Status }
   | { type: 'mint'; mint: MintEvent }
   | { type: 'nftRankings'; key: RankingKey; rows: NftRanking[]; at: number }
-  | { type: 'mintJob'; job: MintJob };
+  | { type: 'mintJob'; job: MintJob }
+  | { type: 'mintJobGone'; id: string };

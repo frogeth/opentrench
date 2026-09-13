@@ -215,4 +215,5 @@ export const api = {
   setOpenSeaRpc: (chain: string, url: string) => req<MaskedConfig['opensea']>('PUT', '/opensea/rpc', { chain, url }),
   osQuote: (locator: string, quantity: number, chain?: string) => req<import('./types').MintJob>('POST', '/osmint/quote', { locator, quantity, chain }),
   osSend: (jobId: string) => req<{ ok: true }>('POST', '/osmint/send', { jobId }),
+  osDismiss: (jobId: string) => req<{ ok: true }>('DELETE', `/osmint/jobs/${encodeURIComponent(jobId)}`),
 };

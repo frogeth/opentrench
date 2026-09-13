@@ -36,6 +36,14 @@ class FakeMinter {
     job.state = 'pending';
     return job;
   }
+  gone: string[] = [];
+  dismiss(jobId: string): boolean {
+    const i = this.jobs.findIndex((j) => j.id === jobId);
+    if (i < 0 || (this.jobs[i].state !== 'failed' && this.jobs[i].state !== 'confirmed')) return false;
+    this.jobs.splice(i, 1);
+    this.gone.push(jobId);
+    return true;
+  }
 }
 
 function makeStubServices(cfg: ConfigStore) {
@@ -270,6 +278,18 @@ describe('osmint + opensea settings API', () => {
     expect(body.error).toMatch(/quote is sending/);
   });
 
+  it('DELETE /osmint/jobs/:id dismisses a finished job and refuses a live one', async () => {
+    const q = await fetch(`${base}/osmint/quote`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ locator: 'chump-nft-1', quantity: 1 }) });
+    const job = (await q.json()) as MintJob;
+    const live = await fetch(`${base}/osmint/jobs/${job.id}`, { method: 'DELETE' });
+    expect(live.status).toBe(500);
+    expect(((await live.json()) as any).error).toMatch(/finished/);
+    svc.minter.jobs.find((j) => j.id === job.id)!.state = 'failed'; // the HTTP body is a copy
+    const ok = await fetch(`${base}/osmint/jobs/${job.id}`, { method: 'DELETE' });
+    expect(ok.status).toBe(200);
+    const bad = await fetch(`${base}/osmint/jobs/not-an-id!`, { method: 'DELETE' });
+    expect(bad.status).toBe(500);
+  });
   it('GET /osmint/jobs returns the minter jobs list', async () => {
     await fetch(`${base}/osmint/quote`, {
       method: 'POST',

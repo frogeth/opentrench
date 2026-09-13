@@ -528,6 +528,20 @@ export class Minter extends EventEmitter {
   }
 
   /**
+   * Drop a finished card from the log. A job that is still sending or pending is refused: it holds
+   * the wallet's in-flight guard until the chain answers. Returns false when nothing was removed.
+   */
+  dismiss(jobId: string): boolean {
+    const i = this.jobs.findIndex((j) => j.id === jobId);
+    if (i < 0) return false;
+    const s = this.jobs[i].state;
+    if (s !== 'failed' && s !== 'confirmed') return false;
+    this.jobs.splice(i, 1);
+    this.emit('gone', jobId);
+    return true;
+  }
+
+  /**
    * Keep the log small. A job whose transaction is in flight is never dropped, and neither is a
    * quote the user could still send (a `ready` job inside its TTL) — so finished jobs go first,
    * then stale quotes, and only past HARD_MAX_JOBS does a live quote become expendable.

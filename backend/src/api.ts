@@ -404,6 +404,16 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
   r.get('/mints/recent', wrap(() => svc.mintsRecent()));
   // OpenSea mint window
   r.get('/osmint/jobs', wrap(() => svc.minter.jobs));
+  // Dismiss a finished card. A mint that is still sending or pending stays: it holds the wallet's in-flight guard.
+  r.delete(
+    '/osmint/jobs/:id',
+    wrap((req) => {
+      const id = String(req.params.id ?? '');
+      if (!/^m[a-z0-9]{1,40}$/.test(id)) throw new Error('bad job id');
+      if (!svc.minter.dismiss(id)) throw new Error('only a finished mint can be dismissed');
+      return { ok: true };
+    }),
+  );
   r.post(
     '/osmint/quote',
     wrap((req) => {
