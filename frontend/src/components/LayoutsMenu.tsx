@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Save } from 'lucide-react';
 import type { ColumnDef, Layout } from '../api';
 
 /** Two column sets are the same layout when they serialise the same (ids, order, scope, splits, widths, filters). */
@@ -6,8 +7,8 @@ export const sameColumns = (a: ColumnDef[], b: ColumnDef[]) => JSON.stringify(a)
 
 /**
  * The header's Layouts menu: every saved arrangement of the column terminal, the one matching what
- * is on screen marked; click one to switch to it, save the current arrangement under a name, or
- * delete one. Saving under an existing name overwrites it.
+ * is on screen marked; click one to switch to it, save the current arrangement under a name or over
+ * an existing layout (its save icon), delete one, or close every column.
  */
 export function LayoutsMenu({
   layouts,
@@ -15,6 +16,7 @@ export function LayoutsMenu({
   onLoad,
   onSave,
   onDelete,
+  onClear,
   onClose,
 }: {
   layouts: Layout[];
@@ -22,6 +24,7 @@ export function LayoutsMenu({
   onLoad: (l: Layout) => void;
   onSave: (name: string) => Promise<void>;
   onDelete: (l: Layout) => void;
+  onClear: () => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState('');
@@ -32,8 +35,7 @@ export function LayoutsMenu({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
-  const save = async () => {
-    const n = name.trim();
+  const save = async (n = name.trim()) => {
     if (!n || busy) return;
     setBusy(true);
     try {
@@ -58,6 +60,11 @@ export function LayoutsMenu({
               <span className="layouts-name">{l.name}</span>
               <span className="muted">{l.columns.map((c) => c.title).join(' · ')}</span>
             </button>
+            {current?.id !== l.id && (
+              <button className="layouts-resave" disabled={busy} onClick={() => void save(l.name)} title={`save the current columns over ${l.name}`} aria-label={`save the current columns over ${l.name}`}>
+                <Save size={13} strokeWidth={2} />
+              </button>
+            )}
             <button className="layouts-del" onClick={() => onDelete(l)} title={`delete ${l.name}`} aria-label={`delete ${l.name}`}>
               ✕
             </button>
@@ -76,6 +83,9 @@ export function LayoutsMenu({
             Save
           </button>
         </div>
+        <button className="layouts-clear" disabled={columns.length === 0} onClick={onClear} title="close every column (saved layouts stay)">
+          Clear all columns
+        </button>
       </div>
     </>
   );

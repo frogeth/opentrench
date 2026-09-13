@@ -930,6 +930,14 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .layouts-row .muted { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .ca-menu .layouts-del { flex: none; color: var(--dim); padding: 7px 8px; }
 .ca-menu .layouts-del:hover { color: var(--err); }
+.ca-menu .layouts-resave { flex: none; color: var(--dim); padding: 7px 6px; }
+.ca-menu .layouts-resave:hover { color: var(--accent); }
+.ca-menu .layouts-resave:disabled { opacity: 0.5; cursor: default; }
+.ca-menu .layouts-clear { justify-content: center; color: var(--dim); font-size: 11px; margin-top: 2px; }
+.ca-menu .layouts-clear:hover:not(:disabled) { color: var(--err); }
+.ca-menu .layouts-clear:disabled { opacity: 0.4; cursor: default; }
+.terminal-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--text); font-size: 14px; font-weight: 600; }
+.terminal-empty .muted { font-size: 12px; font-weight: 400; }
 .layouts-save { display: flex; gap: 6px; padding: 8px 6px 4px; border-top: 1px solid var(--line); margin-top: 4px; }
 .layouts-save input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; color: var(--text); padding: 5px 8px; font-size: 12px; }
 .ca-menu .layouts-save button { flex: none; background: var(--accent); color: #04140d; font-weight: 600; padding: 5px 10px; }

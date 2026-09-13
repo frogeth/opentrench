@@ -153,6 +153,13 @@ routeUpgrades(server, {
   '/bridge': { wss: svc.discord.wss, allow: DiscordBridge.allowOrigin },
 });
 
+// A backend that cannot bind its port must not linger as a headless process with live Discord and
+// Telegram sessions (the uncaughtException logger below would otherwise keep it alive): exit, loudly.
+server.on('error', (e: NodeJS.ErrnoException) => {
+  console.error(`[backend] cannot listen on ${HOST}:${PORT}: ${e.code ?? e.message} — is another opentrench backend running?`);
+  store.flush();
+  process.exit(1);
+});
 server.listen(PORT, HOST, () => {
   console.log(`opentrench listening on http://${HOST}:${PORT}`);
   svc.startDiscord();

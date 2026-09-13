@@ -143,7 +143,8 @@ export function sanitizeColumns(raw: unknown): ColumnDef[] {
     const col = parseColumn(r, seen, true);
     if (col) out.push(col);
   }
-  return out.length ? out : DEFAULT_COLUMNS.map((c) => ({ ...c }));
+  // an explicitly empty list is a choice (every column removed to start a layout from scratch), not a fallback
+  return out;
 }
 
 export interface Config {
@@ -266,7 +267,8 @@ export class ConfigStore {
         pingTelegram: raw.pingTelegram !== false,
         o1ApiKey: typeof raw.o1ApiKey === 'string' && raw.o1ApiKey.trim() ? raw.o1ApiKey.trim() : undefined,
         railOrder: Array.isArray(raw.railOrder) ? raw.railOrder.map(String) : [],
-        columns: sanitizeColumns(raw.columns),
+        // a config that never had columns gets the two defaults; a saved empty list stays empty
+        columns: raw.columns === undefined ? DEFAULT_COLUMNS.map((c) => ({ ...c })) : sanitizeColumns(raw.columns),
         layouts: sanitizeLayouts(raw.layouts),
         j7: {
           token: typeof raw.j7?.token === 'string' && raw.j7.token.trim() ? raw.j7.token.trim() : undefined,

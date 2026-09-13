@@ -229,7 +229,8 @@ export default function App() {
       /* ignore */
     }
   };
-  const columns: ColumnDef[] = cfg?.columns?.length ? cfg.columns : DEFAULT_COLUMNS;
+  // an empty list is a choice (every column closed, or an empty layout): only an unloaded config shows the defaults
+  const columns: ColumnDef[] = cfg ? cfg.columns : DEFAULT_COLUMNS;
   const saveColumns = (next: ColumnDef[]) => {
     setCfg((c) => (c ? { ...c, columns: next } : c));
     void api.setColumns(next).catch(() => {});
@@ -1165,6 +1166,7 @@ export default function App() {
               .loadLayout(l.id)
               .then((r) => {
                 setCfg((c) => (c ? { ...c, columns: r.columns } : c));
+                setView({ rail: 'all' }); // a layout's feeds are scoped by its columns, not by whatever server was selected
                 setLayoutsOpen(false);
               })
               .catch((e) => alert(`Layout: ${e?.message ?? e}`));
@@ -1176,6 +1178,13 @@ export default function App() {
             } catch (e: any) {
               alert(`Layout: ${e?.message ?? e}`);
             }
+          }}
+          onClear={() => {
+            if (columns.length === 0) return setLayoutsOpen(false);
+            if (!window.confirm(`Close all ${columns.length} column${columns.length === 1 ? '' : 's'}?${currentLayout ? '' : ' The current arrangement is not saved as a layout.'}`)) return;
+            saveColumns([]);
+            setView({ rail: 'all' });
+            setLayoutsOpen(false);
           }}
           onDelete={(l) => {
             if (!window.confirm(`Delete the layout "${l.name}"? Your columns stay as they are.`)) return;
@@ -1323,6 +1332,12 @@ export default function App() {
             </>
           ) : (
             <>
+              {columns.length === 0 && (
+                <div className="terminal-empty">
+                  <div>No columns</div>
+                  <div className="muted">Use + to add one, or pick a layout from the header.</div>
+                </div>
+              )}
               {columns.map((col, i) => {
                 const layout = { width: liveWidths[col.id] ?? col.width, onResize: resizeFor(col.id), fill: i === fillIdx };
                 if (!col.split) return renderColumn(col, { ...actionsFor(col), ...layout });

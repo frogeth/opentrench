@@ -7,7 +7,8 @@ import { ConfigStore, DEFAULT_COLUMNS, sanitizeColumns, sanitizeLayouts } from '
 describe('columns', () => {
   it('falls back to All Calls + All Chats and drops junk', () => {
     expect(sanitizeColumns(undefined)).toEqual(DEFAULT_COLUMNS);
-    expect(sanitizeColumns([])).toEqual(DEFAULT_COLUMNS);
+    expect(sanitizeColumns([])).toEqual([]); // an emptied terminal stays empty; only a missing/invalid list gets the defaults
+    expect(sanitizeColumns('junk')).toEqual(DEFAULT_COLUMNS);
     expect(sanitizeColumns([{ id: 'a', type: 'calls', title: ' Alpha ', chats: ['discord:1', 'nope', 7] }, { id: 'a', type: 'chat' }, { id: '', type: 'chat' }, 'x'])).toEqual([
       { id: 'a', type: 'calls', title: 'Alpha', chats: ['discord:1'] },
     ]);
