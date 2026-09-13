@@ -214,6 +214,7 @@ export const api = {
   loadLayout: (id: string) => req<{ columns: ColumnDef[] }>('POST', `/layouts/${encodeURIComponent(id)}/load`),
   deleteLayout: (id: string) => req<{ layouts: Layout[] }>('DELETE', `/layouts/${encodeURIComponent(id)}`),
   watched: () => req<WatchedChat[]>('GET', '/watched'),
+  telegramResolve: (username: string) => req<{ id: string; name: string; bot: boolean }>('GET', `/telegram/resolve/${encodeURIComponent(username)}`),
   tickers: () => req<{ sym: string; usd: number; change24h: number }[]>('GET', '/tickers'),
   ohlcv: (address: string, interval: string) =>
     req<{ candles: { t: number; o: number; h: number; l: number; c: number; v: number }[]; mcPerPrice?: number; reason?: string }>(

@@ -397,6 +397,11 @@ export class Services {
     await tg.connect();
   }
 
+  resolveTelegram(username: string) {
+    if (!this.telegram) throw new Error('telegram not connected');
+    return this.telegram.resolveChat(username);
+  }
+
   async listTelegramDialogs(): Promise<TelegramDialog[]> {
     return this.telegram?.listDialogs() ?? [];
   }

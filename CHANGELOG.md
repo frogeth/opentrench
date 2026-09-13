@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Every Discord, Telegram and bot link stays in the app. A message link scrolls the chat to that message (or opens the chat when the message is no longer in the feed), a channel or group link opens it (focused if you watch it, a preview otherwise), and a bot link drives that bot's column, creating one for a bot you have not got a column for. That covers links in message text, embeds, call cards, the calls list and time stamps. Hold ⌘/Ctrl while clicking to open one in the browser anyway; invite links still open outside.
 - Call cards: click the chat name on a card, or a row of the "N calls for $X" list, to scroll the chat to the message that made the call (it flashes). A call that has aged out of the feed opens the original in Telegram or Discord instead.
 - Fix: J7 tweets showed broken image tiles (the feed now sends media as objects; their urls are read instead of the object being stringified).
 - Fix: a big Telegram supergroup (thousands of members) showed only your own messages and replies to you. Telegram does not push such a group's messages to a client at all; its own apps poll the group's difference while the chat is open. opentrench now does the same for every watched supergroup: a group Telegram has proved it will not push is asked every 2 seconds, the rest every 30 as a safety net, and Telegram's flood limits are honoured.

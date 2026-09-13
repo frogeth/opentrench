@@ -183,6 +183,14 @@ export class TelegramWrapper extends EventEmitter {
     this.setState('needs_login');
   }
 
+  /** A public username (chat, channel or bot) → its id as the feed knows it, its name, and whether it is a bot. */
+  async resolveChat(username: string): Promise<{ id: string; name: string; bot: boolean }> {
+    if (!this.client || this.state !== 'connected') throw new Error('telegram not connected');
+    const e: any = await this.client.getEntity(username);
+    const name = String(e?.title ?? [e?.firstName, e?.lastName].filter(Boolean).join(' ') ?? e?.username ?? username).trim() || username;
+    return { id: String(getPeerId(e)), name, bot: !!e?.bot };
+  }
+
   async listDialogs(): Promise<TelegramDialog[]> {
     if (!this.client || this.state !== 'connected') return [];
     const dialogs = await this.client.getDialogs({ limit: 500 });

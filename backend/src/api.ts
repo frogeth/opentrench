@@ -723,6 +723,15 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     }),
   );
   r.get('/telegram/dialogs', wrap(() => svc.listTelegramDialogs()));
+  // a t.me/<username> link clicked in the app: which chat (or bot) that is, so it opens in-app
+  r.get(
+    '/telegram/resolve/:username',
+    wrap((req) => {
+      const u = String(req.params.username ?? '');
+      if (!/^[A-Za-z0-9_]{4,32}$/.test(u)) throw new Error('bad username');
+      return svc.resolveTelegram(u);
+    }),
+  );
   r.get('/telegram/media/:chatId/:msgId', async (req, res) => {
     const chatId = String(req.params.chatId ?? '');
     const msgId = Number(req.params.msgId);

@@ -15,6 +15,7 @@ import { CaMenuContext, LinkInterceptContext } from './components/RichText';
 import { J7View } from './components/J7View';
 import { MintFeed, mintPasses } from './components/MintFeed';
 import { LayoutsMenu, sameColumns } from './components/LayoutsMenu';
+import { parseChatLink } from './links';
 import { LayoutDashboard } from 'lucide-react';
 import { NftRankings } from './components/NftRankings';
 import { OsMintView } from './components/OsMintView';
@@ -363,6 +364,64 @@ export default function App() {
     if (status.telegram !== 'connected') return; // the column shows the "connect Telegram" prompt
     api.botStart(BOTS[hit.kind], hit.payload).catch((e) => alert(`${hit.kind === 'salpha' ? 'Salpha' : PROVIDER_LABEL[hit.kind]}: ${e?.message ?? e}`));
   };
+  /** Any other bot (a t.me/<x>?start= link, or a @…bot link): its own Telegram bot column, created on first use. */
+  const openTgBot = (bot: string, start?: string) => {
+    const b = bot.toLowerCase();
+    if (!flatColumns.some((c) => c.type === 'tgbot' && c.bot?.toLowerCase() === b)) saveColumns([...columns, { id: `tgbot-${b}`, type: 'tgbot', title: `@${bot}`, chats: [], bot, width: 420 }]);
+    setCoveFlash(`tgbot:${b}`);
+    window.setTimeout(() => setCoveFlash(null), 1500);
+    if (start && status.telegram === 'connected') api.botStart(bot, start).catch((e) => alert(`@${bot}: ${e?.message ?? e}`));
+  };
+  /**
+   * Every Discord, Telegram and bot link stays in the app: a message link scrolls the chat to that
+   * message (or opens the chat when the message is not in the feed), a chat link opens the chat
+   * (watched: focused; otherwise a preview), a bot link drives that bot's column. Returns false for
+   * anything else (X, charts, explorers, invites), which then opens in the browser.
+   */
+  const openLink = (href: string): boolean => {
+    const l = parseChatLink(href);
+    if (!l) return false;
+    if (l.kind === 'bot') {
+      if (botLink(href)) onBuy(href);
+      else openTgBot(l.bot, l.start);
+      return true;
+    }
+    if (l.kind === 'discord') {
+      const ch = channels.find((c) => c.id === l.channel);
+      // the feed's chat name for a Discord channel: "#name (Guild)", or "name (DM)"
+      const name = ch ? ((ch as any).dm ? `${ch.name} (DM)` : `#${ch.name} (${ch.guildName})`) : `#${l.channel}`;
+      showMessageOrChat('discord', l.channel, name, l.msgId, ch?.guildId ?? (l.guild === '@me' ? undefined : l.guild));
+      return true;
+    }
+    if (l.internal) {
+      const id = `-100${l.internal}`;
+      const name = dialogs.find((d) => String(d.id) === id)?.title ?? watched.find((w) => w.source === 'telegram' && w.id === id)?.name ?? 'Telegram chat';
+      showMessageOrChat('telegram', id, name, l.msgId);
+      return true;
+    }
+    if (l.username) {
+      const msgId = l.msgId;
+      api
+        .telegramResolve(l.username)
+        .then((r) => (r.bot ? openTgBot(l.username!) : showMessageOrChat('telegram', r.id, r.name, msgId)))
+        .catch((e) => alert(`@${l.username}: ${e?.message ?? e}`));
+      return true;
+    }
+    return false;
+  };
+  const openLinkRef = useRef(openLink);
+  openLinkRef.current = openLink;
+  // One catch for every <a> in the UI (cards, embeds, message text, time stamps): chat and bot
+  // links are routed in-app; a modifier click still goes to the browser on purpose.
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (a && openLinkRef.current(a.href)) e.preventDefault();
+    };
+    document.addEventListener('click', h, true);
+    return () => document.removeEventListener('click', h, true);
+  }, []);
   const openShare = (address: string, symbol?: string) => setShare({ text: address, title: `Share ${symbol ? `$${symbol}` : 'contract'}`, hint: 'Only the address is sent, nothing else.' });
   // Reactions: what you added this session (the platform stream brings the counts back)
   const [myReactions, setMyReactions] = useState<Set<string>>(() => new Set());
@@ -630,8 +689,8 @@ export default function App() {
   const jumpToMessage = (id: string, link?: string) => {
     const m = messages.find((x) => x.id === id);
     if (!m) {
-      // no longer in the feed's buffer: the original in Telegram / Discord is the best we can do
-      if (link) window.open(link, '_blank', 'noopener');
+      // no longer in the feed's buffer: open its chat in-app from the link (the browser only as a last resort)
+      if (link && !openLink(link)) window.open(link, '_blank', 'noopener');
       return;
     }
     revealMessage(id);
@@ -654,9 +713,19 @@ export default function App() {
         if (view.chat?.name !== m.chatName) openChat(m.chatName, m.source, m.chatId);
         return void window.setTimeout(find, 120);
       }
-      if (m.link) window.open(m.link, '_blank', 'noopener');
+      if (m.link && !openLink(m.link)) window.open(m.link, '_blank', 'noopener');
     };
     window.setTimeout(find, 30);
+  };
+  /** A message link: scroll to the message when the feed has it, else open its chat (focused when watched, a preview otherwise). */
+  const showMessageOrChat = (source: Source, chatId: string, name: string, msgId?: string, guildId?: string) => {
+    if (msgId !== undefined) {
+      const id = source === 'discord' ? `discord:${msgId}` : `telegram:${chatId}:${msgId}`;
+      if (messages.some((x) => x.id === id)) return jumpToMessage(id);
+    }
+    if (view.chat?.id === chatId || view.preview?.id === chatId) return; // already showing it
+    if (watchedKeys.has(`${source}:${chatId}`)) return openChat(name, source, chatId);
+    openPreview(source, chatId, name, guildId);
   };
 
   // Favorited X accounts: a fresh tweet plays the J7 column's sound and posts a notification, if that column's bell is on.
@@ -1039,7 +1108,7 @@ export default function App() {
     if (col.type === 'tgbot') {
       const bot = col.bot ?? '';
       return (
-        <Column key={col.id} title={col.title} subtitle={bot ? `@${bot} · your Telegram` : 'no bot picked'} kind="tgbot" className="col-cove" {...actions}>
+        <Column key={col.id} title={col.title} subtitle={bot ? `@${bot} · your Telegram` : 'no bot picked'} kind="tgbot" className={`col-cove${coveFlash === `tgbot:${bot.toLowerCase()}` ? ' col-flash' : ''}`} {...actions}>
           {bot ? <CoveView bot={bot} msgs={botMsgs[bot] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} /> : <div className="empty">Edit this column and pick the bot to show.</div>}
         </Column>
       );
@@ -1130,7 +1199,7 @@ export default function App() {
 
   return (
     <BuyContext.Provider value={onBuy}>
-    <LinkInterceptContext.Provider value={interceptBotLink}>
+    <LinkInterceptContext.Provider value={openLink}>
     <CaMenuContext.Provider value={openCaMenu}>
     <div className={`app${dragCol ? ' col-drag' : ''}`}>
       <header className="top">

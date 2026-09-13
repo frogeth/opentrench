@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useContext } from 'react';
 import type { BotMessage } from '../types';
 import { api } from '../api';
 import { RichText, LinkInterceptContext } from './RichText';
@@ -53,9 +53,10 @@ export function CoveView({
     window.setTimeout(() => setToast(null), 4000);
   };
   // Cove's own deep links (positions, Sell 100%, Move, Hide, bulk sell, buy confirms…) run in-app
+  const outer = useContext(LinkInterceptContext); // the app's router, for links to other bots and chats
   const intercept = (href: string) => {
     const m = new RegExp(`^(?:https?://t\\.me/${bot}/?\\?start=|tg://resolve\\?domain=${bot}&start=)([A-Za-z0-9_-]+)`, 'i').exec(href);
-    if (!m) return false;
+    if (!m) return !!outer?.(href);
     void api.botStart(bot, m[1]).catch((err) => flash(err?.message ?? 'failed'));
     return true;
   };

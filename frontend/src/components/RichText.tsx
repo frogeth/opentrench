@@ -84,18 +84,9 @@ function buildRe(contracts: string[]): RegExp {
 }
 
 function Link({ href, children }: { href: string; children: ReactNode }) {
-  const intercept = useContext(LinkInterceptContext);
+  // chat and bot links are routed in-app by the app's document-level click handler
   return (
-    <a
-      className="md-link"
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      onClick={(e) => {
-        e.stopPropagation();
-        if (intercept?.(href)) e.preventDefault();
-      }}
-    >
+    <a className="md-link" href={href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
       {children}
     </a>
   );

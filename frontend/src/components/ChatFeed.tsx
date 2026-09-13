@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, useContext } from 'react';
+import { LinkInterceptContext } from './RichText';
 import type { FeedMessage, TokenInfo } from '../types';
 import type { ChartProvider } from '../format';
 import { MessageRow } from './MessageRow';
@@ -96,8 +97,9 @@ export function ChatFeed({
     ro.observe(inner);
     return () => ro.disconnect();
   }, [order]);
+  const intercept = useContext(LinkInterceptContext);
   const jumpTo = (id: string | undefined, fallback: string | undefined) => {
-    const open = () => fallback && window.open(fallback, '_blank', 'noopener');
+    const open = () => fallback && !intercept?.(fallback) && window.open(fallback, '_blank', 'noopener');
     if (!id) return open();
     const inBuffer = onReveal ? onReveal(id) : true;
     if (!inBuffer) return open();
