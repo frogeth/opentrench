@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.8.5 — 2026-09-13
+
 - Website columns have a ⟳ in the header that reloads the page, for a page that went blank or turned into Chromium's sad face.
 - Desktop: a log of what the app shell does, including any renderer or helper process Chromium loses and why, in the app's log folder (desktop.log). Open Log Folder in the app menu (File on Windows) takes you there. Please attach it when reporting a blank or crashed Website column.
 
