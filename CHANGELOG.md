@@ -7,7 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
-- **Layouts.** Save the column terminal as a named arrangement and switch between them from the ▦ Layouts menu in the header: every column's channels, splits, widths and filters come along, so a calls-and-chats setup and an NFT setup are one click apart. Saving under an existing name overwrites it; the menu marks the layout that matches what is on screen and warns before switching away from an arrangement you have not saved.
+- **Layouts.** Save the column terminal as a named arrangement and switch between them from the Layouts button in the header: every column's channels, splits, widths and filters come along, so a calls-and-chats setup and an NFT setup are one click apart. Saving under an existing name overwrites it; the menu marks the layout that matches what is on screen and warns before switching away from an arrangement you have not saved.
 
 ## v0.8.2 — 2026-09-13
 

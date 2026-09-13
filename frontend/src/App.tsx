@@ -1141,7 +1141,8 @@ export default function App() {
           @{mentions.some((m) => !m.read) && <span className="pings-badge">{mentions.filter((m) => !m.read).length}</span>}
         </button>
         <button className={`gear layouts-btn${layoutsOpen ? ' on' : ''}`} onClick={() => setLayoutsOpen((o) => !o)} title={`layouts: save this arrangement of columns, or switch to a saved one${currentLayout ? ` · on ${currentLayout.name}` : ''}`}>
-          ▦{currentLayout && <span className="layouts-current">{currentLayout.name}</span>}
+          <Icon name="layout" size={14} />
+          {currentLayout && <span className="layouts-current">{currentLayout.name}</span>}
         </button>
         <button className="gear" onClick={() => setSettingsOpen(true)} title="settings">
           ⚙
