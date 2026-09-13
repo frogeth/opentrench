@@ -60,11 +60,49 @@ async function waitFor(ms) {
   return false;
 }
 
+/** What the backend on the port says it is; null when it predates /api/version or is unreachable. */
+function backendVersion() {
+  return new Promise((resolve) => {
+    const req = http.get(`${URL}/api/version`, { timeout: 1500 }, (res) => {
+      let body = '';
+      res.on('data', (d) => (body += d));
+      res.on('end', () => {
+        try {
+          resolve(res.statusCode === 200 ? String(JSON.parse(body).version ?? '') : null);
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(null);
+    });
+  });
+}
+
+/** @returns false when the app should quit instead of opening a window */
 async function startBackend() {
   const p = paths();
   if (await ping()) {
+    // Attaching to a backend from another build is how a column type the backend has never heard
+    // of silently turns into a chat column: its config parser rewrites what it doesn't know. A
+    // stale `npm start` from an older checkout is the usual culprit.
+    const v = await backendVersion();
+    if (v !== app.getVersion()) {
+      const { response } = await dialog.showMessageBox({
+        type: 'warning',
+        message: `Another opentrench backend is already running on port ${PORT}`,
+        detail: `It reports version ${v || 'unknown (an older build)'}; this app is ${app.getVersion()}. A backend from a different build rewrites newer column types and hides newer features. Quit that process (a stale "npm start"?) and open opentrench again, or attach anyway.`,
+        buttons: ['Quit', 'Attach anyway'],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (response === 0) return false;
+    }
     console.log('[desktop] backend already running on', URL, '— attaching');
-    return;
+    return true;
   }
   adoptDevFiles(p);
   if (!fs.existsSync(p.entry)) throw new Error(`backend not built: ${p.entry}`);
@@ -77,6 +115,7 @@ async function startBackend() {
       TRENCHFEED_CONFIG: p.config,
       TRENCHFEED_STATE: p.state,
       TRENCHFEED_PARENT_PID: String(process.pid),
+      TRENCHFEED_APP_VERSION: app.getVersion(),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -87,6 +126,7 @@ async function startBackend() {
     child = null;
   });
   if (!(await waitFor(20_000))) throw new Error('backend did not come up');
+  return true;
 }
 
 function createWindow() {
@@ -289,7 +329,10 @@ function buildMenu() {
 app.whenReady().then(async () => {
   buildMenu();
   try {
-    await startBackend();
+    if (!(await startBackend())) {
+      app.quit();
+      return;
+    }
   } catch (e) {
     console.error('[desktop]', e);
   }

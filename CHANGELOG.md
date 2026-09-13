@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Fix: a MintGo (or any newer) column could turn into a chat column. When the desktop app starts it attaches to a backend already listening on its port; a backend left running from an older checkout doesn't know the newer column types and rewrites them to Chats on every save. The app now checks the running backend's version and offers to quit instead of attaching to a different build.
 - OpenSea Mint: a failed or confirmed card has a Dismiss button, and a failed one also offers Quote again. A mint that is still sending or pending stays until the chain answers, since it holds the wallet's one-mint-at-a-time guard.
 - Fix: a narrow (or zoomed-in) chat column lost its title — the header's hidden / repeats / media toggles and buttons never shrank, so the title was squeezed to nothing. It now ellipsizes instead, narrow columns get tighter header chrome, and in message rows the author name gives way before the timestamp wraps.
 

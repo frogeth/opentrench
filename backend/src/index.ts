@@ -122,6 +122,18 @@ app.use('/api', (req, res, next) => {
   }
   next();
 });
+// Which build this backend is: the desktop app compares it with its own before attaching to a
+// backend it did not start (a stale one from an older checkout rewrites column types it never knew).
+const APP_VERSION =
+  process.env.TRENCHFEED_APP_VERSION ??
+  (() => {
+    try {
+      return String(JSON.parse(fs.readFileSync(path.resolve(root, '..', 'electron', 'package.json'), 'utf8')).version ?? 'dev');
+    } catch {
+      return 'dev';
+    }
+  })();
+app.get('/api/version', (_req, res) => res.json({ version: APP_VERSION }));
 app.use('/api', createApi(cfg, hub, svc, hover));
 
 const dist = path.resolve(root, '..', 'frontend', 'dist');
