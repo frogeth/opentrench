@@ -1,7 +1,7 @@
 import { Router, json, raw, type Request, type Response } from 'express';
 import type { HoverFetchers } from './hover.js';
 import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
-import { sanitizeColumns } from './config.js';
+import { LAYOUT_NAME_MAX, MAX_LAYOUTS, sanitizeColumns, type Layout } from './config.js';
 import type { ConfigStore } from './config.js';
 import type { MessageHub } from './hub.js';
 import type { Services } from './services.js';
@@ -208,6 +208,52 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       });
       svc.syncColumnFeeds();
       return cols;
+    }),
+  );
+  // Layouts: named snapshots of the column terminal. Saving under an existing name overwrites it.
+  r.post(
+    '/layouts',
+    wrap((req) => {
+      const name = String(req.body?.name ?? '').trim().slice(0, LAYOUT_NAME_MAX);
+      if (!name) throw new Error('name required');
+      const columns = sanitizeColumns(cfg.get().columns);
+      let saved: Layout | undefined;
+      cfg.update((c) => {
+        const existing = c.layouts.find((l) => l.name.toLowerCase() === name.toLowerCase());
+        if (existing) {
+          existing.name = name;
+          existing.columns = columns;
+          saved = existing;
+        } else {
+          if (c.layouts.length >= MAX_LAYOUTS) throw new Error(`up to ${MAX_LAYOUTS} layouts; delete one first`);
+          saved = { id: `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name, columns };
+          c.layouts.push(saved);
+        }
+      });
+      return { layout: saved, layouts: cfg.get().layouts };
+    }),
+  );
+  r.post(
+    '/layouts/:id/load',
+    wrap((req) => {
+      const l = cfg.get().layouts.find((x) => x.id === String(req.params.id));
+      if (!l) throw new Error('no such layout');
+      const cols = sanitizeColumns(l.columns).map((c) => ({ ...c }));
+      cfg.update((c) => {
+        c.columns = cols;
+      });
+      svc.syncColumnFeeds();
+      return { columns: cols };
+    }),
+  );
+  r.delete(
+    '/layouts/:id',
+    wrap((req) => {
+      const id = String(req.params.id);
+      cfg.update((c) => {
+        c.layouts = c.layouts.filter((l) => l.id !== id);
+      });
+      return { layouts: cfg.get().layouts };
     }),
   );
   r.put(

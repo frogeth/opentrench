@@ -105,6 +105,12 @@ export interface ColumnDef {
   alert?: { on: boolean; sound: string };
   filters?: ColumnFilters;
 }
+/** A saved arrangement of the column terminal (header → Layouts). */
+export interface Layout {
+  id: string;
+  name: string;
+  columns: ColumnDef[];
+}
 export interface MaskedConfig {
   discord: { hasToken: boolean; watch: string[]; canSend: boolean };
   telegram: { apiId: number | null; hasApiHash: boolean; hasSession: boolean; watch: string[]; canSend: boolean };
@@ -118,6 +124,7 @@ export interface MaskedConfig {
   j7: { hasToken: boolean; favorites: string[] };
   railOrder: string[];
   columns: ColumnDef[];
+  layouts: Layout[];
   seenTokens: string[];
   opensea: { hasWallet: boolean; walletAddress?: string; rpc: Record<string, string>; chains?: { id: string; name: string; defaultRpc: string; symbol: string }[] };
 }
@@ -199,6 +206,9 @@ export const api = {
     req<{ ok: true }>('POST', '/react', { source, chatId, msgId, key, name, on }),
   markSeen: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/seen', { add, remove }),
   setColumns: (columns: ColumnDef[]) => req<ColumnDef[]>('PUT', '/columns', { columns }),
+  saveLayout: (name: string) => req<{ layout: Layout; layouts: Layout[] }>('POST', '/layouts', { name }),
+  loadLayout: (id: string) => req<{ columns: ColumnDef[] }>('POST', `/layouts/${encodeURIComponent(id)}/load`),
+  deleteLayout: (id: string) => req<{ layouts: Layout[] }>('DELETE', `/layouts/${encodeURIComponent(id)}`),
   watched: () => req<WatchedChat[]>('GET', '/watched'),
   tickers: () => req<{ sym: string; usd: number; change24h: number }[]>('GET', '/tickers'),
   ohlcv: (address: string, interval: string) =>

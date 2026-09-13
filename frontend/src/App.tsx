@@ -14,6 +14,7 @@ import { PROVIDER_LABEL, BASEDBOT_REFERRAL, BuyContext } from './components/BuyR
 import { CaMenuContext, LinkInterceptContext } from './components/RichText';
 import { J7View } from './components/J7View';
 import { MintFeed, mintPasses } from './components/MintFeed';
+import { LayoutsMenu, sameColumns } from './components/LayoutsMenu';
 import { NftRankings } from './components/NftRankings';
 import { OsMintView } from './components/OsMintView';
 import { PingsPanel } from './components/PingsPanel';
@@ -81,6 +82,7 @@ export type ChatOrder = 'bottom' | 'top';
 export default function App() {
   const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [layoutsOpen, setLayoutsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState<Source | null>(null);
   const [view, setView] = useState<View>({ rail: 'all' });
   const [query, setQuery] = useState('');
@@ -245,6 +247,9 @@ export default function App() {
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   /** every column including stacked bottoms, for anything that does not care about layout */
   const flatColumns = useMemo(() => columns.flatMap((c) => (c.split ? [c, c.split.bottom] : [c])), [columns]);
+  /** saved arrangements of the terminal, and the one matching what is on screen (if any) */
+  const layouts = cfg?.layouts ?? [];
+  const currentLayout = useMemo(() => layouts.find((l) => sameColumns(l.columns, columns)), [layouts, columns]);
   const updateColumn = (id: string, fn: (c: ColumnDef) => ColumnDef): ColumnDef[] =>
     columns.map((c) => (c.id === id ? fn(c) : c.split?.bottom.id === id ? { ...c, split: { ...c.split, bottom: fn(c.split.bottom) } } : c));
   /** drop a column; a split top hands its slot (and width) to its bottom, a dropped bottom just unsplits */
@@ -1135,10 +1140,46 @@ export default function App() {
         <button className={`gear pings-btn${pingsOpen ? ' on' : ''}`} onClick={() => openPings(!pingsOpen)} title="pings: who mentioned you">
           @{mentions.some((m) => !m.read) && <span className="pings-badge">{mentions.filter((m) => !m.read).length}</span>}
         </button>
+        <button className={`gear layouts-btn${layoutsOpen ? ' on' : ''}`} onClick={() => setLayoutsOpen((o) => !o)} title={`layouts: save this arrangement of columns, or switch to a saved one${currentLayout ? ` · on ${currentLayout.name}` : ''}`}>
+          ▦{currentLayout && <span className="layouts-current">{currentLayout.name}</span>}
+        </button>
         <button className="gear" onClick={() => setSettingsOpen(true)} title="settings">
           ⚙
         </button>
       </header>
+      {layoutsOpen && (
+        <LayoutsMenu
+          layouts={layouts}
+          columns={columns}
+          onClose={() => setLayoutsOpen(false)}
+          onLoad={(l) => {
+            if (sameColumns(l.columns, columns)) return setLayoutsOpen(false);
+            if (!currentLayout && !window.confirm(`Switch to "${l.name}"? The current arrangement isn't saved as a layout and will be replaced.`)) return;
+            api
+              .loadLayout(l.id)
+              .then((r) => {
+                setCfg((c) => (c ? { ...c, columns: r.columns } : c));
+                setLayoutsOpen(false);
+              })
+              .catch((e) => alert(`Layout: ${e?.message ?? e}`));
+          }}
+          onSave={async (name) => {
+            try {
+              const r = await api.saveLayout(name);
+              setCfg((c) => (c ? { ...c, layouts: r.layouts } : c));
+            } catch (e: any) {
+              alert(`Layout: ${e?.message ?? e}`);
+            }
+          }}
+          onDelete={(l) => {
+            if (!window.confirm(`Delete the layout "${l.name}"? Your columns stay as they are.`)) return;
+            api
+              .deleteLayout(l.id)
+              .then((r) => setCfg((c) => (c ? { ...c, layouts: r.layouts } : c)))
+              .catch((e) => alert(`Layout: ${e?.message ?? e}`));
+          }}
+        />
+      )}
       <PingsPanel mentions={mentions} now={now} open={pingsOpen} canSend={canSend} onOpen={openPings} onRead={readMentions} onJump={jumpToMessage} />
       <div
         className="tabs"

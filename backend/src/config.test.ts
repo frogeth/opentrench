@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ConfigStore, DEFAULT_COLUMNS, sanitizeColumns } from './config.js';
+import { ConfigStore, DEFAULT_COLUMNS, sanitizeColumns, sanitizeLayouts } from './config.js';
 
 describe('columns', () => {
   it('falls back to All Calls + All Chats and drops junk', () => {
@@ -83,5 +83,20 @@ describe('ConfigStore opensea block', () => {
     fs.writeFileSync(f, JSON.stringify({ opensea: { walletKey: '0Xdeadbeef', rpc: {} } }));
     expect(new ConfigStore(f).get().opensea.walletKey).toBeUndefined();
     fs.unlinkSync(f);
+  });
+});
+
+describe('sanitizeLayouts', () => {
+  it('keeps named layouts with sanitized columns and drops the rest', () => {
+    const out = sanitizeLayouts([
+      { id: 'a', name: ' Trading ', columns: [{ id: 'x', type: 'mints', title: '', chats: [] }] },
+      { id: 'a', name: 'dup id', columns: [] },
+      { id: '', name: 'no id', columns: [] },
+      { id: 'b', name: '', columns: [] },
+      'junk',
+    ]);
+    expect(out.map((l) => [l.id, l.name])).toEqual([['a', 'Trading']]);
+    expect(out[0].columns.map((c) => c.type)).toEqual(['mints']);
+    expect(sanitizeLayouts(undefined)).toEqual([]);
   });
 });

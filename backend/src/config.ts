@@ -106,6 +106,30 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
   return col;
 }
 
+/** A saved arrangement of the column terminal. Columns carry their own channel scope, splits, widths and filters. */
+export interface Layout {
+  id: string;
+  name: string;
+  columns: ColumnDef[];
+}
+export const MAX_LAYOUTS = 12;
+export const LAYOUT_NAME_MAX = 30;
+
+export function sanitizeLayouts(raw: unknown): Layout[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Layout[] = [];
+  const ids = new Set<string>();
+  for (const r of raw.slice(0, MAX_LAYOUTS)) {
+    if (!r || typeof r !== 'object') continue;
+    const id = String((r as any).id ?? '').trim().slice(0, 40);
+    const name = String((r as any).name ?? '').trim().slice(0, LAYOUT_NAME_MAX);
+    if (!id || !name || ids.has(id)) continue;
+    ids.add(id);
+    out.push({ id, name, columns: sanitizeColumns((r as any).columns) });
+  }
+  return out;
+}
+
 export function sanitizeColumns(raw: unknown): ColumnDef[] {
   if (!Array.isArray(raw)) return DEFAULT_COLUMNS.map((c) => ({ ...c }));
   const out: ColumnDef[] = [];
@@ -140,6 +164,8 @@ export interface Config {
   railOrder: string[];
   /** the column terminal: what each column shows, in order */
   columns: ColumnDef[];
+  /** named snapshots of the column terminal, switched from the header's Layouts menu */
+  layouts: Layout[];
   /** call cards the user has marked as seen (inbox style); newest last, capped */
   seenTokens: string[];
   /** J7Tracker: the account's session id (from its web app), read-only tweet stream */
@@ -162,6 +188,7 @@ const DEFAULT: Config = {
   pingTelegram: true,
   railOrder: [],
   columns: DEFAULT_COLUMNS.map((c) => ({ ...c })),
+  layouts: [],
   seenTokens: [],
   j7: { favorites: [] },
   opensea: { rpc: {} },
@@ -203,6 +230,7 @@ export class ConfigStore {
       hasO1Key: !!this.cfg.o1ApiKey,
       railOrder: this.cfg.railOrder,
       columns: this.cfg.columns,
+      layouts: this.cfg.layouts,
       j7: { hasToken: !!this.cfg.j7.token, favorites: this.cfg.j7.favorites },
       seenTokens: this.cfg.seenTokens,
       opensea: { hasWallet: !!this.cfg.opensea.walletKey, rpc: this.cfg.opensea.rpc },
@@ -234,6 +262,7 @@ export class ConfigStore {
         o1ApiKey: typeof raw.o1ApiKey === 'string' && raw.o1ApiKey.trim() ? raw.o1ApiKey.trim() : undefined,
         railOrder: Array.isArray(raw.railOrder) ? raw.railOrder.map(String) : [],
         columns: sanitizeColumns(raw.columns),
+        layouts: sanitizeLayouts(raw.layouts),
         j7: {
           token: typeof raw.j7?.token === 'string' && raw.j7.token.trim() ? raw.j7.token.trim() : undefined,
           favorites: Array.isArray(raw.j7?.favorites) ? [...new Set((raw.j7.favorites as unknown[]).map((h) => String(h).replace(/^@/, '').trim().toLowerCase()).filter((h) => h.length > 0))].slice(0, 500) : [],

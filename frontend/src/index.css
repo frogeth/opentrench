@@ -907,6 +907,23 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 /* ---------- contract right-click menu, compact bot editor ---------- */
 .ca-menu-backdrop { position: fixed; inset: 0; z-index: 900; }
 .ca-menu { position: fixed; z-index: 901; width: 210px; background: #232b3b; border: 1px solid #3d4a66; border-radius: 10px; padding: 4px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6); display: flex; flex-direction: column; }
+/* ---------- Layouts menu (header) ---------- */
+.layouts-menu { width: 300px; right: 12px; top: 44px; max-height: calc(100vh - 80px); overflow-y: auto; }
+.layouts-head { font-size: 12px; font-weight: 600; padding: 6px 8px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.layouts-head .muted { font-weight: 400; }
+.layouts-empty { font-size: 11px; padding: 6px 8px 8px; line-height: 1.4; }
+.layouts-row { display: flex; align-items: stretch; gap: 2px; border-radius: 6px; }
+.layouts-row.on { background: rgba(65, 200, 146, 0.12); }
+.ca-menu .layouts-load { flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; gap: 2px; }
+.layouts-name { font-weight: 600; }
+.layouts-row .muted { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ca-menu .layouts-del { flex: none; color: var(--dim); padding: 7px 8px; }
+.ca-menu .layouts-del:hover { color: var(--err); }
+.layouts-save { display: flex; gap: 6px; padding: 8px 6px 4px; border-top: 1px solid var(--line); margin-top: 4px; }
+.layouts-save input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; color: var(--text); padding: 5px 8px; font-size: 12px; }
+.ca-menu .layouts-save button { flex: none; background: var(--accent); color: #04140d; font-weight: 600; padding: 5px 10px; }
+.ca-menu .layouts-save button:disabled { opacity: 0.5; cursor: default; }
+.gear.layouts-btn.on { border-color: var(--accent); color: var(--accent); }
 .ca-menu-addr { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; color: var(--muted); padding: 4px 8px 6px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
 .ca-menu button { display: flex; align-items: center; gap: 8px; background: none; border: none; color: var(--text); text-align: left; padding: 7px 8px; border-radius: 6px; cursor: pointer; font-size: 12px; }
 .ca-menu button:hover { background: rgba(255, 255, 255, 0.08); }
@@ -1150,3 +1167,4 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .osm-composer .composer-row { align-items: center; }
 .osm-composer input { flex: 1; min-width: 0; }
 .osm-qty { flex: 0 0 56px !important; }
+.layouts-current { margin-left: 5px; font-size: 11px; color: var(--muted); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
