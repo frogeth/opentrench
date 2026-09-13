@@ -44,10 +44,11 @@ import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, tokenPasses } from './filters';
 import type { FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
 
-function Pill({ label, state }: { label: string; state: string }) {
+/** Header status: the platform's logo, coloured by its connection state; the words live in the tooltip. */
+function Pill({ label, state }: { label: Source; state: string }) {
   return (
-    <span className={`pill pill-${state}`}>
-      {label}: {state.replace('_', ' ')}
+    <span className={`pill pill-icon pill-${state}`} title={`${label}: ${state.replace('_', ' ')}`} role="status" aria-label={`${label} ${state.replace('_', ' ')}`}>
+      <Logo source={label} size={14} />
     </span>
   );
 }

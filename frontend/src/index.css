@@ -64,6 +64,10 @@ b { font-weight: 600; }
 .pill-connected { color: var(--ok); border-color: var(--ok); }
 .pill-connecting, .pill-needs_login { color: var(--warn); border-color: var(--warn); }
 .pill-auth_error, .pill-disconnected { color: var(--err); border-color: var(--err); }
+/* logo pills: the mark takes the state colour, so red/amber/green reads at a glance */
+.pill-icon { display: inline-flex; align-items: center; justify-content: center; padding: 0; width: 26px; height: 26px; }
+.pill-icon .logo { color: inherit; }
+.pill-disconnected.pill-icon, .pill-auth_error.pill-icon { opacity: 0.85; }
 .gear { background: none; border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
 .banner { background: #3a1c1c; color: #ffb3b3; padding: 6px 14px; cursor: pointer; border-bottom: 1px solid var(--err); }
 .banner-line { display: flex; align-items: center; gap: 10px; }
