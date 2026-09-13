@@ -375,6 +375,7 @@ export class Services {
       return;
     }
     const tg = new TelegramWrapper(apiId, apiHash, session);
+    tg.watchList = () => this.cfg.get().telegram.watch;
     tg.on('state', (s, err) => this.hub.setStatus('telegram', s, err));
     tg.on('step', (step) => this.hub.setLoginStep(step));
     tg.on('session', (sess?: string) =>

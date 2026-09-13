@@ -9,6 +9,7 @@ import { CustomFile } from 'telegram/client/uploads.js';
 import type { BotMessage, FeedMessage, LoginStep, TelegramState } from '../types.js';
 import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, type TelegramPlain, entitiesToMarkdown } from './normalize.js';
 import { extractLinks, type ExtractedMeta, type LinkIn } from '../links.js';
+import { canonicalChatId } from './ids.js';
 
 export interface TelegramDialog {
   id: string;
@@ -35,6 +36,18 @@ const FATAL_AUTH = [
   'USER_DEACTIVATED',
 ];
 const HEALTH_INTERVAL_MS = 30_000;
+/**
+ * Telegram does not push a big supergroup's messages to a session (thousands of members: only
+ * mentions, replies to you and your own messages arrive); its own apps poll such a chat's
+ * difference while it is open, and the server's answer even says how often (30s). So watched
+ * supergroups are polled with updates.getChannelDifference: every POLL_FAST_MS once a poll has
+ * found a message the live stream never delivered, every POLL_SLOW_MS otherwise (a safety net
+ * for chats that do push). A live message within PUSH_MEMORY_MS marks a chat as pushed.
+ */
+const POLL_TICK_MS = 1_000;
+const POLL_FAST_MS = 3_000;
+const POLL_SLOW_MS = 30_000;
+const PUSH_MEMORY_MS = 30 * 60 * 1000;
 const STEP_WAIT_MS = 20_000;
 const AVATAR_CACHE_MAX = 500;
 const MEDIA_MSG_MAX = 300;
@@ -423,8 +436,127 @@ export class TelegramWrapper extends EventEmitter {
         console.warn('[telegram] reaction update dropped', e);
       }
     }, new Raw({ types: [Api.UpdateMessageReactions] }));
+    // Telegram's nudge that a channel moved on without its messages being pushed: sync it now.
+    client.addEventHandler((u: any) => {
+      const raw = `-100${String(u?.channelId ?? '')}`;
+      if (this.watchList().some((w) => canonicalChatId(w) === canonicalChatId(raw))) void this.syncChannel(raw);
+    }, new Raw({ types: [Api.UpdateChannelTooLong] }));
     this.healthTimer = setInterval(() => void this.healthCheck(), HEALTH_INTERVAL_MS);
+    this.pollTimer = setInterval(() => void this.pollTick(), POLL_TICK_MS);
+    this.pollTimer.unref();
     this.setState('connected');
+  }
+
+  private pollTimer?: ReturnType<typeof setInterval>;
+  private polling = false;
+  /** per watched chat (canonical id): the channel to ask, the pts synced to, when to ask again; no input = not a channel */
+  private channels = new Map<string, { input?: Api.InputChannel; pts: number; nextAt: number; syncing?: Promise<void> }>();
+  private syncWarned = new Set<string>();
+  /** Telegram asked for a pause (FLOOD_WAIT): no difference requests until then */
+  private floodUntil = 0;
+  /** the chats to keep in sync (set by Services from the config's watch list) */
+  watchList: () => string[] = () => [];
+  /** per chat (canonical id): highest message id seen, when the live stream last pushed one, when a poll last found one it had not */
+  private seen = new Map<string, { id: number; liveAt: number; polledAt: number }>();
+
+  private noteSeen(chatId: string, id: number, via: 'push' | 'poll'): void {
+    const k = canonicalChatId(chatId);
+    const cur = this.seen.get(k) ?? { id: 0, liveAt: 0, polledAt: 0 };
+    this.seen.set(k, { id: Math.max(cur.id, id), liveAt: via === 'push' ? Date.now() : cur.liveAt, polledAt: via === 'poll' ? Date.now() : cur.polledAt });
+  }
+
+  /** how soon a chat is asked again: tight once Telegram has shown it does not push this chat, else the server's own 30s */
+  pollInterval(chatId: string, now = Date.now()): number {
+    const s = this.seen.get(canonicalChatId(chatId));
+    if (!s?.polledAt) return POLL_SLOW_MS;
+    return s.liveAt && now - s.liveAt < PUSH_MEMORY_MS ? POLL_SLOW_MS : POLL_FAST_MS;
+  }
+
+  /** the poll tick: every watched chat whose turn has come is synced, one after the other. Exposed for tests. */
+  async pollTick(now = Date.now()): Promise<void> {
+    if (!this.client || this.state !== 'connected' || this.polling || now < this.floodUntil) return;
+    this.polling = true;
+    try {
+      for (const raw of this.watchList()) {
+        const ch = this.channels.get(canonicalChatId(raw));
+        if (ch && now < ch.nextAt) continue;
+        await this.syncChannel(raw);
+        if (Date.now() < this.floodUntil) return;
+      }
+    } finally {
+      this.polling = false;
+    }
+  }
+
+  /** one getChannelDifference round for a watched chat; a no-op for chats that are not channels */
+  syncChannel(raw: string): Promise<void> {
+    const k = canonicalChatId(raw);
+    const client = this.client;
+    if (!k || !client || this.state !== 'connected') return Promise.resolve();
+    const inFlight = this.channels.get(k)?.syncing;
+    if (inFlight) return inFlight;
+    const run = (async () => {
+      let ch = this.channels.get(k);
+      try {
+        if (!ch?.input) {
+          const peer: any = await client.getInputEntity(bigInt(raw));
+          if (peer?.className !== 'InputPeerChannel') {
+            // a basic group or DM: delivered normally, never polled
+            this.channels.set(k, { pts: 0, nextAt: Number.POSITIVE_INFINITY });
+            return;
+          }
+          const input = new Api.InputChannel({ channelId: peer.channelId, accessHash: peer.accessHash });
+          const full: any = await client.invoke(new Api.channels.GetFullChannel({ channel: input }));
+          const pts = Number(full?.fullChat?.pts ?? 0);
+          if (!pts) throw new Error('no pts for channel');
+          ch = { input, pts, nextAt: 0 };
+          this.channels.set(k, ch);
+        }
+        const diff: any = await client.invoke(
+          new Api.updates.GetChannelDifference({ channel: ch.input, filter: new Api.ChannelMessagesFilterEmpty(), pts: ch.pts, limit: 100 }),
+        );
+        if (diff?.className === 'updates.ChannelDifferenceTooLong') {
+          ch.pts = Number(diff.dialog?.pts ?? ch.pts);
+        } else if (diff?.className === 'updates.ChannelDifference' || diff?.className === 'updates.ChannelDifferenceEmpty') {
+          ch.pts = Number(diff.pts ?? ch.pts);
+          const last = this.seen.get(k)?.id ?? 0;
+          const ids: number[] = (diff.newMessages ?? [])
+            .filter((m: any) => m?.className === 'Message' && Number(m.id) > last)
+            .map((m: any) => Number(m.id))
+            .sort((a: number, b: number) => a - b);
+          if (ids.length) {
+            // the difference carries bare messages; the full objects know their chat and sender
+            const full: any[] = await client.getMessages(bigInt(raw), { ids });
+            for (const m of full) {
+              if (!m || m.className !== 'Message' || this.botFor(m)) continue;
+              this.noteSeen(raw, Number(m.id), 'poll');
+              const { msg, meta } = await this.toFeed(m, raw);
+              this.emit('message', msg, meta);
+            }
+          }
+        }
+        this.syncWarned.delete(k);
+      } catch (e: any) {
+        const wait = Number(e?.seconds ?? /FLOOD_WAIT_(\d+)/.exec(String(e?.message ?? e))?.[1] ?? 0);
+        if (wait > 0) {
+          this.floodUntil = Date.now() + wait * 1000;
+          console.warn(`[telegram] channel sync: Telegram asks for a ${wait}s pause`);
+        } else if (!this.syncWarned.has(k)) {
+          console.warn('[telegram] channel sync failed for', raw, e?.message ?? e);
+        }
+        this.syncWarned.add(k);
+        ch = { pts: 0, nextAt: 0 }; // re-resolve next time
+        this.channels.set(k, ch);
+      } finally {
+        if (ch) {
+          ch.syncing = undefined;
+          if (ch.nextAt !== Number.POSITIVE_INFINITY) ch.nextAt = Date.now() + this.pollInterval(k);
+        }
+      }
+    })();
+    const ch = this.channels.get(k);
+    if (ch) ch.syncing = run;
+    return run;
   }
 
   private async onNewMessage(ev: NewMessageEvent): Promise<void> {
@@ -432,6 +564,7 @@ export class TelegramWrapper extends EventEmitter {
       const m = ev.message;
       const chatId = String(m.chatId ?? ev.chatId ?? '');
       if (!chatId) return;
+      this.noteSeen(chatId, Number(m.id), 'push');
       const { msg, meta } = await this.toFeed(m, chatId);
       this.emit('message', msg, meta);
     } catch (e) {
@@ -607,6 +740,8 @@ export class TelegramWrapper extends EventEmitter {
   private async teardown(): Promise<void> {
     if (this.healthTimer) clearInterval(this.healthTimer);
     this.healthTimer = undefined;
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    this.pollTimer = undefined;
     for (const d of Object.values(this.pending)) d?.reject(new Error('AUTH_USER_CANCEL'));
     this.pending = {};
     const c = this.client;
