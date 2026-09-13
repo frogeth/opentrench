@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.8.1 — 2026-09-13
+
 - Charts in chat can stay collapsed: with ⚙ → Feed → "Live charts in chat" off, every contract under a message keeps its one-line stats and gets a ▾ chart bar that opens the live chart in place; ▴ folds it back. With the setting on, the same bar collapses a chart you don't need right now.
 
 ## v0.8.0 — 2026-09-12
