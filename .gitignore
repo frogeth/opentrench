@@ -5,3 +5,4 @@ backend/config.json
 .DS_Store
 backend/state.json
 backend/state.json.tmp
+backend/backend.log
