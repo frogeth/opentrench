@@ -75,7 +75,7 @@ describe('TelegramWrapper.syncChannel', () => {
 });
 
 describe('TelegramWrapper.pollTick', () => {
-  it('polls a chat every 30s until a poll finds a message the live stream never pushed, then every 2s', async () => {
+  it('polls a chat every 10s until a poll finds a message the live stream never pushed, then every 2s', async () => {
     const { w, invoked } = wrapper({ pts: 10, diffs: [] });
     w.watchList = () => [TNC];
     const t0 = 1_000_000;
@@ -85,6 +85,7 @@ describe('TelegramWrapper.pollTick', () => {
     expect(diffs()).toBe(1);
     await w.pollTick(t0 + 5_000);
     expect(diffs()).toBe(1); // not due yet: nothing has shown this chat needs a tight poll
+    expect(w.pollInterval(TNC, t0)).toBe(10_000);
     vi.spyOn(Date, 'now').mockReturnValue(t0 + 31_000);
     (w as any).client.invoke = async (req: any) => {
       invoked.push(req);

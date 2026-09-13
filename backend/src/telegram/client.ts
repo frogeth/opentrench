@@ -47,6 +47,8 @@ const HEALTH_INTERVAL_MS = 30_000;
 const POLL_TICK_MS = 1_000;
 const POLL_FAST_MS = 2_000;
 const POLL_SLOW_MS = 30_000;
+/** a chat nothing is known about yet (fresh process): between the two, so a restart costs at most this */
+const POLL_UNKNOWN_MS = 10_000;
 const PUSH_MEMORY_MS = 30 * 60 * 1000;
 const STEP_WAIT_MS = 20_000;
 const AVATAR_CACHE_MAX = 500;
@@ -465,11 +467,11 @@ export class TelegramWrapper extends EventEmitter {
     this.seen.set(k, { id: Math.max(cur.id, id), liveAt: via === 'push' ? Date.now() : cur.liveAt, polledAt: via === 'poll' ? Date.now() : cur.polledAt });
   }
 
-  /** how soon a chat is asked again: tight once Telegram has shown it does not push this chat, else the server's own 30s */
+  /** how soon a chat is asked again: tight once Telegram has shown it does not push this chat, the server's own 30s once it has pushed, 10s while nothing is known */
   pollInterval(chatId: string, now = Date.now()): number {
     const s = this.seen.get(canonicalChatId(chatId));
-    if (!s?.polledAt) return POLL_SLOW_MS;
-    return s.liveAt && now - s.liveAt < PUSH_MEMORY_MS ? POLL_SLOW_MS : POLL_FAST_MS;
+    if (s?.liveAt && now - s.liveAt < PUSH_MEMORY_MS) return POLL_SLOW_MS;
+    return s?.polledAt ? POLL_FAST_MS : POLL_UNKNOWN_MS;
   }
 
   /** the poll tick: every watched chat whose turn has come is synced, one after the other. Exposed for tests. */
