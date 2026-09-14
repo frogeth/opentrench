@@ -1,6 +1,7 @@
 // opentrench desktop: runs the backend with Electron's bundled Node and opens a window on it.
-const { app, BrowserWindow, shell, nativeTheme, dialog, Menu } = require('electron');
+const { app, BrowserWindow, shell, nativeTheme, dialog, Menu, safeStorage } = require('electron');
 const { spawn } = require('node:child_process');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
@@ -141,6 +142,7 @@ async function startBackend() {
   }
   adoptDevFiles(p);
   if (!fs.existsSync(p.entry)) throw new Error(`backend not built: ${p.entry}`);
+  const secretKey = loadSecretKey(p.data);
   child = spawn(process.execPath, [p.entry], {
     cwd: p.backendDir,
     env: {
@@ -151,9 +153,13 @@ async function startBackend() {
       TRENCHFEED_STATE: p.state,
       TRENCHFEED_PARENT_PID: String(process.pid),
       TRENCHFEED_APP_VERSION: app.getVersion(),
+      ...(secretKey ? { TRENCHFEED_SECRET_KEY_STDIN: '1' } : {}),
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    // the key goes over stdin, not the environment: another process of the same user can list
+    // a process's environment but not read its pipes
+    stdio: [secretKey ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   });
+  if (secretKey) child.stdin.end(secretKey + '\n');
   child.stdout.on('data', (d) => process.stdout.write(`[backend] ${d}`));
   child.stderr.on('data', (d) => process.stderr.write(`[backend] ${d}`));
   child.on('exit', (code) => {
@@ -162,6 +168,41 @@ async function startBackend() {
   });
   if (!(await waitFor(20_000))) throw new Error('backend did not come up');
   return true;
+}
+
+/**
+ * The key the backend seals tokens and wallet keys with. A random 32 bytes, generated once and
+ * kept in `secret.key` encrypted by the OS keychain (safeStorage: Keychain on macOS, DPAPI on
+ * Windows, the desktop's keyring on Linux). No keychain → no key, and the backend keeps plain
+ * text as before. An unreadable existing file is never replaced: the backend leaves values sealed
+ * with the old key on disk, and a fresh key would orphan them for good.
+ */
+function loadSecretKey(dataDir) {
+  const file = path.join(dataDir, 'secret.key');
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.warn('[desktop] OS keychain unavailable: config secrets stay in plain text');
+    return null;
+  }
+  if (fs.existsSync(file)) {
+    try {
+      const key = safeStorage.decryptString(fs.readFileSync(file)).trim();
+      if (/^[0-9a-f]{64}$/i.test(key)) return key;
+      console.warn('[desktop] secret.key is not a key; leaving it alone, secrets stay sealed');
+    } catch (e) {
+      console.warn('[desktop] cannot open secret.key with this keychain; leaving it alone, secrets stay sealed:', e.message);
+    }
+    return null;
+  }
+  const key = crypto.randomBytes(32).toString('hex');
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(file, safeStorage.encryptString(key), { mode: 0o600 });
+    console.log('[desktop] created secret.key in the keychain');
+    return key;
+  } catch (e) {
+    console.warn('[desktop] cannot store secret.key; config secrets stay in plain text:', e.message);
+    return null;
+  }
 }
 
 function createWindow() {

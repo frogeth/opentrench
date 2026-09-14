@@ -95,9 +95,12 @@ the sidebar, not in settings.
   image and socials fill in when no chart site has them yet. IPFS images go
   through a local gateway-hopping proxy.
 - **Buy buttons** open Cove (t.me/cove_trading_bot) with the token and a USD
-  amount prefilled, same deep-link format frogr uses. Amounts and an optional
-  affiliate Telegram ID live in Settings → Buy buttons. Supported chains:
-  Ethereum, Base, BNB, Robinhood Chain, MegaETH, Solana.
+  amount prefilled, same deep-link format frogr uses. Amounts live in
+  Settings → Buy buttons. Every Cove and BasedBot link carries opentrench's own
+  referral code, fixed in the code and not a setting: the bots' referral
+  payouts help cover development costs, and they change nothing about your
+  price or fees. Supported chains: Ethereum, Base, BNB, Robinhood Chain,
+  MegaETH, Solana.
 - Charts come from **BasedBot** (token-address embeds on Robinhood, Base,
   Ethereum, Solana, BNB, Arbitrum); Dexscreener / GeckoTerminal is the
   fallback and can be made the default in Settings → Feed.
@@ -161,6 +164,12 @@ Discord and Telegram accounts on first launch.
 
 The desktop app runs the same backend with Electron's bundled Node and keeps
 `config.json` / `state.json` in `~/Library/Application Support/opentrench` (an existing trenchfeed folder is adopted once).
+Tokens, sessions and the mint wallet key inside `config.json` are encrypted
+with a random key the app keeps in the OS keychain (`secret.key`, sealed by
+Electron's safeStorage: Keychain on macOS, DPAPI on Windows). A plain-text
+file from an older version is sealed on first launch. Only a backend the app
+started can read them; a backend started from the repo sees them as unset and
+leaves them untouched.
 First run from the repo copies the dev checkout's files there. If a server is
 already listening on 3210 the app attaches to it instead of starting another.
 External links open in your default browser. The build is unsigned: on first
@@ -172,7 +181,9 @@ launch right-click the app → Open.
 2. **Telegram** — enter API ID + hash from https://my.telegram.org, save.
    Enter phone → code → 2FA password if prompted. Then tick chats to watch.
 
-Everything is stored in `backend/config.json` (git-ignored, mode 600).
+Everything is stored in `backend/config.json` (git-ignored, mode 600). A
+backend started this way has no keychain key, so it keeps tokens in plain text;
+the desktop app seals them (see Desktop app above).
 Nothing is sent anywhere except to Discord and Telegram.
 
 ## Tests

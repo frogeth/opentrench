@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { ConfigStore } from './config.js';
+import { SecretBox, readSecretKey } from './secrets.js';
 import { MessageHub } from './hub.js';
 import { createSecurityBatchFetcher, createSecurityFetcher } from './security.js';
 import { createHoverFetchers } from './hover.js';
@@ -21,7 +22,11 @@ const root = path.resolve(here, '..'); // backend/ (parent of src/ or dist/)
 const PORT = Number(process.env.PORT ?? 3210);
 const HOST = '127.0.0.1';
 
-const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'config.json'));
+// The desktop app hands over the key it keeps in the OS keychain; tokens and wallet keys in
+// config.json are sealed with it. Started bare (`npm start`), the file stays plain text as before.
+const secretKey = readSecretKey();
+if (!secretKey) console.warn('[backend] no secret key: tokens in config.json are stored in plain text (the desktop app supplies one)');
+const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'config.json'), new SecretBox(secretKey));
 const hub: MessageHub = new MessageHub(500, createDefaultEnricher({ o1ApiKey: () => cfg.get().o1ApiKey }), {
   security: createSecurityFetcher(),
   securityBatch: createSecurityBatchFetcher(),

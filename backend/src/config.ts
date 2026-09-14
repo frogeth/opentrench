@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { SecretBox, isSealed } from './secrets.js';
 import path from 'node:path';
 import type { BotPolicy } from './types.js';
 
@@ -207,11 +208,42 @@ const DEFAULT: Config = {
   opensea: { rpc: {} },
 };
 
+/** The fields that are sealed on disk when a key is available (see secrets.ts). */
+type SecretPath = 'discord.token' | 'telegram.apiHash' | 'telegram.session' | 'o1ApiKey' | 'j7.token' | 'opensea.walletKey';
+
 export class ConfigStore {
   private cfg: Config;
+  /** Sealed values this backend has no key for: kept verbatim on disk so the desktop app still finds them. */
+  private locked: Partial<Record<SecretPath, string>> = {};
 
-  constructor(private file: string) {
+  constructor(
+    private file: string,
+    private box: SecretBox = new SecretBox(),
+  ) {
     this.cfg = this.load();
+    if (this.plainOnDisk) {
+      // a file from before sealing (or written by a keyless dev backend): seal it now, not on the next edit
+      this.save();
+      this.plainOnDisk = false;
+    }
+    const n = Object.keys(this.locked).length;
+    if (n) console.warn(`[config] ${n} secret(s) in ${this.file} are sealed with a key this backend was not given; they stay on disk but are unavailable`);
+  }
+  private plainOnDisk = false;
+
+  /**
+   * A secret as read from disk: plain text (legacy, migrated on the next save), sealed and opened,
+   * or sealed by a key this backend lacks (kept aside in `locked`, absent from the config).
+   */
+  private secret(v: unknown, at: SecretPath): string | undefined {
+    if (isSealed(v)) {
+      const open = this.box.open(v);
+      if (open === undefined) this.locked[at] = v;
+      return open;
+    }
+    if (typeof v !== 'string' || !v.trim()) return undefined;
+    if (this.box.hasKey) this.plainOnDisk = true;
+    return v.trim();
   }
 
   get(): Config {
@@ -255,11 +287,11 @@ export class ConfigStore {
       const raw = JSON.parse(fs.readFileSync(this.file, 'utf8'));
       return {
         discord: {
-          token: typeof raw.discord?.token === 'string' && raw.discord.token.trim() ? raw.discord.token.trim() : undefined,
+          token: this.secret(raw.discord?.token, 'discord.token'),
           watch: Array.isArray(raw.discord?.watch) ? raw.discord.watch.map(String) : [],
           send: raw.discord?.send === true,
         },
-        telegram: { ...DEFAULT.telegram, ...raw.telegram },
+        telegram: { ...DEFAULT.telegram, ...raw.telegram, apiHash: this.secret(raw.telegram?.apiHash, 'telegram.apiHash'), session: this.secret(raw.telegram?.session, 'telegram.session') },
         cove: { amounts: Array.isArray(raw.cove?.amounts) ? raw.cove.amounts.map(Number) : DEFAULT.cove.amounts }, // any old affiliateId in the file is ignored
         buy: { provider: raw.buy?.provider === 'basedbot' ? 'basedbot' : 'cove' }, // any old basedbotReferral is ignored
         blacklist: Array.isArray(raw.blacklist) ? raw.blacklist.map(String) : [],
@@ -272,20 +304,20 @@ export class ConfigStore {
           pingAllow: Array.isArray(raw.bots?.pingAllow) ? raw.bots.pingAllow.map(String) : [],
         },
         pingTelegram: raw.pingTelegram !== false,
-        o1ApiKey: typeof raw.o1ApiKey === 'string' && raw.o1ApiKey.trim() ? raw.o1ApiKey.trim() : undefined,
+        o1ApiKey: this.secret(raw.o1ApiKey, 'o1ApiKey'),
         railOrder: Array.isArray(raw.railOrder) ? raw.railOrder.map(String) : [],
         // a config that never had columns gets the two defaults; a saved empty list stays empty
         columns: raw.columns === undefined ? DEFAULT_COLUMNS.map((c) => ({ ...c })) : sanitizeColumns(raw.columns),
         layouts: sanitizeLayouts(raw.layouts),
         j7: {
-          token: typeof raw.j7?.token === 'string' && raw.j7.token.trim() ? raw.j7.token.trim() : undefined,
+          token: this.secret(raw.j7?.token, 'j7.token'),
           favorites: Array.isArray(raw.j7?.favorites) ? [...new Set((raw.j7.favorites as unknown[]).map((h) => String(h).replace(/^@/, '').trim().toLowerCase()).filter((h) => h.length > 0))].slice(0, 500) : [],
         },
         seenTokens: Array.isArray(raw.seenTokens) ? raw.seenTokens.map(String).slice(-3000) : [],
         opensea: {
           walletKey: (() => {
-            const wk = raw.opensea?.walletKey;
-            if (wk === undefined || wk === null) return undefined;
+            const wk = this.secret(raw.opensea?.walletKey, 'opensea.walletKey');
+            if (wk === undefined) return undefined;
             if (/^0x[0-9a-fA-F]{64}$/.test(String(wk))) return String(wk);
             console.warn('[config] ignoring invalid opensea.walletKey');
             return undefined;
@@ -305,9 +337,23 @@ export class ConfigStore {
     }
   }
 
+  /** What goes on disk: the config with each secret sealed (when there is a key), or the locked ciphertext when this backend holds no value for it. */
+  private toDisk(): Record<string, unknown> {
+    const c = this.cfg;
+    const put = (v: string | undefined, at: SecretPath) => (v !== undefined ? this.box.seal(v) : this.locked[at]);
+    return {
+      ...c,
+      discord: { ...c.discord, token: put(c.discord.token, 'discord.token') },
+      telegram: { ...c.telegram, apiHash: put(c.telegram.apiHash, 'telegram.apiHash'), session: put(c.telegram.session, 'telegram.session') },
+      o1ApiKey: put(c.o1ApiKey, 'o1ApiKey'),
+      j7: { ...c.j7, token: put(c.j7.token, 'j7.token') },
+      opensea: { ...c.opensea, walletKey: put(c.opensea.walletKey, 'opensea.walletKey') },
+    };
+  }
+
   private save(): void {
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
-    fs.writeFileSync(this.file, JSON.stringify(this.cfg, null, 2), { mode: 0o600 });
+    fs.writeFileSync(this.file, JSON.stringify(this.toDisk(), null, 2), { mode: 0o600 });
     try {
       // writeFileSync's mode only applies when the file is created; an existing file (e.g. one left
       // world-readable by an older version) keeps its old permissions unless we chmod it explicitly.

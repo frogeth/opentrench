@@ -7,6 +7,11 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Desktop: tokens, sessions and the mint wallet key in config.json are now encrypted with a random key the app keeps in the OS keychain (Keychain on macOS, DPAPI on Windows). An existing plain-text config is sealed on first launch. A backend started from the repo has no key: it treats sealed values as unset and leaves them on disk.
+- Robinhood Chain explorer links open on robin.etherscan.io instead of Blockscout.
+- The buy links' referral code is opentrench's own and fixed in the code; the README now says so and why (referral payouts help cover development costs; they change nothing about your price or fees).
+- Dependencies: qs (under express) bumped past two moderate advisories.
+
 ## v0.8.5 — 2026-09-13
 
 - Website columns have a ⟳ in the header that reloads the page, for a page that went blank or turned into Chromium's sad face.

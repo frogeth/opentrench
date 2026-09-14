@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ConfigStore, DEFAULT_COLUMNS, sanitizeColumns, sanitizeLayouts } from './config.js';
+import { SecretBox, isSealed } from './secrets.js';
 
 describe('columns', () => {
   it('falls back to All Calls + All Chats and drops junk', () => {
@@ -125,5 +126,84 @@ describe('tgbot columns', () => {
     expect(b).toMatchObject({ type: 'tgbot', title: 'Telegram bot' });
     expect(b.bot).toBeUndefined();
     expect(c.bot).toBeUndefined();
+  });
+});
+
+describe('secrets at rest', () => {
+  const KEY = Buffer.alloc(32, 7);
+  const SECRETS = { discord: { token: 'dtok' }, telegram: { apiId: 1, apiHash: 'hash', session: 'sess' }, o1ApiKey: 'o1_launch_x', j7: { token: 'j7' }, opensea: { walletKey: '0x' + 'ab'.repeat(32) } };
+  const tmpFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tf-cfg-')), 'config.json');
+
+  it('seals every token on save and opens them on load', () => {
+    const file = tmpFile();
+    const a = new ConfigStore(file, new SecretBox(KEY));
+    a.update((c) => {
+      c.discord.token = 'dtok';
+      c.telegram.apiHash = 'hash';
+      c.telegram.session = 'sess';
+      c.o1ApiKey = 'o1_launch_x';
+      c.j7.token = 'j7';
+      c.opensea.walletKey = SECRETS.opensea.walletKey;
+    });
+    const disk = JSON.parse(fs.readFileSync(file, 'utf8'));
+    for (const v of [disk.discord.token, disk.telegram.apiHash, disk.telegram.session, disk.o1ApiKey, disk.j7.token, disk.opensea.walletKey]) {
+      expect(isSealed(v)).toBe(true);
+    }
+    expect(fs.readFileSync(file, 'utf8')).not.toContain('dtok');
+    const b = new ConfigStore(file, new SecretBox(KEY)).get();
+    expect(b.discord.token).toBe('dtok');
+    expect(b.telegram).toMatchObject({ apiHash: 'hash', session: 'sess' });
+    expect(b.o1ApiKey).toBe('o1_launch_x');
+    expect(b.j7.token).toBe('j7');
+    expect(b.opensea.walletKey).toBe(SECRETS.opensea.walletKey);
+  });
+
+  it('migrates a plain-text file the moment a key is available', () => {
+    const file = tmpFile();
+    fs.writeFileSync(file, JSON.stringify(SECRETS));
+    const store = new ConfigStore(file, new SecretBox(KEY));
+    expect(store.get().discord.token).toBe('dtok');
+    const disk = fs.readFileSync(file, 'utf8');
+    expect(disk).not.toContain('dtok');
+    expect(disk).not.toContain('"sess"');
+    expect(disk).toContain('enc:v1:');
+  });
+
+  it('without a key keeps sealed values it cannot open, and other edits do not lose them', () => {
+    const file = tmpFile();
+    new ConfigStore(file, new SecretBox(KEY)).update((c) => {
+      c.discord.token = 'dtok';
+      c.telegram.session = 'sess';
+    });
+    const plain = new ConfigStore(file, new SecretBox());
+    expect(plain.get().discord.token).toBeUndefined();
+    expect(plain.masked().discord.hasToken).toBe(false);
+    expect(plain.masked().telegram.hasSession).toBe(false);
+    plain.update((c) => c.favorites.push('someone'));
+    const again = new ConfigStore(file, new SecretBox(KEY)).get();
+    expect(again.discord.token).toBe('dtok');
+    expect(again.telegram.session).toBe('sess');
+    expect(again.favorites).toEqual(['someone']);
+  });
+
+  it('a new value set without a key replaces the sealed one', () => {
+    const file = tmpFile();
+    new ConfigStore(file, new SecretBox(KEY)).update((c) => {
+      c.discord.token = 'old';
+    });
+    new ConfigStore(file, new SecretBox()).update((c) => {
+      c.discord.token = 'new';
+    });
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).discord.token).toBe('new');
+    expect(new ConfigStore(file, new SecretBox(KEY)).get().discord.token).toBe('new');
+  });
+
+  it('a plain-text file without a key still works as before', () => {
+    const file = tmpFile();
+    fs.writeFileSync(file, JSON.stringify(SECRETS));
+    const store = new ConfigStore(file);
+    expect(store.get().discord.token).toBe('dtok');
+    store.update((c) => (c.o1ApiKey = 'o1_launch_y'));
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).o1ApiKey).toBe('o1_launch_y');
   });
 });
