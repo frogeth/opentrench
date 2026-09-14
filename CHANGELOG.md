@@ -7,6 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Share: an optional message goes out above the address, the same to every chat you pick. (Suggested by Brandzo.)
+- Contracts-only chat columns can keep the caller's next 1–3 messages after a call, so the thesis shows with the contract. Column editor → Message filter → Contracts only → "+ caller's next".
+
 - Calls count per caller per chat. A different person posting a contract in a chat that already called it is a new call: the 🔥 count goes up and the card moves to the top. The same person re-posting stays a repeat. (Before, a second caller in the same chat was ignored, so cards sat at 3× while people kept calling.)
 - TrenchTogether: a chat both machines watch no longer shows every call twice on the follower, and the 🔥 count is no longer doubled.
 - Fix: Send on Telegram could take minutes. Telegram flood-limits `GetDialogs` hard, the app fetched it on every page load, and gramJS also fell back to it when resolving a chat for a send. The dialog list is now cached for a minute with one shared request, and avatars never trigger that fallback.

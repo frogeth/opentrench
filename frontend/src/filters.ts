@@ -57,6 +57,29 @@ export function tokenPasses(t: TokenInfo, f: ColumnFilters | undefined, now = Da
 }
 
 /** Chat column: does this message pass? */
+/**
+ * Contracts-only columns can keep the caller's next few messages in the same chat after a call
+ * (the thesis), up to `n` per call within 15 minutes. `list` is chronological; returns the ids to keep.
+ */
+export function thesisFollowUps(list: FeedMessage[], n: number): Set<string> {
+  const keep = new Set<string>();
+  if (n <= 0) return keep;
+  for (let i = 0; i < list.length; i++) {
+    const call = list[i];
+    if (call.contracts.length === 0) continue;
+    let taken = 0;
+    for (let j = i + 1; j < list.length && taken < n; j++) {
+      const m = list[j];
+      if (m.ts - call.ts > 15 * 60_000) break;
+      if (m.chatId !== call.chatId || m.source !== call.source || m.author !== call.author) continue;
+      if (m.contracts.length > 0) break; // their next call starts its own thread
+      keep.add(m.id);
+      taken++;
+    }
+  }
+  return keep;
+}
+
 export function messagePasses(m: FeedMessage, f: ColumnFilters | undefined): boolean {
   if (!f) return true;
   if (f.excludeBots && m.isBot) return false;

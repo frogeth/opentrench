@@ -51,6 +51,8 @@ export function ShareModal({
   });
   const [status, setStatus] = useState<Record<string, 'sending' | 'sent' | string>>({});
   const [busy, setBusy] = useState(false);
+  // an optional line above the address, the same one to every chat picked ("looks like a bundle, careful")
+  const [note, setNote] = useState('');
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
   const groups = useMemo(() => {
@@ -79,7 +81,7 @@ export function ShareModal({
       const w = targets[i];
       setStatus((s) => ({ ...s, [key(w)]: 'sending' }));
       try {
-        await api.send(w.source, w.id, text);
+        await api.send(w.source, w.id, note.trim() ? `${note.trim()}\n${text}` : text);
         setStatus((s) => ({ ...s, [key(w)]: 'sent' }));
         onSent?.([shortName(w)]);
       } catch (e: any) {
@@ -106,6 +108,7 @@ export function ShareModal({
           <div className="share-ca">
             <code>{preview ?? text}</code>
             <span className="hint">{hint ?? 'Only this is sent, nothing else.'}</span>
+            <textarea className="share-note" placeholder="Add a message above it (optional)" value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={1500} disabled={busy} />
           </div>
           {((anyDiscord && !canSend.discord) || (anyTelegram && !canSend.telegram)) && (
             <div className="hint share-off">

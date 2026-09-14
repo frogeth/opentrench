@@ -61,6 +61,8 @@ export interface ColumnFilters {
   search?: string;
   excludeBots?: boolean;
   contractsOnly?: boolean;
+  /** contracts-only columns: also keep the caller's next N messages in that chat (their thesis), 0–3 */
+  thesis?: number;
   // calls columns
   chains?: string[];
   launchpads?: string[];

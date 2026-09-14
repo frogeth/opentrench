@@ -45,7 +45,7 @@ import { Avatar } from './components/Avatar';
 import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
 import { beep, type ChartProvider } from './format';
 import { playSound, setMuted } from './sounds';
-import { filtersActive, messagePasses, tokenPasses } from './filters';
+import { filtersActive, messagePasses, thesisFollowUps, tokenPasses } from './filters';
 import type { FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
 
 /** Header status: the platform's logo, coloured by its connection state; the words live in the tooltip. */
@@ -455,7 +455,7 @@ export default function App() {
     document.addEventListener('click', h, true);
     return () => document.removeEventListener('click', h, true);
   }, []);
-  const openShare = (address: string, symbol?: string) => setShare({ text: address, title: `Share ${symbol ? `$${symbol}` : 'contract'}`, hint: 'Only the address is sent, nothing else.' });
+  const openShare = (address: string, symbol?: string) => setShare({ text: address, title: `Share ${symbol ? `$${symbol}` : 'contract'}`, hint: 'The address is sent, with your message above it if you add one.' });
   // Reactions: what you added this session (the platform stream brings the counts back)
   const [myReactions, setMyReactions] = useState<Set<string>>(() => new Set());
   const react = (m: FeedMessage, key: string, name: string, on: boolean) => {
@@ -987,11 +987,14 @@ export default function App() {
     if (view.preview) return (previewMsgs ?? []).filter((m) => (showBots || !m.hidden) && matchesQuery(q, m, tokens));
     // a revealed message skips the hidden/repeat/media/filter/search gates, never the chat scope:
     // a message only ever shows in a column that carries its chat
+    // a contracts-only column may keep the caller's next messages after a call (their thesis): those pass the contracts gate by being follow-ups
+    const followUps = f?.contractsOnly && (f.thesis ?? 0) > 0 ? thesisFollowUps(messages.filter((m) => inWatch(m) && inScope(m.chatName, names) && (showBots || !m.hidden)), f.thesis ?? 0) : null;
+    const passes = (m: FeedMessage) => (followUps?.has(m.id) ? messagePasses(m, { ...f, contractsOnly: false }) : messagePasses(m, f));
     return messages.filter(
       (m) =>
         inWatch(m) &&
         inScope(m.chatName, names) &&
-        (revealed.has(m.id) || ((showBots || !m.hidden) && (showRepeats || !m.repeat) && (showMedia || !mediaOnly(m)) && messagePasses(m, f) && matchesQuery(q, m, tokens))),
+        (revealed.has(m.id) || ((showBots || !m.hidden) && (showRepeats || !m.repeat) && (showMedia || !mediaOnly(m)) && passes(m) && matchesQuery(q, m, tokens))),
     );
   };
   const callsFor = (names: Set<string> | null, f?: ColumnDef['filters']) =>
