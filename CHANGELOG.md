@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.8.9 — 2026-09-14
+
 - The + picker's Telegram list has filters: All / Groups / Channels / DMs, and "in feed" for what you already watch, each with a count. For accounts with a ton of chats.
 
 - Calls: a card you mark as seen (the ✓) folds to one line — symbol, chain, 🔥count, caller, MC, multiple, age — so more coins fit on screen and what you already looked at is obvious at a glance; the chevron peeks at the full card, the ✓ unfolds it. A new eye button hides a card from the calls columns while the token keeps being tracked (trending, callers, repeat counts); the column header shows "N hidden" to reveal or unhide them. Suggested by a user.
@@ -22,7 +24,7 @@ app shows the same text in its update prompt.
 
 - Fix: a Telegram group without a photo showed a broken image in the rail; it shows its initials now, like a Discord server without an icon.
 
-- Long (app.long.xyz): a call for a Long token shows the Long badge with what it is anchored to ("anchored to NVDA"), and a **Long launches** column lists the newest stock-anchored launches on Robinhood Chain as they appear, with anchor, market cap, 24h volume, auction progress, and Long / Cove links. Long is in the launchpad filter too. Reads Long's own indexer, unofficially.
+- Long (app.long.xyz): a call for a Long token shows the Long badge with what it is anchored to ("anchored to NVDA"), and Long is in the launchpad filter. Reads Long's own indexer, unofficially.
 
 - Desktop: **Set up Discord** in one click (⚙ → Accounts → Discord, the first-run guide, or the app menu). The app quits Discord, installs its own copy of Vencord with the opentrench plugin switched on, and reopens Discord; no git, Node or pnpm. An existing Vencord is replaced by the same Vencord plus the plugin, settings kept; "remove the plugin" puts Discord's original files back. The plugin build ships inside the app (electron/scripts/build-vencord.sh, GPL-3 notice included).
 - First-run guide: a three-step checklist (Discord, Telegram, channels) when nothing is connected yet, reachable again from ⚙ → Accounts.
