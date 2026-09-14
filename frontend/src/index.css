@@ -789,6 +789,26 @@ button.link:disabled { opacity: 0.6; cursor: default; }
 .call-check:hover { border-color: var(--accent); }
 .call-check.on { background: var(--accent); border-color: var(--accent); }
 .seen-all { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 2px 8px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.seen-all.on { color: var(--accent); border-color: var(--accent); }
+/* hide-from-feed button (the token keeps being tracked) */
+.call-hide { margin-left: 2px; width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.call-hide:hover { border-color: var(--err); color: var(--err); }
+.call-hide.on { color: var(--err); border-color: var(--err); }
+.call-hidden { opacity: 0.5; }
+.call-hidden:hover { opacity: 0.85; }
+/* a seen card folded to one line */
+.call.call-row { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 7px; padding: 5px 10px; min-height: 30px; font-size: 12px; }
+.call-row > * { margin: 0; }
+.call-row .call-check { margin: 0; flex: none; }
+.call-row-img { width: 20px; height: 20px; border-radius: 5px; flex: none; display: inline-flex; align-items: center; justify-content: center; background: var(--panel); cursor: pointer; overflow: hidden; }
+.call-row-img img { width: 20px; height: 20px; object-fit: cover; }
+.call-row .call-sym { font-weight: 700; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call-row-who { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
+.call-row-r { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; flex: none; }
+.call-row .call-age { color: var(--dim); font-size: 11px; }
+.call-peek { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.call-peek:hover { color: var(--text); border-color: var(--muted); }
+.call-peek-open .icon { transform: rotate(180deg); }
 .seen-all:hover { color: var(--text); border-color: var(--accent); }
 .chip-repeat { font-size: 10px; color: var(--gold); border: 1px solid rgba(242, 195, 102, 0.45); border-radius: 4px; padding: 0 5px; white-space: nowrap; flex: none; }
 .coled-group { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; }

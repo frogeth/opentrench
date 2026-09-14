@@ -72,6 +72,9 @@ export function CallCard({
   onJump,
   seen = true,
   onSeen,
+  hidden = false,
+  onHide,
+  collapsed = false,
 }: {
   t: TokenInfo;
   now: number;
@@ -89,7 +92,13 @@ export function CallCard({
   /** inbox-style: false = not looked at yet (card tinted), toggled by the check button */
   seen?: boolean;
   onSeen?: (on: boolean) => void;
+  /** hidden from the calls columns (still tracked); shown muted when the column reveals hidden cards */
+  hidden?: boolean;
+  onHide?: (on: boolean) => void;
+  /** a seen card folds to one line so more coins fit on screen; the chevron peeks at the full card */
+  collapsed?: boolean;
 }) {
+  const [peek, setPeek] = useState(false);
   const caMenu = useContext(CaMenuContext);
   const embed = chartEmbedUrl(t, chartProvider);
   const [copied, setCopied] = useState(false);
@@ -117,8 +126,51 @@ export function CallCard({
   const mult = t.marketCap && mcAt ? t.marketCap / mcAt : undefined;
   const nearAth = t.marketCap && t.athMarketCap ? t.marketCap >= t.athMarketCap * 0.95 : false;
 
+  const hideButton = onHide && (
+    <Tip text={hidden ? 'hidden from the feed · click to show again' : 'hide from the feed (still tracked)'}>
+      <button className={`call-hide${hidden ? ' on' : ''}`} onClick={() => onHide(!hidden)} aria-label={hidden ? 'unhide' : 'hide'}>
+        <Icon name="eyeoff" size={12} />
+      </button>
+    </Tip>
+  );
+  if (collapsed && !peek) {
+    return (
+      <div id={`call-${t.address}`} className={`call call-row${selected ? ' call-selected' : ''}${hidden ? ' call-hidden' : ''}${hot}`}>
+        {onSeen && (
+          <Tip text="seen · click to mark unseen">
+            <button className="call-check on" onClick={() => onSeen(false)} aria-label="mark unseen">
+              ✓
+            </button>
+          </Tip>
+        )}
+        <span className="call-row-img" onClick={() => onOpen?.(t.address)} title="open details">
+          {t.imageUrl && !imgBroken ? <img src={t.imageUrl} alt="" loading="lazy" onError={() => setImgBroken(true)} /> : <ChainBadge network={t.network} chain={t.chain} size={12} className="net-plain" />}
+        </span>
+        <button className="call-sym" onClick={copy} title={`${t.address}\nclick to copy`}>
+          {copied ? 'copied' : (t.symbol ?? shortAddr(t.address))}
+        </button>
+        <ChainBadge network={t.network} chain={t.chain} size={10} />
+        {isFirst ? <span className="first-badge">1st</span> : <span className={`call-seen${t.seen >= 2 ? ' call-seen-hot' : ''}`}>🔥{t.seen}×</span>}
+        {c && <span className="call-row-who muted">{c.author}</span>}
+        <span className="call-row-r">
+          <span className="call-kv call-mc">
+            MC <b>{money(t.marketCap) ?? '—'}</b>
+          </span>
+          {mult !== undefined && <span className={`call-mult${mult >= 1 ? ' up' : ' down'}`}>{fmtX(mult)}</span>}
+          <span className="call-age">{timeAgo(t.lastCallTs ?? t.firstSeenTs, now)}</span>
+          <Tip text="show the full card">
+            <button className="call-peek" onClick={() => setPeek(true)} aria-label="expand">
+              <Icon name="chevron" size={12} />
+            </button>
+          </Tip>
+          {hideButton}
+        </span>
+      </div>
+    );
+  }
+
   return (
-    <div id={`call-${t.address}`} className={`call${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${isNew ? ' call-new' : ''}${onSeen && !seen ? ' call-unseen' : ''}${hot}`}>
+    <div id={`call-${t.address}`} className={`call${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${isNew ? ' call-new' : ''}${onSeen && !seen ? ' call-unseen' : ''}${hidden ? ' call-hidden' : ''}${hot}`}>
       {t.seen >= 2 && <span key={t.lastCallTs} className="call-pulse" />}
 
       {/* 1 · caller meta */}
@@ -158,13 +210,21 @@ export function CallCard({
               <span className={`call-mult${mult >= 1 ? ' up' : ' down'}`}>{fmtX(mult)}</span>
             </Tip>
           )}
+          {collapsed && peek && (
+            <Tip text="fold back to one line">
+              <button className="call-peek call-peek-open" onClick={() => setPeek(false)} aria-label="collapse">
+                <Icon name="chevron" size={12} />
+              </button>
+            </Tip>
+          )}
           {onSeen && (
-            <Tip text={seen ? 'seen · click to mark unseen' : 'mark as seen'}>
+            <Tip text={seen ? 'seen · click to mark unseen' : 'mark as seen · folds the card to one line'}>
               <button className={`call-check${seen ? ' on' : ''}`} onClick={() => onSeen(!seen)} aria-label={seen ? 'mark unseen' : 'mark seen'}>
                 {seen ? '✓' : ''}
               </button>
             </Tip>
           )}
+          {hideButton}
         </span>
       </div>
 

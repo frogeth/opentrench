@@ -202,6 +202,15 @@ describe('secrets at rest', () => {
     expect(new ConfigStore(file, new SecretBox(KEY)).get().discord.token).toBe('new');
   });
 
+  it('keeps hidden call cards like seen ones, capped and stringly', () => {
+    const file = tmpFile();
+    fs.writeFileSync(file, JSON.stringify({ hiddenTokens: ['0xa', 7, '0xb'] }));
+    const store = new ConfigStore(file);
+    expect(store.get().hiddenTokens).toEqual(['0xa', '7', '0xb']);
+    expect(store.masked().hiddenTokens).toEqual(['0xa', '7', '0xb']);
+    expect(new ConfigStore(tmpFile()).get().hiddenTokens).toEqual([]);
+  });
+
   it('a plain-text file without a key still works as before', () => {
     const file = tmpFile();
     fs.writeFileSync(file, JSON.stringify(SECRETS));

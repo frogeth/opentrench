@@ -224,6 +224,20 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { count: cfg.get().seenTokens.length };
     }),
   );
+  // Hidden call cards: gone from the calls columns, still tracked. Same shape as /seen.
+  r.post(
+    '/hidden',
+    wrap((req) => {
+      const add: string[] = Array.isArray(req.body?.add) ? req.body.add.map(String).slice(0, 3000) : [];
+      const remove = new Set<string>(Array.isArray(req.body?.remove) ? req.body.remove.map(String) : []);
+      cfg.update((c) => {
+        const next = c.hiddenTokens.filter((a) => !remove.has(a) && !add.includes(a));
+        next.push(...add);
+        c.hiddenTokens = next.slice(-3000);
+      });
+      return { count: cfg.get().hiddenTokens.length };
+    }),
+  );
   r.put(
     '/columns',
     wrap((req) => {

@@ -1,4 +1,4 @@
-export type IconName = 'chart' | 'live' | 'globe' | 'x' | 'telegram' | 'explorer' | 'copy' | 'search' | 'people' | 'top' | 'dev' | 'insider' | 'sniper' | 'bundle' | 'lock' | 'chat' | 'grip' | 'calls' | 'pencil' | 'close' | 'bell' | 'play' | 'filter' | 'send' | 'reply' | 'trash' | 'mint' | 'sea' | 'wallet';
+export type IconName = 'chart' | 'live' | 'globe' | 'x' | 'telegram' | 'explorer' | 'copy' | 'search' | 'people' | 'top' | 'dev' | 'insider' | 'sniper' | 'bundle' | 'lock' | 'chat' | 'grip' | 'calls' | 'pencil' | 'close' | 'bell' | 'play' | 'filter' | 'send' | 'reply' | 'trash' | 'mint' | 'sea' | 'wallet' | 'eyeoff' | 'chevron';
 
 // Small inline glyphs. X and Telegram from Simple Icons (CC0); the rest hand-drawn.
 const PATHS: Record<IconName, string> = {
@@ -41,6 +41,9 @@ const PATHS: Record<IconName, string> = {
   pencil: 'M17 3l4 4-11.5 11.5L5 20l1.5-4.5L17 3zm0 2.8L8.1 14.7l-.6 1.8 1.8-.6L18.2 7 17 5.8z',
   // × = close / remove
   close: 'M18.3 5.7 12 12l6.3 6.3-1.4 1.4L12 13.4l-6.3 6.3-1.4-1.4L10.6 12 4.3 5.7l1.4-1.4L12 10.6l6.3-6.3 1.4 1.4z',
+  // an eye with a slash: hide from the feed
+  eyeoff: 'M2.1 3.5 3.5 2.1l18.4 18.4-1.4 1.4-3.4-3.4A11.6 11.6 0 0 1 12 19.5C6.5 19.5 2.4 15.4 1 12c.6-1.5 1.8-3.2 3.4-4.6L2.1 3.5zm3.7 3.7A9.4 9.4 0 0 0 3.2 12c1.3 2.6 4.6 5.5 8.8 5.5 1.3 0 2.5-.3 3.6-.8l-1.8-1.8a4 4 0 0 1-5.3-5.3L5.8 7.2zM12 4.5c5.5 0 9.6 4.1 11 7.5-.5 1.2-1.3 2.5-2.4 3.7l-1.4-1.4c.7-.8 1.2-1.6 1.6-2.3-1.3-2.6-4.6-5.5-8.8-5.5-.8 0-1.6.1-2.3.3L8.1 5.2c1.2-.4 2.5-.7 3.9-.7zm0 3.5a4 4 0 0 1 3.7 5.4l-5.1-5.1c.4-.2.9-.3 1.4-.3z',
+  chevron: 'M6.7 8.3 12 13.6l5.3-5.3 1.4 1.4L12 16.4 5.3 9.7l1.4-1.4z',
   // bell = alerts
   bell: 'M12 2a6 6 0 0 0-6 6v3.6L4.3 15A1 1 0 0 0 5 16.7h14a1 1 0 0 0 .7-1.7L18 11.6V8a6 6 0 0 0-6-6zm0 2a4 4 0 0 1 4 4v4.4l1.1 1.3H6.9L8 12.4V8a4 4 0 0 1 4-4zm-2 14a2 2 0 0 0 4 0h-4z',
   play: 'M8 5v14l11-7z',

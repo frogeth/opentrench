@@ -184,6 +184,8 @@ export interface Config {
   layouts: Layout[];
   /** call cards the user has marked as seen (inbox style); newest last, capped */
   seenTokens: string[];
+  /** call cards hidden from the calls columns; the token keeps being tracked (calls, trending, callers) */
+  hiddenTokens: string[];
   /** J7Tracker: the account's session id (from its web app), read-only tweet stream */
   j7: { token?: string; /** X handles (no @) whose tweets ping you */ favorites: string[] };
   /** OpenSea mint window: one wallet key (0x + 64 hex) and RPC overrides by OpenSea chain identifier.
@@ -206,6 +208,7 @@ const DEFAULT: Config = {
   columns: DEFAULT_COLUMNS.map((c) => ({ ...c })),
   layouts: [],
   seenTokens: [],
+  hiddenTokens: [],
   j7: { favorites: [] },
   opensea: { rpc: {} },
 };
@@ -280,6 +283,7 @@ export class ConfigStore {
       layouts: this.cfg.layouts,
       j7: { hasToken: !!this.cfg.j7.token, favorites: this.cfg.j7.favorites },
       seenTokens: this.cfg.seenTokens,
+      hiddenTokens: this.cfg.hiddenTokens,
       opensea: { hasWallet: !!this.cfg.opensea.walletKey, rpc: this.cfg.opensea.rpc },
     };
   }
@@ -316,6 +320,7 @@ export class ConfigStore {
           favorites: Array.isArray(raw.j7?.favorites) ? [...new Set((raw.j7.favorites as unknown[]).map((h) => String(h).replace(/^@/, '').trim().toLowerCase()).filter((h) => h.length > 0))].slice(0, 500) : [],
         },
         seenTokens: Array.isArray(raw.seenTokens) ? raw.seenTokens.map(String).slice(-3000) : [],
+        hiddenTokens: Array.isArray(raw.hiddenTokens) ? raw.hiddenTokens.map(String).slice(-3000) : [],
         opensea: {
           walletKey: (() => {
             const wk = this.secret(raw.opensea?.walletKey, 'opensea.walletKey');

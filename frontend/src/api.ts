@@ -130,6 +130,7 @@ export interface MaskedConfig {
   columns: ColumnDef[];
   layouts: Layout[];
   seenTokens: string[];
+  hiddenTokens: string[];
   opensea: { hasWallet: boolean; walletAddress?: string; rpc: Record<string, string>; chains?: { id: string; name: string; defaultRpc: string; symbol: string }[] };
 }
 export interface WatchedChat {
@@ -209,6 +210,8 @@ export const api = {
   react: (source: 'discord' | 'telegram', chatId: string, msgId: string, key: string, name: string, on: boolean) =>
     req<{ ok: true }>('POST', '/react', { source, chatId, msgId, key, name, on }),
   markSeen: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/seen', { add, remove }),
+  /** hide call cards from the calls columns (the token keeps being tracked) */
+  markHidden: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/hidden', { add, remove }),
   setColumns: (columns: ColumnDef[]) => req<ColumnDef[]>('PUT', '/columns', { columns }),
   saveLayout: (name: string) => req<{ layout: Layout; layouts: Layout[] }>('POST', '/layouts', { name }),
   loadLayout: (id: string) => req<{ columns: ColumnDef[] }>('POST', `/layouts/${encodeURIComponent(id)}/load`),

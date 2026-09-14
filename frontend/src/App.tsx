@@ -298,6 +298,18 @@ export default function App() {
     });
     void api.markSeen(on ? addresses : [], on ? [] : addresses).catch(() => {});
   };
+  // hidden call cards: out of the calls columns, still tracked; a column can reveal them
+  const hidden = useMemo(() => new Set(cfg?.hiddenTokens ?? []), [cfg?.hiddenTokens]);
+  const setHidden = (addresses: string[], on: boolean) => {
+    setCfg((c) => {
+      if (!c) return c;
+      const s = new Set(c.hiddenTokens);
+      for (const a of addresses) (on ? s.add(a) : s.delete(a));
+      return { ...c, hiddenTokens: [...s] };
+    });
+    void api.markHidden(on ? addresses : [], on ? [] : addresses).catch(() => {});
+  };
+  const [revealHidden, setRevealHidden] = useState<Record<string, boolean>>({});
   // Messages revealed by "jump to reply" even though they are hidden or filtered out
   const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
   const revealMessage = (id: string): boolean => {
@@ -1214,7 +1226,9 @@ export default function App() {
       );
     }
     if (col.type === 'calls') {
-      const list = callsFor(names, col.filters);
+      const all = callsFor(names, col.filters);
+      const hiddenHere = all.filter((t) => hidden.has(t.address)).length;
+      const list = revealHidden[col.id] ? all : all.filter((t) => !hidden.has(t.address));
       const unseen = list.filter((t) => !seen.has(t.address));
       return (
         <Column
@@ -1225,18 +1239,25 @@ export default function App() {
           count={list.length}
           className="col-calls"
           extra={
-            unseen.length > 0 && (
-              <button className="seen-all" onClick={() => setSeen(unseen.map((t) => t.address), true)} title="mark every call in this column as seen">
-                {unseen.length} new · mark seen
-              </button>
-            )
+            <>
+              {unseen.length > 0 && (
+                <button className="seen-all" onClick={() => setSeen(unseen.map((t) => t.address), true)} title="mark every call in this column as seen (they fold to one line)">
+                  {unseen.length} new · mark seen
+                </button>
+              )}
+              {hiddenHere > 0 && (
+                <button className={`seen-all${revealHidden[col.id] ? ' on' : ''}`} onClick={() => setRevealHidden((r) => ({ ...r, [col.id]: !r[col.id] }))} title={revealHidden[col.id] ? 'hide them again' : 'show the hidden cards'}>
+                  {hiddenHere} hidden{revealHidden[col.id] ? ' · showing' : ''}
+                </button>
+              )}
+            </>
           }
           {...actions}
         >
           {list.length === 0 && <div className="empty">No contracts seen yet.</div>}
           {list.map((t) => (
-            <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
-              <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} onJump={jumpToMessage} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} onBuy={onBuy} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
+            <VirtualItem key={t.address} id={`call:${t.address}`} estimate={seen.has(t.address) ? 36 : 139}>
+              <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} onJump={jumpToMessage} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} onBuy={onBuy} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} collapsed={seen.has(t.address)} hidden={hidden.has(t.address)} onHide={(on) => setHidden([t.address], on)} />
             </VirtualItem>
           ))}
         </Column>
@@ -1428,11 +1449,13 @@ export default function App() {
                 {allCalls.length === 0 && (
                   <div className="empty">{view.preview ? 'Previewing — add this chat to track its calls.' : 'No contracts seen yet.'}</div>
                 )}
-                {allCalls.map((t) => (
-                  <VirtualItem key={t.address} id={`call:${t.address}`} estimate={139}>
-                    <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} onJump={jumpToMessage} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} onBuy={onBuy} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} />
-                  </VirtualItem>
-                ))}
+                {allCalls
+                  .filter((t) => revealHidden.focused || !hidden.has(t.address))
+                  .map((t) => (
+                    <VirtualItem key={t.address} id={`call:${t.address}`} estimate={seen.has(t.address) ? 36 : 139}>
+                      <CallCard t={t} now={now} selected={selected === t.address} favorites={status.favorites} onJump={jumpToMessage} chartProvider={chartProvider} onOpen={setOpenToken} onShare={openShare} onBuy={onBuy} seen={seen.has(t.address)} onSeen={(on) => setSeen([t.address], on)} collapsed={seen.has(t.address)} hidden={hidden.has(t.address)} onHide={(on) => setHidden([t.address], on)} />
+                    </VirtualItem>
+                  ))}
               </Column>
               <ChatFeed
                 msgs={chatMsgsFor(null)}
