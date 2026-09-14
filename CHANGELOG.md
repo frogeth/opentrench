@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Fix: clicking a photo in a chat opened it twice — the lightbox, and the image again in a second window (the photo is also a link, and the click followed it). Same for the image on a link preview, which also opened the linked post. A click now opens the lightbox only; right-click and drag on the photo still give you the link.
+
 - Market caps are live-er: tokens called in the last hour refresh every 10 seconds (Dexscreener only), everything from the last 24 hours every minute as before, and chains are queried in parallel so one slow chain no longer holds the rest back. Opening a token's chart refreshes it on the spot. Tokens whose network was never resolved used to be skipped for good; they are now looked up chain-less each minute and pick up their network when Dexscreener lists the pair.
 
 ## v0.8.6 — 2026-09-14

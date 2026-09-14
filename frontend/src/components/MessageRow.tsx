@@ -37,7 +37,19 @@ function Media({ item }: { item: MediaItem }) {
   }
   return (
     <a href={item.url} target="_blank" rel="noreferrer">
-      <img className={item.kind === 'gif' ? 'media-gif' : 'media-img'} src={item.url} alt="" loading="lazy" onError={fail} onClick={() => openImage(item.url)} />
+      <img
+        className={item.kind === 'gif' ? 'media-gif' : 'media-img'}
+        src={item.url}
+        alt=""
+        loading="lazy"
+        onError={fail}
+        onClick={(e) => {
+          // the wrapping link is for right-click / drag; a click opens the lightbox only (the link's
+          // default would open the image a second time — a new window in the desktop app)
+          e.preventDefault();
+          openImage(item.url);
+        }}
+      />
     </a>
   );
 }
@@ -53,7 +65,18 @@ function Preview({ p }: { p: LinkPreview }) {
         {!p.author && p.title && <b>{p.title}</b>}
       </div>
       {p.text && <div className="preview-text">{p.text}</div>}
-      {p.image && <img className="preview-img" src={p.image} alt="" loading="lazy" onClick={() => openImage(p.image!)} />}
+      {p.image && (
+        <img
+          className="preview-img"
+          src={p.image}
+          alt=""
+          loading="lazy"
+          onClick={(e) => {
+            e.preventDefault(); // the lightbox, not the linked post as well
+            openImage(p.image!);
+          }}
+        />
+      )}
     </a>
   );
 }
