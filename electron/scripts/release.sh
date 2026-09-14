@@ -45,18 +45,38 @@ printf "%s\n" "$NOTES_BODY" > "$NOTES_FILE"
 ( cd .. && npm run build )
 npm run prepare-vencord
 npm run prepare-backend
-# Publish as a DRAFT so the updater never sees a half-uploaded release, then flip it live
-# only once every asset (both manifests included) is on GitHub.
-npx electron-builder --mac --win --x64 --arm64 --publish always
-echo "==> verifying assets"
-# GitHub's asset list can lag the upload by a little; give it up to two minutes.
-for want in latest.yml latest-mac.yml "opentrench-Setup-$VERSION.exe" "opentrench-$VERSION-arm64-mac.zip" "opentrench-$VERSION-mac.zip"; do
-  ok=false
-  for _ in $(seq 1 24); do
-    if gh release view "v$VERSION" --repo frogeth/opentrench --json assets --jq '.assets[].name' | grep -qx "$want"; then ok=true; break; fi
+# Build without publishing: electron-builder's own GitHub uploader stalls silently from here.
+# The assets go up through the GitHub CLI (with retries) into a DRAFT, so the updater never sees
+# a half-uploaded release; the manifests are written by scripts/manifests.js; then the release
+# is flipped live only once every asset is verified on GitHub.
+npx electron-builder --mac --win --x64 --arm64 --publish never
+node scripts/manifests.js "$VERSION"
+ASSETS=(
+  "dist/latest.yml" "dist/latest-mac.yml"
+  "dist/opentrench-Setup-$VERSION.exe" "dist/opentrench-Setup-$VERSION.exe.blockmap"
+  "dist/opentrench-$VERSION-mac.zip" "dist/opentrench-$VERSION-mac.zip.blockmap"
+  "dist/opentrench-$VERSION-arm64-mac.zip" "dist/opentrench-$VERSION-arm64-mac.zip.blockmap"
+  "dist/opentrench-$VERSION.dmg" "dist/opentrench-$VERSION.dmg.blockmap"
+  "dist/opentrench-$VERSION-arm64.dmg" "dist/opentrench-$VERSION-arm64.dmg.blockmap"
+)
+for f in "${ASSETS[@]}"; do [ -f "$f" ] || { echo "!! missing build output $f" >&2; exit 1; }; done
+if ! gh release view "v$VERSION" --repo frogeth/opentrench >/dev/null 2>&1; then
+  gh release create "v$VERSION" --repo frogeth/opentrench --draft --title "opentrench v$VERSION" --notes-file "$NOTES_FILE"
+fi
+echo "==> uploading $((${#ASSETS[@]})) assets"
+for f in "${ASSETS[@]}"; do
+  for attempt in 1 2 3; do
+    if gh release upload "v$VERSION" --repo frogeth/opentrench --clobber "$f"; then break; fi
+    echo "   retry $attempt for $f" >&2
+    [ "$attempt" = 3 ] && { echo "!! upload failed: $f — release left as draft" >&2; exit 1; }
     sleep 5
   done
-  [ "$ok" = true ] || { echo "!! missing asset $want — release left as draft" >&2; exit 1; }
+done
+echo "==> verifying assets"
+names=$(gh release view "v$VERSION" --repo frogeth/opentrench --json assets --jq '.assets[] | "\(.name) \(.size)"')
+for f in "${ASSETS[@]}"; do
+  n=$(basename "$f"); want=$(stat -f %z "$f")
+  echo "$names" | grep -qx "$n $want" || { echo "!! $n missing or wrong size on GitHub — release left as draft" >&2; exit 1; }
 done
 gh release edit "v$VERSION" --repo frogeth/opentrench --title "opentrench v$VERSION" --notes-file "$NOTES_FILE" --draft=false --latest
 rm -f "$NOTES_FILE"

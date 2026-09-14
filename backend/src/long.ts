@@ -1,7 +1,5 @@
-import { EventEmitter } from 'node:events';
-import { DEFAULT_COVE_AFFILIATE, buildCoveLinks } from './cove.js';
 import { decodeStrings, type LaunchpadInfo } from './launchpads.js';
-import type { LongLaunch, TokenInfo } from './types.js';
+import type { TokenInfo } from './types.js';
 
 /**
  * Long (app.long.xyz): a launchpad on Robinhood Chain where every token is "anchored" to a
@@ -13,13 +11,11 @@ import type { LongLaunch, TokenInfo } from './types.js';
  *
  * Cloudflare's bot check in front of the API lets browsers through and answers Node with a 403
  * challenge page. So the server tries once and, when blocked, leaves the fetching to the page
- * (frontend/src/long.ts), which hands raw rows to `ingest` / the /api/long routes; the mapping
- * below is shared either way.
+ * (frontend/src/long.ts), which hands the raw asset to /api/long/asset; the mapping below is
+ * shared either way.
  */
 export const LONG_API = 'https://api.long.xyz/v1/graphql';
 export const LONG_CHAIN_ID = 4663;
-/** the integrator Long's own web app filters on: launches made through app.long.xyz */
-export const LONG_INTEGRATOR = '0x92d435c96e63c43e12d6d0ab28f6b0b04072f765';
 export const LONG_SUFFIX = '1e18';
 const TIMEOUT_MS = 8000;
 
@@ -211,92 +207,3 @@ export function mergeLaunchpad(t: TokenInfo, info: LaunchpadInfo): boolean {
   return changed;
 }
 
-/** A launch row for the Long launches column. Pure. */
-export function mapLongLaunch(a: any, longSymbols: Record<string, string> = {}): LongLaunch | undefined {
-  const info = mapLongAsset(a, longSymbols);
-  if (!info) return undefined;
-  const address = String(a.asset_address).toLowerCase();
-  const progress = num(a.auction_pool?.pool_current_sale_progress_percentage);
-  return {
-    address,
-    name: info.name ?? address.slice(0, 10),
-    symbol: info.symbol ?? '?',
-    image: info.imageUrl,
-    anchor: anchorLabel(a.asset_numeraire_address, longSymbols) ?? '?',
-    anchorAddress: String(a.asset_numeraire_address ?? '').toLowerCase() || undefined,
-    marketCap: info.marketCap,
-    volume24h: info.volume24h,
-    progress: progress !== undefined ? Math.max(0, Math.min(100, progress)) : undefined,
-    stage: a.asset_current_pool === 'graduation' ? 'graduated' : 'auction',
-    createdAt: info.pairCreatedAt ?? 0,
-    url: longUrl(address),
-    cove: buildCoveLinks('robinhood', address, { amounts: [], affiliateId: DEFAULT_COVE_AFFILIATE })?.panel,
-  };
-}
-
-/** The newest launches made through app.long.xyz, newest first. */
-export async function fetchLongLaunches(limit = 40, fetchImpl: typeof fetch = fetch): Promise<LongLaunch[]> {
-  const data = await gql<{ Asset: any[] }>(
-    `query LongLaunches($chain: Int!, $integrator: String!, $limit: Int!) { Asset(where: { chain_id: { _eq: $chain }, integrator_address: { _ilike: $integrator } }, order_by: { asset_creation_timestamp: desc }, limit: $limit) { ${ASSET_FIELDS} } }`,
-    { chain: LONG_CHAIN_ID, integrator: LONG_INTEGRATOR, limit: Math.min(100, limit) },
-    fetchImpl,
-  );
-  const assets = Array.isArray(data?.Asset) ? data.Asset : [];
-  const unknown = [...new Set(assets.map((a) => String(a?.asset_numeraire_address ?? '').toLowerCase()).filter((n) => isLongAddress(n) && !NUMERAIRES[n]))];
-  const longSymbols = { ...(await resolveNumeraires(assets.map((a) => String(a?.asset_numeraire_address ?? '')), fetchImpl)), ...(await symbolsFor(unknown, fetchImpl)) };
-  return assets.map((a) => mapLongLaunch(a, longSymbols)).filter((r): r is LongLaunch => !!r);
-}
-
-const POLL_MS = 20_000;
-
-/** Polls the newest launches while a Long column exists; emits 'launches' (rows, at). */
-export class LongPoller extends EventEmitter {
-  latest: { rows: LongLaunch[]; at: number } | undefined;
-  /** the server got Cloudflare's challenge page: the page does the fetching from here on */
-  blocked = false;
-  private timer: NodeJS.Timeout | undefined;
-  private running = false;
-  constructor(private readonly fetchImpl: typeof fetch = fetch, private readonly log: (m: string) => void = (m) => console.warn('[long]', m)) {
-    super();
-  }
-  /** Raw assets fetched by the page (see frontend/src/long.ts): map, keep, broadcast. */
-  async ingest(assets: unknown[], longSymbols: Record<string, string> = {}): Promise<LongLaunch[]> {
-    const list = (Array.isArray(assets) ? assets : []).slice(0, 100);
-    const anchors = { ...(await resolveNumeraires(list.map((a: any) => String(a?.asset_numeraire_address ?? '')), this.fetchImpl)), ...longSymbols };
-    const rows = list.map((a) => mapLongLaunch(a, anchors)).filter((r): r is LongLaunch => !!r);
-    this.latest = { rows, at: Date.now() };
-    this.emit('launches', rows, this.latest.at);
-    return rows;
-  }
-  want(on: boolean): void {
-    if (on && this.blocked) return;
-    if (on && !this.timer) {
-      this.timer = setInterval(() => void this.poll(), POLL_MS);
-      this.timer.unref?.();
-      void this.poll();
-    } else if (!on && this.timer) {
-      clearInterval(this.timer);
-      this.timer = undefined;
-    }
-  }
-  async poll(): Promise<void> {
-    if (this.running) return;
-    this.running = true;
-    try {
-      const rows = await fetchLongLaunches(40, this.fetchImpl);
-      this.latest = { rows, at: Date.now() };
-      this.emit('launches', rows, this.latest.at);
-    } catch (e: any) {
-      if (/\b403\b/.test(String(e?.message ?? e))) {
-        this.blocked = true;
-        this.want(false);
-        this.log('api.long.xyz answers the server with a bot check (403); the app fetches launches from the page instead');
-      } else this.log(`launches failed: ${e?.message ?? e}`);
-    } finally {
-      this.running = false;
-    }
-  }
-  stop(): void {
-    this.want(false);
-  }
-}

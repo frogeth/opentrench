@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LongPoller, anchorLabel, fetchLong, fetchLongLaunches, isLongAddress, mapLongAsset, mapLongLaunch, mergeLaunchpad, resolveNumeraires, __resetSymbolCache } from './long.js';
+import { anchorLabel, fetchLong, isLongAddress, mapLongAsset, mergeLaunchpad, resolveNumeraires, __resetSymbolCache } from './long.js';
 import type { TokenInfo } from './types.js';
 
 /** a row as api.long.xyz returns it (captured 2026-09-14) */
@@ -65,13 +65,6 @@ describe('long', () => {
     expect(info.priceUsd).toBeUndefined();
   });
 
-  it('a launch row carries the anchor, progress, stage and a Cove panel link', () => {
-    const row = mapLongLaunch(RIZO)!;
-    expect(row).toMatchObject({ address: RIZO.asset_address, symbol: 'RIZO', name: 'Rizo', anchor: 'TSLA', anchorAddress: RIZO.asset_numeraire_address, progress: 12.5, stage: 'auction', marketCap: 284080.493699, url: 'https://app.long.xyz/tokens/0xc99fd9ff8494229c8271a9053e489f6405f61e18' });
-    expect(row.cove).toMatch(/^https:\/\/t\.me\/cove_trading_bot\?start=b_r/);
-    expect(mapLongLaunch({ ...RIZO, asset_current_pool: 'graduation' })!.stage).toBe('graduated');
-  });
-
   it('fetchLong asks only for the suffix and returns undefined for an unknown asset', async () => {
     const fetchImpl = gqlMock((q) => (q.includes('LongAsset') ? { Asset: [] } : {}));
     expect(await fetchLong('0xa419Bb493ed5059f28dfd84348A2F93D70ECf003', fetchImpl)).toBeUndefined();
@@ -87,60 +80,6 @@ describe('long', () => {
     const info = await fetchLong(child.asset_address, fetchImpl);
     expect(info?.launchpadNote).toBe('anchored to AI');
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-  });
-
-  it('fetchLongLaunches filters on the chain and integrator, newest first', async () => {
-    const fetchImpl = gqlMock((q, v) => {
-      if (q.includes('LongLaunches')) {
-        expect(v).toEqual({ chain: 4663, integrator: '0x92d435c96e63c43e12d6d0ab28f6b0b04072f765', limit: 40 });
-        return { Asset: [RIZO, { ...RIZO, asset_address: '0xbad' }] };
-      }
-      return { Asset: [] };
-    });
-    const rows = await fetchLongLaunches(40, fetchImpl);
-    expect(rows.map((r) => r.symbol)).toEqual(['RIZO', 'RIZO']); // an odd address still maps; nothing is dropped silently
-    expect(rows[0].anchor).toBe('TSLA');
-  });
-
-  it('the poller emits rows and swallows a failing request', async () => {
-    let fail = false;
-    const fetchImpl = vi.fn(async () => {
-      if (fail) throw new Error('down');
-      return { ok: true, status: 200, json: async () => ({ data: { Asset: [RIZO] } }) } as any;
-    });
-    const logs: string[] = [];
-    const p = new LongPoller(fetchImpl, (m) => logs.push(m));
-    const got: number[] = [];
-    p.on('launches', (rows: unknown[]) => got.push(rows.length));
-    await p.poll();
-    expect(got).toEqual([1]);
-    expect(p.latest?.rows[0].symbol).toBe('RIZO');
-    fail = true;
-    await p.poll();
-    expect(got).toEqual([1]);
-    expect(logs[0]).toContain('down');
-    p.stop();
-  });
-
-  it('ingest maps rows the page fetched and broadcasts them', async () => {
-    const p = new LongPoller(vi.fn() as any, () => {});
-    const got: number[] = [];
-    p.on('launches', (rows: unknown[]) => got.push(rows.length));
-    expect((await p.ingest([RIZO, null, { nope: 1 }], {})).map((r) => r.symbol)).toEqual(['RIZO']);
-    expect(got).toEqual([1]);
-    expect(p.latest?.rows[0].anchor).toBe('TSLA');
-  });
-
-  it('a 403 from Cloudflare stops the server-side poller for good', async () => {
-    const fetchImpl = vi.fn(async () => ({ ok: false, status: 403, json: async () => ({}) }) as any);
-    const logs: string[] = [];
-    const p = new LongPoller(fetchImpl, (m) => logs.push(m));
-    await p.poll();
-    expect(p.blocked).toBe(true);
-    expect(logs[0]).toContain('bot check');
-    p.want(true);
-    await p.poll();
-    expect(fetchImpl).toHaveBeenCalledTimes(2); // poll() itself still runs when called; want() no longer schedules
   });
 
   it('mergeLaunchpad sets the badge and fills only the gaps', () => {

@@ -31,7 +31,6 @@ import type {
   TokenInfo,
   Mention,
   PersonSeen,
-  LongLaunch,
 } from './types.js';
 
 /** Identifies this server process; the UI reloads when it changes so a restart with a new build never leaves stale assets. */
@@ -102,10 +101,9 @@ function normName(n: string): string {
  */
 export class MessageHub extends EventEmitter {
   /** filled by Services: what the NFT columns need in `hello` */
-  nftState: { mints: () => MintEvent[]; rankings: () => Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>>; mintJobs: () => MintJob[]; launches: () => LongLaunch[] | undefined } = {
+  nftState: { mints: () => MintEvent[]; rankings: () => Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>>; mintJobs: () => MintJob[]} = {
     mints: () => [],
     rankings: () => ({}),
-    launches: () => undefined,
     mintJobs: () => [],
   };
   /**
@@ -519,7 +517,6 @@ export class MessageHub extends EventEmitter {
       mentions: this.mentions(),
       mints: this.nftState.mints(),
       rankings: this.nftState.rankings(),
-      launches: this.nftState.launches(),
       mintJobs: this.nftState.mintJobs(),
       boot: BOOT_ID,
     };

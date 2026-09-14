@@ -162,15 +162,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       hub.rebuild();
     }),
   );
-  // Long (app.long.xyz): the page fetches Long's indexer (Cloudflare blocks the server) and hands the raw rows here.
-  r.post(
-    '/long/launches',
-    wrap(async (req) => {
-      const assets = Array.isArray(req.body?.assets) ? req.body.assets : [];
-      const symbols = req.body?.symbols && typeof req.body.symbols === 'object' ? (req.body.symbols as Record<string, string>) : {};
-      return { rows: (await svc.long.ingest(assets, symbols)).length };
-    }),
-  );
+  // Long (app.long.xyz): the page fetches Long's indexer (Cloudflare blocks the server) and hands the raw asset here.
   r.post(
     '/long/asset',
     wrap(async (req) => {

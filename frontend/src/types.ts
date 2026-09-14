@@ -380,7 +380,6 @@ export type ServerEvent =
       mentions: Mention[];
       mints: MintEvent[];
       rankings: Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>>;
-      launches?: LongLaunch[];
       mintJobs: MintJob[];
       boot: string;
     }
@@ -397,23 +396,6 @@ export type ServerEvent =
   | { type: 'status'; status: Status }
   | { type: 'mint'; mint: MintEvent }
   | { type: 'nftRankings'; key: RankingKey; rows: NftRanking[]; at: number }
-  | { type: 'longLaunches'; rows: LongLaunch[]; at: number }
   | { type: 'mintJob'; job: MintJob }
   | { type: 'mintJobGone'; id: string };
 
-/** A launch on Long (app.long.xyz): a token anchored to a tokenized stock on Robinhood Chain. */
-export interface LongLaunch {
-  address: string;
-  name: string;
-  symbol: string;
-  image?: string;
-  anchor: string;
-  anchorAddress?: string;
-  marketCap?: number;
-  volume24h?: number;
-  progress?: number;
-  stage: 'auction' | 'graduated';
-  createdAt: number;
-  url: string;
-  cove?: string;
-}

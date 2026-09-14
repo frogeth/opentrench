@@ -86,7 +86,7 @@ export interface ColumnFilters {
 }
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'trending' | 'long' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot';
+  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
@@ -219,8 +219,6 @@ export const api = {
   watched: () => req<WatchedChat[]>('GET', '/watched'),
   telegramResolve: (username: string) => req<{ id: string; name: string; bot: boolean }>('GET', `/telegram/resolve/${encodeURIComponent(username)}`),
   tickers: () => req<{ sym: string; usd: number; change24h: number }[]>('GET', '/tickers'),
-  /** Long (app.long.xyz): raw indexer rows fetched by the page, handed to the backend to map and broadcast */
-  longLaunches: (assets: unknown[], symbols: Record<string, string>) => req<{ rows: number }>('POST', '/long/launches', { assets, symbols }),
   longAsset: (asset: unknown, symbols: Record<string, string>) => req<{ applied: boolean }>('POST', '/long/asset', { asset, symbols }),
   ohlcv: (address: string, interval: string) =>
     req<{ candles: { t: number; o: number; h: number; l: number; c: number; v: number }[]; mcPerPrice?: number; reason?: string }>(

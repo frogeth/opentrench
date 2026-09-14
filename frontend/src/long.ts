@@ -6,13 +6,11 @@ import type { TokenInfo } from './types';
  * Long (app.long.xyz) is read from the page, not the backend: its indexer sits behind Cloudflare's
  * bot check, which lets a browser through and blocks Node. So the page fetches Long's GraphQL
  * (CORS is open) and hands the raw rows to the backend, which maps, stores and broadcasts them
- * to every client. Two jobs: the launches feed while a Long column exists, and telling the
- * backend which called tokens are Long assets (their addresses all end in `1e18`).
+ * to every client. One job: telling the backend which called tokens are Long assets (their
+ * addresses all end in `1e18`).
  */
 export const LONG_API = 'https://api.long.xyz/v1/graphql';
 const LONG_CHAIN_ID = 4663;
-const LONG_INTEGRATOR = '0x92d435c96e63c43e12d6d0ab28f6b0b04072f765';
-const LAUNCHES_MS = 20_000;
 
 const ASSET_FIELDS = `
   asset_address asset_numeraire_address asset_creation_timestamp asset_current_pool integrator_address
@@ -42,33 +40,6 @@ async function symbolsFor(addresses: string[]): Promise<Record<string, string>> 
   }
 }
 const unknownNumeraires = (assets: any[], known: Set<string>): string[] => [...new Set(assets.map((a) => String(a?.asset_numeraire_address ?? '').toLowerCase()).filter((n) => isLongAddress(n) && !known.has(n)))];
-
-/** Poll the newest launches while a Long column is on screen and hand them to the backend. */
-export function useLongLaunches(active: boolean, knownNumeraires: Set<string>): void {
-  useEffect(() => {
-    if (!active) return;
-    let stop = false;
-    const tick = async () => {
-      try {
-        const data = await gql<{ Asset: any[] }>(
-          `query LongLaunches($chain: Int!, $integrator: String!, $limit: Int!) { Asset(where: { chain_id: { _eq: $chain }, integrator_address: { _ilike: $integrator } }, order_by: { asset_creation_timestamp: desc }, limit: $limit) { ${ASSET_FIELDS} } }`,
-          { chain: LONG_CHAIN_ID, integrator: LONG_INTEGRATOR, limit: 40 },
-        );
-        const assets = Array.isArray(data?.Asset) ? data.Asset : [];
-        const symbols = await symbolsFor(unknownNumeraires(assets, knownNumeraires));
-        if (!stop) await api.longLaunches(assets, symbols);
-      } catch (e) {
-        console.warn('[long] launches', (e as Error).message);
-      }
-    };
-    void tick();
-    const id = window.setInterval(() => void tick(), LAUNCHES_MS);
-    return () => {
-      stop = true;
-      window.clearInterval(id);
-    };
-  }, [active, knownNumeraires]);
-}
 
 /** Called EVM tokens with the Long suffix and no launchpad yet: ask Long once, tell the backend. */
 export function useLongDetection(tokens: Record<string, TokenInfo>, knownNumeraires: Set<string>): void {

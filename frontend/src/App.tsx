@@ -8,8 +8,7 @@ import { ChatFeed } from './components/ChatFeed';
 import { ColumnEditor, chatKey } from './components/ColumnEditor';
 import { CallersList } from './components/CallersColumn';
 import { TREND_WINDOWS, TrendingList, trendWindow } from './components/TrendingColumn';
-import { LongLaunches } from './components/LongLaunches';
-import { useLongDetection, useLongLaunches } from './long';
+import { useLongDetection } from './long';
 import { Composer, type SendTarget } from './components/Composer';
 import { ShareModal } from './components/ShareModal';
 import { CoveView, COVE_BOT } from './components/CoveView';
@@ -90,7 +89,7 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 export type ChatOrder = 'bottom' | 'top';
 
 export default function App() {
-  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, launches, mintJobs } = useFeed();
+  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
   // first-run checklist: once, when nothing is connected and the feed is empty; ⚙ → Accounts brings it back
   const [setupOpen, setSetupOpen] = useState(false);
@@ -269,8 +268,7 @@ export default function App() {
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   /** every column including stacked bottoms, for anything that does not care about layout */
   const flatColumns = useMemo(() => columns.flatMap((c) => (c.split ? [c, c.split.bottom] : [c])), [columns]);
-  // Long (app.long.xyz) is read from the page (its API blocks servers): the launches feed while a Long column exists, and badges for called Long tokens
-  useLongLaunches(flatColumns.some((c) => c.type === 'long'), NO_NUMERAIRES);
+  // Long (app.long.xyz) is read from the page (its API blocks servers): badges for called Long tokens
   useLongDetection(tokens, NO_NUMERAIRES);
   /** saved arrangements of the terminal, and the one matching what is on screen (if any) */
   const layouts = cfg?.layouts ?? [];
@@ -1182,13 +1180,6 @@ export default function App() {
       return (
         <Column key={col.id} title={col.title} subtitle={osAddr ? `${osAddr.slice(0, 6)}…${osAddr.slice(-4)} · opensea.io` : 'no wallet yet'} kind="osmint" className={`col-cove col-osmint${coveFlash === 'osmint' ? ' col-flash' : ''}`} {...actions}>
           <OsMintView jobs={mintJobs} now={now} wallet={osAddr} prefill={mintPrefill} onPrefilled={() => setMintPrefill(null)} />
-        </Column>
-      );
-    }
-    if (col.type === 'long') {
-      return (
-        <Column key={col.id} title={col.title} subtitle="app.long.xyz · Robinhood Chain" kind="long" className="col-long" {...actions}>
-          <LongLaunches rows={launches?.rows} at={launches?.at} now={now} onSelect={(a) => (tokens[a] ? select(a) : window.open(`https://app.long.xyz/tokens/${a}`, '_blank', 'noopener'))} />
         </Column>
       );
     }
