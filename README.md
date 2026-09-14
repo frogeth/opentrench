@@ -22,11 +22,40 @@ every caller pinned where they called, and the full call list.
 
 ![token drill-down](docs/img/drilldown.png)
 
-> **Discord** connects through a small [Vencord plugin](vencord/) inside your own Discord app, so there is no token and no self-bot session. Discord has to be open for that side of the feed to work. A user token still works as a read-only fallback. Website and setup guides: **https://opentrench.app**
+> **Discord** connects through a small [Vencord plugin](vencord/) inside your own Discord app, so there is no token and no self-bot session. From 0.8.7 the desktop app installs it for you: ⚙ → Accounts → Discord → **Set up Discord**. Discord has to be open for that side of the feed to work. A user token still works as a read-only fallback. Website and setup guides: **https://opentrench.app**
 
 > **OpenSea mint wallet**: use a dedicated wallet, not one holding real funds. The private key lives in plain text in `config.json` on this machine — anyone with file access on your machine can read it. Mint transactions are irreversible once sent. MintGo and OpenSea expose no official public API for any of this; opentrench reads their unofficial web endpoints, which can change without notice.
 
-## Run
+## Install
+
+Download one file from the [latest release](https://github.com/frogeth/opentrench/releases/latest)
+and open it. Nothing else needs installing: no Node, no npm, no git.
+
+| Your machine | File |
+| --- | --- |
+| Mac, Apple Silicon (any Mac from 2020 on) | `opentrench-x.y.z-arm64.dmg` |
+| Mac, Intel | `opentrench-x.y.z.dmg` (no `arm64` in the name) |
+| Windows | `opentrench-Setup-x.y.z.exe` |
+
+A three-step checklist on first launch covers Discord, Telegram and channels;
+the long version is [Getting started](docs/getting-started.md) or
+https://opentrench.app/docs/.
+
+### Set up with Claude
+
+The repo ships a [Claude skill](skills/opentrench-setup/SKILL.md) that walks a
+new user through install, both accounts, channels and the usual snags. With
+Claude Code:
+
+```bash
+git clone --depth 1 https://github.com/frogeth/opentrench /tmp/opentrench
+mkdir -p ~/.claude/skills
+cp -r /tmp/opentrench/skills/opentrench-setup ~/.claude/skills/
+```
+
+Then say "set up opentrench". Without git, paste the skill's text into any Claude chat.
+
+## Run from source (developers)
 
 ```bash
 npm install

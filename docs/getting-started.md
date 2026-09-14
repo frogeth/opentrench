@@ -55,8 +55,15 @@ build && npm start`, then open http://127.0.0.1:3210.
 ## 2. Connect Discord
 
 Discord connects through the **opentrench plugin for Vencord**, which lives
-inside your own Discord app: no token to paste, nothing stored. One-time setup,
-about five minutes, with separate Mac and Windows steps:
+inside your own Discord app: no token to paste, nothing stored.
+
+**One click (0.8.7 and later):** ⚙ → Accounts → Discord → **Set up Discord**.
+opentrench quits Discord, installs its own copy of Vencord with the plugin
+switched on, and reopens Discord. An existing Vencord is replaced by the same
+Vencord plus the plugin, settings kept; *remove the plugin* undoes it.
+
+**By hand** (older versions, or a Discord installed somewhere unusual), about
+five minutes, with separate Mac and Windows steps:
 
 **https://opentrench.app/docs/discord/**
 
@@ -154,3 +161,22 @@ with every caller pinned on it, and the full call list.
   updates from 0.1.4 on.
 
 Still stuck? Ask in the Discord: https://discord.gg/6ByE8fPNN
+
+---
+
+## Set up with Claude
+
+The repo ships a Claude skill that knows all of the above: which file to
+download, both Discord routes, the Telegram steps, where the app keeps its
+files and logs, and what the usual error messages mean. With Claude Code:
+
+```bash
+git clone --depth 1 https://github.com/frogeth/opentrench /tmp/opentrench
+mkdir -p ~/.claude/skills
+cp -r /tmp/opentrench/skills/opentrench-setup ~/.claude/skills/
+```
+
+Then open Claude Code and say "set up opentrench", or describe what is stuck.
+Without git, paste the text of
+[skills/opentrench-setup/SKILL.md](../skills/opentrench-setup/SKILL.md) into
+any Claude chat.
