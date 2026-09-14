@@ -728,6 +728,15 @@ b { font-weight: 600; }
 .caller-top .caller-rank { color: var(--gold); font-weight: 700; }
 .gold { color: var(--gold); font-weight: 600; }
 .col-callers .hc-anchor { display: block; }
+/* trending: token, calls in window, entry MC, current MC, multiplier, last call */
+.trend-head, .trend-row { display: grid; grid-template-columns: minmax(0, 1fr) 36px 56px 56px 50px 44px; gap: 6px; align-items: center; padding: 6px 12px; font-size: 12px; }
+.trend-head { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 1; }
+.trend-head span:not(:first-child), .trend-row > span:not(:first-child) { text-align: right; white-space: nowrap; }
+.trend-row { border-bottom: 1px solid var(--line); cursor: pointer; transition: filter 0.15s; }
+.trend-row:hover { filter: brightness(1.15); background: var(--hover); }
+.trend-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.trend-who b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.col-trending .hc-anchor { display: block; }
 /* grouped rows in the plain (non-focused) chat columns */
 .row-continued { padding-top: 1px; padding-bottom: 1px; border-bottom: none; }
 .row-continued + .row:not(.row-continued) { margin-top: 4px; }

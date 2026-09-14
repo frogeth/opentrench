@@ -86,7 +86,7 @@ export interface ColumnFilters {
 }
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot';
+  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
@@ -101,8 +101,8 @@ export interface ColumnDef {
   split?: { bottom: ColumnDef; ratio?: number };
   /** fixed width in px (drag-resized); unset = share the space */
   width?: number;
-  /** callers leaderboard window */
-  window?: '24h' | '7d' | '30d';
+  /** callers leaderboard window (24h/7d/30d) or trending window (5m/1h/6h/24h) */
+  window?: '5m' | '1h' | '6h' | '24h' | '7d' | '30d';
   /** content scale for this column only (ctrl/⌘ + wheel), 0.5–1.5; unset = 1 */
   zoom?: number;
   /** play a sound when a new call lands in this column */

@@ -25,6 +25,7 @@ const TYPE_CARDS: { t: ColumnDef['type']; icon: import('./Icon').IconName; name:
   { t: 'chat', icon: 'chat', name: 'Messages', blurb: 'live chat from the channels you pick' },
   { t: 'calls', icon: 'calls', name: 'Calls', blurb: 'every contract as it gets called' },
   { t: 'callers', icon: 'people', name: 'Top Callers', blurb: 'who calls best, over a window' },
+  { t: 'trending', icon: 'top', name: 'Trending', blurb: 'most-called tokens, 5m to 24h' },
   { t: 'cove', icon: 'send', name: 'Buy bot', blurb: 'Cove or BasedBot, one pane' },
   { t: 'salpha', icon: 'search', name: 'Salpha', blurb: 'your research bot chat' },
   { t: 'tgbot', icon: 'telegram', name: 'Telegram bot', blurb: 'Cielo alerts, or any bot you talk to' },
@@ -212,7 +213,7 @@ export function ColumnEditor({
   })();
   const urlOk = /^https?:\/\/[^\s/]+/i.test(cleanUrl);
   const save = () => {
-    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'OpenSea Volume' : type === 'osmint' ? 'OpenSea Mint' : all ? 'All Chats' : 'Chats');
+    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'OpenSea Volume' : type === 'osmint' ? 'OpenSea Mint' : all ? 'All Chats' : 'Chats');
     if (isWeb && !urlOk) {
       window.alert('Paste the address of the page to show (http:// or https://).');
       return;
@@ -236,7 +237,7 @@ export function ColumnEditor({
       chats: isWeb || isNft ? [] : chats,
       ...(isWeb ? { url: cleanUrl } : {}),
       ...(type === 'tgbot' ? { bot: cleanBot } : {}),
-      ...(type === 'callers' ? { window: win } : {}),
+      ...(type === 'callers' ? { window: (['24h', '7d', '30d'] as const).includes(win as any) ? win : '7d' } : type === 'trending' ? { window: (['5m', '1h', '6h', '24h'] as const).includes(win as any) ? win : '1h' } : {}),
       ...(type === 'nftvol' ? { ranking, timeframe } : {}),
       ...(type === 'calls' || type === 'chat' || type === 'j7' ? { alert: { on: alertOn, sound } } : {}),
       filters: Object.keys(clean).length ? clean : undefined,
@@ -266,7 +267,7 @@ export function ColumnEditor({
               ))}
             </div>
             <div className="fed-label">Feed name</div>
-            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'OpenSea Volume' : type === 'osmint' ? 'OpenSea Mint' : 'All Chats'} maxLength={40} />
+            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'OpenSea Volume' : type === 'osmint' ? 'OpenSea Mint' : 'All Chats'} maxLength={40} />
             {isWeb && (
               <>
                 <div className="fed-label">Site</div>
@@ -484,16 +485,17 @@ export function ColumnEditor({
                 <div className="hint">Snipers and bundlers only apply once a data source reports them.</div>
               </>
             )}
-            {type === 'callers' && (
+            {(type === 'callers' || type === 'trending') && (
               <div className="fsec">
                 <div className="fsec-title">Window</div>
                 <div className="fchips">
-                  {(['24h', '7d', '30d'] as const).map((w) => (
+                  {(type === 'callers' ? (['24h', '7d', '30d'] as const) : (['5m', '1h', '6h', '24h'] as const)).map((w) => (
                     <button key={w} className={`fchip${win === w ? ' on' : ''}`} onClick={() => setWin(w)}>
                       {w}
                     </button>
                   ))}
                 </div>
+                {type === 'trending' && <div className="hint">The column header switches windows too; this is the one it opens on.</div>}
               </div>
             )}
             {(type === 'calls' || type === 'chat') && (

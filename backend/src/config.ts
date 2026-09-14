@@ -6,7 +6,7 @@ import type { BotPolicy } from './types.js';
 /** One column of the terminal. `chats` are `<source>:<id>` keys of watched chats; empty = every watched chat. */
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot';
+  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot';
   title: string;
   chats: string[];
   /** web columns: the page to embed (http/https only) */
@@ -20,8 +20,8 @@ export interface ColumnDef {
   split?: { bottom: ColumnDef; ratio?: number };
   /** fixed width in px (drag-resized); unset = share the space */
   width?: number;
-  /** callers leaderboard window */
-  window?: '24h' | '7d' | '30d';
+  /** callers leaderboard window (24h/7d/30d) or trending window (5m/1h/6h/24h) */
+  window?: '5m' | '1h' | '6h' | '24h' | '7d' | '30d';
   /** content scale for this column only (ctrl/⌘ + wheel), 0.5–1.5; unset = 1 */
   zoom?: number;
   /** play a sound when a new call lands in this column */
@@ -35,10 +35,11 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
   { id: 'chats', type: 'chat', title: 'All Chats', chats: [] },
 ];
 
-const TYPES = ['calls', 'callers', 'cove', 'salpha', 'j7', 'web', 'chat', 'mints', 'nftvol', 'osmint', 'tgbot'] as const;
+const TYPES = ['calls', 'callers', 'trending', 'cove', 'salpha', 'j7', 'web', 'chat', 'mints', 'nftvol', 'osmint', 'tgbot'] as const;
 const DEFAULT_TITLE: Record<ColumnDef['type'], string> = {
   calls: 'Calls',
   callers: 'Top Callers',
+  trending: 'Trending',
   cove: 'Cove',
   salpha: 'Salpha',
   j7: 'J7',
@@ -65,7 +66,7 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
   const col: ColumnDef = { id, type, title, chats };
   const w = Number(raw.width);
   if (Number.isFinite(w) && w >= 320 && w <= 1600) col.width = Math.round(w);
-  if (['24h', '7d', '30d'].includes(raw.window)) col.window = raw.window;
+  if (['5m', '1h', '6h', '24h', '7d', '30d'].includes(raw.window)) col.window = raw.window;
   // per-column zoom (ctrl/⌘ + wheel over the column), 50%–150%; 1 = default and is not stored
   const z = Number(raw.zoom);
   if (Number.isFinite(z) && z >= 0.5 && z <= 1.5 && Math.round(z * 100) !== 100) col.zoom = Math.round(z * 100) / 100;

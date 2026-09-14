@@ -16,6 +16,10 @@ describe('columns', () => {
     expect(sanitizeColumns([{ id: 'n', type: 'chat', chats: ['none'] }])).toEqual([{ id: 'n', type: 'chat', title: 'Chats', chats: ['none'] },
     ]);
     expect(sanitizeColumns([{ id: 'c', type: 'weird' }])).toEqual([{ id: 'c', type: 'chat', title: 'Chats', chats: [] }]);
+    expect(sanitizeColumns([{ id: 't', type: 'trending', window: '5m' }, { id: 'u', type: 'trending', window: 'never' }])).toEqual([
+      { id: 't', type: 'trending', title: 'Trending', chats: [], window: '5m' },
+      { id: 'u', type: 'trending', title: 'Trending', chats: [] },
+    ]);
     expect(sanitizeColumns([{ id: 'k', type: 'callers', width: 500.4, window: '7d', alert: { on: 1, sound: 'coin' } }, { id: 'w', type: 'calls', width: 10, window: 'x' }])).toEqual([
       { id: 'k', type: 'callers', title: 'Top Callers', chats: [], width: 500, window: '7d', alert: { on: true, sound: 'coin' } },
       { id: 'w', type: 'calls', title: 'Calls', chats: [] },

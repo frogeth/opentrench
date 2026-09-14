@@ -7,6 +7,7 @@ import { CallCard } from './components/CallCard';
 import { ChatFeed } from './components/ChatFeed';
 import { ColumnEditor, chatKey } from './components/ColumnEditor';
 import { CallersList } from './components/CallersColumn';
+import { TREND_WINDOWS, TrendingList, trendWindow } from './components/TrendingColumn';
 import { Composer, type SendTarget } from './components/Composer';
 import { ShareModal } from './components/ShareModal';
 import { CoveView, COVE_BOT } from './components/CoveView';
@@ -1141,10 +1142,36 @@ export default function App() {
         </Column>
       );
     }
-    if (col.type === 'callers') {
+    if (col.type === 'trending') {
+      const win = trendWindow(col.window);
+      const setWin = (w: (typeof TREND_WINDOWS)[number]) => saveColumnsDebounced(updateColumn(col.id, (c) => ({ ...c, window: w })));
       return (
-        <Column key={col.id} title={col.title} subtitle={`${col.window ?? '7d'} · ${subtitleFor(col)}`} kind="callers" className="col-callers" {...actions}>
-          <CallersList tokens={tokens} window={col.window ?? '7d'} inScope={(name) => inScope(name, names)} now={now} favorites={status.favorites} onSearch={setQuery} />
+        <Column
+          key={col.id}
+          title={col.title}
+          subtitle={`${win} · ${subtitleFor(col)}`}
+          kind="trending"
+          className="col-trending"
+          extra={
+            <span className="seg seg-sm">
+              {TREND_WINDOWS.map((w) => (
+                <button key={w} className={win === w ? 'active' : ''} onClick={() => setWin(w)}>
+                  {w}
+                </button>
+              ))}
+            </span>
+          }
+          {...actions}
+        >
+          <TrendingList tokens={tokens} window={win} inScope={(name) => inScope(name, names)} now={now} onSelect={select} />
+        </Column>
+      );
+    }
+    if (col.type === 'callers') {
+      const cw = col.window === '24h' || col.window === '30d' ? col.window : '7d';
+      return (
+        <Column key={col.id} title={col.title} subtitle={`${cw} · ${subtitleFor(col)}`} kind="callers" className="col-callers" {...actions}>
+          <CallersList tokens={tokens} window={cw} inScope={(name) => inScope(name, names)} now={now} favorites={status.favorites} onSearch={setQuery} />
         </Column>
       );
     }
