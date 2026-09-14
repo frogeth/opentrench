@@ -192,6 +192,8 @@ export interface Config {
    * network can be tampered with in transit — a quoted balance/fee can be lied about, and a
    * broadcast transaction can be silently dropped. */
   opensea: { walletKey?: string; rpc: Record<string, string> };
+  /** TrenchTogether: share my calls on the LAN (token = the pairing secret), and the friends I follow */
+  together: { share: boolean; name: string; token: string; peers: { host: string; port: number; token: string; name: string }[] };
 }
 
 const DEFAULT: Config = {
@@ -210,6 +212,7 @@ const DEFAULT: Config = {
   hiddenTokens: [],
   j7: { favorites: [] },
   opensea: { rpc: {} },
+  together: { share: false, name: '', token: '', peers: [] },
 };
 
 /** The fields that are sealed on disk when a key is available (see secrets.ts). */
@@ -284,6 +287,7 @@ export class ConfigStore {
       seenTokens: this.cfg.seenTokens,
       hiddenTokens: this.cfg.hiddenTokens,
       opensea: { hasWallet: !!this.cfg.opensea.walletKey, rpc: this.cfg.opensea.rpc },
+      together: { share: this.cfg.together.share, name: this.cfg.together.name, peers: this.cfg.together.peers.map((p) => ({ host: p.host, port: p.port, name: p.name })) },
     };
   }
 
@@ -336,6 +340,15 @@ export class ConfigStore {
               .slice(0, 40)
               .map(([k, v]) => [k, String(v).slice(0, 500)]),
           ),
+        },
+        together: {
+          share: raw.together?.share === true,
+          name: String(raw.together?.name ?? '').trim().slice(0, 40),
+          token: typeof raw.together?.token === 'string' ? raw.together.token.trim().slice(0, 100) : '',
+          peers: (Array.isArray(raw.together?.peers) ? raw.together.peers : [])
+            .filter((p: any) => p && typeof p.host === 'string' && typeof p.token === 'string' && Number.isInteger(Number(p.port)))
+            .map((p: any) => ({ host: String(p.host).slice(0, 120), port: Number(p.port), token: String(p.token).slice(0, 100), name: String(p.name ?? '').slice(0, 40) }))
+            .slice(0, 20),
         },
       };
     } catch {

@@ -208,6 +208,8 @@ export interface TokenInfo {
   launchpadUrl?: string;
   /** one line the launchpad adds to the badge (Long: "anchored to NVDA") */
   launchpadNote?: string;
+  /** TrenchTogether: the friend whose machine this call came from (absent for your own calls) */
+  via?: string;
   imageUrl?: string;
   /** dexscreener-style chain id: ethereum | base | bsc | solana | robinhood | … */
   network?: string;
@@ -396,6 +398,8 @@ export interface Status {
   discordUser?: string;
   /** how Discord is connected: the Vencord bridge (read + write) or a legacy token (read only) */
   discordMode?: 'bridge' | 'token' | 'none';
+  /** TrenchTogether: sharing on this machine, and the friends this machine follows */
+  together?: { sharing: boolean; port: number; clients: number; peers: { name: string; url: string; state: 'connecting' | 'connected' | 'disconnected' | 'unauthorized' }[] };
 }
 
 export type ServerEvent =

@@ -200,6 +200,11 @@ export function CallCard({
           </>
         ) : null}
         <span className="call-age">{timeAgo(t.lastCallTs ?? t.firstSeenTs, now)}</span>
+        {t.via && (
+          <span className="call-via" title={`shared by ${t.via}'s opentrench (TrenchTogether)`}>
+            via {t.via}
+          </span>
+        )}
         {isFirst ? (
           <span className="first-badge">1st</span>
         ) : (

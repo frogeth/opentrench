@@ -131,6 +131,7 @@ export interface MaskedConfig {
   layouts: Layout[];
   seenTokens: string[];
   hiddenTokens: string[];
+  together: { share: boolean; name: string; peers: { host: string; port: number; name: string }[] };
   opensea: { hasWallet: boolean; walletAddress?: string; rpc: Record<string, string>; chains?: { id: string; name: string; defaultRpc: string; symbol: string }[] };
 }
 export interface WatchedChat {
@@ -151,6 +152,15 @@ export interface DiscordChannel {
   dm?: boolean;
   avatar?: string;
 }
+export interface TogetherInfo {
+  share: boolean;
+  name: string;
+  peers: { host: string; port: number; name: string }[];
+  /** one per LAN address, only while sharing */
+  pairings: string[];
+  status?: import('./types').Status['together'];
+}
+
 export interface TelegramDialog {
   id: string;
   title: string;
@@ -210,6 +220,12 @@ export const api = {
   react: (source: 'discord' | 'telegram', chatId: string, msgId: string, key: string, name: string, on: boolean) =>
     req<{ ok: true }>('POST', '/react', { source, chatId, msgId, key, name, on }),
   markSeen: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/seen', { add, remove }),
+  /** TrenchTogether: share calls with a friend on the same network */
+  together: () => req<TogetherInfo>('GET', '/together'),
+  setTogether: (patch: { share?: boolean; name?: string }) => req<TogetherInfo>('PUT', '/together', patch),
+  rotateTogether: () => req<{ pairings: string[] }>('POST', '/together/rotate'),
+  addPeer: (pairing: string) => req<TogetherInfo>('POST', '/together/peers', { pairing }),
+  removePeer: (host: string, port: number) => req<TogetherInfo>('DELETE', '/together/peers', { host, port }),
   /** hide call cards from the calls columns (the token keeps being tracked) */
   markHidden: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/hidden', { add, remove }),
   setColumns: (columns: ColumnDef[]) => req<ColumnDef[]>('PUT', '/columns', { columns }),

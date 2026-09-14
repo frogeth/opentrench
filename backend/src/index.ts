@@ -55,12 +55,17 @@ const refreshHot = createMarketRefresher(applyMarket, (m) => console.warn('[refr
 const refreshMarket = createMarketRefresher(applyMarket, (m) => console.warn('[refresh]', m));
 // newest calls first so a burst of new tokens never starves the ones people are watching
 const byNewest = (list: TokenInfo[]) => list.sort((a, b) => b.lastCallTs - a.lastCallTs);
-setInterval(() => void refreshHot(byNewest(hub.activeTokens(HOT_WINDOW_MS).filter((t) => t.network))), HOT_REFRESH_MS).unref();
-setInterval(() => void refreshMarket(byNewest(hub.activeTokens(ACTIVE_WINDOW_MS))), REFRESH_MS).unref();
+// TrenchTogether: a friend's machine that is connected keeps its tokens fresh for us, so those skip the loops
+const mine = (list: TokenInfo[]) => {
+  const live = hub.remoteLive();
+  return live.size ? list.filter((t) => !live.has(t.address)) : list;
+};
+setInterval(() => void refreshHot(byNewest(mine(hub.activeTokens(HOT_WINDOW_MS).filter((t) => t.network)))), HOT_REFRESH_MS).unref();
+setInterval(() => void refreshMarket(byNewest(mine(hub.activeTokens(ACTIVE_WINDOW_MS)))), REFRESH_MS).unref();
 // Exact market caps at call time: a call lands with the cached number; once its minute candle has
 // closed, the real value is read from the pool's 1-minute candles (a few tokens per pass, see backfill.ts).
 const backfill = createBackfiller({
-  tokens: () => hub.activeTokens(ACTIVE_WINDOW_MS),
+  tokens: () => mine(hub.activeTokens(ACTIVE_WINDOW_MS)),
   candles: (token, network, pool, beforeTs, limit) => fetchOhlcv(gtSlugFor(network), pool, '1m', limit, fetch, beforeTs, token),
   apply: (address, updates) => hub.applyCallMarketCaps(address, updates),
   log: (m) => console.warn('[backfill]', m),
@@ -92,6 +97,7 @@ setInterval(() => {
 const svc: Services = new Services(cfg, hub);
 svc.startJ7();
 svc.syncColumnFeeds();
+void svc.syncTogether();
 const hover = createHoverFetchers();
 const store = new StateStore(process.env.TRENCHFEED_STATE ?? path.join(root, 'state.json'));
 hub.load(store.load());

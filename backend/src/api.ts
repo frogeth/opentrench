@@ -2,6 +2,7 @@ import type { TokenInfo } from './types.js';
 import { Router, json, raw, type Request, type Response } from 'express';
 import type { HoverFetchers } from './hover.js';
 import { mapLongAsset, resolveNumeraires } from './long.js';
+import { decodePairing, newToken } from './together.js';
 import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
 import { LAYOUT_NAME_MAX, MAX_LAYOUTS, sanitizeColumns, type Layout } from './config.js';
 import type { ConfigStore } from './config.js';
@@ -160,6 +161,51 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
         c.blacklist = [...new Set(names)];
       });
       hub.rebuild();
+    }),
+  );
+  // ---------- TrenchTogether ----------
+  r.get('/together', wrap(() => ({ ...cfg.masked().together, pairings: svc.togetherPairings(), status: hub.getStatus().together })));
+  r.put(
+    '/together',
+    wrap(async (req) => {
+      cfg.update((c) => {
+        if (typeof req.body?.share === 'boolean') c.together.share = req.body.share;
+        if (typeof req.body?.name === 'string') c.together.name = req.body.name.trim().slice(0, 40);
+      });
+      await svc.syncTogether();
+      return { ...cfg.masked().together, pairings: svc.togetherPairings(), status: hub.getStatus().together };
+    }),
+  );
+  // a new pairing secret: every friend has to pair again
+  r.post(
+    '/together/rotate',
+    wrap(async () => {
+      cfg.update((c) => (c.together.token = newToken()));
+      await svc.syncTogether();
+      return { pairings: svc.togetherPairings() };
+    }),
+  );
+  r.post(
+    '/together/peers',
+    wrap(async (req) => {
+      const p = decodePairing(String(req.body?.pairing ?? ''));
+      if (!p) throw new Error('that is not a pairing string (opentrench://together/…)');
+      cfg.update((c) => {
+        c.together.peers = c.together.peers.filter((x) => !(x.host === p.host && x.port === p.port));
+        c.together.peers.push({ host: p.host, port: p.port, token: p.token, name: p.name });
+      });
+      await svc.syncTogether();
+      return { ...cfg.masked().together, status: hub.getStatus().together };
+    }),
+  );
+  r.delete(
+    '/together/peers',
+    wrap(async (req) => {
+      const host = String(req.body?.host ?? '');
+      const port = Number(req.body?.port);
+      cfg.update((c) => (c.together.peers = c.together.peers.filter((x) => !(x.host === host && x.port === port))));
+      await svc.syncTogether();
+      return { ...cfg.masked().together, status: hub.getStatus().together };
     }),
   );
   // Long (app.long.xyz): the page fetches Long's indexer (Cloudflare blocks the server) and hands the raw asset here.

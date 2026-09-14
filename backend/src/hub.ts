@@ -190,6 +190,66 @@ export class MessageHub extends EventEmitter {
     this.changed();
   }
 
+  /** TrenchTogether: tokens a connected friend keeps fresh right now (their market data streams in), so local refresh loops leave them alone. */
+  remoteLive: () => Set<string> = () => new Set();
+
+  /**
+   * A call shared by a friend (TrenchTogether). A token this machine already has gets the calls it
+   * lacks (by message id) and any market numbers it lacks; a token it has never seen arrives whole,
+   * tagged `via`, and keeps taking the friend's market numbers since theirs is the machine fetching.
+   */
+  applyRemoteToken(peer: string, incoming: TokenInfo): void {
+    if (!incoming || typeof incoming.address !== 'string' || !Array.isArray(incoming.calls)) return;
+    const calls = incoming.calls.filter((c) => c && typeof c.msgId === 'string' && typeof c.chatName === 'string' && Number.isFinite(c.ts)).slice(-MAX_CALLS);
+    let t = this.tokens.get(incoming.address);
+    const fresh = !t;
+    if (!t) {
+      t = { ...incoming, calls: [], seen: 0, calledIn: [], via: peer };
+      this.tokens.set(t.address, t);
+      this.tokenChats.set(t.address, new Set());
+      if (this.tokens.size > MAX_TOKENS) {
+        const oldest = this.tokens.keys().next().value!;
+        this.tokens.delete(oldest);
+        this.tokenChats.delete(oldest);
+      }
+    }
+    const chats = this.tokenChats.get(t.address)!;
+    let changed = fresh;
+    for (const c of calls) {
+      if (t.calls.some((x) => x.msgId === c.msgId)) continue;
+      t.calls.push({ ...c });
+      chats.add(`together:${c.source}:${c.chatName}`);
+      if (!t.calledIn.includes(c.chatName)) t.calledIn.push(c.chatName);
+      t.lastCallTs = Math.max(t.lastCallTs ?? 0, c.ts);
+      changed = true;
+    }
+    if (changed) {
+      t.calls.sort((a, b) => a.ts - b.ts);
+      if (t.calls.length > MAX_CALLS) t.calls.splice(0, t.calls.length - MAX_CALLS);
+      t.seen = chats.size;
+      if (!t.firstCaller && t.calls[0]) t.firstCaller = { ...t.calls[0] };
+    }
+    // market numbers: fill what is missing; a token that came from the friend keeps following them
+    for (const k of DATA_KEYS) {
+      if (incoming[k] === undefined) continue;
+      if (t[k] === undefined || t.via) {
+        if ((t as any)[k] !== incoming[k]) changed = true;
+        (t as any)[k] = incoming[k];
+      }
+    }
+    for (const k of ['firstCallMarketCap', 'athMarketCap', 'security'] as const) if (t[k] === undefined && incoming[k] !== undefined) ((t as any)[k] = incoming[k]), (changed = true);
+    if (t.via && incoming.athMarketCap !== undefined) t.athMarketCap = Math.max(t.athMarketCap ?? 0, incoming.athMarketCap);
+    if (fresh) this.applyBuy(t);
+    if (!changed) return;
+    this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
+    this.changed();
+  }
+
+  setTogether(s: NonNullable<Status['together']>): void {
+    this.status.together = s;
+    this.emitStatus();
+  }
+
   /** A launchpad identified after the fact (the page asked Long): badge plus whatever the token still lacks. */
   applyLaunchpad(address: string, info: LaunchpadInfo): boolean {
     const t = this.tokens.get(address) ?? this.tokens.get(address.toLowerCase());

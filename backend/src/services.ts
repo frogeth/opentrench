@@ -10,7 +10,9 @@ import { extractLinks, type ExtractedMeta } from './links.js';
 import { createPreviewer, type Previewer } from './previews.js';
 import { J7Client } from './j7.js';
 import { MintGoClient } from './mintgo.js';
+import os from 'node:os';
 import { RankingsPoller, keyFor } from './opensea/rankings.js';
+import { TOGETHER_PORT, TogetherGuest, TogetherHost, encodePairing, lanAddresses, newToken } from './together.js';
 import { Minter } from './opensea/minter.js';
 import { CHAINS } from './opensea/chains.js';
 import { createLaunchWatcher } from './deploys.js';
@@ -27,6 +29,59 @@ export class Services {
   j7?: J7Client;
   mintgo?: MintGoClient;
   readonly rankings = new RankingsPoller();
+  // ---------- TrenchTogether ----------
+  readonly togetherHost: TogetherHost; // built in the constructor: field initializers run before `hub` is assigned
+  private guests = new Map<string, TogetherGuest>();
+  togetherName(): string {
+    return this.cfg.get().together.name || os.userInfo().username || os.hostname();
+  }
+  /** Pairing strings for every address a friend on the LAN could reach this machine on. */
+  togetherPairings(): string[] {
+    const t = this.cfg.get().together;
+    if (!t.share || !t.token) return [];
+    return lanAddresses().map((host) => encodePairing({ host, port: TOGETHER_PORT, token: t.token, name: this.togetherName() }));
+  }
+  private togetherStatus(): void {
+    this.hub.setTogether({
+      sharing: this.togetherHost.listening,
+      port: TOGETHER_PORT,
+      clients: this.togetherHost.clients,
+      peers: [...this.guests.values()].map((g) => ({ name: g.name, url: g.url, state: g.state })),
+    });
+  }
+  /** Start/stop the LAN listener and the friends we follow, from the config. Safe to call repeatedly. */
+  async syncTogether(): Promise<void> {
+    const t = this.cfg.get().together;
+    if (t.share && !t.token) this.cfg.update((c) => (c.together.token = newToken()));
+    if (t.share && !this.togetherHost.listening) {
+      try {
+        await this.togetherHost.start(TOGETHER_PORT);
+        console.log(`[together] sharing calls on port ${TOGETHER_PORT}`);
+      } catch (e: any) {
+        console.warn('[together] cannot listen:', e?.message ?? e);
+      }
+    } else if (!t.share && this.togetherHost.listening) this.togetherHost.stop();
+    const want = new Map(this.cfg.get().together.peers.map((p) => [`${p.host}:${p.port}`, p]));
+    for (const [key, g] of this.guests) {
+      if (!want.has(key)) {
+        g.stop();
+        this.guests.delete(key);
+      }
+    }
+    for (const [key, p] of want) {
+      if (this.guests.has(key)) continue;
+      const g = new TogetherGuest({ host: p.host, port: p.port, token: p.token, name: p.name }, (peer, token) => this.hub.applyRemoteToken(peer, token));
+      g.on('state', () => this.togetherStatus());
+      this.guests.set(key, g);
+      g.start();
+    }
+    this.hub.remoteLive = () => {
+      const s = new Set<string>();
+      for (const g of this.guests.values()) if (g.state === 'connected') for (const a of g.live) s.add(a);
+      return s;
+    };
+    this.togetherStatus();
+  }
   readonly minter = new Minter(() => this.cfg.get().opensea.walletKey, () => this.cfg.get().opensea.rpc);
   private discordSelf?: DiscordSelf;
   private guildRoles = new Map<string, Map<string, string>>();
@@ -54,6 +109,8 @@ export class Services {
     this.minter.on('job', (job) => this.hub.emit('event', { type: 'mintJob', job }));
     this.minter.on('gone', (id: string) => this.hub.emit('event', { type: 'mintJobGone', id }));
     this.hub.nftState.mintJobs = () => this.minter.jobs;
+    this.togetherHost = new TogetherHost(hub, { name: () => this.togetherName(), token: () => this.cfg.get().together.token, version: process.env.TRENCHFEED_APP_VERSION ?? 'dev' });
+    this.togetherHost.on('clients', () => this.togetherStatus());
     hub.on('event', (e) => {
       if (e.type === 'ping') void this.ping(e.token, e.msg);
     });

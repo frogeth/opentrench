@@ -739,6 +739,13 @@ b { font-weight: 600; }
 .col-trending .hc-anchor { display: block; }
 .pick-filters { display: flex; align-items: center; gap: 8px; padding: 6px 10px 8px; position: sticky; top: 0; background: var(--panel, var(--bg)); z-index: 1; }
 .pick-filters .muted { margin-left: 3px; font-size: 10px; }
+/* TrenchTogether */
+.call-via { font-size: 10px; color: var(--accent); border: 1px solid rgba(65, 200, 146, 0.45); border-radius: 4px; padding: 0 5px; white-space: nowrap; flex: none; }
+.call-row .call-via { margin-left: 2px; }
+.pairing { font-size: 11px; word-break: break-all; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; flex: 1; min-width: 0; }
+.pairing-row, .peer-row { align-items: center; }
+.peer-row b { min-width: 90px; }
+.pill-on { color: var(--accent); border-color: var(--accent); }
 /* first-run checklist */
 .onboard { max-width: 600px; }
 .onboard-steps { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }

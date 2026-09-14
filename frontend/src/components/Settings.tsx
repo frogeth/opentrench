@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, type BotSeen, type MaskedConfig } from '../api';
+import { api, type BotSeen, type MaskedConfig, TogetherInfo } from '../api';
 import type { Status } from '../types';
 import { Logo } from './Logo';
 import { Avatar } from './Avatar';
@@ -17,7 +17,7 @@ const onEnter = (enabled: boolean, fn: () => void) => (e: React.KeyboardEvent<HT
 };
 
 
-type Tab = 'accounts' | 'feed' | 'trading';
+type Tab = 'accounts' | 'feed' | 'trading' | 'together';
 
 /** The one settings place: a modal with three tabs. Channels are managed in the sidebar, not here. */
 export function Settings({
@@ -71,6 +71,9 @@ export function Settings({
             </button>
             <button className={tab === 'trading' ? 'active' : ''} onClick={() => setTab('trading')}>
               Trading
+            </button>
+            <button className={tab === 'together' ? 'active' : ''} onClick={() => setTab('together')}>
+              Together
             </button>
           </div>
           <button className="close" onClick={onClose}>
@@ -142,6 +145,7 @@ export function Settings({
               <BlacklistSection cfg={cfg} onChange={reload} />
             </>
           )}
+          {cfg && tab === 'together' && <TogetherSection status={status} />}
           {cfg && tab === 'trading' && (
             <>
               <CoveSection cfg={cfg} onChange={reload} />
@@ -958,5 +962,112 @@ function J7Section({ cfg, status, onChange }: { cfg: MaskedConfig; status: Statu
       )}
       {err && <div className="err">{err}</div>}
     </section>
+  );
+}
+
+/** TrenchTogether: share my calls with a friend on the same network, or follow theirs. */
+function TogetherSection({ status }: { status: Status }) {
+  const [info, setInfo] = useState<TogetherInfo | null>(null);
+  const [name, setName] = useState('');
+  const [pairing, setPairing] = useState('');
+  const [copied, setCopied] = useState<string | null>(null);
+  const { busy, err, run } = useAsync();
+  const load = () =>
+    api
+      .together()
+      .then((i) => {
+        setInfo(i);
+        setName(i.name);
+      })
+      .catch(() => {});
+  useEffect(() => {
+    load();
+  }, [status.together?.sharing, status.together?.peers.length]);
+  const live = status.together;
+  const copy = async (s: string) => {
+    if (await copyText(s)) {
+      setCopied(s);
+      setTimeout(() => setCopied(null), 1200);
+    }
+  };
+  const addPeer = () =>
+    run(async () => {
+      setInfo(await api.addPeer(pairing));
+      setPairing('');
+    });
+  if (!info) return <div className="hint">Loading…</div>;
+  return (
+    <>
+      <section>
+        <h2>
+          TrenchTogether <span className="pill pill-mode">calls only · same network</span>
+        </h2>
+        <div className="hint">
+          Share your calls with a friend on the same Wi-Fi (or the same VPN). What travels is the call: the token, who called it where, and the market numbers your machine already
+          fetched. Never a chat message. On their side your calls show tagged <b>via {info.name || 'you'}</b>, and their machine stops asking the APIs for tokens you keep fresh, so
+          two machines on one connection stop fighting over the same rate limits.
+        </div>
+      </section>
+      <section>
+        <h2>
+          Share my calls{' '}
+          <span className={`pill ${live?.sharing ? 'pill-on' : ''}`}>{live?.sharing ? `on · ${live.clients} connected` : 'off'}</span>
+        </h2>
+        <div className="row-inline">
+          <input placeholder="your name, as your friend will see it" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} onKeyDown={onEnter(!busy, () => run(async () => setInfo(await api.setTogether({ name }))))} />
+          <button disabled={busy} onClick={() => run(async () => setInfo(await api.setTogether({ name })))}>
+            Save name
+          </button>
+          <button className={info.share ? '' : 'primary'} disabled={busy} onClick={() => run(async () => setInfo(await api.setTogether({ share: !info.share })))}>
+            {info.share ? 'Stop sharing' : 'Start sharing'}
+          </button>
+        </div>
+        {info.share && (
+          <>
+            <div className="hint">Send your friend one of these. Paste it in their opentrench under Together → Follow a friend. Anyone with the string can read your calls; rotate it to cut everyone off.</div>
+            {info.pairings.length === 0 && <div className="hint">No network address found. Are you connected to Wi-Fi or Ethernet?</div>}
+            {info.pairings.map((p) => (
+              <div key={p} className="row-inline pairing-row">
+                <code className="pairing">{p}</code>
+                <button onClick={() => void copy(p)}>{copied === p ? 'Copied' : 'Copy'}</button>
+              </div>
+            ))}
+            <div className="row-inline">
+              <button disabled={busy} onClick={() => run(async () => { await api.rotateTogether(); await load(); })}>
+                Rotate the secret
+              </button>
+              <span className="hint">Listens on port {live?.port ?? 3211} of this machine only while sharing is on; the rest of opentrench stays on 127.0.0.1.</span>
+            </div>
+          </>
+        )}
+      </section>
+      <section>
+        <h2>Follow a friend</h2>
+        <div className="row-inline">
+          <input placeholder="opentrench://together/…" value={pairing} onChange={(e) => setPairing(e.target.value)} spellCheck={false} onKeyDown={onEnter(!busy && pairing.trim().length > 0, addPeer)} />
+          <button className="primary" disabled={busy || !pairing.trim()} onClick={addPeer}>
+            Follow
+          </button>
+        </div>
+        {info.peers.length === 0 && <div className="hint">Nobody yet. Paste a pairing string from a friend who turned on sharing.</div>}
+        {info.peers.map((p) => {
+          const st = live?.peers.find((x) => x.url.includes(`${p.host.includes(':') ? `[${p.host}]` : p.host}:${p.port}`))?.state ?? 'disconnected';
+          return (
+            <div key={`${p.host}:${p.port}`} className="row-inline peer-row">
+              <b>{p.name || p.host}</b>
+              <span className="muted">
+                {p.host}:{p.port}
+              </span>
+              <StatePill state={st === 'unauthorized' ? 'auth_error' : st} />
+              <button disabled={busy} onClick={() => run(async () => setInfo(await api.removePeer(p.host, p.port)))}>
+                Unfollow
+              </button>
+            </div>
+          );
+        })}
+        <div className="hint">Their calls appear in your feed with a small <b>via</b> tag. Unauthorized means their secret changed: ask for a fresh pairing string.</div>
+      </section>
+      {err && <div className="err">{err}</div>}
+    </>
   );
 }
