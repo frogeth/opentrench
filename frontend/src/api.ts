@@ -225,6 +225,7 @@ export const api = {
   setTogether: (patch: { share?: boolean; name?: string }) => req<TogetherInfo>('PUT', '/together', patch),
   rotateTogether: () => req<{ pairings: string[] }>('POST', '/together/rotate'),
   addPeer: (pairing: string) => req<TogetherInfo>('POST', '/together/peers', { pairing }),
+  reconnectPeers: () => req<{ status: import('./types').Status['together'] }>('POST', '/together/reconnect'),
   removePeer: (host: string, port: number) => req<TogetherInfo>('DELETE', '/together/peers', { host, port }),
   /** hide call cards from the calls columns (the token keeps being tracked) */
   markHidden: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/hidden', { add, remove }),

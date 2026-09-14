@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { MessageHub } from './hub.js';
-import { TogetherGuest, TogetherHost, decodePairing, encodePairing, shareable } from './together.js';
+import { TogetherGuest, TogetherHost, decodePairing, encodePairing, lanAddresses, shareable } from './together.js';
 import type { CallRecord, TokenInfo } from './types.js';
 
 const NOW = Date.now();
@@ -24,6 +24,17 @@ describe('pairing strings', () => {
     expect(decodePairing('https://example.com')).toBeUndefined();
     expect(decodePairing('opentrench://together/host:99999/t')).toBeUndefined();
     expect(decodePairing('opentrench://together/host:3211/t')?.name).toBe('host');
+  });
+});
+
+describe('lanAddresses', () => {
+  it('skips loopback, link-local and IPv6, and puts private ranges first', () => {
+    const ifaces = {
+      lo0: [{ address: '127.0.0.1', family: 'IPv4', internal: true }],
+      en0: [{ address: '169.254.63.48', family: 'IPv4', internal: false }, { address: 'fe80::1', family: 'IPv6', internal: false }, { address: '192.168.1.178', family: 'IPv4', internal: false }],
+      utun3: [{ address: '100.101.102.103', family: 'IPv4', internal: false }],
+    } as any;
+    expect(lanAddresses(ifaces)).toEqual(['192.168.1.178', '100.101.102.103']);
   });
 });
 

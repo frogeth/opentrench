@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- TrenchTogether: reconnects in seconds instead of up to a minute after the host restarts, a Reconnect button and re-pasting a pairing dial again at once, the peer row says why a connection failed, and link-local 169.254 addresses are no longer offered as pairings.
+
 - Settings shows the app version with a **check for updates** button (desktop), the same check the app menu runs.
 
 ## v0.8.10 — 2026-09-14

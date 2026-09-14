@@ -49,6 +49,11 @@ export class Services {
       peers: [...this.guests.values()].map((g) => ({ name: g.name, url: g.url, state: g.state, error: g.lastError })),
     });
   }
+  /** Dial every friend again now. */
+  reconnectPeers(): void {
+    for (const g of this.guests.values()) if (g.state !== 'connected') g.reconnect();
+    this.togetherStatus();
+  }
   /** Start/stop the LAN listener and the friends we follow, from the config. Safe to call repeatedly. */
   async syncTogether(): Promise<void> {
     const t = this.cfg.get().together;
@@ -69,7 +74,17 @@ export class Services {
       }
     }
     for (const [key, p] of want) {
-      if (this.guests.has(key)) continue;
+      const have = this.guests.get(key);
+      if (have) {
+        // re-pasting a pairing (maybe with a new secret) dials again right away
+        if (have.pairing.token !== p.token) {
+          have.stop();
+          this.guests.delete(key);
+        } else {
+          if (have.state !== 'connected') have.reconnect();
+          continue;
+        }
+      }
       const g = new TogetherGuest({ host: p.host, port: p.port, token: p.token, name: p.name }, (peer, token) => this.hub.applyRemoteToken(peer, token));
       g.on('state', () => this.togetherStatus());
       this.guests.set(key, g);

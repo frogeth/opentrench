@@ -1073,6 +1073,11 @@ function TogetherSection({ status }: { status: Status }) {
               </span>
               <StatePill state={st === 'unauthorized' ? 'auth_error' : st} />
               {peer?.error && st !== 'connected' && <span className="muted" title="last connection error">{peer.error === 'ECONNREFUSED' ? 'refused: is sharing on over there?' : peer.error === 'ETIMEDOUT' || /timeout/i.test(peer.error) ? 'no route: same Wi-Fi? client isolation?' : peer.error === 'EHOSTUNREACH' || peer.error === 'ENETUNREACH' ? 'unreachable: different network' : peer.error}</span>}
+              {st !== 'connected' && (
+                <button disabled={busy} onClick={() => run(async () => { await api.reconnectPeers(); })}>
+                  Reconnect
+                </button>
+              )}
               <button disabled={busy} onClick={() => run(async () => setInfo(await api.removePeer(p.host, p.port)))}>
                 Unfollow
               </button>

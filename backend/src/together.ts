@@ -47,17 +47,21 @@ export function decodePairing(s: string): Pairing | undefined {
   return { host, port, token: decodeURIComponent(m[3]), name: decodeURIComponent(m[4] ?? '') || host };
 }
 
-/** The addresses a peer on the LAN can reach this machine on (IPv4 first, no loopback). */
-export function lanAddresses(): string[] {
+/** The addresses a peer on the LAN can reach this machine on: IPv4, not loopback, not link-local (169.254.x is a self-assigned address nobody else can route to). */
+export function lanAddresses(ifaces: NodeJS.Dict<os.NetworkInterfaceInfo[]> = os.networkInterfaces()): string[] {
   const out: string[] = [];
-  for (const list of Object.values(os.networkInterfaces())) {
+  for (const list of Object.values(ifaces)) {
     for (const i of list ?? []) {
       if (i.internal) continue;
-      if (i.family === 'IPv4' || (i.family as unknown) === 4) out.push(i.address);
+      if (!(i.family === 'IPv4' || (i.family as unknown) === 4)) continue;
+      if (i.address.startsWith('169.254.')) continue;
+      out.push(i.address);
     }
   }
-  return out;
+  // the private ranges first: those are the ones a friend on the same Wi-Fi can use
+  return out.sort((a, b) => Number(isPrivate(b)) - Number(isPrivate(a)));
 }
+const isPrivate = (ip: string): boolean => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip);
 
 const sameToken = (a: string, b: string): boolean => {
   const x = Buffer.from(a);
@@ -156,7 +160,7 @@ export class TogetherGuest extends EventEmitter {
   readonly live = new Set<string>();
   private ws?: WebSocket;
   private timer?: NodeJS.Timeout;
-  private backoff = 5_000;
+  private backoff = 2_000;
   private stopped = false;
   constructor(
     readonly pairing: Pairing,
@@ -172,6 +176,19 @@ export class TogetherGuest extends EventEmitter {
   }
   start(): void {
     this.stopped = false;
+    this.connect();
+  }
+  /** drop whatever is there and dial again now (the user re-pasted the pairing, or pressed reconnect) */
+  reconnect(): void {
+    clearTimeout(this.timer);
+    this.backoff = 2_000;
+    this.stopped = false;
+    if (this.ws) {
+      const ws = this.ws;
+      this.ws = undefined;
+      ws.removeAllListeners('close');
+      ws.close();
+    }
     this.connect();
   }
   stop(): void {
@@ -193,7 +210,7 @@ export class TogetherGuest extends EventEmitter {
     const ws = new this.WS(`${this.url}?token=${encodeURIComponent(this.pairing.token)}`, { handshakeTimeout: 8_000 });
     this.ws = ws;
     ws.on('open', () => {
-      this.backoff = 5_000;
+      this.backoff = 2_000;
       this.lastError = undefined;
       this.setState('connected');
     });
@@ -221,9 +238,9 @@ export class TogetherGuest extends EventEmitter {
       this.live.clear();
       if (this.state !== 'unauthorized') this.setState('disconnected');
       if (this.stopped) return;
-      this.timer = setTimeout(() => this.connect(), this.state === 'unauthorized' ? 60_000 : this.backoff);
+      this.timer = setTimeout(() => this.connect(), this.state === 'unauthorized' ? 30_000 : this.backoff);
       this.timer.unref?.();
-      this.backoff = Math.min(60_000, this.backoff * 2);
+      this.backoff = Math.min(15_000, this.backoff * 2);
     });
   }
   private take(t: any): void {

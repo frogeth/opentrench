@@ -198,6 +198,14 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { ...cfg.masked().together, status: hub.getStatus().together };
     }),
   );
+  r.post(
+    '/together/reconnect',
+    wrap(async () => {
+      await svc.syncTogether();
+      svc.reconnectPeers();
+      return { status: hub.getStatus().together };
+    }),
+  );
   r.delete(
     '/together/peers',
     wrap(async (req) => {
