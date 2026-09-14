@@ -57,9 +57,11 @@ build && npm start`, then open http://127.0.0.1:3210.
 Discord connects through the **opentrench plugin for Vencord**, which lives
 inside your own Discord app: no token to paste, nothing stored.
 
-**One click (0.8.7 and later):** ⚙ → Accounts → Discord → **Set up Discord**.
+**One click (0.8.8 and later):** ⚙ → Accounts → Discord → **Set up Discord**.
 opentrench quits Discord, installs its own copy of Vencord with the plugin
-switched on, and reopens Discord. An existing Vencord is replaced by the same
+switched on, and reopens Discord. On a Mac the first attempt may be blocked
+until you allow opentrench under System Settings → Privacy & Security → App
+Management; the app offers to open that pane, then press the button again. An existing Vencord is replaced by the same
 Vencord plus the plugin, settings kept; *remove the plugin* undoes it.
 
 **By hand** (older versions, or a Discord installed somewhere unusual), about

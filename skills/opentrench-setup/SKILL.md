@@ -41,6 +41,9 @@ error), the manual route is https://opentrench.app/docs/discord/ (git + Node + p
 Vencord, copy `vencord/opentrench-bridge` into `src/userplugins`, `pnpm build`, `pnpm inject`).
 
 Known failure modes:
+- "macOS blocked the change (App Management)": macOS gates edits to other apps' bundles.
+  System Settings → Privacy & Security → App Management → switch on opentrench, press Set
+  up Discord again. The dialog in the app offers to open that pane.
 - Pill stays red: Discord is not running, or the plugin is disabled (Discord → User Settings →
   Vencord → Plugins → OpentrenchBridge), or it points at a different port than the backend.
 - Discord updated itself: on macOS an update replaces the app bundle and removes the

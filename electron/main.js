@@ -407,6 +407,18 @@ async function confirmDiscordSetup() {
     return r;
   } catch (e) {
     console.error('[discord-setup]', e);
+    if (e.code === 'APP_MANAGEMENT' && process.platform === 'darwin') {
+      // macOS gates changes to other apps' bundles behind App Management; the pane is one click away
+      const { response } = await dialog.showMessageBox(win ?? undefined, {
+        type: 'warning',
+        buttons: ['Open System Settings', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+        message: 'macOS needs your permission first',
+        detail: 'To install the plugin, opentrench has to change files inside the Discord app. macOS only allows that for apps listed under Privacy & Security → App Management.\n\nTurn on opentrench there, come back, and press Set up Discord again.',
+      });
+      if (response === 0) shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles');
+    }
     return { ok: false, error: e.message };
   }
 }

@@ -7,7 +7,16 @@
 //
 // Removing puts `_app.asar` back. If the user already had Vencord, ours replaces it (it is the
 // same Vencord with one extra plugin; their settings and plugins carry over untouched).
-const fs = require('node:fs');
+// Electron's own `fs` treats every path ending in .asar as an archive to read *inside* of, so
+// Discord's app.asar cannot be read, renamed or replaced through it ("ENOENT, not found in
+// app.asar"). `original-fs` is the unpatched module; under plain Node it does not exist.
+const fs = (() => {
+  try {
+    return require('original-fs');
+  } catch {
+    return require('node:fs');
+  }
+})();
 const path = require('node:path');
 const os = require('node:os');
 const { execFile } = require('node:child_process');
@@ -235,7 +244,17 @@ async function setup({ bundledDir, dataDir, port = 3210, flavour, log = () => {}
     fs.writeFileSync(appAsar, injectorAsar(p.patcher));
     enablePlugin(port);
   } catch (e) {
-    if (e && e.code === 'EACCES') throw new Error(`no permission to change ${install.resources}`);
+    // nothing was changed (the first write is what fails): bring Discord back, then explain
+    await launch(install).catch(() => {});
+    if (e && (e.code === 'EPERM' || e.code === 'EACCES')) {
+      const err = new Error(
+        process.platform === 'darwin'
+          ? `macOS blocked the change to ${install.name} (App Management). Allow opentrench under System Settings → Privacy & Security → App Management, then press Set up Discord again.`
+          : `no permission to change ${install.resources}; run opentrench as the user who installed Discord`,
+      );
+      err.code = 'APP_MANAGEMENT';
+      throw err;
+    }
     throw e;
   }
   log(`injected into ${install.resources}`);
