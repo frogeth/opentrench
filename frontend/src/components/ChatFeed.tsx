@@ -34,6 +34,7 @@ export function ChatFeed({
   render,
   onReply,
   onOpenChat,
+  onPick,
   onReveal,
   onReact,
   mine,
@@ -56,6 +57,8 @@ export function ChatFeed({
   render: (body: ReactNode, bodyRef: React.RefObject<HTMLDivElement>, onScroll: () => void, footer: ReactNode) => ReactNode;
   onReply?: (m: FeedMessage) => void;
   onOpenChat?: (m: FeedMessage) => void;
+  /** a plain click on a row picked that message's chat */
+  onPick?: (m: FeedMessage) => void;
   /** make a hidden/filtered message visible in this column; returns false if it is not in the buffer at all */
   onReveal?: (id: string) => boolean;
   onReact?: (m: FeedMessage, key: string, name: string, on: boolean) => void;
@@ -149,6 +152,7 @@ export function ChatFeed({
           onAuthorChanged={onAuthorChanged}
           onReply={onReply}
           onOpenChat={onOpenChat}
+          onPick={onPick}
           onJump={jumpTo}
           onReact={onReact && canReactTo(m) ? onReact : undefined}
           mine={mine}

@@ -450,14 +450,28 @@ export default function App() {
   const canSend = { discord: !!cfg?.discord.canSend && status.discordMode === 'bridge', telegram: !!cfg?.telegram.canSend } as const;
   const targetsFor = (names: Set<string> | null): SendTarget[] =>
     watched.filter((w) => (!names || names.has(w.name)) && (!scope || scope.has(w.name))).map((w) => ({ id: w.id, name: w.name, source: w.source }));
+  // which chat each column's composer sends to; a plain click on a message picks that message's chat
+  const [targetByCol, setTargetByCol] = useState<Record<string, string | undefined>>({});
   const composerFor = (colId: string, names: Set<string> | null) => (
     <Composer
       targets={targetsFor(names)}
       canSend={canSend}
       reply={replyByCol[colId]}
       onCancelReply={() => setReplyByCol((r) => ({ ...r, [colId]: undefined }))}
+      targetId={targetByCol[colId]}
+      onTargetChange={(id) => setTargetByCol((t) => ({ ...t, [colId]: id }))}
     />
   );
+  /** A click on a message in a column that follows several chats: the composer now sends to that chat.
+   *  A pending reply aimed at a different chat is dropped — the click is the newer intent. */
+  const pickChat = (colId: string, names: Set<string> | null) => (m: FeedMessage) => {
+    const targets = targetsFor(names);
+    if (targets.length < 2) return;
+    const hit = targets.find((t) => t.source === m.source && String(t.id) === String(m.chatId)) ?? targets.find((t) => t.source === m.source && t.name === m.chatName);
+    if (!hit) return;
+    setTargetByCol((t) => ({ ...t, [colId]: hit.id }));
+    setReplyByCol((r) => (r[colId] && r[colId]!.chatName !== m.chatName ? { ...r, [colId]: undefined } : r));
+  };
   const [liveWidths, setLiveWidths] = useState<Record<string, number>>({});
   const [liveRatios, setLiveRatios] = useState<Record<string, number>>({});
   /** the divider of a stacked pair: live share while dragging, persisted on release */
@@ -1178,6 +1192,7 @@ export default function App() {
         onAuthorChanged={reloadLists}
         onReply={(m) => setReplyByCol((r) => ({ ...r, [col.id]: m }))}
         onOpenChat={(m) => openChat(m.chatName, m.source, m.chatId)}
+        onPick={pickChat(col.id, names)}
         onReveal={revealMessage}
         onReact={canSend.discord || canSend.telegram ? react : undefined}
         canReact={canSend}
@@ -1367,6 +1382,7 @@ export default function App() {
                 onAuthorChanged={reloadLists}
                 onReply={(m) => setReplyByCol((r) => ({ ...r, focused: m }))}
                 onOpenChat={(m) => openChat(m.chatName, m.source, m.chatId)}
+                onPick={pickChat('focused', view.chat ? new Set([view.chat.name]) : null)}
                 onReveal={revealMessage}
                 onReact={canSend.discord || canSend.telegram ? react : undefined}
                 canReact={canSend}

@@ -96,6 +96,7 @@ export function MessageRow({
   onJump,
   onReact,
   onOpenChat,
+  onPick,
   mine,
 }: {
   m: FeedMessage;
@@ -115,6 +116,8 @@ export function MessageRow({
   onReply?: (m: FeedMessage) => void;
   /** the chat chip was clicked: focus that chat */
   onOpenChat?: (m: FeedMessage) => void;
+  /** a plain click on the row (not on a link, button, image or a text selection): "I'm looking at this chat now" */
+  onPick?: (m: FeedMessage) => void;
   /** go to the message this one replies to (feed id + a link to open if it is gone) */
   onJump?: (id: string | undefined, fallbackLink: string | undefined) => void;
   /** toggle your reaction (undefined = reacting is off for this platform) */
@@ -227,6 +230,13 @@ export function MessageRow({
         if ((e.target as HTMLElement).closest('input, textarea, video, .react-picker')) return;
         e.preventDefault();
         setMenu({ x: e.clientX, y: e.clientY });
+      }}
+      onClick={(e) => {
+        if (!onPick || e.defaultPrevented || e.button !== 0) return;
+        // anything that is its own control keeps its click; so does a drag that selected text (copying a CA)
+        if ((e.target as HTMLElement).closest('a, button, input, textarea, select, video, img, .react-picker, .ca-menu, .token-chart')) return;
+        if (window.getSelection()?.toString()) return;
+        onPick(m);
       }}
     >
       {contextMenu}

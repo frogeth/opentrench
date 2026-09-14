@@ -27,15 +27,25 @@ export function Composer({
   reply,
   onCancelReply,
   onSent,
+  targetId: outerTargetId,
+  onTargetChange,
 }: {
   targets: SendTarget[];
   canSend: Record<Source, boolean>;
   reply?: FeedMessage;
   onCancelReply: () => void;
   onSent?: () => void;
+  /** the chat to send to, when the column owns that choice (a click on a message picks it) */
+  targetId?: string;
+  onTargetChange?: (id: string) => void;
 }) {
   const [text, setText] = useState('');
-  const [targetId, setTargetId] = useState<string>(targets[0]?.id ?? '');
+  const [ownTargetId, setOwnTargetId] = useState<string>(targets[0]?.id ?? '');
+  const targetId = outerTargetId ?? ownTargetId;
+  const setTargetId = (id: string) => {
+    setOwnTargetId(id);
+    onTargetChange?.(id);
+  };
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
@@ -59,6 +69,7 @@ export function Composer({
   }, [reply]);
   useEffect(() => {
     if (!targets.some((t) => t.id === targetId)) setTargetId(targets[0]?.id ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targets, targetId]);
 
   if (targets.length === 0) return null;

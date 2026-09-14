@@ -7,6 +7,10 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Click a message in a column that follows several chats (All Chats, a server) and the message box switches to that chat. Just the chat, not a reply. A reply you had pending for a different chat is dropped, since the click is the newer intent; one for the same chat stays.
+
+- Cove buy buttons on Ink tokens (chain code i, confirmed against Cove's own panel).
+
 - Ink tokens get their explorer link and chain badge, and the calls / chat column chain filter now lists Ink, MegaETH, Plasma, Story and Stable. Token cards use the one chain-label table the rest of the app uses, so newer chains read INK, MEGA, XPL and so on instead of a truncated id.
 
 - Fix: clicking a photo in a chat opened it twice — the lightbox, and the image again in a second window (the photo is also a link, and the click followed it). Same for the image on a link preview, which also opened the linked post. A click now opens the lightbox only; right-click and drag on the photo still give you the link.

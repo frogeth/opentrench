@@ -34,6 +34,13 @@ describe('cove', () => {
     expect(encodeToken('solana', BONK)).toBe('iaRSVwOC5Q7w8fhLkPV0ZTcZS05LOrDfMOAnjmVfyHY');
   });
 
+  it('opens the Ink market panel with the code Cove resolves (confirmed 2026-09-14)', () => {
+    // $INK on Ink: this exact link opened the token's buy panel in Cove
+    expect(buildCoveLinks('ink', '0x3E00A742C5182C45888691A27246282115FE81aC', { amounts: [], affiliateId: '876274588' })!.panel).toBe(
+      'https://t.me/cove_trading_bot?start=b_i8qV0BUli6bOx1P7uFyQiPwmuar600xIl360000000',
+    );
+  });
+
   it('matches frogr for the Robinhood market panel and decimal amounts on Base', () => {
     expect(buildCoveLinks('robinhood', BITCAT, { amounts: [] })!.panel).toBe(
       'https://t.me/cove_trading_bot?start=b_rNPhQxSY2YgjwkNHzcydzU9PhZxL',

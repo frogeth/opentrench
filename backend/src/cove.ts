@@ -16,9 +16,10 @@ const PAYLOAD_MAX = 64;
 
 /**
  * Dexscreener network id → Cove chain code (docs.cove.trade/builders/deep-links).
- * Robinhood's 'r' is not in the published table but is what Cove's own panels use.
- * Arbitrum, Ink and Stable are tradeable on Cove but have no published deep-link
- * code yet; the bare CA still works when sent to the bot directly.
+ * Robinhood's 'r' and Ink's 'i' are not in the published table; both were confirmed against
+ * Cove's own panels (a b_ link with the code opens the right token on the right chain).
+ * Arbitrum and Stable are tradeable on Cove but have no known deep-link code yet; the bare
+ * CA still works when sent to the bot directly.
  */
 export const CHAIN_CODES: Record<string, string> = {
   ethereum: 'e',
@@ -26,6 +27,7 @@ export const CHAIN_CODES: Record<string, string> = {
   bsc: 'n',
   megaeth: 'm',
   robinhood: 'r',
+  ink: 'i',
   solana: 's',
   tempo: 't',
   monad: 'o',
