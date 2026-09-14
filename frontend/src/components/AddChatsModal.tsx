@@ -3,6 +3,8 @@ import type { DiscordChannel, MaskedConfig, TelegramDialog } from '../api';
 import type { Source } from '../types';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
+
+type TgKind = 'all' | 'group' | 'channel' | 'dm';
 import { Icon } from './Icon';
 import { discordChatName, discordGlyph } from './ChannelSidebar';
 
@@ -42,6 +44,9 @@ export function AddChatsModal({
   }, [onClose]);
 
   const query = q.trim().toLowerCase();
+  // Telegram: groups, channels and DMs pile up fast; narrow by kind, or to what is already in the feed
+  const [tgKind, setTgKind] = useState<TgKind>('all');
+  const [tgInFeed, setTgInFeed] = useState(false);
 
   const guilds = useMemo(() => {
     const m = new Map<string, { id: string; name: string; icon?: string; count: number; watched: number }>();
@@ -65,7 +70,11 @@ export function AddChatsModal({
 
   let body;
   if (source === 'telegram') {
+    const counts = { all: dialogs.length, group: 0, channel: 0, dm: 0 } as Record<TgKind, number>;
+    for (const d of dialogs) counts[d.type]++;
+    const inFeed = dialogs.filter((d) => cfg?.telegram.watch.includes(d.id)).length;
     const rows = dialogs
+      .filter((d) => (tgKind === 'all' || d.type === tgKind) && (!tgInFeed || (cfg?.telegram.watch.includes(d.id) ?? false)))
       .filter((d) => !query || d.title.toLowerCase().includes(query))
       .sort((a, b) => {
         const wa = cfg?.telegram.watch.includes(a.id) ? 0 : 1;
@@ -74,6 +83,18 @@ export function AddChatsModal({
       });
     body = (
       <div className="modal-list">
+        <div className="pick-filters">
+          <span className="seg seg-sm">
+            {(['all', 'group', 'channel', 'dm'] as const).map((k) => (
+              <button key={k} className={tgKind === k ? 'active' : ''} onClick={() => setTgKind(k)}>
+                {k === 'all' ? 'All' : k === 'group' ? 'Groups' : k === 'channel' ? 'Channels' : 'DMs'} <span className="muted">{counts[k]}</span>
+              </button>
+            ))}
+          </span>
+          <button className={`seen-all${tgInFeed ? ' on' : ''}`} onClick={() => setTgInFeed((v) => !v)} title="only the chats already in your feed">
+            in feed <span className="muted">{inFeed}</span>
+          </button>
+        </div>
         {rows.map((d) => {
           const on = cfg?.telegram.watch.includes(d.id) ?? false;
           return (
@@ -92,7 +113,7 @@ export function AddChatsModal({
             </div>
           );
         })}
-        {rows.length === 0 && <div className="empty">{dialogs.length ? 'No match.' : 'Telegram not connected.'}</div>}
+        {rows.length === 0 && <div className="empty">{dialogs.length ? 'No match for this filter.' : 'Telegram not connected.'}</div>}
       </div>
     );
   } else {

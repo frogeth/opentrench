@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- The + picker's Telegram list has filters: All / Groups / Channels / DMs, and "in feed" for what you already watch, each with a count. For accounts with a ton of chats.
+
 - Calls: a card you mark as seen (the ✓) folds to one line — symbol, chain, 🔥count, caller, MC, multiple, age — so more coins fit on screen and what you already looked at is obvious at a glance; the chevron peeks at the full card, the ✓ unfolds it. A new eye button hides a card from the calls columns while the token keeps being tracked (trending, callers, repeat counts); the column header shows "N hidden" to reveal or unhide them. Suggested by a user.
 
 - Fix: call market caps read from candles were the *other* asset's price for tokens on the quote side of their pool (an entry of $1.6 trillion, every multiplier 0.0x): GeckoTerminal returns the pool's base token unless the token is named, and now it is, for the backfill and the drill-down chart alike. On first start every candle-derived value is sent back to be re-read, and values wildly off the current market cap are dropped rather than shown. Reported with the exact repro by a user, thank you.
