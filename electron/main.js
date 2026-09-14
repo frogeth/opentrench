@@ -450,6 +450,11 @@ function wireDiscordSetup() {
   });
   ipcMain.handle('discord:setup', () => confirmDiscordSetup());
   ipcMain.handle('discord:remove', () => confirmDiscordRemove());
+  ipcMain.handle('app:version', () => app.getVersion());
+  ipcMain.handle('updates:check', () => {
+    checkForUpdatesNow();
+    return { ok: true, version: app.getVersion() };
+  });
   // a newer bundled build (after an app update) replaces the copy Discord loads; Discord picks it up on its next launch
   try {
     const p = paths();

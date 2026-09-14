@@ -9,4 +9,8 @@ contextBridge.exposeInMainWorld('desktop', {
   discordSetup: () => ipcRenderer.invoke('discord:setup'),
   /** confirm, quit Discord, restore the original app.asar, relaunch */
   discordRemove: () => ipcRenderer.invoke('discord:remove'),
+  /** the app's own version */
+  version: () => ipcRenderer.invoke('app:version'),
+  /** run the updater now; it reports with its own dialog */
+  checkForUpdates: () => ipcRenderer.invoke('updates:check'),
 });

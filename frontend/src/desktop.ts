@@ -29,6 +29,8 @@ export interface DesktopBridge {
   discordStatus(): Promise<DiscordSetupStatus>;
   discordSetup(): Promise<DiscordSetupResult>;
   discordRemove(): Promise<DiscordSetupResult>;
+  version(): Promise<string>;
+  checkForUpdates(): Promise<{ ok: boolean; version: string }>;
 }
 
 declare global {

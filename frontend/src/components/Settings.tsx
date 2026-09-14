@@ -48,6 +48,10 @@ export function Settings({
 }) {
   const [cfg, setCfg] = useState<MaskedConfig | null>(null);
   const [tab, setTab] = useState<Tab>('accounts');
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    (desktop ? desktop.version() : fetch('/api/version').then((r) => r.json()).then((j) => String(j.version))).then(setVersion).catch(() => {});
+  }, []);
   const reload = () => api.config().then(setCfg).catch(() => {});
   useEffect(() => {
     reload();
@@ -76,6 +80,14 @@ export function Settings({
               Together
             </button>
           </div>
+          <span className="settings-version">
+            {version && <span className="muted">v{version}</span>}
+            {desktop && (
+              <button className="link" onClick={() => void desktop!.checkForUpdates()} title="ask GitHub for a newer build now">
+                check for updates
+              </button>
+            )}
+          </span>
           <button className="close" onClick={onClose}>
             close
           </button>
