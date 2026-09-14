@@ -191,16 +191,33 @@ export class TelegramWrapper extends EventEmitter {
     return { id: String(getPeerId(e)), name, bot: !!e?.bot };
   }
 
+  /**
+   * messages.GetDialogs is flood-limited hard (30s+ sleeps after a handful of calls), and gramJS
+   * also falls back to it whenever it must resolve an entity it has not seen — which is what
+   * turned a Send into a four-minute wait once a few page loads had exhausted the allowance. So
+   * the list is fetched at most once a minute, concurrent callers share the one request, and
+   * every fetch warms gramJS's entity cache for the sends and avatars that follow.
+   */
+  private dialogsCache?: { at: number; list: TelegramDialog[] };
+  private dialogsInFlight?: Promise<TelegramDialog[]>;
   async listDialogs(): Promise<TelegramDialog[]> {
     if (!this.client || this.state !== 'connected') return [];
-    const dialogs = await this.client.getDialogs({ limit: 500 });
-    return dialogs
+    if (this.dialogsCache && Date.now() - this.dialogsCache.at < 60_000) return this.dialogsCache.list;
+    if (this.dialogsInFlight) return this.dialogsInFlight;
+    this.dialogsInFlight = this.fetchDialogs().finally(() => (this.dialogsInFlight = undefined));
+    return this.dialogsInFlight;
+  }
+  private async fetchDialogs(): Promise<TelegramDialog[]> {
+    const dialogs = await this.client!.getDialogs({ limit: 500 });
+    const list = dialogs
       .filter((d) => d.isGroup || d.isChannel || (d.isUser && !(d.entity as any)?.bot))
       .map((d) => ({
         id: String(d.id),
         title: d.isUser ? chatDisplayName(d.entity, d.title ?? String(d.id)) : (d.title ?? '(untitled)'),
         type: d.isUser ? ('dm' as const) : d.isChannel && !d.isGroup ? ('channel' as const) : ('group' as const),
       }));
+    this.dialogsCache = { at: Date.now(), list };
+    return list;
   }
 
   /** Profile photo bytes (JPEG) for a user/chat id, cached. null when none. */
@@ -209,7 +226,18 @@ export class TelegramWrapper extends EventEmitter {
     if (!this.client || this.state !== 'connected') return null;
     let buf: Buffer | null = null;
     try {
-      const entity = await this.client.getInputEntity(bigInt(id));
+      // the session cache only: an id gramJS has not met would make it fall back to messages.GetDialogs
+      // (flood-limited hard), and a user we never saw has no photo we could fetch anyway
+      let entity: any;
+      try {
+        entity = this.client.session.getInputEntity(bigInt(id));
+      } catch {
+        entity = null;
+      }
+      if (!entity) {
+        this.avatars.set(id, null);
+        return null;
+      }
       const res = await this.client.downloadProfilePhoto(entity, { isBig: false });
       if (Buffer.isBuffer(res) && res.length > 0) buf = res;
     } catch (e: any) {

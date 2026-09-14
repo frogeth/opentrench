@@ -103,9 +103,9 @@ the sidebar, not in settings.
   scanner posts (parsed, never shown) → Dexscreener → GeckoTerminal (covers
   Robinhood Chain and fresh pools) → Bankr (launch name, chain, socials). A
   token with no price yet is re-checked after 1 and 5 minutes.
-- "called N×" counts how many different chats have posted a contract since
-  the server started (hover to see which). Repeats inside the same chat don't
-  count.
+- "called N×" counts distinct callers: one call per person per chat (hover to
+  see who). The same person re-posting a contract in the same chat is a repeat;
+  a different person in that chat is a new call.
 - **Call cards** show the caller (with a 👑 if favorited), age, live market
   cap, token image with chain badge, ticker, token age, price, a buys/sells
   bar, volume, market cap, ATH since first call, liquidity, Cove buttons and

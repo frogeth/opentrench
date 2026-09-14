@@ -40,6 +40,11 @@ const MENTION_CTX = 4;
 const MENTION_MAX = 100;
 const MENTION_AFTER_MS = 30 * 60_000;
 const MAX_CALLS = 50;
+const normAuthor = (a: string) => a.replace(/^@/, '').trim().toLowerCase();
+/** what makes a call count once: this caller, in this chat */
+const callKey = (chatId: string, author: string) => `${chatId}|${normAuthor(author)}`;
+/** the same, for a call that came from a friend's machine (no chat id of ours, only the name) */
+const remoteCallKey = (source: string, chatName: string, author: string) => `together:${source}:${chatName}|${normAuthor(author)}`;
 const META_KEYS = ['website', 'twitter', 'telegram', 'name', 'symbol'] as const;
 const DATA_KEYS = [
   'priceUsd',
@@ -217,8 +222,10 @@ export class MessageHub extends EventEmitter {
     let changed = fresh;
     for (const c of calls) {
       if (t.calls.some((x) => x.msgId === c.msgId)) continue;
+      // the same caller in the same chat already counted here (our own copy of that chat, or an earlier share): a repeat
+      if (t.calls.some((x) => x.source === c.source && x.chatName === c.chatName && normAuthor(x.author) === normAuthor(c.author))) continue;
       t.calls.push({ ...c });
-      chats.add(`together:${c.source}:${c.chatName}`);
+      chats.add(remoteCallKey(c.source, c.chatName, c.author));
       if (!t.calledIn.includes(c.chatName)) t.calledIn.push(c.chatName);
       t.lastCallTs = Math.max(t.lastCallTs ?? 0, c.ts);
       changed = true;
@@ -438,10 +445,21 @@ export class MessageHub extends EventEmitter {
         }
       }
       const chats = this.tokenChats.get(c.address)!;
-      if (!blocked && !chats.has(msg.chatId)) {
-        chats.add(msg.chatId);
+      // one call per caller per chat: the same person re-posting a contract in the same chat is a
+      // repeat, a different person in that chat is a new call. A friend's copy of this very chat
+      // (TrenchTogether) may have arrived first under its remote key: fold it into ours.
+      const key = callKey(msg.chatId, msg.author);
+      const remoteKey = remoteCallKey(msg.source, msg.chatName, msg.author);
+      if (chats.has(remoteKey)) {
+        chats.delete(remoteKey);
+        chats.add(key);
         t.seen = chats.size;
-        t.calledIn.push(msg.chatName);
+      }
+      const already = t.calls.some((x) => x.msgId === msg.id);
+      if (!blocked && !chats.has(key) && !already) {
+        chats.add(key);
+        t.seen = chats.size;
+        if (!t.calledIn.includes(msg.chatName)) t.calledIn.push(msg.chatName);
         t.lastCallTs = Math.max(t.lastCallTs ?? 0, msg.ts);
         t.calls.push({
           author: msg.author,

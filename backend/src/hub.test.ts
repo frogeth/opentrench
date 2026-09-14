@@ -312,16 +312,19 @@ describe('MessageHub', () => {
     await new Promise((r) => setTimeout(r, 0));
     hub.updateMarket(EVM.toLowerCase(), { marketCap: 5000 });
     hub.push(msg(2, EVM, { author: 'second', chatId: 'b', chatName: '#b' }));
-    hub.push(msg(3, EVM, { author: 'again', chatId: 'b', chatName: '#b' })); // same chat: not a call
+    hub.push(msg(3, EVM, { author: 'again', chatId: 'b', chatName: '#b' })); // a different person in that chat: a call
+    hub.push(msg(4, EVM, { author: 'second', chatId: 'b', chatName: '#b' })); // the same person again: a repeat
     const [t] = hub.hello().tokens;
     expect(t.calls.map((c) => [c.author, c.chatName, c.marketCap])).toEqual([
       ['first', '#a', 1000],
       ['second', '#b', 5000],
+      ['again', '#b', 5000],
     ]);
+    expect(t.seen).toBe(3);
     expect(t.firstCallMarketCap).toBe(1000);
     // rebuild keeps the caps it learned
     hub.rebuild();
-    expect(hub.hello().tokens[0].calls.map((c) => c.marketCap)).toEqual([1000, 5000]);
+    expect(hub.hello().tokens[0].calls.map((c) => c.marketCap)).toEqual([1000, 5000, 5000]);
     expect(hub.hello().tokens[0].firstCallMarketCap).toBe(1000);
   });
 

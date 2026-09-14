@@ -66,6 +66,14 @@ describe('hub.applyRemoteToken', () => {
     hub.applyRemoteToken('Moussa', token('0xb', [call('m9', 'Alpha')], { marketCap: 2 }));
     expect(hub.getToken('0xb')!.marketCap).toBe(2);
   });
+  it('never doubles a chat we watch ourselves: same caller in the same chat is one call however it arrives', () => {
+    const hub = new MessageHub(10);
+    hub.applyRemoteToken('Moussa', token('0xa', [call('m1', 'Alpha', NOW - 60_000, { author: 'alice' }), call('m2', 'Alpha', NOW - 50_000, { author: 'bob' })]));
+    expect(hub.getToken('0xa')!.seen).toBe(2); // two callers in one chat: two calls
+    hub.applyRemoteToken('Moussa', token('0xa', [call('m3', 'Alpha', NOW - 40_000, { author: 'Alice' })]));
+    expect(hub.getToken('0xa')!.seen).toBe(2); // alice again in Alpha: a repeat
+    expect(hub.getToken('0xa')!.calls.map((c) => c.msgId)).toEqual(['m1', 'm2']);
+  });
   it('ignores junk', () => {
     const hub = new MessageHub(10);
     hub.applyRemoteToken('x', { address: 5 } as any);
