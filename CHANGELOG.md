@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Fix: a Telegram group without a photo showed a broken image in the rail; it shows its initials now, like a Discord server without an icon.
+
 - Long (app.long.xyz): a call for a Long token shows the Long badge with what it is anchored to ("anchored to NVDA"), and a **Long launches** column lists the newest stock-anchored launches on Robinhood Chain as they appear, with anchor, market cap, 24h volume, auction progress, and Long / Cove links. Long is in the launchpad filter too. Reads Long's own indexer, unofficially.
 
 - Desktop: **Set up Discord** in one click (⚙ → Accounts → Discord, the first-run guide, or the app menu). The app quits Discord, installs its own copy of Vencord with the opentrench plugin switched on, and reopens Discord; no git, Node or pnpm. An existing Vencord is replaced by the same Vencord plus the plugin, settings kept; "remove the plugin" puts Discord's original files back. The plugin build ships inside the app (electron/scripts/build-vencord.sh, GPL-3 notice included).

@@ -18,6 +18,13 @@ export function discordChatName(c: DiscordChannel): string {
   return c.dm ? `${c.name} (DM)` : `#${c.name} (${c.guildName})`;
 }
 
+/** A rail or header icon that falls back to initials when the picture is missing (a Telegram group with no photo answers 404). */
+function RailIcon({ src, name, className }: { src: string; name: string; className?: string }) {
+  const [broken, setBroken] = useState(false);
+  if (broken) return <span className={className}>{name.replace(/^[@#]/, '').slice(0, 2).toUpperCase()}</span>;
+  return <img className={className} src={src} alt="" loading="lazy" draggable={false} onError={() => setBroken(true)} />;
+}
+
 /** The row glyph: a hash for a server channel, the person's avatar for a DM. */
 export function discordGlyph(c: DiscordChannel, size = 20): ReactNode {
   return c.dm ? <Avatar src={c.avatar} name={c.name} size={size} /> : <span className="chan-hash">#</span>;
@@ -146,7 +153,7 @@ export function ChannelSidebar({
           }
         >
           {it.icon ? (
-            <img src={it.icon} alt="" loading="lazy" draggable={false} />
+            <RailIcon src={it.icon} name={it.name} />
           ) : it.key === 'g:dm' ? (
             <span>@</span>
           ) : (
@@ -252,7 +259,7 @@ export function ChannelSidebar({
     }
     head = (
       <>
-        {active?.icon ? <img className="sidebar-icon" src={active.icon} alt="" /> : active?.id === 'dm' ? <span className="chan-hash">@</span> : <Logo source="discord" size={16} />}
+        {active?.icon ? <RailIcon className="sidebar-icon" src={active.icon} name={active.name} /> : active?.id === 'dm' ? <span className="chan-hash">@</span> : <Logo source="discord" size={16} />}
         <b>{active?.name ?? 'Discord'}</b>
         <Logo source="discord" size={11} />
       </>
