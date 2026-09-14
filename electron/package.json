@@ -27,6 +27,7 @@
       "main.js",
       "preload.js",
       "discord-setup.js",
+      "stale.js",
       "entitlements.mac.plist"
     ],
     "extraResources": [

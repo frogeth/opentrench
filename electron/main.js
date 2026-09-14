@@ -1,6 +1,7 @@
 // opentrench desktop: runs the backend with Electron's bundled Node and opens a window on it.
 const { app, BrowserWindow, shell, nativeTheme, dialog, Menu, safeStorage, ipcMain } = require('electron');
 const discordSetup = require('./discord-setup');
+const stale = require('./stale');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -133,15 +134,33 @@ async function startBackend() {
       const { response } = await dialog.showMessageBox({
         type: 'warning',
         message: `Another opentrench backend is already running on port ${PORT}`,
-        detail: `It reports version ${v || 'unknown (an older build)'}; this app is ${app.getVersion()}. A backend from a different build rewrites newer column types and hides newer features. Quit that process (a stale "npm start"?) and open opentrench again, or attach anyway.`,
-        buttons: ['Quit', 'Attach anyway'],
+        detail: `It reports version ${v || 'unknown (an older build)'}; this app is ${app.getVersion()}. Usually a backend left behind by the previous version. Stop it and let this app start its own (recommended), attach to it anyway (older page, missing features), or quit.`,
+        buttons: ['Stop it and start mine', 'Attach anyway', 'Quit'],
         defaultId: 0,
-        cancelId: 0,
+        cancelId: 2,
       });
-      if (response === 0) return false;
+      if (response === 2) return false;
+      if (response === 0) {
+        const r = await stale.stopListener(PORT, ping, (m) => console.log('[desktop]', m));
+        if (!r.ok) {
+          await dialog.showMessageBox({
+            type: 'error',
+            message: 'Could not stop it',
+            detail: r.pid ? `The process (${r.what}) is still holding port ${PORT}. End it yourself and open opentrench again.` : `Nothing this app can stop is listening on port ${PORT}.`,
+            buttons: ['Quit'],
+          });
+          return false;
+        }
+        console.log('[desktop] stale backend stopped; starting our own');
+        // fall through to start ours
+      } else {
+        console.log('[desktop] backend already running on', URL, '— attaching (different build, by choice)');
+        return true;
+      }
+    } else {
+      console.log('[desktop] backend already running on', URL, '— attaching');
+      return true;
     }
-    console.log('[desktop] backend already running on', URL, '— attaching');
-    return true;
   }
   adoptDevFiles(p);
   if (!fs.existsSync(p.entry)) throw new Error(`backend not built: ${p.entry}`);
