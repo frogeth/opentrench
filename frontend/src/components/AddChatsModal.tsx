@@ -53,9 +53,15 @@ export function AddChatsModal({
     }
     return [...m.values()].sort((a, b) => b.watched - a.watched || a.name.localeCompare(b.name));
   }, [channels, cfg]);
+  // the search box narrows the server rail too: a server whose name matches, or that has a matching channel
+  const shownGuilds = useMemo(() => {
+    if (!query) return guilds;
+    const chanHit = new Set(channels.filter((c) => c.name.toLowerCase().includes(query)).map((c) => c.guildId));
+    return guilds.filter((g) => g.name.toLowerCase().includes(query) || chanHit.has(g.id));
+  }, [guilds, channels, query]);
   useEffect(() => {
-    if (!guild && guilds.length) setGuild(guilds[0].id);
-  }, [guild, guilds]);
+    if (shownGuilds.length && !shownGuilds.some((g) => g.id === guild)) setGuild(shownGuilds[0].id);
+  }, [guild, shownGuilds]);
 
   let body;
   if (source === 'telegram') {
@@ -92,7 +98,7 @@ export function AddChatsModal({
   } else {
     const active = guilds.find((g) => g.id === guild);
     const inGuild = channels
-      .filter((c) => c.guildId === guild && (!query || c.name.toLowerCase().includes(query)))
+      .filter((c) => c.guildId === guild && (!query || c.name.toLowerCase().includes(query) || (active?.name.toLowerCase().includes(query) ?? false)))
       .sort((a, b) => (a.category ?? '').localeCompare(b.category ?? '') || a.position - b.position);
     const cats = new Map<string, DiscordChannel[]>();
     for (const c of inGuild) {
@@ -103,7 +109,7 @@ export function AddChatsModal({
     body = (
       <div className="modal-discord">
         <div className="guild-rail">
-          {guilds.map((g) => (
+          {shownGuilds.map((g) => (
             <button
               key={g.id}
               className={`guild${g.id === guild ? ' active' : ''}${g.watched ? ' watched' : ''}`}

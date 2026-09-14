@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Onboarding: Enter submits the account forms (Discord token, Telegram credentials, phone, code, password); the Telegram tab links straight to my.telegram.org/apps; the search box in the + picker now narrows the Discord server rail too, not only the channels of the selected server; the getting-started guide says which installer file is which.
+
 - Trending column: the ten most-called tokens in the last 5m, 1h, 6h or 24h, ranked by calls then recency, with the entry market cap (at the first call), the current one, the multiplier and the last call. The header switches the window; hover a row for the calls behind it, click to open the token. Suggested by Brandzo, after the Discord leaderboard he built.
 
 - Click a message in a column that follows several chats (All Chats, a server) and the message box switches to that chat. Just the chat, not a reply. A reply you had pending for a different chat is dropped, since the click is the newer intent; one for the same chat stays.

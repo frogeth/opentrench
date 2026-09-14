@@ -22,16 +22,27 @@ Community, help and release news: **https://discord.gg/6ByE8fPNN**
 
 ## 1. Install
 
-Grab the latest build from
-**https://github.com/frogeth/opentrench/releases/latest**.
+Download from **https://github.com/frogeth/opentrench/releases/latest**. The
+page lists several files; you want exactly one of these:
 
-- **macOS** — download the `.dmg` (`arm64` for Apple Silicon, the other one for
-  Intel), open it and drag opentrench into Applications. It is signed and
-  notarized, so it opens like any other app.
-- **Windows** — download `opentrench-Setup-x.y.z.exe` and run it. Windows will
-  show a blue "Windows protected your PC" screen the first time because the
-  installer is not code-signed. Click **More info → Run anyway**. That only
-  happens once.
+| Your machine | File to download | Then |
+| --- | --- | --- |
+| Mac with Apple Silicon (M1, M2, M3, M4 — any Mac from 2020 on) | `opentrench-x.y.z-arm64.dmg` | open it, drag opentrench into Applications |
+| Mac with an Intel chip (2019 or older) | `opentrench-x.y.z.dmg` (no `arm64` in the name) | same |
+| Windows | `opentrench-Setup-x.y.z.exe` | run it |
+
+Not sure which Mac you have? Apple menu → About This Mac: "Chip: Apple M…" is
+Apple Silicon, "Processor: Intel…" is Intel. Ignore the `.zip`, `.blockmap` and
+`.yml` files: the app uses those to update itself.
+
+The Mac build is signed and notarized, so it opens like any other app. On
+Windows you will see a blue "Windows protected your PC" screen the first time
+because the installer is not code-signed: click **More info → Run anyway**.
+That only happens once.
+
+You do not need Node, npm, git or anything else installed: the app is
+self-contained. Those only matter if you run from source (below) or set up the
+Discord plugin (next step).
 
 opentrench checks for updates on launch and every hour and installs them
 itself, so you only do this once.

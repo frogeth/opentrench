@@ -7,6 +7,15 @@ import { DOCS } from '../site';
 import { PeoplePicker } from './PeoplePicker';
 import { CHART_PROVIDERS, copyText, type ChartProvider } from '../format';
 
+/** Enter in a one-line form does what its button does (when the button would be enabled). */
+const onEnter = (enabled: boolean, fn: () => void) => (e: React.KeyboardEvent<HTMLInputElement>) => {
+  if (e.key === 'Enter' && enabled) {
+    e.preventDefault();
+    fn();
+  }
+};
+
+
 type Tab = 'accounts' | 'feed' | 'trading';
 
 /** The one settings place: a modal with three tabs. Channels are managed in the sidebar, not here. */
@@ -159,6 +168,13 @@ function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: 
   const bridge = status.discordMode === 'bridge';
   const [token, setToken] = useState('');
   const [edit, setEdit] = useState(false);
+  const saveToken = () =>
+    run(async () => {
+      await api.setDiscordToken(token);
+      setToken('');
+      setEdit(false);
+      onChange();
+    });
   const { busy, err, run } = useAsync();
   return (
     <section>
@@ -216,18 +232,14 @@ function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: 
               removed here. Token: DevTools → Network → any request → Authorization header.
             </div>
             <div className="row-inline">
-              <input type="password" placeholder="user token" value={token} onChange={(e) => setToken(e.target.value)} />
-              <button
-                disabled={busy || !token}
-                onClick={() =>
-                  run(async () => {
-                    await api.setDiscordToken(token);
-                    setToken('');
-                    setEdit(false);
-                    onChange();
-                  })
-                }
-              >
+              <input
+                type="password"
+                placeholder="user token"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                onKeyDown={onEnter(!busy && !!token, () => saveToken())}
+              />
+              <button disabled={busy || !token} onClick={() => saveToken()}>
                 Save
               </button>
               {cfg.discord.hasToken && <button onClick={() => setEdit(false)}>Cancel</button>}
@@ -312,6 +324,23 @@ function TelegramAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status:
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [editCreds, setEditCreds] = useState(!(cfg.telegram.apiId && cfg.telegram.hasApiHash));
+  const saveCreds = () =>
+    run(async () => {
+      await api.setTelegramCreds(Number(apiId), apiHash);
+      setApiHash('');
+      setEditCreds(false);
+      onChange();
+    });
+  const submitCode = () =>
+    run(async () => {
+      await api.tgCode(code);
+      setCode('');
+    });
+  const submitPassword = () =>
+    run(async () => {
+      await api.tgPassword(password);
+      setPassword('');
+    });
   const { busy, err, run } = useAsync();
   const hasCreds = !!cfg.telegram.apiId && cfg.telegram.hasApiHash;
 
@@ -329,21 +358,17 @@ function TelegramAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status:
         </div>
       ) : (
         <>
-          <div className="hint">API ID and hash from my.telegram.org → API development tools.</div>
-          <input placeholder="api id" value={apiId} onChange={(e) => setApiId(e.target.value)} />
-          <input type="password" placeholder="api hash" value={apiHash} onChange={(e) => setApiHash(e.target.value)} />
+          <div className="hint">
+            API ID and hash from{' '}
+            <a href="https://my.telegram.org/apps" target="_blank" rel="noreferrer">
+              my.telegram.org/apps
+            </a>{' '}
+            (log in with your phone, then API development tools → Create application).
+          </div>
+          <input placeholder="api id" value={apiId} onChange={(e) => setApiId(e.target.value)} onKeyDown={onEnter(!busy && !!apiId && !!apiHash, () => saveCreds())} />
+          <input type="password" placeholder="api hash" value={apiHash} onChange={(e) => setApiHash(e.target.value)} onKeyDown={onEnter(!busy && !!apiId && !!apiHash, () => saveCreds())} />
           <div className="row-inline">
-            <button
-              disabled={busy || !apiId || !apiHash}
-              onClick={() =>
-                run(async () => {
-                  await api.setTelegramCreds(Number(apiId), apiHash);
-                  setApiHash('');
-                  setEditCreds(false);
-                  onChange();
-                })
-              }
-            >
+            <button disabled={busy || !apiId || !apiHash} onClick={() => saveCreds()}>
               Save credentials
             </button>
             {hasCreds && <button onClick={() => setEditCreds(false)}>Cancel</button>}
@@ -352,7 +377,7 @@ function TelegramAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status:
       )}
       {hasCreds && status.telegram === 'needs_login' && status.loginStep === 'idle' && (
         <div className="row-inline">
-          <input placeholder="phone, e.g. +15551234567" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <input placeholder="phone, e.g. +15551234567" value={phone} onChange={(e) => setPhone(e.target.value)} onKeyDown={onEnter(!busy && !!phone, () => run(() => api.tgStart(phone)))} />
           <button className="primary" disabled={busy || !phone} onClick={() => run(() => api.tgStart(phone))}>
             Send code
           </button>
@@ -360,34 +385,16 @@ function TelegramAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status:
       )}
       {status.loginStep === 'code' && (
         <div className="row-inline">
-          <input placeholder="login code" value={code} onChange={(e) => setCode(e.target.value)} />
-          <button
-            className="primary"
-            disabled={busy || !code}
-            onClick={() =>
-              run(async () => {
-                await api.tgCode(code);
-                setCode('');
-              })
-            }
-          >
+          <input placeholder="login code" value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={onEnter(!busy && !!code, () => submitCode())} />
+          <button className="primary" disabled={busy || !code} onClick={() => submitCode()}>
             Submit code
           </button>
         </div>
       )}
       {status.loginStep === 'password' && (
         <div className="row-inline">
-          <input type="password" placeholder="2FA password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <button
-            className="primary"
-            disabled={busy || !password}
-            onClick={() =>
-              run(async () => {
-                await api.tgPassword(password);
-                setPassword('');
-              })
-            }
-          >
+          <input type="password" placeholder="2FA password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={onEnter(!busy && !!password, () => submitPassword())} />
+          <button className="primary" disabled={busy || !password} onClick={() => submitPassword()}>
             Submit password
           </button>
         </div>
