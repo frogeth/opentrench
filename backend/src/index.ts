@@ -10,6 +10,7 @@ import { createSecurityBatchFetcher, createSecurityFetcher } from './security.js
 import { createHoverFetchers } from './hover.js';
 import { createDefaultEnricher } from './enrich.js';
 import { createMarketRefresher } from './refresh.js';
+import type { TokenInfo } from './types.js';
 import { DEFAULT_COVE_AFFILIATE, type CoveOptions } from './cove.js';
 import { Services } from './services.js';
 import { createApi } from './api.js';
@@ -38,18 +39,22 @@ const hub: MessageHub = new MessageHub(500, createDefaultEnricher({ o1ApiKey: ()
   favorites: () => cfg.get().favorites,
 });
 
-// Live market numbers: every minute, refresh tokens called in the last 24h (30 per request).
+// Live market numbers, two loops. Fast: every 10s, tokens called in the last hour, Dexscreener
+// only (30 per request, its token endpoint allows 300 requests a minute). Full: every minute,
+// everything called in the last 24h, with GeckoTerminal as the fallback for pairs Dexscreener
+// has not indexed yet (30/min there, so only on the slow loop) and the chain-less lookup for
+// tokens whose network is still unknown.
+const HOT_REFRESH_MS = 10_000;
+const HOT_WINDOW_MS = 60 * 60 * 1000;
 const REFRESH_MS = 60_000;
 const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
-const refreshMarket = createMarketRefresher(
-  (addr, info) => hub.updateMarket(addr, info),
-  (m) => console.warn('[refresh]', m),
-);
-setInterval(() => {
-  // newest calls first so a burst of new tokens never starves the ones people are watching
-  const active = hub.activeTokens(ACTIVE_WINDOW_MS).sort((a, b) => b.lastCallTs - a.lastCallTs);
-  void refreshMarket(active);
-}, REFRESH_MS).unref();
+const applyMarket = (addr: string, info: Partial<TokenInfo>) => hub.updateMarket(addr, info);
+const refreshHot = createMarketRefresher(applyMarket, (m) => console.warn('[refresh]', m), { gt: false });
+const refreshMarket = createMarketRefresher(applyMarket, (m) => console.warn('[refresh]', m));
+// newest calls first so a burst of new tokens never starves the ones people are watching
+const byNewest = (list: TokenInfo[]) => list.sort((a, b) => b.lastCallTs - a.lastCallTs);
+setInterval(() => void refreshHot(byNewest(hub.activeTokens(HOT_WINDOW_MS).filter((t) => t.network))), HOT_REFRESH_MS).unref();
+setInterval(() => void refreshMarket(byNewest(hub.activeTokens(ACTIVE_WINDOW_MS))), REFRESH_MS).unref();
 // Holder security, near-live: every minute, refresh what is due. Fresh calls (< 1h) refresh
 // every minute, < 6h every 5 minutes, < 24h every 30 minutes. EVM chains go out as one
 // GoPlus request per chain; Solana is one RugCheck request per token, newest first, 15 per cycle.
@@ -139,7 +144,7 @@ const APP_VERSION =
     }
   })();
 app.get('/api/version', (_req, res) => res.json({ version: APP_VERSION }));
-app.use('/api', createApi(cfg, hub, svc, hover));
+app.use('/api', createApi(cfg, hub, svc, hover, (t) => refreshMarket([t])));
 
 const dist = path.resolve(root, '..', 'frontend', 'dist');
 if (fs.existsSync(dist)) {

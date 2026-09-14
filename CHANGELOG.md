@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Market caps are live-er: tokens called in the last hour refresh every 10 seconds (Dexscreener only), everything from the last 24 hours every minute as before, and chains are queried in parallel so one slow chain no longer holds the rest back. Opening a token's chart refreshes it on the spot. Tokens whose network was never resolved used to be skipped for good; they are now looked up chain-less each minute and pick up their network when Dexscreener lists the pair.
+
 ## v0.8.6 — 2026-09-14
 
 - Desktop: tokens, sessions and the mint wallet key in config.json are now encrypted with a random key the app keeps in the OS keychain (Keychain on macOS, DPAPI on Windows). An existing plain-text config is sealed on first launch. A backend started from the repo has no key: it treats sealed values as unset and leaves them on disk.

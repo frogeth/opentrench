@@ -1,3 +1,4 @@
+import type { TokenInfo } from './types.js';
 import { Router, json, raw, type Request, type Response } from 'express';
 import type { HoverFetchers } from './hover.js';
 import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
@@ -20,7 +21,7 @@ export function __resetOsmintQuoteThrottle(): void {
   lastQuote = 0;
 }
 
-export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hover?: HoverFetchers): Router {
+export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hover?: HoverFetchers, refreshToken?: (t: TokenInfo) => Promise<void>): Router {
   const r = Router();
   r.use(json({ limit: '64kb' }));
   const ipfs = new IpfsCache();
@@ -105,6 +106,8 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     wrap(async (req) => {
       const t = hub.getToken(String(req.params.address));
       if (!t) throw new Error('unknown token');
+      // the modal just opened on this token: bring its numbers up to date now rather than on the next tick
+      void refreshToken?.(t).catch(() => {});
       if (!t.network || !t.pairAddress) return { candles: [], reason: 'no pool known yet' };
       const interval = /^\d+[mhd]$/.test(String(req.query.interval)) ? String(req.query.interval) : '5m';
       const key = `${t.address}:${interval}`;
