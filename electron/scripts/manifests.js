@@ -30,9 +30,9 @@ fs.writeFileSync(path.join(dist, 'latest-mac.yml'), yaml(mac, mac[0]));
 // Windows: electron-builder names the file with spaces on disk and dashes on GitHub
 const exeOnDisk = path.join(dist, `opentrench Setup ${version}.exe`);
 const exeName = `opentrench-Setup-${version}.exe`;
-if (!fs.existsSync(path.join(dist, exeName)) && fs.existsSync(exeOnDisk)) fs.copyFileSync(exeOnDisk, path.join(dist, exeName));
+if (fs.existsSync(exeOnDisk)) fs.copyFileSync(exeOnDisk, path.join(dist, exeName)); // always refresh: a stale dashed copy from an earlier build must not win
 const bmOnDisk = path.join(dist, `opentrench Setup ${version}.exe.blockmap`);
-if (!fs.existsSync(path.join(dist, `${exeName}.blockmap`)) && fs.existsSync(bmOnDisk)) fs.copyFileSync(bmOnDisk, path.join(dist, `${exeName}.blockmap`));
+if (fs.existsSync(bmOnDisk)) fs.copyFileSync(bmOnDisk, path.join(dist, `${exeName}.blockmap`));
 const win = [entry(exeName)];
 fs.writeFileSync(path.join(dist, 'latest.yml'), yaml(win, win[0]));
 console.log(`manifests for ${version}: ${mac.map((f) => f.name).join(', ')}; ${exeName}`);
