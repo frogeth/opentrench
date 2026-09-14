@@ -799,6 +799,11 @@ button.link:disabled { opacity: 0.6; cursor: default; }
 /* a seen card folded to one line */
 .call.call-row { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 7px; padding: 5px 10px; min-height: 30px; font-size: 12px; }
 .call-row > * { margin: 0; }
+.call.call-row { cursor: pointer; transition: background 0.12s, filter 0.12s; }
+.call.call-row:hover { background: var(--hover); filter: none; }
+.call.call-row:hover .call-sym { color: var(--accent); }
+.call.call-row:hover .call-peek { color: var(--accent); border-color: var(--accent); }
+.call.call-row:hover .call-row-who { color: var(--text); }
 .call-row .call-check { margin: 0; flex: none; }
 .call-row-img { width: 20px; height: 20px; border-radius: 5px; flex: none; display: inline-flex; align-items: center; justify-content: center; background: var(--panel); cursor: pointer; overflow: hidden; }
 .call-row-img img { width: 20px; height: 20px; object-fit: cover; }

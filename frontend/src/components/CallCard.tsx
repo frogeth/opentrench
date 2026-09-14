@@ -135,7 +135,16 @@ export function CallCard({
   );
   if (collapsed && !peek) {
     return (
-      <div id={`call-${t.address}`} className={`call call-row${selected ? ' call-selected' : ''}${hidden ? ' call-hidden' : ''}${hot}`}>
+      <div
+        id={`call-${t.address}`}
+        className={`call call-row${selected ? ' call-selected' : ''}${hidden ? ' call-hidden' : ''}${hot}`}
+        title="click to unfold"
+        onClick={(e) => {
+          // the row itself unfolds; its own controls (check, copy, hide, chevron, image) keep their jobs
+          if ((e.target as HTMLElement).closest('button, a, .call-row-img')) return;
+          setPeek(true);
+        }}
+      >
         {onSeen && (
           <Tip text="seen · click to mark unseen">
             <button className="call-check on" onClick={() => onSeen(false)} aria-label="mark unseen">
