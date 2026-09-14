@@ -165,6 +165,25 @@ export class MessageHub extends EventEmitter {
     this.changed();
   }
 
+  /** Market caps read back from the calls' own minute candles (backfill.ts); the first call's value is the entry. */
+  applyCallMarketCaps(address: string, updates: { msgId: string; marketCap?: number; source: 'candle' | 'cached' }[]): void {
+    const t = this.tokens.get(address);
+    if (!t) return;
+    let changed = false;
+    for (const u of updates) {
+      const c = t.calls.find((c) => c.msgId === u.msgId);
+      if (!c) continue;
+      c.mcSource = u.source;
+      if (u.source === 'candle' && u.marketCap !== undefined && u.marketCap > 0) {
+        c.marketCap = u.marketCap;
+        if (c === t.calls[0]) t.firstCallMarketCap = u.marketCap;
+        changed = true;
+      }
+    }
+    if (changed) this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
+    this.changed();
+  }
+
   // ---------- ingest ----------
 
   push(msg: FeedMessage, meta?: ExtractedMeta): void {
@@ -387,6 +406,7 @@ export class MessageHub extends EventEmitter {
       for (const c of t.calls) {
         const oc = o.calls?.find((x) => x.msgId === c.msgId);
         if (oc?.marketCap !== undefined) c.marketCap = oc.marketCap;
+        if (oc?.mcSource) c.mcSource = oc.mcSource;
       }
       this.applyBuy(t);
     }

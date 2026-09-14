@@ -8,8 +8,9 @@
   "scripts": {
     "start": "electron .",
     "prepare-backend": "node scripts/prepare-backend.js",
-    "dist": "npm run prepare-backend && electron-builder --mac dmg --publish never",
-    "dist:win": "npm run prepare-backend && electron-builder --win nsis --x64 --publish never",
+    "prepare-vencord": "scripts/build-vencord.sh",
+    "dist": "npm run prepare-vencord && npm run prepare-backend && electron-builder --mac dmg --publish never",
+    "dist:win": "npm run prepare-vencord && npm run prepare-backend && electron-builder --win nsis --x64 --publish never",
     "release": "scripts/release.sh"
   },
   "devDependencies": {
@@ -24,12 +25,18 @@
     },
     "files": [
       "main.js",
+      "preload.js",
+      "discord-setup.js",
       "entitlements.mac.plist"
     ],
     "extraResources": [
       {
         "from": "resources/backend",
         "to": "backend"
+      },
+      {
+        "from": "resources/vencord",
+        "to": "vencord"
       },
       {
         "from": "../frontend/dist",

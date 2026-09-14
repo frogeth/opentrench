@@ -6,6 +6,7 @@ import { Avatar } from './Avatar';
 import { DOCS } from '../site';
 import { PeoplePicker } from './PeoplePicker';
 import { CHART_PROVIDERS, copyText, type ChartProvider } from '../format';
+import { desktop } from '../desktop';
 
 /** Enter in a one-line form does what its button does (when the button would be enabled). */
 const onEnter = (enabled: boolean, fn: () => void) => (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -30,6 +31,7 @@ export function Settings({
   onCompactEmbeds,
   chartProvider,
   onChartProvider,
+  onShowSetup,
 }: {
   status: Status;
   onClose: () => void;
@@ -41,6 +43,8 @@ export function Settings({
   onCompactEmbeds: (on: boolean) => void;
   chartProvider: ChartProvider;
   onChartProvider: (p: ChartProvider) => void;
+  /** reopen the first-run checklist */
+  onShowSetup?: () => void;
 }) {
   const [cfg, setCfg] = useState<MaskedConfig | null>(null);
   const [tab, setTab] = useState<Tab>('accounts');
@@ -77,6 +81,14 @@ export function Settings({
           {!cfg && <div className="hint">Loading…</div>}
           {cfg && tab === 'accounts' && (
             <>
+              {onShowSetup && (
+                <div className="hint settings-setup-link">
+                  New here?{' '}
+                  <button className="link" onClick={onShowSetup}>
+                    open the setup guide
+                  </button>
+                </div>
+              )}
               <DiscordAccount cfg={cfg} status={status} onChange={reload} />
               <TelegramAccount cfg={cfg} status={status} onChange={reload} />
               <J7Section cfg={cfg} status={status} onChange={reload} />
@@ -176,6 +188,16 @@ function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: 
       onChange();
     });
   const { busy, err, run } = useAsync();
+  const [setupMsg, setSetupMsg] = useState<string | null>(null);
+  const setupDiscord = () =>
+    run(async () => {
+      setSetupMsg(null);
+      const r = await desktop!.discordSetup();
+      if (r.cancelled) return;
+      if (!r.ok) throw new Error(r.error ?? 'setup failed');
+      setSetupMsg(`Installed into ${r.install}${r.replaced ? ' (your existing Vencord was replaced by this copy; settings and plugins kept)' : ''}. Discord is restarting.`);
+      onChange();
+    });
   return (
     <section>
       <h2>
@@ -188,19 +210,47 @@ function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: 
           <b>opentrench plugin for Vencord</b> <span className="muted">recommended · reads and sends · no token</span>
         </div>
         {bridge ? (
-          <div className="hint">Connected through your Discord app{status.discordUser ? ` as ${status.discordUser}` : ''} · {cfg.discord.watch.length} channel(s) in feed.</div>
+          <div className="hint">
+            Connected through your Discord app{status.discordUser ? ` as ${status.discordUser}` : ''} · {cfg.discord.watch.length} channel(s) in feed.
+            {desktop && (
+              <>
+                {' '}
+                <button className="link" disabled={busy} onClick={() => run(async () => { const r = await desktop!.discordRemove(); if (!r.ok && !r.cancelled) throw new Error(r.error ?? 'failed'); })}>
+                  remove the plugin
+                </button>
+              </>
+            )}
+          </div>
         ) : (
           <>
             <div className="hint">
               A small plugin inside <b>your own Discord app</b> feeds opentrench and sends for you, so to Discord it is just you using Discord. No token is stored. Discord has to
               be open for this side of the feed to work.
             </div>
-            <div className="row-inline">
-              <a className="btn primary" href={DOCS.discordBridge} target="_blank" rel="noreferrer">
-                Step-by-step guide (Mac &amp; Windows)
-              </a>
-              <span className="hint">This pill turns green on its own once the plugin connects.</span>
-            </div>
+            {desktop ? (
+              <>
+                <div className="row-inline">
+                  <button className="primary" disabled={busy} onClick={() => void setupDiscord()}>
+                    {busy ? 'Setting up…' : 'Set up Discord'}
+                  </button>
+                  <span className="hint">Quits Discord, installs the plugin, reopens it. The pill turns green on its own once it connects.</span>
+                </div>
+                {setupMsg && <div className="hint">{setupMsg}</div>}
+                <div className="hint">
+                  Prefer to do it by hand?{' '}
+                  <a href={DOCS.discordBridge} target="_blank" rel="noreferrer">
+                    Step-by-step guide (Mac &amp; Windows)
+                  </a>
+                </div>
+              </>
+            ) : (
+              <div className="row-inline">
+                <a className="btn primary" href={DOCS.discordBridge} target="_blank" rel="noreferrer">
+                  Step-by-step guide (Mac &amp; Windows)
+                </a>
+                <span className="hint">This pill turns green on its own once the plugin connects.</span>
+              </div>
+            )}
           </>
         )}
       </div>

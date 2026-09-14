@@ -10,6 +10,8 @@ import { createSecurityBatchFetcher, createSecurityFetcher } from './security.js
 import { createHoverFetchers } from './hover.js';
 import { createDefaultEnricher } from './enrich.js';
 import { createMarketRefresher } from './refresh.js';
+import { createBackfiller } from './backfill.js';
+import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
 import type { TokenInfo } from './types.js';
 import { DEFAULT_COVE_AFFILIATE, type CoveOptions } from './cove.js';
 import { Services } from './services.js';
@@ -55,6 +57,15 @@ const refreshMarket = createMarketRefresher(applyMarket, (m) => console.warn('[r
 const byNewest = (list: TokenInfo[]) => list.sort((a, b) => b.lastCallTs - a.lastCallTs);
 setInterval(() => void refreshHot(byNewest(hub.activeTokens(HOT_WINDOW_MS).filter((t) => t.network))), HOT_REFRESH_MS).unref();
 setInterval(() => void refreshMarket(byNewest(hub.activeTokens(ACTIVE_WINDOW_MS))), REFRESH_MS).unref();
+// Exact market caps at call time: a call lands with the cached number; once its minute candle has
+// closed, the real value is read from the pool's 1-minute candles (a few tokens per pass, see backfill.ts).
+const backfill = createBackfiller({
+  tokens: () => hub.activeTokens(ACTIVE_WINDOW_MS),
+  candles: (network, pool, beforeTs, limit) => fetchOhlcv(gtSlugFor(network), pool, '1m', limit, fetch, beforeTs),
+  apply: (address, updates) => hub.applyCallMarketCaps(address, updates),
+  log: (m) => console.warn('[backfill]', m),
+});
+setInterval(() => void backfill(), 15_000).unref();
 // Holder security, near-live: every minute, refresh what is due. Fresh calls (< 1h) refresh
 // every minute, < 6h every 5 minutes, < 24h every 30 minutes. EVM chains go out as one
 // GoPlus request per chain; Solana is one RugCheck request per token, newest first, 15 per cycle.

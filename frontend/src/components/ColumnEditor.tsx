@@ -45,8 +45,10 @@ const WEB_PRESETS: { name: string; url: string; blurb: string }[] = [
 const BOT_PRESETS: { name: string; bot: string; blurb: string }[] = [{ name: 'Cielo', bot: 'evmtrackerbot', blurb: 'wallet tracker alerts' }];
 type NumKey = { [K in keyof ColumnFilters]-?: NonNullable<ColumnFilters[K]> extends number ? K : never }[keyof ColumnFilters];
 const RANGES: { title: string; rows: [string, NumKey, NumKey, string][] }[] = [
-  { title: 'Metrics', rows: [['Market cap', 'mcMin', 'mcMax', '$'], ['Liquidity', 'liqMin', 'liqMax', '$'], ['Volume 24h', 'volMin', 'volMax', '$'], ['MC / Liq', 'mcLiqMin', 'mcLiqMax', 'x'], ['Multiplier', 'multMin', 'multMax', 'x']] },
-  { title: 'Activity', rows: [['Holders', 'holdersMin', 'holdersMax', ''], ['Age', 'ageMin', 'ageMax', 'min'], ['Txns 24h', 'txMin', 'txMax', ''], ['Buys', 'buysMin', 'buysMax', ''], ['Sells', 'sellsMin', 'sellsMax', ''], ['Times called', 'callsMin', 'callsMax', '']] },
+  { title: 'Metrics', rows: [['Market cap', 'mcMin', 'mcMax', '$'], ['Liquidity', 'liqMin', 'liqMax', '$'], ['Volume 24h', 'volMin', 'volMax', '$'], ['MC / Liq', 'mcLiqMin', 'mcLiqMax', 'x']] },
+  // "MC since first call" and "Times called" side by side: people read a bare "Multiplier" as the call count
+  { title: 'Calls', rows: [['Times called', 'callsMin', 'callsMax', ''], ['MC since first call', 'multMin', 'multMax', 'x']] },
+  { title: 'Activity', rows: [['Holders', 'holdersMin', 'holdersMax', ''], ['Age', 'ageMin', 'ageMax', 'min'], ['Txns 24h', 'txMin', 'txMax', ''], ['Buys', 'buysMin', 'buysMax', ''], ['Sells', 'sellsMin', 'sellsMax', '']] },
   { title: 'Distribution', rows: [['Top 10', 'top10Min', 'top10Max', '%'], ['Snipers', 'snipersMin', 'snipersMax', '%'], ['Insiders', 'insidersMin', 'insidersMax', '%'], ['Bundlers', 'bundlersMin', 'bundlersMax', '%'], ['Dev', 'devMin', 'devMax', '%']] },
 ];
 

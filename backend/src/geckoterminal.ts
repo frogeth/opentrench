@@ -55,9 +55,10 @@ export function mapOhlcv(json: any): Candle[] {
 }
 
 /** Candles for a pool (oldest first). GT returns newest-first pages of up to 1000. */
-export async function fetchOhlcv(slug: string, pool: string, interval: string, limit = 300, fetchImpl: typeof fetch = fetch): Promise<Candle[]> {
+export async function fetchOhlcv(slug: string, pool: string, interval: string, limit = 300, fetchImpl: typeof fetch = fetch, beforeTs?: number): Promise<Candle[]> {
   const { timeframe, aggregate } = ohlcvPath(interval);
-  const json = await getJson(`${API}/networks/${slug}/pools/${encodeURIComponent(pool)}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${Math.min(1000, limit)}&currency=usd`, fetchImpl);
+  const before = beforeTs ? `&before_timestamp=${Math.floor(beforeTs)}` : '';
+  const json = await getJson(`${API}/networks/${slug}/pools/${encodeURIComponent(pool)}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${Math.min(1000, limit)}&currency=usd${before}`, fetchImpl);
   return mapOhlcv(json);
 }
 

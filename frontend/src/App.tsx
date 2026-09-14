@@ -22,6 +22,7 @@ import { NftRankings } from './components/NftRankings';
 import { OsMintView } from './components/OsMintView';
 import { PingsPanel } from './components/PingsPanel';
 import { BridgeNotice } from './components/BridgeNotice';
+import { ONBOARDED_KEY, Onboarding } from './components/Onboarding';
 import { Lightbox } from './components/Lightbox';
 import type { ShareItem } from './components/ShareModal';
 
@@ -86,6 +87,17 @@ export type ChatOrder = 'bottom' | 'top';
 export default function App() {
   const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // first-run checklist: once, when nothing is connected and the feed is empty; ⚙ → Accounts brings it back
+  const [setupOpen, setSetupOpen] = useState(false);
+  const setupChecked = useRef(false);
+  const closeSetup = () => {
+    setSetupOpen(false);
+    try {
+      localStorage.setItem(ONBOARDED_KEY, '1');
+    } catch {
+      /* ignore */
+    }
+  };
   const [layoutsOpen, setLayoutsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState<Source | null>(null);
   const [view, setView] = useState<View>({ rail: 'all' });
@@ -598,6 +610,17 @@ export default function App() {
     }
   });
   // 🔕 is a master mute: every automatic sound in the app goes quiet, not just favorite pings
+  useEffect(() => {
+    if (setupChecked.current || !cfg || status.discordMode === undefined) return;
+    setupChecked.current = true;
+    let seen = false;
+    try {
+      seen = localStorage.getItem(ONBOARDED_KEY) === '1';
+    } catch {
+      /* ignore */
+    }
+    if (!seen && status.discord !== 'connected' && status.telegram !== 'connected' && watched.length === 0) setSetupOpen(true);
+  }, [cfg, status, watched]);
   useEffect(() => setMuted(!sound), [sound]);
 
   const reloadLists = () => {
@@ -1569,6 +1592,21 @@ export default function App() {
         </div>
       )}
       {cfg && status.discordMode !== undefined && <BridgeNotice cfg={cfg} status={status} onOpenSettings={() => setSettingsOpen(true)} />}
+      {setupOpen && (
+        <Onboarding
+          status={status}
+          watched={watched.length}
+          onOpenSettings={() => {
+            setSetupOpen(false);
+            setSettingsOpen(true);
+          }}
+          onAddChats={(s) => {
+            closeSetup();
+            setAddOpen(s);
+          }}
+          onClose={closeSetup}
+        />
+      )}
       {botDrawer && (
         <div className="bot-drawer">
           <div className="bot-drawer-head">
@@ -1586,6 +1624,10 @@ export default function App() {
       )}
       {settingsOpen && (
         <Settings
+          onShowSetup={() => {
+            setSettingsOpen(false);
+            setSetupOpen(true);
+          }}
           status={status}
           onClose={() => {
             setSettingsOpen(false);

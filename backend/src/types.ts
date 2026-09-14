@@ -146,6 +146,8 @@ export interface CallRecord {
   ts: number;
   /** market cap when the call was registered (first call: the first enrichment after it) */
   marketCap?: number;
+  /** set once the backfill ran: 'candle' = read from the 1-minute candle of the call's minute (exact), 'cached' = no candle for that minute, the registration number stays */
+  mcSource?: 'candle' | 'cached';
 }
 
 /** Holder security from GoPlus (EVM) or RugCheck (Solana). Percentages are 0..100. */

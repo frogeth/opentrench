@@ -43,6 +43,7 @@ node -e '
 NOTES_FILE=$(mktemp)
 printf "%s\n" "$NOTES_BODY" > "$NOTES_FILE"
 ( cd .. && npm run build )
+npm run prepare-vencord
 npm run prepare-backend
 # Publish as a DRAFT so the updater never sees a half-uploaded release, then flip it live
 # only once every asset (both manifests included) is on GitHub.

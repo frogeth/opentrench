@@ -1,5 +1,6 @@
 // opentrench desktop: runs the backend with Electron's bundled Node and opens a window on it.
-const { app, BrowserWindow, shell, nativeTheme, dialog, Menu, safeStorage } = require('electron');
+const { app, BrowserWindow, shell, nativeTheme, dialog, Menu, safeStorage, ipcMain } = require('electron');
+const discordSetup = require('./discord-setup');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -52,7 +53,9 @@ function paths() {
   const backendDir = packaged ? path.join(process.resourcesPath, 'backend') : path.resolve(__dirname, '..', 'backend');
   const entry = path.join(backendDir, 'dist', 'index.js');
   const data = app.getPath('userData');
-  return { packaged, backendDir, entry, data, config: path.join(data, 'config.json'), state: path.join(data, 'state.json') };
+  // the Vencord build shipped for one-click Discord setup (scripts/build-vencord.sh)
+  const vencord = packaged ? path.join(process.resourcesPath, 'vencord') : path.join(__dirname, 'resources', 'vencord');
+  return { packaged, backendDir, entry, data, vencord, config: path.join(data, 'config.json'), state: path.join(data, 'state.json') };
 }
 
 /** First run: adopt the old trenchfeed app-data folder, or (from the repo) the dev checkout's files. */
@@ -217,7 +220,7 @@ function createWindow() {
     ...(app.isPackaged ? {} : { icon: path.join(__dirname, 'build', 'icon.png') }),
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 14 },
-    webPreferences: { contextIsolation: true, sandbox: true },
+    webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.js') },
   });
   // Website columns embed pages in iframes, and two things break sites there. Many refuse
   // framing with X-Frame-Options or a frame-ancestors CSP (a blank box), so those refusals are
@@ -376,6 +379,74 @@ function checkForUpdatesNow() {
   updater.checkForUpdates().catch(() => {});
 }
 
+// ---------- one-click Discord setup ----------
+// The page asks over IPC (preload.js); the confirmation is a native dialog so a page can never
+// trigger the install on its own. The same flow hangs off the app menu.
+async function confirmDiscordSetup() {
+  const p = paths();
+  const st = await discordSetup.status(p.vencord, p.data);
+  if (!st.available) return { ok: false, error: st.reason };
+  const target = st.installs[0];
+  if (!target) return { ok: false, error: process.platform === 'darwin' ? 'Discord is not installed in /Applications' : 'Discord is not installed for this user' };
+  const { response } = await dialog.showMessageBox(win ?? undefined, {
+    type: 'question',
+    buttons: ['Set up Discord', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    message: `Set up Discord (${target.name})`,
+    detail:
+      `opentrench will quit Discord, install its copy of Vencord with the opentrench plugin into\n${target.path}\nand open Discord again.\n\n` +
+      (target.injected
+        ? 'Vencord is already installed there. It will be replaced by this copy: the same Vencord plus the opentrench plugin, with your settings and plugins kept.'
+        : "Vencord is a Discord client mod. Client mods are outside Discord's terms; Vencord has a very large user base and Discord has not banned for it."),
+  });
+  if (response !== 0) return { ok: false, cancelled: true };
+  try {
+    const r = await discordSetup.setup({ bundledDir: p.vencord, dataDir: p.data, port: PORT, flavour: target.id, log: (m) => console.log('[discord-setup]', m) });
+    console.log('[discord-setup] done', JSON.stringify(r));
+    return r;
+  } catch (e) {
+    console.error('[discord-setup]', e);
+    return { ok: false, error: e.message };
+  }
+}
+async function confirmDiscordRemove() {
+  const p = paths();
+  const st = await discordSetup.status(p.vencord, p.data);
+  const target = st.installs.find((i) => i.injected);
+  if (!target) return { ok: true, nothing: true };
+  const { response } = await dialog.showMessageBox(win ?? undefined, {
+    type: 'question',
+    buttons: ['Remove', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    message: `Remove the plugin from ${target.name}?`,
+    detail: `This puts Discord's original files back (Vencord is removed entirely from ${target.path}) and reopens Discord.`,
+  });
+  if (response !== 0) return { ok: false, cancelled: true };
+  try {
+    return await discordSetup.remove({ flavour: target.id });
+  } catch (e) {
+    console.error('[discord-setup] remove', e);
+    return { ok: false, error: e.message };
+  }
+}
+function wireDiscordSetup() {
+  ipcMain.handle('discord:status', () => {
+    const p = paths();
+    return discordSetup.status(p.vencord, p.data);
+  });
+  ipcMain.handle('discord:setup', () => confirmDiscordSetup());
+  ipcMain.handle('discord:remove', () => confirmDiscordRemove());
+  // a newer bundled build (after an app update) replaces the copy Discord loads; Discord picks it up on its next launch
+  try {
+    const p = paths();
+    if (discordSetup.refreshDist(p.vencord, p.data)) console.log('[discord-setup] refreshed the Vencord build in', p.data);
+  } catch (e) {
+    console.error('[discord-setup] refresh', e);
+  }
+}
+
 function buildMenu() {
   const template = [
     ...(process.platform === 'darwin'
@@ -385,6 +456,7 @@ function buildMenu() {
             submenu: [
               { role: 'about' },
               { label: 'Check for Updates…', click: checkForUpdatesNow },
+              { label: 'Set up Discord Plugin…', click: () => void confirmDiscordSetup() },
               { label: 'Open Log Folder', click: () => shell.openPath(app.getPath('logs')) },
               { type: 'separator' },
               { role: 'services' },
@@ -397,7 +469,7 @@ function buildMenu() {
             ],
           },
         ]
-      : [{ label: 'File', submenu: [{ label: 'Check for Updates…', click: checkForUpdatesNow }, { label: 'Open Log Folder', click: () => shell.openPath(app.getPath('logs')) }, { type: 'separator' }, { role: 'quit' }] }]),
+      : [{ label: 'File', submenu: [{ label: 'Check for Updates…', click: checkForUpdatesNow }, { label: 'Set up Discord Plugin…', click: () => void confirmDiscordSetup() }, { label: 'Open Log Folder', click: () => shell.openPath(app.getPath('logs')) }, { type: 'separator' }, { role: 'quit' }] }]),
     { role: 'editMenu' },
     { role: 'viewMenu' },
     { role: 'windowMenu' },
@@ -408,6 +480,7 @@ function buildMenu() {
 app.whenReady().then(async () => {
   openLog();
   buildMenu();
+  wireDiscordSetup();
   try {
     if (!(await startBackend())) {
       app.quit();

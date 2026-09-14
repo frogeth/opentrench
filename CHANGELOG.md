@@ -7,6 +7,12 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Desktop: **Set up Discord** in one click (⚙ → Accounts → Discord, the first-run guide, or the app menu). The app quits Discord, installs its own copy of Vencord with the opentrench plugin switched on, and reopens Discord; no git, Node or pnpm. An existing Vencord is replaced by the same Vencord plus the plugin, settings kept; "remove the plugin" puts Discord's original files back. The plugin build ships inside the app (electron/scripts/build-vencord.sh, GPL-3 notice included).
+- First-run guide: a three-step checklist (Discord, Telegram, channels) when nothing is connected yet, reachable again from ⚙ → Accounts.
+- Call market caps are corrected after the fact: a call lands with the number the app had cached; once the 1-minute candle for that minute has closed, the real market cap is read from the pool's candles and the entry (first call) moves with it. Multipliers and the "N calls for $X" hover reflect the price at the call, not at the next refresh.
+- Filters: "Multiplier" is now "MC since first call", grouped with "Times called" under Calls, so nobody reads it as a call count again.
+- A Claude skill for onboarding (skills/opentrench-setup): install, connect Discord and Telegram, add channels, and the known failure modes.
+
 - Onboarding: Enter submits the account forms (Discord token, Telegram credentials, phone, code, password); the Telegram tab links straight to my.telegram.org/apps; the search box in the + picker now narrows the Discord server rail too, not only the channels of the selected server; the getting-started guide says which installer file is which.
 
 - Trending column: the ten most-called tokens in the last 5m, 1h, 6h or 24h, ranked by calls then recency, with the entry market cap (at the first call), the current one, the multiplier and the last call. The header switches the window; hover a row for the calls behind it, click to open the token. Suggested by Brandzo, after the Discord leaderboard he built.
