@@ -105,21 +105,28 @@ export class TogetherHost extends EventEmitter {
     const wss = new WebSocketServer({ noServer: true });
     server.on('upgrade', (req, socket: Duplex, head) => {
       const url = new URL(req.url ?? '/', 'http://x');
+      const from = req.socket.remoteAddress ?? '?';
       if (url.pathname !== STREAM_PATH || req.headers.origin !== undefined || !sameToken(url.searchParams.get('token') ?? '', this.opts.token())) {
+        console.warn(`[together] refused ${from}: ${url.pathname !== STREAM_PATH ? 'wrong path' : req.headers.origin !== undefined ? 'browser origin' : 'wrong secret'}`);
         socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
         socket.destroy();
         return;
       }
       wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
     });
-    wss.on('connection', (ws) => {
+    wss.on('connection', (ws, req) => {
+      const from = req.socket.remoteAddress ?? '?';
       this.clients++;
       this.emit('clients', this.clients);
       const tokens = this.hub.activeTokens(SHARE_WINDOW_MS).map(shareable);
-      ws.send(JSON.stringify({ type: 'hello', name: this.opts.name(), version: this.opts.version, tokens }));
-      ws.on('close', () => {
+      const hello = JSON.stringify({ type: 'hello', name: this.opts.name(), version: this.opts.version, tokens });
+      console.log(`[together] ${from} connected; sending ${tokens.length} calls (${Math.round(hello.length / 1024)} KB)`);
+      ws.send(hello);
+      ws.on('error', (e) => console.warn(`[together] ${from} socket error: ${e.message}`));
+      ws.on('close', (code, reason) => {
         this.clients--;
         this.emit('clients', this.clients);
+        console.log(`[together] ${from} disconnected (${code}${reason?.length ? ` ${reason}` : ''})`);
       });
     });
     const onEvent = (ev: ServerEvent) => {
