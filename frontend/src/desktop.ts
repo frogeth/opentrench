@@ -40,3 +40,10 @@ declare global {
 }
 
 export const desktop: DesktopBridge | undefined = typeof window !== 'undefined' ? window.desktop : undefined;
+
+/**
+ * The page is served by the backend and can be newer than the desktop shell around it (the shell
+ * only changes with an app update). A bridge call that this shell does not have yet must never
+ * throw into a render: check for it, and fall back.
+ */
+export const hasBridge = <K extends keyof DesktopBridge>(name: K): boolean => typeof desktop?.[name] === 'function';

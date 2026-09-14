@@ -6,7 +6,7 @@ import { Avatar } from './Avatar';
 import { DOCS } from '../site';
 import { PeoplePicker } from './PeoplePicker';
 import { CHART_PROVIDERS, copyText, type ChartProvider } from '../format';
-import { desktop } from '../desktop';
+import { desktop, hasBridge } from '../desktop';
 
 /** Enter in a one-line form does what its button does (when the button would be enabled). */
 const onEnter = (enabled: boolean, fn: () => void) => (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -50,7 +50,7 @@ export function Settings({
   const [tab, setTab] = useState<Tab>('accounts');
   const [version, setVersion] = useState<string | null>(null);
   useEffect(() => {
-    (desktop ? desktop.version() : fetch('/api/version').then((r) => r.json()).then((j) => String(j.version))).then(setVersion).catch(() => {});
+    (hasBridge('version') ? desktop!.version() : fetch('/api/version').then((r) => r.json()).then((j) => String(j.version))).then(setVersion).catch(() => {});
   }, []);
   const reload = () => api.config().then(setCfg).catch(() => {});
   useEffect(() => {
@@ -82,7 +82,7 @@ export function Settings({
           </div>
           <span className="settings-version">
             {version && <span className="muted">v{version}</span>}
-            {desktop && (
+            {hasBridge('checkForUpdates') && (
               <button className="link" onClick={() => void desktop!.checkForUpdates()} title="ask GitHub for a newer build now">
                 check for updates
               </button>
@@ -228,7 +228,7 @@ function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: 
         {bridge ? (
           <div className="hint">
             Connected through your Discord app{status.discordUser ? ` as ${status.discordUser}` : ''} · {cfg.discord.watch.length} channel(s) in feed.
-            {desktop && (
+            {hasBridge('discordRemove') && (
               <>
                 {' '}
                 <button className="link" disabled={busy} onClick={() => run(async () => { const r = await desktop!.discordRemove(); if (!r.ok && !r.cancelled) throw new Error(r.error ?? 'failed'); })}>
@@ -243,7 +243,7 @@ function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: 
               A small plugin inside <b>your own Discord app</b> feeds opentrench and sends for you, so to Discord it is just you using Discord. No token is stored. Discord has to
               be open for this side of the feed to work.
             </div>
-            {desktop ? (
+            {hasBridge('discordSetup') ? (
               <>
                 <div className="row-inline">
                   <button className="primary" disabled={busy} onClick={() => void setupDiscord()}>

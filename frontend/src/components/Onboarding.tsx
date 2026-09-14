@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Source, Status } from '../types';
-import { desktop } from '../desktop';
+import { desktop, hasBridge } from '../desktop';
 import { Logo } from './Logo';
 
 export const ONBOARDED_KEY = 'opentrench:onboarded';
@@ -29,12 +29,13 @@ export function Onboarding({
   const discordDone = status.discord === 'connected';
   const telegramDone = status.telegram === 'connected';
   const chatsDone = watched > 0;
+  const canSetup = hasBridge('discordSetup');
   const setupDiscord = async () => {
-    if (!desktop) return;
+    if (!canSetup) return;
     setBusy(true);
     setMsg(null);
     try {
-      const r = await desktop.discordSetup();
+      const r = await desktop!.discordSetup();
       if (r.cancelled) return;
       if (!r.ok) throw new Error(r.error ?? 'setup failed');
       setMsg(`Installed into ${r.install}. Discord is restarting; this step ticks itself when the plugin connects.`);
@@ -62,13 +63,13 @@ export function Onboarding({
                 <span className="hint">
                   {discordDone
                     ? `Connected${status.discordUser ? ` as ${status.discordUser}` : ''}.`
-                    : desktop
+                    : canSetup
                       ? 'One click: opentrench installs its plugin into your Discord app and reopens it. Discord has to stay open for this side of the feed.'
                       : 'A small plugin inside your own Discord app. Five minutes, once, with the guide.'}
                 </span>
               </span>
               {!discordDone &&
-                (desktop ? (
+                (canSetup ? (
                   <button className="primary" disabled={busy} onClick={() => void setupDiscord()}>
                     {busy ? 'Setting up…' : 'Set up Discord'}
                   </button>
