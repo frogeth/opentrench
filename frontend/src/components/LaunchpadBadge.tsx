@@ -11,9 +11,10 @@ const LOGOS: Record<string, { src: string; label: string; short: string }> = {
   virtuals: { src: 'https://app.virtuals.io/favicon.ico', label: 'Virtuals', short: 'V' },
   flap: { src: 'https://flap.sh/favicon.ico', label: 'Flap', short: 'F' },
   clanker: { src: '', label: 'Clanker', short: 'CL' },
+  long: { src: 'https://app.long.xyz/favicon.ico', label: 'Long', short: 'L' },
 };
 
-export function LaunchpadBadge({ launchpad, url, size = 18 }: { launchpad?: string; url?: string; size?: number }) {
+export function LaunchpadBadge({ launchpad, url, note, size = 18 }: { launchpad?: string; url?: string; /** one more line for the tooltip (Long: anchored to NVDA) */ note?: string; size?: number }) {
   const [broken, setBroken] = useState(false);
   if (!launchpad) return null;
   const meta = LOGOS[launchpad] ?? { src: '', label: launchpad, short: launchpad.slice(0, 2).toUpperCase() };
@@ -25,11 +26,11 @@ export function LaunchpadBadge({ launchpad, url, size = 18 }: { launchpad?: stri
     );
   const cls = `lp lp-${launchpad}`;
   return url ? (
-    <a className={cls} href={url} target="_blank" rel="noreferrer" title={`launched on ${meta.label}`} style={{ width: size + 6, height: size + 6 }}>
+    <a className={cls} href={url} target="_blank" rel="noreferrer" title={`launched on ${meta.label}${note ? ` · ${note}` : ''}`} style={{ width: size + 6, height: size + 6 }}>
       {body}
     </a>
   ) : (
-    <span className={cls} title={`launched on ${meta.label}`} style={{ width: size + 6, height: size + 6 }}>
+    <span className={cls} title={`launched on ${meta.label}${note ? ` · ${note}` : ''}`} style={{ width: size + 6, height: size + 6 }}>
       {body}
     </span>
   );

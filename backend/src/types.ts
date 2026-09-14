@@ -203,9 +203,11 @@ export interface TokenInfo {
   sells24h?: number;
   /** pair creation time (ms) — the token's age */
   pairCreatedAt?: number;
-  /** launchpad that deployed it: pumpfun | letsbonk | bankr | stonks | pons | o1 */
+  /** launchpad that deployed it: pumpfun | letsbonk | bankr | stonks | pons | o1 | long | … */
   launchpad?: string;
   launchpadUrl?: string;
+  /** one line the launchpad adds to the badge (Long: "anchored to NVDA") */
+  launchpadNote?: string;
   imageUrl?: string;
   /** dexscreener-style chain id: ethereum | base | bsc | solana | robinhood | … */
   network?: string;
@@ -405,6 +407,7 @@ export type ServerEvent =
       mentions: Mention[];
       mints: MintEvent[];
       rankings: Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>>;
+      launches?: LongLaunch[];
       mintJobs: MintJob[];
       /** changes on every server start: the page reloads to pick up new assets */
       boot: string;
@@ -422,5 +425,26 @@ export type ServerEvent =
   | { type: 'status'; status: Status }
   | { type: 'mint'; mint: MintEvent }
   | { type: 'nftRankings'; key: RankingKey; rows: NftRanking[]; at: number }
+  | { type: 'longLaunches'; rows: LongLaunch[]; at: number }
   | { type: 'mintJob'; job: MintJob }
   | { type: 'mintJobGone'; id: string };
+
+/** A launch on Long (app.long.xyz): a token anchored to a tokenized stock on Robinhood Chain. */
+export interface LongLaunch {
+  address: string;
+  name: string;
+  symbol: string;
+  image?: string;
+  /** the anchor's ticker (NVDA), a Long token's symbol, or a short address */
+  anchor: string;
+  anchorAddress?: string;
+  marketCap?: number;
+  volume24h?: number;
+  /** auction sold so far, 0–100 */
+  progress?: number;
+  stage: 'auction' | 'graduated';
+  createdAt: number;
+  url: string;
+  /** Cove buy panel deep link */
+  cove?: string;
+}

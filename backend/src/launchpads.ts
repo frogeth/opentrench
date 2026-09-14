@@ -7,7 +7,7 @@ import type { Chain, TokenInfo } from './types.js';
  * the launchpad itself becomes a badge on the card.
  */
 
-export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'o1' | 'virtuals' | 'flap' | 'clanker';
+export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long';
 
 export interface LaunchpadInfo extends Partial<TokenInfo> {
   launchpad: Launchpad;
@@ -383,6 +383,8 @@ export interface LaunchpadProbes {
   clanker?: (a: string) => Promise<LaunchpadInfo | undefined>;
   o1?: (a: string) => Promise<LaunchpadInfo | undefined>;
   pumpfun?: (a: string) => Promise<LaunchpadInfo | undefined>;
+  /** Long (Robinhood Chain): cheap, it only asks for the `1e18` suffix */
+  long?: (a: string) => Promise<LaunchpadInfo | undefined>;
   log?: (m: string) => void;
 }
 
@@ -405,6 +407,7 @@ export function createLaunchpadClassifier(p: LaunchpadProbes): (address: string,
     if (bySuffix) return bySuffix;
     if (chain !== 'evm') return undefined;
     for (const [name, probe] of [
+      ['long', p.long],
       ['bankr', p.bankr],
       ['stonks', p.stonks],
       ['pons', p.pons],

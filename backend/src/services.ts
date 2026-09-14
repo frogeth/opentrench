@@ -11,6 +11,7 @@ import { createPreviewer, type Previewer } from './previews.js';
 import { J7Client } from './j7.js';
 import { MintGoClient } from './mintgo.js';
 import { RankingsPoller, keyFor } from './opensea/rankings.js';
+import { LongPoller } from './long.js';
 import { Minter } from './opensea/minter.js';
 import { CHAINS } from './opensea/chains.js';
 import { createLaunchWatcher } from './deploys.js';
@@ -27,6 +28,7 @@ export class Services {
   j7?: J7Client;
   mintgo?: MintGoClient;
   readonly rankings = new RankingsPoller();
+  readonly long = new LongPoller();
   readonly minter = new Minter(() => this.cfg.get().opensea.walletKey, () => this.cfg.get().opensea.rpc);
   private discordSelf?: DiscordSelf;
   private guildRoles = new Map<string, Map<string, string>>();
@@ -51,6 +53,8 @@ export class Services {
     this.wireDiscord();
     this.rankings.on('rankings', (key, rows, at) => this.hub.emit('event', { type: 'nftRankings', key, rows, at }));
     this.hub.nftState.rankings = () => this.rankings.latest;
+    this.long.on('launches', (rows, at) => this.hub.emit('event', { type: 'longLaunches', rows, at }));
+    this.hub.nftState.launches = () => this.long.latest?.rows;
     this.minter.on('job', (job) => this.hub.emit('event', { type: 'mintJob', job }));
     this.minter.on('gone', (id: string) => this.hub.emit('event', { type: 'mintJobGone', id }));
     this.hub.nftState.mintJobs = () => this.minter.jobs;
@@ -262,6 +266,7 @@ export class Services {
     this.startMintGo();
     const cols = this.cfg.get().columns.flatMap((c) => (c.split ? [c, c.split.bottom] : [c]));
     this.rankings.want([...new Set(cols.filter((c) => c.type === 'nftvol').map(keyFor))]);
+    this.long.want(cols.some((c) => c.type === 'long'));
   }
 
   /** Conversation with a Telegram bot (Cove) through the user's own session. */

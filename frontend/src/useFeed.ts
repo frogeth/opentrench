@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BotMessage, FeedMessage, J7Tweet, Mention, MintEvent, MintJob, NftRanking, RankingKey, ServerEvent, Status, TokenInfo } from './types';
+import type { BotMessage, FeedMessage, J7Tweet, Mention, MintEvent, MintJob, NftRanking, RankingKey, ServerEvent, Status, TokenInfo, LongLaunch } from './types';
 
 const MAX = 500;
 
@@ -47,6 +47,7 @@ export function useFeed() {
       return [...byId.values()].sort((a, b) => b.ts - a.ts || b.id.localeCompare(a.id)).slice(0, 300);
     });
   const [rankings, setRankings] = useState<Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>>>({});
+  const [launches, setLaunches] = useState<{ rows: LongLaunch[]; at: number } | undefined>(undefined);
   const [mintJobs, setMintJobs] = useState<MintJob[]>([]);
   const upsertJob = (job: MintJob) => setMintJobs((cur) => (cur.some((j) => j.id === job.id) ? cur.map((j) => (j.id === job.id ? job : j)) : [...cur, job].slice(-100)));
   const boot = useRef<string | null>(null);
@@ -90,6 +91,7 @@ export function useFeed() {
           mintTimer.current = undefined;
           setMints(ev.mints ?? []);
           setRankings(ev.rankings ?? {});
+          if (ev.launches) setLaunches({ rows: ev.launches, at: Date.now() });
           setMintJobs(ev.mintJobs ?? []);
         } else if (ev.type === 'message') {
           setMessages((m) => [ev.msg, ...m].slice(0, MAX));
@@ -121,6 +123,7 @@ export function useFeed() {
           else if (mintTimer.current === undefined) mintTimer.current = window.setTimeout(flushMints, 200);
         }
         else if (ev.type === 'nftRankings') setRankings((r) => ({ ...r, [ev.key]: { rows: ev.rows, at: ev.at } }));
+        else if (ev.type === 'longLaunches') setLaunches({ rows: ev.rows, at: ev.at });
         else if (ev.type === 'mintJob') upsertJob(ev.job);
         else if (ev.type === 'mintJobGone') setMintJobs((cur) => cur.filter((j) => j.id !== ev.id));
       };
@@ -138,5 +141,5 @@ export function useFeed() {
     };
   }, []);
 
-  return { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs };
+  return { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, launches, mintJobs };
 }

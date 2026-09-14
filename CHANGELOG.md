@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Long (app.long.xyz): a call for a Long token shows the Long badge with what it is anchored to ("anchored to NVDA"), and a **Long launches** column lists the newest stock-anchored launches on Robinhood Chain as they appear, with anchor, market cap, 24h volume, auction progress, and Long / Cove links. Long is in the launchpad filter too. Reads Long's own indexer, unofficially.
+
 - Desktop: **Set up Discord** in one click (⚙ → Accounts → Discord, the first-run guide, or the app menu). The app quits Discord, installs its own copy of Vencord with the opentrench plugin switched on, and reopens Discord; no git, Node or pnpm. An existing Vencord is replaced by the same Vencord plus the plugin, settings kept; "remove the plugin" puts Discord's original files back. The plugin build ships inside the app (electron/scripts/build-vencord.sh, GPL-3 notice included).
 - First-run guide: a three-step checklist (Discord, Telegram, channels) when nothing is connected yet, reachable again from ⚙ → Accounts.
 - Call market caps are corrected after the fact: a call lands with the number the app had cached; once the 1-minute candle for that minute has closed, the real market cap is read from the pool's candles and the entry (first call) moves with it. Multipliers and the "N calls for $X" hover reflect the price at the call, not at the next refresh.

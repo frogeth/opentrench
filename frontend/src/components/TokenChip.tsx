@@ -55,7 +55,7 @@ export function TokenChip({
           <ChainBadge network={t?.network} chain={c.chain} size={9} className="chip-net" />
           {t?.launchpad && (
             <span className="chip-lp">
-              <LaunchpadBadge launchpad={t.launchpad} url={t.launchpadUrl} size={10} />
+              <LaunchpadBadge launchpad={t.launchpad} url={t.launchpadUrl} note={t.launchpadNote} size={10} />
             </span>
           )}
         </div>

@@ -1,4 +1,6 @@
 import { EventEmitter } from 'node:events';
+import { mergeLaunchpad } from './long.js';
+import type { LaunchpadInfo } from './launchpads.js';
 import { detectContracts } from './contracts.js';
 import type { TokenFetcher } from './enrich.js';
 import type { SecurityBatchFetcher, SecurityFetcher } from './security.js';
@@ -28,6 +30,7 @@ import type {
   TokenInfo,
   Mention,
   PersonSeen,
+  LongLaunch,
 } from './types.js';
 
 /** Identifies this server process; the UI reloads when it changes so a restart with a new build never leaves stale assets. */
@@ -49,6 +52,7 @@ const DATA_KEYS = [
   'pairCreatedAt',
   'launchpad',
   'launchpadUrl',
+  'launchpadNote',
   'imageUrl',
   'network',
   'pairAddress',
@@ -95,9 +99,10 @@ function normName(n: string): string {
  */
 export class MessageHub extends EventEmitter {
   /** filled by Services: what the NFT columns need in `hello` */
-  nftState: { mints: () => MintEvent[]; rankings: () => Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>>; mintJobs: () => MintJob[] } = {
+  nftState: { mints: () => MintEvent[]; rankings: () => Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>>; mintJobs: () => MintJob[]; launches: () => LongLaunch[] | undefined } = {
     mints: () => [],
     rankings: () => ({}),
+    launches: () => undefined,
     mintJobs: () => [],
   };
   /**
@@ -182,6 +187,17 @@ export class MessageHub extends EventEmitter {
     }
     if (changed) this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
     this.changed();
+  }
+
+  /** A launchpad identified after the fact (the page asked Long): badge plus whatever the token still lacks. */
+  applyLaunchpad(address: string, info: LaunchpadInfo): boolean {
+    const t = this.tokens.get(address) ?? this.tokens.get(address.toLowerCase());
+    if (!t) return false;
+    if (!mergeLaunchpad(t, info)) return false;
+    this.noteFirstCallMc(t);
+    this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
+    this.changed();
+    return true;
   }
 
   // ---------- ingest ----------
@@ -500,6 +516,7 @@ export class MessageHub extends EventEmitter {
       mentions: this.mentions(),
       mints: this.nftState.mints(),
       rankings: this.nftState.rankings(),
+      launches: this.nftState.launches(),
       mintJobs: this.nftState.mintJobs(),
       boot: BOOT_ID,
     };

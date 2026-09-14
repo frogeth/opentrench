@@ -8,6 +8,8 @@ import { ChatFeed } from './components/ChatFeed';
 import { ColumnEditor, chatKey } from './components/ColumnEditor';
 import { CallersList } from './components/CallersColumn';
 import { TREND_WINDOWS, TrendingList, trendWindow } from './components/TrendingColumn';
+import { LongLaunches } from './components/LongLaunches';
+import { useLongDetection, useLongLaunches } from './long';
 import { Composer, type SendTarget } from './components/Composer';
 import { ShareModal } from './components/ShareModal';
 import { CoveView, COVE_BOT } from './components/CoveView';
@@ -56,6 +58,9 @@ function Pill({ label, state }: { label: Source; state: string }) {
   );
 }
 
+/** stock-token anchors are named on the backend; the page only looks up anchors that are Long tokens themselves */
+const NO_NUMERAIRES = new Set<string>();
+
 function matchesQuery(q: string, m: FeedMessage, tokens: Record<string, TokenInfo>): boolean {
   if (!q) return true;
   if (m.text.toLowerCase().includes(q) || m.author.toLowerCase().includes(q) || m.chatName.toLowerCase().includes(q))
@@ -85,7 +90,7 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 export type ChatOrder = 'bottom' | 'top';
 
 export default function App() {
-  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs } = useFeed();
+  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, launches, mintJobs } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
   // first-run checklist: once, when nothing is connected and the feed is empty; ⚙ → Accounts brings it back
   const [setupOpen, setSetupOpen] = useState(false);
@@ -264,6 +269,9 @@ export default function App() {
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   /** every column including stacked bottoms, for anything that does not care about layout */
   const flatColumns = useMemo(() => columns.flatMap((c) => (c.split ? [c, c.split.bottom] : [c])), [columns]);
+  // Long (app.long.xyz) is read from the page (its API blocks servers): the launches feed while a Long column exists, and badges for called Long tokens
+  useLongLaunches(flatColumns.some((c) => c.type === 'long'), NO_NUMERAIRES);
+  useLongDetection(tokens, NO_NUMERAIRES);
   /** saved arrangements of the terminal, and the one matching what is on screen (if any) */
   const layouts = cfg?.layouts ?? [];
   const currentLayout = useMemo(() => layouts.find((l) => sameColumns(l.columns, columns)), [layouts, columns]);
@@ -1162,6 +1170,13 @@ export default function App() {
       return (
         <Column key={col.id} title={col.title} subtitle={osAddr ? `${osAddr.slice(0, 6)}…${osAddr.slice(-4)} · opensea.io` : 'no wallet yet'} kind="osmint" className={`col-cove col-osmint${coveFlash === 'osmint' ? ' col-flash' : ''}`} {...actions}>
           <OsMintView jobs={mintJobs} now={now} wallet={osAddr} prefill={mintPrefill} onPrefilled={() => setMintPrefill(null)} />
+        </Column>
+      );
+    }
+    if (col.type === 'long') {
+      return (
+        <Column key={col.id} title={col.title} subtitle="app.long.xyz · Robinhood Chain" kind="long" className="col-long" {...actions}>
+          <LongLaunches rows={launches?.rows} at={launches?.at} now={now} onSelect={(a) => (tokens[a] ? select(a) : window.open(`https://app.long.xyz/tokens/${a}`, '_blank', 'noopener'))} />
         </Column>
       );
     }

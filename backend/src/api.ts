@@ -1,6 +1,7 @@
 import type { TokenInfo } from './types.js';
 import { Router, json, raw, type Request, type Response } from 'express';
 import type { HoverFetchers } from './hover.js';
+import { mapLongAsset, resolveNumeraires } from './long.js';
 import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
 import { LAYOUT_NAME_MAX, MAX_LAYOUTS, sanitizeColumns, type Layout } from './config.js';
 import type { ConfigStore } from './config.js';
@@ -158,6 +159,26 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
         c.blacklist = [...new Set(names)];
       });
       hub.rebuild();
+    }),
+  );
+  // Long (app.long.xyz): the page fetches Long's indexer (Cloudflare blocks the server) and hands the raw rows here.
+  r.post(
+    '/long/launches',
+    wrap(async (req) => {
+      const assets = Array.isArray(req.body?.assets) ? req.body.assets : [];
+      const symbols = req.body?.symbols && typeof req.body.symbols === 'object' ? (req.body.symbols as Record<string, string>) : {};
+      return { rows: (await svc.long.ingest(assets, symbols)).length };
+    }),
+  );
+  r.post(
+    '/long/asset',
+    wrap(async (req) => {
+      const asset = req.body?.asset;
+      const given = req.body?.symbols && typeof req.body.symbols === 'object' ? req.body.symbols : {};
+      const info = mapLongAsset(asset, { ...(await resolveNumeraires([String(asset?.asset_numeraire_address ?? '')])), ...given });
+      if (!info) throw new Error('asset required');
+      const address = String(req.body.asset.asset_address);
+      return { applied: hub.applyLaunchpad(address, info) };
     }),
   );
   r.post(

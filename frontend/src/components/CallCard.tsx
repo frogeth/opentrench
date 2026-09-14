@@ -181,7 +181,7 @@ export function CallCard({
           <ChainBadge network={t.network} chain={t.chain} size={11} className="net-badge" />
           {t.launchpad && (
             <span className="lp-badge">
-              <LaunchpadBadge launchpad={t.launchpad} url={t.launchpadUrl} size={13} />
+              <LaunchpadBadge launchpad={t.launchpad} url={t.launchpadUrl} note={t.launchpadNote} size={13} />
             </span>
           )}
         </div>

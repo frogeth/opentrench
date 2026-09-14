@@ -13,6 +13,7 @@ import {
   fetchVirtuals,
   type LaunchpadInfo,
 } from './launchpads.js';
+import { fetchLong } from './long.js';
 
 export type TokenFetcher = (address: string, chain: Chain) => Promise<Partial<TokenInfo> | undefined>;
 
@@ -101,6 +102,7 @@ export function createDefaultEnricher(opts: { o1ApiKey?: () => string | undefine
       bankr: (a) => fetchBankrLaunch(a),
       stonks: (a) => fetchStonks(a),
       pons: (a) => fetchPons(a),
+      long: (a) => fetchLong(a),
       flap: (a) => fetchFlap(a),
       virtuals: (a) => fetchVirtuals(a),
       clanker: (a) => fetchClanker(a),
