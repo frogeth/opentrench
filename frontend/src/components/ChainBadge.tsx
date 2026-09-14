@@ -1,6 +1,7 @@
 import { netLabel } from '../format';
 
-// Chain marks. Ethereum / Solana / BNB from Simple Icons (CC0); Base and Robinhood drawn by hand.
+// Chain marks. Ethereum / Solana / BNB from Simple Icons (CC0); Base and Robinhood drawn by hand;
+// Ink is the mark from its own logo (docs.inkonchain.com), scaled to 24.
 const MARKS: Record<string, string> = {
   ethereum: 'M11.944 17.97L4.58 13.62 11.943 24l7.37-10.38-7.372 4.35h.003zM12.056 0L4.69 12.223l7.365 4.354 7.365-4.35L12.056 0z',
   solana:
@@ -11,7 +12,11 @@ const MARKS: Record<string, string> = {
   // Robinhood: a feather.
   robinhood:
     'M19.6 2.2c-.4-.3-1-.2-1.6 0-4.4 1.4-8.4 4.9-10.6 9.6-.9 1.9-1.4 3.9-1.6 5.8l-2.6 4.2c-.3.5-.1 1.1.4 1.4.5.3 1.1.1 1.4-.4l2.5-4.1c1.8-.2 3.7-.8 5.5-1.9 4.3-2.7 7.1-7.4 7.4-12.5 0-.8-.3-1.6-.8-2.1zm-3.9 6.4-5.8 7.2c.1-1.3.5-2.7 1.2-4.1 1.5-3.2 4-5.9 6.9-7.4-.5 1.5-1.2 3-2.3 4.3z',
+  ink: 'M 12 0 C 18.63 0 24 5.37 24 12 C 24 18.63 18.63 24 12 24 C 5.37 24 0 18.63 0 12 C 0 5.37 5.37 0 12 0Z M 12.1 22.48 C 13.04 22.46 13.71 21.8 13.71 20.98 C 13.71 20.15 13.06 19.54 12.23 19.54 C 11.81 19.54 11.62 19.54 11.43 19.54 C 11.27 19.53 11.12 19.52 10.84 19.5 L 10.83 19.49 L 10.65 19.48 C 9.83 19.42 9.14 18.81 9.14 17.99 C 9.14 17.16 9.81 16.49 10.65 16.49 H 12.2 C 13.04 16.49 13.71 15.82 13.71 15 C 13.71 14.17 13.04 13.5 12.2 13.5 H 7.09 C 6.25 13.5 5.58 12.83 5.58 12 C 5.58 11.17 6.25 10.5 7.09 10.5 H 17.23 C 18.07 10.5 18.74 9.83 18.74 9.01 C 18.74 8.18 18.07 7.51 17.23 7.51 H 10.65 C 9.81 7.51 9.14 6.84 9.14 6.01 C 9.14 5.19 9.9 4.58 10.65 4.52 C 11.39 4.46 11.43 4.46 12.2 4.46 C 12.98 4.46 13.71 3.85 13.71 3.02 C 13.71 2.2 13.16 1.54 12.09 1.52 C 12.06 1.52 12.03 1.52 12 1.52 C 6.21 1.52 1.52 6.21 1.52 12 C 1.52 17.78 6.2 22.47 11.98 22.48 H 12.02 C 12.04 22.48 12.07 22.48 12.1 22.48Z',
 };
+
+/** Marks whose glyph is a hole cut out of a disc (the source path relies on even-odd filling). */
+const EVEN_ODD = new Set(['ink']);
 
 export function ChainBadge({
   network,
@@ -31,7 +36,7 @@ export function ChainBadge({
     <span className={`net net-${key || chain} ${path ? 'net-mark' : ''} ${className}`} title={label}>
       {path ? (
         <svg width={size} height={size} viewBox="0 0 24 24" aria-label={label} role="img">
-          <path d={path} fill="currentColor" />
+          <path d={path} fill="currentColor" fillRule={EVEN_ODD.has(key) ? 'evenodd' : undefined} />
         </svg>
       ) : (
         label

@@ -1,3 +1,4 @@
+import { netLabel } from '../format';
 import { useState } from 'react';
 import type { Contract, TokenInfo } from '../types';
 import { Icon, type IconName } from './Icon';
@@ -18,17 +19,6 @@ function price(n?: number): string | null {
   return `$${n.toPrecision(3)}`;
 }
 
-const NETWORK_LABEL: Record<string, string> = {
-  ethereum: 'ETH',
-  base: 'BASE',
-  bsc: 'BNB',
-  arbitrum: 'ARB',
-  polygon: 'POL',
-  avalanche: 'AVAX',
-  robinhood: 'RH',
-  solana: 'SOL',
-};
-
 export function TokenCard({ c, t }: { c: Contract; t?: TokenInfo }) {
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
@@ -45,7 +35,7 @@ export function TokenCard({ c, t }: { c: Contract; t?: TokenInfo }) {
   const hasPrice = t?.priceUsd !== undefined;
   const change = hasPrice ? t?.change24h : undefined;
   const net = t?.network;
-  const netLabel = net ? (NETWORK_LABEL[net] ?? net.toUpperCase().slice(0, 5)) : c.chain.toUpperCase();
+  const label = netLabel(net, c.chain);
   const links: [IconName, string, string | undefined][] = [
     ['chart', 'open chart', t?.chartUrl],
     ['globe', 'website', t?.website],
@@ -60,7 +50,7 @@ export function TokenCard({ c, t }: { c: Contract; t?: TokenInfo }) {
         {t?.imageUrl ? (
           <img className="token-img" src={t.imageUrl} alt="" loading="lazy" />
         ) : (
-          <div className="token-img token-img-fallback">{netLabel}</div>
+          <div className="token-img token-img-fallback">{label}</div>
         )}
         <div className="token-body">
           <div className="token-head">
@@ -68,7 +58,7 @@ export function TokenCard({ c, t }: { c: Contract; t?: TokenInfo }) {
               {copied ? 'copied' : (t?.symbol ?? short)}
             </button>
             {t?.name && t.name !== t.symbol && <span className="token-name">{t.name}</span>}
-            {net && <span className={`net net-${net}`}>{netLabel}</span>}
+            {net && <span className={`net net-${net}`}>{label}</span>}
             <span
               className="token-seen"
               title={t?.calledIn?.length ? `called in:\n${t.calledIn.join('\n')}` : undefined}

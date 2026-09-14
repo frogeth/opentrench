@@ -30,6 +30,7 @@ const EXPLORERS: Record<string, string> = {
   plasma: 'https://plasmascan.to/token/',
   story: 'https://www.storyscan.io/token/',
   megaeth: 'https://megaeth.blockscout.com/token/',
+  ink: 'https://explorer.inkonchain.com/token/',
 };
 
 export function explorerUrl(network: string | undefined, address: string): string | undefined {

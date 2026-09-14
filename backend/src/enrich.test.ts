@@ -81,6 +81,7 @@ describe('createEnricher', () => {
 describe('explorerUrl', () => {
   it('maps known networks and returns undefined otherwise', () => {
     expect(explorerUrl('solana', 'X')).toBe('https://solscan.io/token/X');
+    expect(explorerUrl('ink', 'X')).toBe('https://explorer.inkonchain.com/token/X');
     expect(explorerUrl('nope', 'X')).toBeUndefined();
     expect(explorerUrl(undefined, 'X')).toBeUndefined();
   });
