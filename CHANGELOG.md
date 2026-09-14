@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- GeckoTerminal's 30-a-minute allowance is per public IP, so two machines on one connection share it. After a 429, charts and the call-price backfill now stand aside for a minute so the market refresh keeps the budget; fresh tokens resolve first, candles catch up after.
+
 ## v0.8.9 — 2026-09-14
 
 - The + picker's Telegram list has filters: All / Groups / Channels / DMs, and "in feed" for what you already watch, each with a count. For accounts with a ton of chats.

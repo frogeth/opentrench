@@ -64,7 +64,7 @@ export async function fetchOhlcv(slug: string, pool: string, interval: string, l
   const { timeframe, aggregate } = ohlcvPath(interval);
   const before = beforeTs ? `&before_timestamp=${Math.floor(beforeTs)}` : '';
   const side = token ? `&token=${encodeURIComponent(token)}` : '';
-  const json = await getJson(`${API}/networks/${slug}/pools/${encodeURIComponent(pool)}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${Math.min(1000, limit)}&currency=usd${before}${side}`, fetchImpl);
+  const json = await getJson(`${API}/networks/${slug}/pools/${encodeURIComponent(pool)}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${Math.min(1000, limit)}&currency=usd${before}${side}`, fetchImpl, 'extra');
   return mapOhlcv(json);
 }
 
@@ -161,14 +161,35 @@ function spaced<T>(fn: () => Promise<T>): Promise<T> {
 
 class RateLimited extends Error {}
 
-async function getJson(url: string, fetchImpl: typeof fetch): Promise<any | undefined> {
+/**
+ * The 30/min allowance is per public IP, so two machines behind one router share it. When GT has
+ * just said 429, the budget is kept for market data (the refresh fallback for pairs Dexscreener
+ * has not indexed, and the enrichment probe): charts and the call-price backfill ("extra") are
+ * refused locally for a minute instead of spending the next request slots on candles.
+ */
+export type GtPriority = 'market' | 'extra';
+const BACKOFF_MS = 60_000;
+let lastRateLimitAt = 0;
+export function __resetRateLimit(): void {
+  lastRateLimitAt = 0;
+}
+/** true while extras are standing aside */
+export function gtThrottled(now = Date.now()): boolean {
+  return now - lastRateLimitAt < BACKOFF_MS;
+}
+
+async function getJson(url: string, fetchImpl: typeof fetch, priority: GtPriority = 'market'): Promise<any | undefined> {
+  if (priority === 'extra' && gtThrottled()) throw new RateLimited('geckoterminal budget reserved for market data after a 429');
   return spaced(async () => {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
     try {
       const res = await fetchImpl(url, { signal: ctl.signal, headers: { accept: 'application/json' } });
       if (res.status === 404) return undefined;
-      if (res.status === 429) throw new RateLimited('geckoterminal 429');
+      if (res.status === 429) {
+        lastRateLimitAt = Date.now();
+        throw new RateLimited('geckoterminal 429');
+      }
       if (!res.ok) throw new Error(`geckoterminal ${res.status}`);
       return await res.json();
     } finally {
