@@ -399,7 +399,7 @@ export interface Status {
   /** how Discord is connected: the Vencord bridge (read + write) or a legacy token (read only) */
   discordMode?: 'bridge' | 'token' | 'none';
   /** TrenchTogether: sharing on this machine, and the friends this machine follows */
-  together?: { sharing: boolean; port: number; clients: number; peers: { name: string; url: string; state: 'connecting' | 'connected' | 'disconnected' | 'unauthorized' }[] };
+  together?: { sharing: boolean; port: number; clients: number; peers: { name: string; url: string; state: 'connecting' | 'connected' | 'disconnected' | 'unauthorized'; error?: string }[] };
 }
 
 export type ServerEvent =

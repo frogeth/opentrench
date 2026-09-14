@@ -1063,7 +1063,8 @@ function TogetherSection({ status }: { status: Status }) {
         </div>
         {info.peers.length === 0 && <div className="hint">Nobody yet. Paste a pairing string from a friend who turned on sharing.</div>}
         {info.peers.map((p) => {
-          const st = live?.peers.find((x) => x.url.includes(`${p.host.includes(':') ? `[${p.host}]` : p.host}:${p.port}`))?.state ?? 'disconnected';
+          const peer = live?.peers.find((x) => x.url.includes(`${p.host.includes(':') ? `[${p.host}]` : p.host}:${p.port}`));
+          const st = peer?.state ?? 'disconnected';
           return (
             <div key={`${p.host}:${p.port}`} className="row-inline peer-row">
               <b>{p.name || p.host}</b>
@@ -1071,6 +1072,7 @@ function TogetherSection({ status }: { status: Status }) {
                 {p.host}:{p.port}
               </span>
               <StatePill state={st === 'unauthorized' ? 'auth_error' : st} />
+              {peer?.error && st !== 'connected' && <span className="muted" title="last connection error">{peer.error === 'ECONNREFUSED' ? 'refused: is sharing on over there?' : peer.error === 'ETIMEDOUT' || /timeout/i.test(peer.error) ? 'no route: same Wi-Fi? client isolation?' : peer.error === 'EHOSTUNREACH' || peer.error === 'ENETUNREACH' ? 'unreachable: different network' : peer.error}</span>}
               <button disabled={busy} onClick={() => run(async () => setInfo(await api.removePeer(p.host, p.port)))}>
                 Unfollow
               </button>

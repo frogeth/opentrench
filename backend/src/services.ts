@@ -46,7 +46,7 @@ export class Services {
       sharing: this.togetherHost.listening,
       port: TOGETHER_PORT,
       clients: this.togetherHost.clients,
-      peers: [...this.guests.values()].map((g) => ({ name: g.name, url: g.url, state: g.state })),
+      peers: [...this.guests.values()].map((g) => ({ name: g.name, url: g.url, state: g.state, error: g.lastError })),
     });
   }
   /** Start/stop the LAN listener and the friends we follow, from the config. Safe to call repeatedly. */

@@ -149,6 +149,8 @@ export type PeerState = 'connecting' | 'connected' | 'disconnected' | 'unauthori
 /** Follows one host: reconnects on its own, hands every shared token to the hub, and remembers which tokens it currently streams. */
 export class TogetherGuest extends EventEmitter {
   state: PeerState = 'disconnected';
+  /** why the last attempt failed (ECONNREFUSED, timeout…), for the settings screen */
+  lastError?: string;
   name: string;
   /** tokens received while connected: the host keeps these fresh, so local refresh loops skip them */
   readonly live = new Set<string>();
@@ -192,6 +194,7 @@ export class TogetherGuest extends EventEmitter {
     this.ws = ws;
     ws.on('open', () => {
       this.backoff = 5_000;
+      this.lastError = undefined;
       this.setState('connected');
     });
     ws.on('message', (raw) => {
@@ -207,9 +210,13 @@ export class TogetherGuest extends EventEmitter {
       } else if (msg?.type === 'token') this.take(msg.token);
     });
     ws.on('unexpected-response', (_req, res) => {
+      this.lastError = `HTTP ${res.statusCode}`;
       if (res.statusCode === 403) this.setState('unauthorized');
     });
-    ws.on('error', () => {});
+    ws.on('error', (e: Error & { code?: string }) => {
+      this.lastError = e.code ?? e.message;
+      this.emit('state', this.state);
+    });
     ws.on('close', () => {
       this.live.clear();
       if (this.state !== 'unauthorized') this.setState('disconnected');
