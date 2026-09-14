@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.8.8 — 2026-09-14
+
 - Fix: Set up Discord on a Mac explains when macOS App Management blocks it and offers to open that settings pane; Discord is reopened if the install cannot proceed.
 - Fix: Set up Discord failed with "ENOENT, not found in app.asar": the desktop shell reads Discord's app.asar through Electron's archive-aware file system; it now uses the plain one.
 
