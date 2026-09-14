@@ -7,7 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
-- Desktop: when a backend from another build is already on port 3210 (usually one left behind by the previous version), the dialog now offers **Stop it and start mine**. Attaching to a stale backend showed an old page with features missing.
+- Desktop: an older backend left behind by the previous version is replaced automatically at launch, no dialog. Before, a dialog asked about "attaching", and attaching to the old one showed an old page with features missing. Only if the old copy refuses to close does the app say so, in plain words. A newer backend (a dev checkout ahead of the app) is used as before.
 
 - Share: an optional message goes out above the address, the same to every chat you pick. (Suggested by Brandzo.)
 - Contracts-only chat columns can keep the caller's next 1–3 messages after a call, so the thesis shows with the contract. Column editor → Message filter → Contracts only → "+ caller's next".

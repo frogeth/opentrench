@@ -122,6 +122,18 @@ function backendVersion() {
   });
 }
 
+/** -1, 0, 1 for a < b, a = b, a > b over dotted numbers; anything unparsable counts as older than everything. */
+function compareVersions(a, b) {
+  const pa = String(a ?? '').split('.').map(Number);
+  const pb = String(b ?? '').split('.').map(Number);
+  if (pa.some(Number.isNaN) || !pa.length || !String(a ?? '').trim()) return -1;
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
 /** @returns false when the app should quit instead of opening a window */
 async function startBackend() {
   const p = paths();
@@ -130,37 +142,26 @@ async function startBackend() {
     // of silently turns into a chat column: its config parser rewrites what it doesn't know. A
     // stale `npm start` from an older checkout is the usual culprit.
     const v = await backendVersion();
-    if (v !== app.getVersion()) {
-      const { response } = await dialog.showMessageBox({
-        type: 'warning',
-        message: `Another opentrench backend is already running on port ${PORT}`,
-        detail: `It reports version ${v || 'unknown (an older build)'}; this app is ${app.getVersion()}. Usually a backend left behind by the previous version. Stop it and let this app start its own (recommended), attach to it anyway (older page, missing features), or quit.`,
-        buttons: ['Stop it and start mine', 'Attach anyway', 'Quit'],
-        defaultId: 0,
-        cancelId: 2,
-      });
-      if (response === 2) return false;
-      if (response === 0) {
-        const r = await stale.stopListener(PORT, ping, (m) => console.log('[desktop]', m));
-        if (!r.ok) {
-          await dialog.showMessageBox({
-            type: 'error',
-            message: 'Could not stop it',
-            detail: r.pid ? `The process (${r.what}) is still holding port ${PORT}. End it yourself and open opentrench again.` : `Nothing this app can stop is listening on port ${PORT}.`,
-            buttons: ['Quit'],
-          });
-          return false;
-        }
-        console.log('[desktop] stale backend stopped; starting our own');
-        // fall through to start ours
-      } else {
-        console.log('[desktop] backend already running on', URL, '— attaching (different build, by choice)');
-        return true;
-      }
-    } else {
-      console.log('[desktop] backend already running on', URL, '— attaching');
+    const cmp = compareVersions(v, app.getVersion());
+    if (cmp >= 0) {
+      // the same build (the usual case: a restart while the backend kept running) or a newer one
+      // (a dev checkout ahead of the app): use it, nothing to ask
+      console.log('[desktop] backend already running on', URL, cmp > 0 ? `(newer: ${v}) — attaching` : '— attaching');
       return true;
     }
+    // older: almost always one left behind by the previous version. Replace it, no questions.
+    console.log(`[desktop] a backend from ${v || 'an older build'} is on port ${PORT}; this app is ${app.getVersion()} — replacing it`);
+    const r = await stale.stopListener(PORT, ping, (m) => console.log('[desktop]', m));
+    if (!r.ok) {
+      await dialog.showMessageBox({
+        type: 'error',
+        message: "opentrench can't start",
+        detail: 'An older copy of opentrench is still running on this computer and would not close. Quit it (check the Dock, the tray, or Task Manager for opentrench), then open opentrench again.',
+        buttons: ['Quit'],
+      });
+      return false;
+    }
+    console.log('[desktop] stale backend stopped; starting our own');
   }
   adoptDevFiles(p);
   if (!fs.existsSync(p.entry)) throw new Error(`backend not built: ${p.entry}`);
