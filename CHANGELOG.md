@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.8.10 — 2026-09-14
+
 - **TrenchTogether** (⚙ → Together): share your calls with a friend on the same network or VPN. Turn on sharing, send them the pairing string, and your calls show in their feed tagged "via you"; only the call travels (token, caller, chat name, market numbers), never a chat message. Their machine skips the API lookups for tokens you keep fresh, so two machines on one connection stop fighting over the same rate limits. Sharing opens one extra port (3211) on the LAN that serves only that stream to a paired peer; the rest of opentrench stays on 127.0.0.1.
 
 - GeckoTerminal's 30-a-minute allowance is per public IP, so two machines on one connection share it. After a 429, charts and the call-price backfill now stand aside for a minute so the market refresh keeps the budget; fresh tokens resolve first, candles catch up after.
