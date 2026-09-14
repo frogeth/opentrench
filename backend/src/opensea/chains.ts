@@ -17,7 +17,7 @@ export interface ChainInfo { id: string; name: string; chainId: number; symbol: 
 export const CHAINS: Record<string, ChainInfo> = {
   ethereum: { id: 'ethereum', name: 'Ethereum', chainId: 1, symbol: 'ETH', defaultRpc: 'https://ethereum-rpc.publicnode.com', explorerTx: 'https://etherscan.io/tx/', maxFeeGwei: 500, maxTipGwei: 100, maxGasCostWei: 20_000_000_000_000_000n },
   base: { id: 'base', name: 'Base', chainId: 8453, symbol: 'ETH', defaultRpc: 'https://mainnet.base.org', explorerTx: 'https://basescan.org/tx/', maxFeeGwei: 50, maxTipGwei: 10, maxGasCostWei: 2_000_000_000_000_000n },
-  robinhood: { id: 'robinhood', name: 'Robinhood Chain', chainId: 4663, symbol: 'ETH', defaultRpc: 'https://rpc.mainnet.chain.robinhood.com', explorerTx: 'https://robinhoodchain.blockscout.com/tx/', maxFeeGwei: 25, maxTipGwei: 5, maxGasCostWei: 2_000_000_000_000_000n },
+  robinhood: { id: 'robinhood', name: 'Robinhood Chain', chainId: 4663, symbol: 'ETH', defaultRpc: 'https://rpc.mainnet.chain.robinhood.com', explorerTx: 'https://robin.etherscan.io/tx/', maxFeeGwei: 25, maxTipGwei: 5, maxGasCostWei: 2_000_000_000_000_000n },
   ink: { id: 'ink', name: 'Ink', chainId: 57073, symbol: 'ETH', defaultRpc: 'https://rpc-qnd.inkonchain.com', explorerTx: 'https://explorer.inkonchain.com/tx/', maxFeeGwei: 25, maxTipGwei: 5, maxGasCostWei: 2_000_000_000_000_000n },
 };
 

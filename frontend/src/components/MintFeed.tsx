@@ -5,7 +5,7 @@ import { copyText, timeAgo } from '../format';
 import { Icon } from './Icon';
 import { VirtualItem } from './Virtual';
 
-const EXPLORER: Record<string, string> = { ethereum: 'https://etherscan.io/tx/', robinhood: 'https://robinhoodchain.blockscout.com/tx/', ink: 'https://explorer.inkonchain.com/tx/' };
+const EXPLORER: Record<string, string> = { ethereum: 'https://etherscan.io/tx/', robinhood: 'https://robin.etherscan.io/tx/', ink: 'https://explorer.inkonchain.com/tx/' };
 const CHAIN_LABEL: Record<string, string> = { ethereum: 'ETH', robinhood: 'RH', ink: 'INK', stable: 'STB', arc: 'ARC' };
 const short = (a: string) => (a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
 const ethFmt = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 4 });

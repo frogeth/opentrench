@@ -23,7 +23,7 @@ const EXPLORERS: Record<string, string> = {
   arbitrum: 'https://arbiscan.io/token/',
   polygon: 'https://polygonscan.com/token/',
   avalanche: 'https://snowtrace.io/token/',
-  robinhood: 'https://robinhoodchain.blockscout.com/token/',
+  robinhood: 'https://robin.etherscan.io/token/',
   solana: 'https://solscan.io/token/',
   monad: 'https://monadscan.com/token/',
   hyperevm: 'https://hyperevmscan.io/token/',

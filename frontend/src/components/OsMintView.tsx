@@ -4,7 +4,7 @@ import { api } from '../api';
 import { copyText } from '../format';
 import { Icon } from './Icon';
 
-const EXPLORER: Record<string, string> = { ethereum: 'https://etherscan.io/tx/', base: 'https://basescan.org/tx/', robinhood: 'https://robinhoodchain.blockscout.com/tx/', ink: 'https://explorer.inkonchain.com/tx/' };
+const EXPLORER: Record<string, string> = { ethereum: 'https://etherscan.io/tx/', base: 'https://basescan.org/tx/', robinhood: 'https://robin.etherscan.io/tx/', ink: 'https://explorer.inkonchain.com/tx/' };
 const ethFmt = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 6 });
 const eth = (wei?: string, sym = 'ETH') => (wei === undefined ? '—' : `${ethFmt.format(Number(wei) / 1e18)} ${sym}`);
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;

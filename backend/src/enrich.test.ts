@@ -42,7 +42,7 @@ describe('createEnricher', () => {
       launchpadUrl: 'https://www.ponsfamily.com/launchpad',
       website: 'https://bitcat.example',
       twitter: 'https://x.com/bitcat',
-      explorerUrl: `https://robinhoodchain.blockscout.com/token/${A}`,
+      explorerUrl: `https://robin.etherscan.io/token/${A}`,
     });
   });
 
