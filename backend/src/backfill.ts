@@ -15,8 +15,8 @@ import type { CallRecord, TokenInfo } from './types.js';
  */
 export interface BackfillDeps {
   tokens: () => TokenInfo[];
-  /** 1-minute candles for the pool, newest first is fine; `beforeTs` is unix seconds */
-  candles: (network: string, pool: string, beforeTs: number, limit: number) => Promise<Candle[]>;
+  /** 1-minute candles of `token` in the pool (GT defaults to the pool's base token, which may be the other side); `beforeTs` is unix seconds */
+  candles: (token: string, network: string, pool: string, beforeTs: number, limit: number) => Promise<Candle[]>;
   apply: (address: string, updates: CallMarketCap[]) => void;
   log?: (msg: string) => void;
   now?: () => number;
@@ -65,7 +65,7 @@ export async function backfillOnce(deps: BackfillDeps): Promise<number> {
     const oldest = Math.min(...calls.map((c) => c.ts));
     const limit = Math.min(1000, Math.ceil((newest - oldest) / 60_000) + 3);
     try {
-      const candles = await deps.candles(t.network!, t.pairAddress!, Math.floor(newest / 1000) + 60, limit);
+      const candles = await deps.candles(t.address, t.network!, t.pairAddress!, Math.floor(newest / 1000) + 60, limit);
       const updates = marketCapsAt(calls, candles, t.marketCap! / t.priceUsd!);
       deps.apply(t.address, updates);
       fixed += updates.filter((u) => u.source === 'candle').length;
@@ -74,6 +74,36 @@ export async function backfillOnce(deps: BackfillDeps): Promise<number> {
     }
   }
   return fixed;
+}
+
+/** A candle-derived value is nonsense when it is this far from the token's current market cap. */
+export const ABSURD_RATIO = 50;
+
+/**
+ * Undo the backfill's first release, which read the pool's base-token candles for every token and
+ * so wrote the *other* asset's price into calls on quote-side tokens (entry market caps in the
+ * trillions, every multiplier 0.0x). Every candle-derived value goes back to pending so it is
+ * re-read with the right token; a value that is wildly off the current market cap is dropped
+ * outright (the first call's entry with it), since an old call may never get a candle again.
+ * Pure; returns how many calls were touched.
+ */
+export function repairCandleMarketCaps(tokens: TokenInfo[]): { reset: number; dropped: number } {
+  let reset = 0;
+  let dropped = 0;
+  for (const t of tokens) {
+    for (const c of t.calls) {
+      if (c.mcSource !== 'candle') continue;
+      c.mcSource = undefined;
+      reset++;
+      const absurd = !!t.marketCap && c.marketCap !== undefined && (c.marketCap > t.marketCap * ABSURD_RATIO || c.marketCap < t.marketCap / ABSURD_RATIO);
+      if (absurd) {
+        c.marketCap = undefined;
+        if (c === t.calls[0]) t.firstCallMarketCap = undefined;
+        dropped++;
+      }
+    }
+  }
+  return { reset, dropped };
 }
 
 /** The loop: one pass at a time, on a timer the caller owns. */

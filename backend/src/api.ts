@@ -114,7 +114,8 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       const key = `${t.address}:${interval}`;
       const c = ohlcvCache.get(key);
       if (c && Date.now() - c.at < 30_000) return c.v;
-      const candles = await fetchOhlcv(gtSlugFor(t.network), t.pairAddress, interval, 300);
+      // the token's own price: without `token` GT returns the pool's base side, which inverts the chart for a quote-side token
+      const candles = await fetchOhlcv(gtSlugFor(t.network), t.pairAddress, interval, 300, fetch, undefined, t.address);
       const v = {
         candles,
         // scale price → market cap with the supply implied by the latest numbers

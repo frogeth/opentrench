@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { mergeLaunchpad } from './long.js';
+import { repairCandleMarketCaps } from './backfill.js';
 import type { LaunchpadInfo } from './launchpads.js';
 import { detectContracts } from './contracts.js';
 import type { TokenFetcher } from './enrich.js';
@@ -73,6 +74,8 @@ export interface Snapshot {
   tokenChats: Record<string, string[]>;
   /** mints with a transaction hash, so a restart can pick the watch back up */
   mintJobs?: MintJob[];
+  /** 2 once the quote-side candle repair (backfill.ts) has run over this state */
+  candleFix?: number;
 }
 
 export interface HubOptions {
@@ -548,6 +551,7 @@ export class MessageHub extends EventEmitter {
   snapshot(): Snapshot {
     return {
       version: 1,
+      candleFix: 2,
       messages: this.buffer,
       tokens: [...this.tokens.values()],
       tokenChats: Object.fromEntries([...this.tokenChats].map(([a, s]) => [a, [...s]])),
@@ -569,6 +573,10 @@ export class MessageHub extends EventEmitter {
     for (const m of [...this.buffer].sort((a, b) => a.ts - b.ts)) if (m.mention) this.trackMention(m, false);
     this.tokens = new Map((snap.tokens ?? []).map((t) => [t.address, t]));
     this.tokenChats = new Map(Object.entries(snap.tokenChats ?? {}).map(([a, ids]) => [a, new Set(ids)]));
+    if ((snap.candleFix ?? 0) < 2) {
+      const r = repairCandleMarketCaps([...this.tokens.values()]);
+      if (r.reset) console.warn(`[backfill] repair: ${r.reset} candle-derived call market cap(s) sent back for re-reading with the right token side, ${r.dropped} dropped as nonsense`);
+    }
     this.restoredMintJobs = (snap.mintJobs ?? []).filter((j) => j && typeof j.id === 'string' && !!j.txHash);
     for (const t of this.tokens.values()) {
       if (!this.tokenChats.has(t.address)) this.tokenChats.set(t.address, new Set());

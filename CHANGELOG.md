@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Fix: call market caps read from candles were the *other* asset's price for tokens on the quote side of their pool (an entry of $1.6 trillion, every multiplier 0.0x): GeckoTerminal returns the pool's base token unless the token is named, and now it is, for the backfill and the drill-down chart alike. On first start every candle-derived value is sent back to be re-read, and values wildly off the current market cap are dropped rather than shown. Reported with the exact repro by a user, thank you.
+
 ## v0.8.8 — 2026-09-14
 
 - Fix: Set up Discord on a Mac explains when macOS App Management blocks it and offers to open that settings pane; Discord is reopened if the install cannot proceed.

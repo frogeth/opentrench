@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PER_CYCLE, SETTLE_MS, backfillOnce, marketCapsAt, pendingCalls, type CallMarketCap } from './backfill.js';
+import { PER_CYCLE, SETTLE_MS, backfillOnce, marketCapsAt, pendingCalls, repairCandleMarketCaps, type CallMarketCap } from './backfill.js';
 import type { Candle } from './geckoterminal.js';
 import type { CallRecord, TokenInfo } from './types.js';
 
@@ -50,8 +50,8 @@ describe('backfillOnce', () => {
     const applied: Record<string, CallMarketCap[]> = {};
     const n = await backfillOnce({
       tokens: () => tokens,
-      candles: async (_net, _pool, before) => {
-        asked.push(_pool);
+      candles: async (token, _net, _pool, before) => {
+        asked.push(token);
         expect(before).toBeGreaterThan(base);
         return candles(base, 60);
       },
@@ -61,6 +61,7 @@ describe('backfillOnce', () => {
       now: () => NOW,
     });
     expect(asked.length).toBe(PER_CYCLE);
+    expect(asked.sort()).toEqual(tokens.slice(-PER_CYCLE).map((t) => t.address).sort()); // the token itself is named, so GT gives its side of the pool
     // newest lastCallTs first: the highest indices
     expect(Object.keys(applied).sort()).toEqual(tokens.slice(-PER_CYCLE).map((t) => t.address).sort());
     expect(n).toBe(PER_CYCLE);
@@ -74,7 +75,7 @@ describe('backfillOnce', () => {
     const applied: CallMarketCap[] = [];
     await backfillOnce({
       tokens: () => [t],
-      candles: async (_n, _p, _b, limit) => {
+      candles: async (_t, _n, _p, _b, limit) => {
         limitAsked = limit;
         return candles(base, 20);
       },
@@ -107,5 +108,15 @@ describe('backfillOnce', () => {
     expect(applied).toBe(0);
     expect(logs[0]).toContain('429');
     expect(pendingCalls(t, NOW).length).toBe(1);
+  });
+
+  it('repair sends candle-derived values back for re-reading and drops the nonsense ones', () => {
+    const t = token('0xa', [call('first', NOW - 5 * 60_000, { mcSource: 'candle', marketCap: 1_686_295_960_775 }), call('fine', NOW - 4 * 60_000, { mcSource: 'candle', marketCap: 180_000 }), call('cached', NOW - 3 * 60_000, { mcSource: 'cached', marketCap: 100_000 })], { marketCap: 18_333, firstCallMarketCap: 1_686_295_960_775 });
+    expect(repairCandleMarketCaps([t])).toEqual({ reset: 2, dropped: 1 });
+    expect(t.calls[0]).toMatchObject({ msgId: 'first', marketCap: undefined, mcSource: undefined });
+    expect(t.firstCallMarketCap).toBeUndefined();
+    expect(t.calls[1]).toMatchObject({ msgId: 'fine', marketCap: 180_000, mcSource: undefined }); // within 50×: kept, re-read later
+    expect(t.calls[2]).toMatchObject({ msgId: 'cached', marketCap: 100_000, mcSource: 'cached' });
+    expect(pendingCalls(t, NOW).map((c) => c.msgId)).toEqual(['first', 'fine']);
   });
 });

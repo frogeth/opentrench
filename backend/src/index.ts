@@ -61,7 +61,7 @@ setInterval(() => void refreshMarket(byNewest(hub.activeTokens(ACTIVE_WINDOW_MS)
 // closed, the real value is read from the pool's 1-minute candles (a few tokens per pass, see backfill.ts).
 const backfill = createBackfiller({
   tokens: () => hub.activeTokens(ACTIVE_WINDOW_MS),
-  candles: (network, pool, beforeTs, limit) => fetchOhlcv(gtSlugFor(network), pool, '1m', limit, fetch, beforeTs),
+  candles: (token, network, pool, beforeTs, limit) => fetchOhlcv(gtSlugFor(network), pool, '1m', limit, fetch, beforeTs, token),
   apply: (address, updates) => hub.applyCallMarketCaps(address, updates),
   log: (m) => console.warn('[backfill]', m),
 });

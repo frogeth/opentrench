@@ -54,11 +54,17 @@ export function mapOhlcv(json: any): Candle[] {
     .sort((a, b) => a.t - b.t);
 }
 
-/** Candles for a pool (oldest first). GT returns newest-first pages of up to 1000. */
-export async function fetchOhlcv(slug: string, pool: string, interval: string, limit = 300, fetchImpl: typeof fetch = fetch, beforeTs?: number): Promise<Candle[]> {
+/**
+ * Candles for a pool (oldest first). GT returns newest-first pages of up to 1000.
+ * `token` names whose price the candles are: without it GT gives the pool's *base* token, which
+ * is the other asset when the token we care about sits on the quote side (a SOL close scaled by
+ * a meme coin's supply once produced entry market caps in the trillions).
+ */
+export async function fetchOhlcv(slug: string, pool: string, interval: string, limit = 300, fetchImpl: typeof fetch = fetch, beforeTs?: number, token?: string): Promise<Candle[]> {
   const { timeframe, aggregate } = ohlcvPath(interval);
   const before = beforeTs ? `&before_timestamp=${Math.floor(beforeTs)}` : '';
-  const json = await getJson(`${API}/networks/${slug}/pools/${encodeURIComponent(pool)}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${Math.min(1000, limit)}&currency=usd${before}`, fetchImpl);
+  const side = token ? `&token=${encodeURIComponent(token)}` : '';
+  const json = await getJson(`${API}/networks/${slug}/pools/${encodeURIComponent(pool)}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${Math.min(1000, limit)}&currency=usd${before}${side}`, fetchImpl);
   return mapOhlcv(json);
 }
 
