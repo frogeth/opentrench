@@ -776,7 +776,7 @@ export class MessageHub extends EventEmitter {
       // `quoting` job is a quote that expires in two minutes, so it dies with the process.
       mintJobs: this.nftState
         .mintJobs()
-        .filter((j) => j.txHash && (j.state === 'pending' || j.state === 'confirmed' || j.state === 'failed'))
+        .filter((j) => (j.txHash && (j.state === 'pending' || j.state === 'confirmed' || j.state === 'failed')) || j.state === 'waiting')
         .slice(-50),
     };
   }
@@ -798,7 +798,7 @@ export class MessageHub extends EventEmitter {
       const n = this.dropBotEchoes();
       if (n) console.warn(`[hub] repair: ${n} bot echo(es) dropped from the calls (a bot answering a call had counted as a caller)`);
     }
-    this.restoredMintJobs = (snap.mintJobs ?? []).filter((j) => j && typeof j.id === 'string' && !!j.txHash);
+    this.restoredMintJobs = (snap.mintJobs ?? []).filter((j) => j && typeof j.id === 'string' && (!!j.txHash || j.state === 'waiting'));
     for (const t of this.tokens.values()) {
       if (!this.tokenChats.has(t.address)) this.tokenChats.set(t.address, new Set());
       if (t.lastCallTs === undefined) t.lastCallTs = t.firstSeenTs;

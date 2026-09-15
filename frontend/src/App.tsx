@@ -878,6 +878,33 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
 
+  // a queued mint whose stage opened: a coin when it is ready (or already sent, when armed), a chirp when it failed
+  const mintStates = useRef<Map<string, string> | null>(null);
+  useEffect(() => {
+    if (mintStates.current === null) {
+      mintStates.current = new Map(mintJobs.map((j) => [j.id, j.state]));
+      return;
+    }
+    for (const j of mintJobs) {
+      const was = mintStates.current.get(j.id);
+      mintStates.current.set(j.id, j.state);
+      if (was !== 'waiting' || j.state === 'waiting') continue;
+      if (sound) playSound(j.state === 'failed' ? 'chirp' : 'coin');
+      if (notify === 'granted') {
+        try {
+          const n = new Notification(j.state === 'failed' ? `✗ ${j.collection.name}: ${j.error ?? 'mint failed'}` : j.state === 'ready' ? `◎ ${j.collection.name} is open — press Mint` : `⏳ ${j.collection.name}: minting`, { tag: `mint:${j.id}` });
+          n.onclick = () => {
+            window.focus();
+            n.close();
+          };
+        } catch {
+          /* notifications unavailable */
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mintJobs]);
+
   // Preview: fetch recent history for a chat that isn't in the feed.
   useEffect(() => {
     const p = view.preview;

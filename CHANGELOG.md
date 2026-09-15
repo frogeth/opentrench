@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- OpenSea mint queue: quoting a drop whose stage you can mint in has not opened yet (a presale you are not on, public in 15 minutes) no longer fails. The card waits with a countdown, quotes itself again the moment the stage opens and pings you. "Mint when it opens" arms it: the mint is sent by itself at the price OpenSea showed for that stage, with gas under the chain's ceiling; dearer than that and it is held for you with a note. The queue survives a restart. (Brandzo.)
 ## v0.8.14 — 2026-09-15
 
 - Rick, Phanes and the other scanner bots no longer count as callers when they answer a contract someone already posted in that chat; existing echoes are dropped on update. A bot that posts a contract first (an alert bot) is still the call.

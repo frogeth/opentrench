@@ -609,7 +609,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     wrap((req) => {
       const id = String(req.params.id ?? '');
       if (!/^m[a-z0-9]{1,40}$/.test(id)) throw new Error('bad job id');
-      if (!svc.minter.dismiss(id)) throw new Error('only a finished mint can be dismissed');
+      if (!svc.minter.dismiss(id)) throw new Error('only a finished or waiting mint can be dismissed');
       return { ok: true };
     }),
   );
@@ -638,6 +638,15 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       if (job.state !== 'ready') throw new Error(`quote is ${job.state}`);
       void svc.minter.send(jobId).catch((e) => console.warn('[osmint] send', e?.message ?? e));
       return { ok: true };
+    }),
+  );
+  // arm a waiting mint: sent the moment its stage opens, at the shown price and under the gas ceiling
+  r.post(
+    '/osmint/arm',
+    wrap((req) => {
+      const jobId = String(req.body?.jobId ?? '');
+      if (!/^m[a-z0-9]{1,40}$/.test(jobId)) throw new Error('bad job id');
+      return svc.minter.arm(jobId, req.body?.on !== false);
     }),
   );
   r.get('/opensea', wrap(() => svc.openseaMasked()));

@@ -9,6 +9,16 @@ const ethFmt = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 6 });
 const eth = (wei?: string, sym = 'ETH') => (wei === undefined ? '—' : `${ethFmt.format(Number(wei) / 1e18)} ${sym}`);
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const stageLabel = (t: string) => t.toLowerCase().replace(/_/g, ' ').replace('sale', '').trim() || 'stage';
+/** mm:ss under an hour, then the coarser form */
+const countdown = (iso?: string, now = Date.now()) => {
+  if (!iso) return '';
+  const ms = Date.parse(iso) - now;
+  if (!Number.isFinite(ms)) return '';
+  if (ms <= 0) return 'now';
+  if (ms >= 3600e3) return until(iso, now);
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
 const until = (iso?: string, now = Date.now()) => {
   if (!iso) return '';
   const ms = Date.parse(iso) - now;
@@ -17,14 +27,16 @@ const until = (iso?: string, now = Date.now()) => {
   return d > 0 ? `${d}d ${h % 24}h` : h > 0 ? `${h}h ${Math.floor((ms % 3600e3) / 60e3)}m` : `${Math.floor(ms / 60e3)}m`;
 };
 
-function JobCard({ j, now, onSend, sending, onDismiss, onRequote }: { j: MintJob; now: number; onSend: (id: string) => void; sending: boolean; onDismiss?: (id: string) => void; onRequote?: (j: MintJob) => void }) {
+function JobCard({ j, now, onSend, sending, onDismiss, onRequote, onArm }: { j: MintJob; now: number; onSend: (id: string) => void; sending: boolean; onDismiss?: (id: string) => void; onRequote?: (j: MintJob) => void; onArm?: (id: string, on: boolean) => void }) {
   const sym = j.price?.symbol ?? 'ETH';
   const [confirming, setConfirming] = useState(false);
   const confirmTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(confirmTimer.current), []);
   // a fresh quote/state transition retracts a stale confirmation prompt
   useEffect(() => setConfirming(false), [j.state, j.id]);
-  const head = j.state === 'quoting' ? '… Quoting' : j.state === 'ready' ? '◎ Ready to mint' : j.state === 'sending' ? '⏳ Sending' : j.state === 'pending' ? (j.error ? '🔵 Pending · watching' : '🔵 Pending') : j.state === 'confirmed' ? '✓ Mint confirmed' : '✗ Mint failed';
+  const [arming, setArming] = useState(false);
+  useEffect(() => setArming(false), [j.state, j.id, j.armed?.at]);
+  const head = j.state === 'quoting' ? '… Quoting' : j.state === 'waiting' ? `⏱ ${j.armed ? 'Armed' : 'Waiting'} · ${stageLabel(j.waitFor?.type ?? 'stage')} opens in ${countdown(j.waitFor?.startTime, now)}` : j.state === 'ready' ? '◎ Ready to mint' : j.state === 'sending' ? '⏳ Sending' : j.state === 'pending' ? (j.error ? '🔵 Pending · watching' : '🔵 Pending') : j.state === 'confirmed' ? '✓ Mint confirmed' : '✗ Mint failed';
   const tx = j.txHash && EXPLORER[j.collection.chain] ? `${EXPLORER[j.collection.chain]}${j.txHash}` : undefined;
   const expired = j.state === 'ready' && now - j.ts > 120_000;
   const clickMint = (e: MouseEvent) => {
@@ -63,6 +75,8 @@ function JobCard({ j, now, onSend, sending, onDismiss, onRequote }: { j: MintJob
       {(j.state === 'sending' || j.state === 'pending') && <div className="osj-spin muted">…</div>}
       {j.state === 'confirmed' && <div className="osj-ok">{j.tokenIds?.length ? `#${j.tokenIds.join(', #')}` : 'minted'}{j.blockNumber ? ` · block ${j.blockNumber}` : ''}</div>}
       {(j.state === 'pending' || j.state === 'sending') && j.error && <div className="osj-note">{j.error}</div>}
+      {(j.state === 'waiting' || j.state === 'ready') && j.note && <div className="osj-note">{j.note}</div>}
+      {j.state === 'waiting' && !j.note && <div className="osj-note muted">{j.armed ? `Sends by itself the moment the stage opens, at up to ${eth(j.price?.totalWei, sym)} plus gas under the ${j.collection.chain} ceiling. No click needed.` : 'Quotes itself again the moment the stage opens and pings you. Arm it to mint without a click.'}</div>}
       {j.state === 'failed' && j.error && <div className="osj-err">{j.error}</div>}
       <div className="bkeys"><div className="bkey-row">
         {j.state === 'ready' && (expired ? (
@@ -72,12 +86,30 @@ function JobCard({ j, now, onSend, sending, onDismiss, onRequote }: { j: MintJob
             {confirming ? `Confirm: send ${eth(j.price?.totalWei, sym)} from ${short(j.wallet)}?` : `Mint ${j.quantity} for ${eth(j.price?.totalWei, sym)}`}
           </button>
         ))}
+        {j.state === 'waiting' && onArm && !j.armed && (
+          <button
+            className={`bkey ${arming ? 'osj-confirm' : 'osj-mint'}`}
+            disabled={!j.price}
+            title={j.price ? 'send this mint automatically when the stage opens' : 'OpenSea has not shown a price for that stage yet'}
+            onClick={(e) => {
+              if (arming && e.detail === 0) return;
+              if (!arming) return setArming(true);
+              setArming(false);
+              onArm(j.id, true);
+            }}
+          >
+            {arming ? `Confirm: auto-mint ${j.quantity} for ${eth(j.price?.totalWei, sym)} from ${short(j.wallet)} when it opens?` : 'Mint when it opens'}
+          </button>
+        )}
+        {j.state === 'waiting' && onArm && j.armed && (
+          <button className="bkey" onClick={() => onArm(j.id, false)} title="do not send automatically">Disarm</button>
+        )}
         {tx && <a className="bkey bkey-url" href={tx} target="_blank" rel="noreferrer">tx <Icon name="explorer" size={10} /></a>}
         {j.collection.slug && <a className="bkey bkey-url" href={`https://opensea.io/collection/${j.collection.slug}`} target="_blank" rel="noreferrer">OpenSea <Icon name="explorer" size={10} /></a>}
         {j.state === 'failed' && j.collection.slug && onRequote && (
           <button className="bkey" onClick={() => onRequote(j)} title="quote this collection again">Quote again</button>
         )}
-        {(j.state === 'failed' || j.state === 'confirmed' || (j.state === 'ready' && expired)) && onDismiss && (
+        {(j.state === 'failed' || j.state === 'confirmed' || j.state === 'waiting' || (j.state === 'ready' && expired)) && onDismiss && (
           <button className="bkey osj-dismiss" onClick={() => onDismiss(j.id)} title="remove this card">Dismiss</button>
         )}
       </div></div>
@@ -156,6 +188,13 @@ export function OsMintView({ jobs, now, wallet, prefill, onPrefilled }: { jobs: 
       flash(e?.message ?? 'could not dismiss');
     }
   };
+  const arm = async (id: string, on: boolean) => {
+    try {
+      await api.osArm(id, on);
+    } catch (e: any) {
+      flash(e?.message ?? 'could not arm');
+    }
+  };
   const send = async (id: string) => {
     setSendingId(id);
     try {
@@ -181,7 +220,7 @@ export function OsMintView({ jobs, now, wallet, prefill, onPrefilled }: { jobs: 
       <div className="cove-body" ref={body} onScroll={onBodyScroll}>
         {jobs.length === 0 && <div className="empty">Paste a collection below, or press Mint on a MintGo card or a minting row in OpenSea Volume.</div>}
         {jobs.map((j) => (
-          <JobCard key={j.id} j={j} now={now} onSend={send} sending={sendingId === j.id} onDismiss={dismiss} onRequote={(job) => void quote(job.collection.slug, job.collection.chain, job.quantity)} />
+          <JobCard key={j.id} j={j} now={now} onSend={send} sending={sendingId === j.id} onDismiss={dismiss} onArm={arm} onRequote={(job) => void quote(job.collection.slug, job.collection.chain, job.quantity)} />
         ))}
       </div>
       {toast && <div className="cove-toast">{toast}</div>}

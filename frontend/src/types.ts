@@ -336,7 +336,7 @@ export interface NftRanking {
   minting?: { stageType: string; endTime?: string };
 }
 
-export type MintJobState = 'quoting' | 'ready' | 'sending' | 'pending' | 'confirmed' | 'failed';
+export type MintJobState = 'quoting' | 'waiting' | 'ready' | 'sending' | 'pending' | 'confirmed' | 'failed';
 
 export interface MintJob {
   id: string;
@@ -358,6 +358,12 @@ export interface MintJob {
   blockNumber?: number;
   tokenIds?: string[];
   error?: string;
+  /** waiting: the coming stage the job is queued for; it is quoted again the moment that stage starts */
+  waitFor?: { type: string; index: number; startTime: string; retries?: number };
+  /** the user armed an automatic send once the stage opens, within these ceilings (wei) */
+  armed?: { maxUnitWei: string; maxGasCostWei: string; at: number };
+  /** a remark on a job that has not failed (why an armed send was held back, say) */
+  note?: string;
 }
 
 export interface Status {

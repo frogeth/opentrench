@@ -31,6 +31,11 @@ const MAX_JOBS = 100;
  */
 const HARD_MAX_JOBS = 2 * MAX_JOBS;
 const MAX_QUANTITY = 99;
+/** A job waits for a coming stage up to this long; a mint further out than that is quoted by hand nearer the time. */
+const WAIT_MAX_MS = 7 * 24 * 3600_000;
+/** Once a waited-for stage's start time has passed, OpenSea is asked again this often, this many times, before giving up. */
+const OPEN_RETRY_MS = 4_000;
+const OPEN_RETRIES = 30;
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const GWEI = 1_000_000_000n;
 
@@ -56,6 +61,8 @@ export interface MinterDeps {
   rpc: (url: string) => Rpc;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
+  /** run `fn` after `ms`; returns the cancel. Tests capture it to fire the timer by hand. */
+  schedule?: (ms: number, fn: () => void) => () => void;
 }
 const LIVE: MinterDeps = {
   resolve: (l, c) => resolveCollection(l, c),
@@ -64,6 +71,10 @@ const LIVE: MinterDeps = {
   rpc: (url) => createPublicClient({ transport: http(url) }) as unknown as Rpc,
   now: () => Date.now(),
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  schedule: (ms, fn) => {
+    const t = setTimeout(fn, ms);
+    return () => clearTimeout(t);
+  },
 };
 
 /** Up to 6 significant decimal digits, never collapsing a small nonzero value to "0". */
@@ -142,6 +153,10 @@ export class Minter extends EventEmitter {
   private verifiedRpc = new Map<string, number>();
   /** job id → the receipt watch still running for it */
   private watches = new Map<string, Promise<MintJob>>();
+  /** job id → cancel of the timer that will quote a waiting job again when its stage starts */
+  private timers = new Map<string, () => void>();
+  /** job id → what was asked for, so a requote asks the same */
+  private reqs = new Map<string, { locator: string; chain?: string }>();
   constructor(
     private walletKey: () => string | undefined,
     private rpcOverrides: () => Record<string, string>,
@@ -220,8 +235,21 @@ export class Minter extends EventEmitter {
     const job: MintJob = { id: `m${t0.toString(36)}${Math.random().toString(36).slice(2, 6)}`, ts: t0, updatedAt: t0, state: 'quoting', collection: { slug: '', name: req.locator, address: '', chain: req.chain ?? '', networkId: 0, dropKind: '' }, quantity, wallet: '' };
     this.jobs.push(job);
     this.evict();
+    if (!quantity) return this.fail(job, `quantity must be a whole number from 1 to ${MAX_QUANTITY}`);
+    this.reqs.set(job.id, { locator: req.locator, chain: req.chain });
+    return this.evaluate(job);
+  }
+
+  /**
+   * Look the drop up and quote it into `job`: `ready` when a stage the wallet can mint in is open,
+   * `waiting` when the next such stage is still to come (a timer runs this again at its start),
+   * `failed` otherwise. An armed waiting job that comes back ready is sent at once.
+   */
+  private async evaluate(job: MintJob): Promise<MintJob> {
+    const req = this.reqs.get(job.id) ?? { locator: job.collection.slug || job.collection.address, chain: job.collection.chain || undefined };
+    const quantity = job.quantity;
+    const t0 = this.deps.now();
     try {
-      if (!quantity) return this.fail(job, `quantity must be a whole number from 1 to ${MAX_QUANTITY}`);
       const acct = this.account();
       if (!acct) return this.fail(job, 'Add a wallet in ⚙ → Trading first.');
       job.wallet = acct.address;
@@ -242,11 +270,47 @@ export class Minter extends EventEmitter {
       const openStages = col.drop.stages.filter((s) => Date.parse(s.startTime ?? '') <= now && (!s.endTime || now < Date.parse(s.endTime)));
       const paired = openStages.map((s) => ({ s, e: elig.stages.find((x) => x.type === s.type && x.index === s.index) }));
       const open = paired.find((p) => p.e?.eligible) ?? paired[0];
-      if (!open) {
-        const next = col.drop.stages.map((s) => Date.parse(s.startTime ?? '')).filter((t) => t > now).sort((a, b) => a - b)[0];
-        return this.fail(job, next ? `no open stage; the next one starts ${new Date(next).toLocaleString()}` : 'no open stage, the drop has ended');
+      if (!open || !open.e?.eligible) {
+        // Nothing this wallet can mint in is open right now. A stage it can mint in that is still
+        // to come (a public stage after a presale, say) puts the job in the queue for that moment.
+        const wf = job.waitFor;
+        const waitedStart = wf ? Date.parse(wf.startTime) : NaN;
+        if (wf && now >= waitedStart && now - waitedStart < OPEN_RETRY_MS * OPEN_RETRIES) {
+          // the clock says it is open; OpenSea has not caught up yet — ask again shortly
+          job.waitFor = { ...wf, retries: (wf.retries ?? 0) + 1 };
+          this.put(job, { state: 'waiting', note: 'the stage should be open now; asking OpenSea again…' });
+          this.timer(job, OPEN_RETRY_MS);
+          return job;
+        }
+        const coming = col.drop.stages
+          .map((s) => ({ s, e: elig.stages.find((x) => x.type === s.type && x.index === s.index), start: Date.parse(s.startTime ?? '') }))
+          // a public stage counts even when OpenSea says not eligible yet: before it opens that is what it says
+          .filter((x) => Number.isFinite(x.start) && x.start > now && (x.e?.eligible || /PUBLIC/i.test(x.s.type)))
+          .sort((a, b) => a.start - b.start)[0];
+        if (coming && coming.start - now <= WAIT_MAX_MS) {
+          const e = coming.e;
+          let price: MintJob['price'];
+          if (e?.priceUnit !== undefined) {
+            try {
+              const unit = toWei(e.priceUnit);
+              price = { unitWei: unit.toString(), totalWei: (unit * BigInt(quantity)).toString(), symbol: e.priceSymbol ?? info.symbol, usd: e.priceUsd !== undefined ? e.priceUsd * quantity : undefined };
+            } catch {
+              price = undefined;
+            }
+          }
+          job.stage = { type: coming.s.type, index: coming.s.index, startTime: coming.s.startTime, endTime: coming.s.endTime, maxPerWallet: e?.eligibleMax ?? e?.maxPerWallet ?? coming.s.maxPerWallet, alreadyMinted: elig.minted };
+          job.price = price;
+          job.waitFor = { type: coming.s.type, index: coming.s.index, startTime: coming.s.startTime ?? new Date(coming.start).toISOString(), retries: 0 };
+          this.put(job, { state: 'waiting', error: undefined, note: undefined });
+          this.timer(job, coming.start - now + 250);
+          return job;
+        }
+        if (!open) {
+          const next = col.drop.stages.map((s) => Date.parse(s.startTime ?? '')).filter((t) => t > now).sort((a, b) => a - b)[0];
+          return this.fail(job, next ? `no open stage; the next one starts ${new Date(next).toLocaleString()}` : 'no open stage, the drop has ended');
+        }
+        return this.fail(job, `the open ${open.s.type.toLowerCase().replace(/_/g, ' ')} stage is not open to this wallet (no open stage you're eligible for)`);
       }
-      if (!open.e?.eligible) return this.fail(job, `the open ${open.s.type.toLowerCase().replace(/_/g, ' ')} stage is not open to this wallet (no open stage you're eligible for)`);
       if (open.e.eligibleMinter !== undefined && open.e.eligibleMinter.toLowerCase() !== acct.address.toLowerCase()) return this.fail(job, 'the eligible minter is another wallet');
       const max = open.e.eligibleMax ?? open.e.maxPerWallet ?? open.s.maxPerWallet;
       const left = max === undefined ? Infinity : Math.max(0, max - elig.minted);
@@ -270,11 +334,58 @@ export class Minter extends EventEmitter {
       job.gas = { limit: GAS_LIMIT, maxFeeWei: fees.maxFeePerGas.toString(), maxPriorityWei: fees.maxPriorityFeePerGas.toString(), estimateWei: estimate.toString() };
       job.balanceWei = balance.toString();
       if (balance < totalWei + estimate) return this.fail(job, `needs ${fmt(totalWei + estimate)} ${job.price.symbol} (price + gas), wallet has ${fmt(balance)}`);
-      return this.put(job, { state: 'ready' });
+      // a requote is a fresh quote: the two-minute clock starts now
+      this.put(job, { state: 'ready', ts: t0, waitFor: undefined, note: undefined });
+      if (job.armed) await this.autoSend(job);
+      return job;
     } catch (e: unknown) {
       console.warn('[osmint]', job.id, redact(rawMessage(e)));
       return this.fail(job, safeMessage(e) ?? 'the RPC or OpenSea call failed; check ⚙ → Trading → OpenSea RPCs');
     }
+  }
+
+  /** Quote a waiting job again after `ms`, unless it has moved on or been dismissed by then. */
+  private timer(job: MintJob, ms: number): void {
+    this.timers.get(job.id)?.();
+    const schedule = this.deps.schedule ?? LIVE.schedule!;
+    const cancel = schedule(Math.max(0, ms), () => {
+      this.timers.delete(job.id);
+      if (job.state !== 'waiting' || !this.jobs.includes(job)) return;
+      void this.evaluate(job).catch((e) => console.warn('[osmint] requote', job.id, redact(rawMessage(e))));
+    });
+    this.timers.set(job.id, cancel);
+  }
+
+  /**
+   * Arm (or disarm) a waiting job: when its stage opens and the quote comes back at the price
+   * OpenSea showed for that stage, with gas under the chain's ceiling, it is sent without a click.
+   * The ceilings are pinned now, so a stage that opens dearer than shown is held for the user.
+   */
+  arm(jobId: string, on: boolean): MintJob {
+    const job = this.jobs.find((j) => j.id === jobId);
+    if (!job) throw new Error('no such quote');
+    if (!on) return this.put(job, { armed: undefined, note: undefined });
+    if (job.state !== 'waiting') throw new Error(`only a waiting mint can be armed (this one is ${job.state})`);
+    if (!job.price) throw new Error('OpenSea has not shown a price for that stage yet; arm once it does');
+    const info = chainInfo(job.collection.chain);
+    if (!info) throw new Error(`minting on ${job.collection.chain} is not supported yet`);
+    return this.put(job, { armed: { maxUnitWei: job.price.unitWei, maxGasCostWei: info.maxGasCostWei.toString(), at: this.deps.now() } });
+  }
+
+  /** An armed job just came back ready: send it if the quote is inside what was armed, else hold it with a note. */
+  private async autoSend(job: MintJob): Promise<void> {
+    const a = job.armed;
+    if (!a || job.state !== 'ready' || !job.price) return;
+    const sym = job.price.symbol;
+    if (BigInt(job.price.unitWei) > BigInt(a.maxUnitWei)) {
+      this.put(job, { note: `not sent: the stage opened at ${fmt(BigInt(job.price.unitWei))} ${sym} per mint, above the ${fmt(BigInt(a.maxUnitWei))} you armed. Press Mint if that is fine.` });
+      return;
+    }
+    if (job.gas && BigInt(job.gas.estimateWei) > BigInt(a.maxGasCostWei)) {
+      this.put(job, { note: `not sent: gas came to ${fmt(BigInt(job.gas.estimateWei))} ${sym}, above the ${fmt(BigInt(a.maxGasCostWei))} ceiling. Press Mint if that is fine.` });
+      return;
+    }
+    await this.send(job.id);
   }
 
   async send(jobId: string): Promise<MintJob> {
@@ -412,9 +523,16 @@ export class Minter extends EventEmitter {
       if (!j || typeof j.id !== 'string' || !j.id || this.jobs.some((x) => x.id === j.id)) continue;
       // A restored 'quoting'/'ready'/'sending' job never reached the chain — nothing to watch, and
       // re-adopting it would hold the per-wallet guard for a mint that was never actually sent.
-      if (j.state !== 'pending' && j.state !== 'confirmed' && j.state !== 'failed') continue;
+      // A 'waiting' job is the queue: it comes back with its timer.
+      if (j.state !== 'pending' && j.state !== 'confirmed' && j.state !== 'failed' && j.state !== 'waiting') continue;
       this.jobs.push(j);
       if (j.state === 'pending' && j.txHash && typeof j.nonce === 'number') resumed.push(this.resume(j));
+      if (j.state === 'waiting') {
+        const start = Date.parse(j.waitFor?.startTime ?? '');
+        if (!Number.isFinite(start)) this.fail(j, 'the queued stage was lost over the restart; quote again');
+        else if (this.deps.now() - start > OPEN_RETRY_MS * OPEN_RETRIES) this.fail(j, `the stage opened at ${new Date(start).toLocaleString()} while opentrench was closed; quote again`);
+        else this.timer(j, start - this.deps.now() + 250);
+      }
     }
     this.evict();
     await Promise.all(resumed);
@@ -535,7 +653,10 @@ export class Minter extends EventEmitter {
     const i = this.jobs.findIndex((j) => j.id === jobId);
     if (i < 0) return false;
     const s = this.jobs[i].state;
-    if (s !== 'failed' && s !== 'confirmed') return false;
+    if (s !== 'failed' && s !== 'confirmed' && s !== 'waiting') return false;
+    this.timers.get(jobId)?.();
+    this.timers.delete(jobId);
+    this.reqs.delete(jobId);
     this.jobs.splice(i, 1);
     this.emit('gone', jobId);
     return true;
@@ -547,7 +668,7 @@ export class Minter extends EventEmitter {
    * then stale quotes, and only past HARD_MAX_JOBS does a live quote become expendable.
    */
   private evict(): void {
-    const expendable = (j: MintJob): boolean => j.state !== 'sending' && j.state !== 'pending';
+    const expendable = (j: MintJob): boolean => j.state !== 'sending' && j.state !== 'pending' && j.state !== 'waiting';
     const finished = (j: MintJob): boolean => j.state === 'failed' || j.state === 'confirmed';
     while (this.jobs.length > MAX_JOBS) {
       const stale = this.deps.now() - QUOTE_TTL_MS;

@@ -60,6 +60,132 @@ const restored = (over: Partial<MintJob> = {}): MintJob => ({
   ...over,
 });
 
+/** A presale running now that this wallet is not on, and a public stage fifteen minutes out. */
+const presaleCol: DropCollection = { ...col, drop: { kind: 'Erc721SeaDropV1', address: col.address, stages: [
+  { kind: 'Erc721SeaDropV1Stage', type: 'PRESALE', index: 1, startTime: '2026-09-12T20:00:00.000Z', endTime: '2026-09-13T00:15:00.000Z', maxPerWallet: 2 },
+  { kind: 'Erc721SeaDropV1Stage', type: 'PUBLIC_SALE', index: 0, startTime: '2026-09-13T00:15:00.000Z', endTime: '2026-09-14T20:00:00.000Z', maxPerWallet: 3 },
+] } };
+const presaleElig = async () => ({ kind: 'Erc721SeaDropV1', minted: 0, stages: [
+  { type: 'PRESALE', index: 1, eligible: false, maxPerWallet: 2 },
+  { type: 'PUBLIC_SALE', index: 0, eligible: true, maxPerWallet: 3, eligibleMax: 3, priceUnit: 0.002, priceUsd: 5, priceSymbol: 'ETH' },
+] });
+/** a hand-cranked scheduler: the test fires the timer */
+function scheduler() {
+  const timers: { ms: number; fn: () => void }[] = [];
+  return { timers, schedule: (ms: number, fn: () => void) => { const t = { ms, fn }; timers.push(t); return () => { const i = timers.indexOf(t); if (i >= 0) timers.splice(i, 1); }; } };
+}
+
+describe('Minter queue', () => {
+  it('waits for the coming stage this wallet can mint in, then quotes itself again when it starts', async () => {
+    const c = clock();
+    const sch = scheduler();
+    const m = new Minter(() => KEY, () => ({}), deps({ resolve: async () => presaleCol, eligibility: presaleElig, ...c, schedule: sch.schedule }));
+    const job = await m.quote({ locator: 'chump', quantity: 2 });
+    expect(job.state).toBe('waiting');
+    expect(job.waitFor).toMatchObject({ type: 'PUBLIC_SALE', index: 0, startTime: '2026-09-13T00:15:00.000Z' });
+    expect(job.price).toEqual({ unitWei: '2000000000000000', totalWei: '4000000000000000', symbol: 'ETH', usd: 10 });
+    expect(job.stage).toMatchObject({ type: 'PUBLIC_SALE', maxPerWallet: 3, alreadyMinted: 0 });
+    expect(sch.timers).toHaveLength(1);
+    expect(sch.timers[0].ms).toBe(15 * 60_000 + 250);
+    // the stage opens: the timer quotes again and the job is ready, with a fresh two-minute clock
+    await c.sleep(15 * 60_000 + 250);
+    sch.timers[0].fn();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(job.state).toBe('ready');
+    expect(job.waitFor).toBeUndefined();
+    expect(job.ts).toBe(c.now());
+  });
+
+  it('keeps asking for a short while when the clock says open but OpenSea does not yet', async () => {
+    const c = clock();
+    const sch = scheduler();
+    let opened = false;
+    const m = new Minter(() => KEY, () => ({}), deps({
+      resolve: async () => presaleCol,
+      eligibility: async () => (opened ? presaleElig() : { kind: 'Erc721SeaDropV1', minted: 0, stages: [{ type: 'PRESALE', index: 1, eligible: false }, { type: 'PUBLIC_SALE', index: 0, eligible: false }] }),
+      ...c, schedule: sch.schedule,
+    }));
+    const job = await m.quote({ locator: 'chump', quantity: 1 });
+    expect(job.state).toBe('waiting');
+    await c.sleep(15 * 60_000 + 250);
+    sch.timers.shift()!.fn();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(job.state).toBe('waiting');
+    expect(job.note).toMatch(/asking OpenSea again/);
+    expect(job.waitFor?.retries).toBe(1);
+    expect(sch.timers[0].ms).toBe(4000);
+    opened = true;
+    await c.sleep(4000);
+    sch.timers.shift()!.fn();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(job.state).toBe('ready');
+  });
+
+  it('an armed job is sent the moment it comes back ready inside its ceilings', async () => {
+    const c = clock();
+    const sch = scheduler();
+    const m = new Minter(() => KEY, () => ({}), deps({ resolve: async () => presaleCol, eligibility: presaleElig, ...c, schedule: sch.schedule }));
+    const job = await m.quote({ locator: 'chump', quantity: 2 });
+    expect(() => m.arm('nope', true)).toThrow(/no such/);
+    const armed = m.arm(job.id, true);
+    expect(armed.armed).toMatchObject({ maxUnitWei: '2000000000000000', maxGasCostWei: '2000000000000000' });
+    await c.sleep(15 * 60_000 + 250);
+    sch.timers[0].fn();
+    for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0));
+    await m.watching(job.id);
+    expect(job.state).toBe('confirmed');
+    expect(job.txHash).toMatch(HASH);
+    expect(job.tokenIds).toEqual(['462']);
+  });
+
+  it('an armed job is held, not sent, when the stage opens dearer than shown', async () => {
+    const c = clock();
+    const sch = scheduler();
+    let unit = 0.002;
+    const m = new Minter(() => KEY, () => ({}), deps({
+      resolve: async () => presaleCol,
+      eligibility: async () => ({ ...(await presaleElig()), stages: [{ type: 'PRESALE', index: 1, eligible: false }, { type: 'PUBLIC_SALE', index: 0, eligible: true, maxPerWallet: 3, eligibleMax: 3, priceUnit: unit, priceSymbol: 'ETH' }] }),
+      ...c, schedule: sch.schedule,
+    }));
+    const job = await m.quote({ locator: 'chump', quantity: 1 });
+    m.arm(job.id, true);
+    unit = 0.003;
+    await c.sleep(15 * 60_000 + 250);
+    sch.timers[0].fn();
+    for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
+    expect(job.state).toBe('ready');
+    expect(job.note).toMatch(/above the 0.002 you armed/);
+    expect(job.txHash).toBeUndefined();
+    // disarming clears the note; arming needs a waiting job
+    expect(m.arm(job.id, false).armed).toBeUndefined();
+    expect(() => m.arm(job.id, true)).toThrow(/only a waiting mint/);
+  });
+
+  it('a waiting job can be dismissed (its timer goes with it) and survives a restart with a new timer', async () => {
+    const c = clock();
+    const sch = scheduler();
+    const d = deps({ resolve: async () => presaleCol, eligibility: presaleElig, ...c, schedule: sch.schedule });
+    const m = new Minter(() => KEY, () => ({}), d);
+    const job = await m.quote({ locator: 'chump', quantity: 1 });
+    expect(m.dismiss(job.id)).toBe(true);
+    expect(sch.timers).toHaveLength(0);
+    expect(m.jobs).toHaveLength(0);
+    // restored from state.json ten minutes before the stage: re-queued
+    const m2 = new Minter(() => KEY, () => ({}), d);
+    await m2.restore([{ ...restored({ id: 'mwait', state: 'waiting', txHash: undefined, nonce: undefined, waitFor: { type: 'PUBLIC_SALE', index: 0, startTime: '2026-09-13T00:15:00.000Z' } }) }]);
+    expect(m2.jobs[0].state).toBe('waiting');
+    expect(sch.timers[0].ms).toBe(15 * 60_000 + 250);
+    // restored long after the stage opened: nothing to wait for
+    const late = new Minter(() => KEY, () => ({}), deps({ ...d, now: () => now + 3 * 3600_000 }));
+    await late.restore([{ ...restored({ id: 'mlate', state: 'waiting', txHash: undefined, nonce: undefined, waitFor: { type: 'PUBLIC_SALE', index: 0, startTime: '2026-09-13T00:15:00.000Z' } }) }]);
+    expect(late.jobs[0].state).toBe('failed');
+    expect(late.jobs[0].error).toMatch(/while opentrench was closed/);
+  });
+});
+
 describe('Minter', () => {
   it('quotes an open, eligible stage', async () => {
     const m = new Minter(() => KEY, () => ({}), deps());
