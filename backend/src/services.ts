@@ -20,6 +20,21 @@ import { createLaunchWatcher } from './deploys.js';
 import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction } from './types.js';
 
+/** Break a long message at line ends (then spaces) so every piece fits Discord's limit. */
+export function splitForDiscord(text: string, max = 2000): string[] {
+  const out: string[] = [];
+  let rest = text.trim();
+  while (rest.length > max) {
+    let cut = rest.lastIndexOf('\n', max);
+    if (cut < max / 2) cut = rest.lastIndexOf(' ', max);
+    if (cut < max / 2) cut = max;
+    out.push(rest.slice(0, cut).trimEnd());
+    rest = rest.slice(cut).trimStart();
+  }
+  if (rest) out.push(rest);
+  return out;
+}
+
 /** one row of the composer's "/" menu */
 export interface SlashMenuItem {
   name: string;
@@ -416,6 +431,34 @@ export class Services {
     if (!found) throw new Error(`no /${name} command here`);
     const options = buildOptions(found.options, args);
     await this.discord.request('command', { channelId: chatId, commandId: found.id, applicationId: found.applicationId, version: found.version, name: found.name, options });
+  }
+
+  /**
+   * Forward a Telegram message (a chat's, or a bot column's report) into a chat in the feed. To
+   * Telegram it is a real forward, formatting and media intact, with the note as a message before
+   * it. To Discord it becomes a copy in Discord's own markdown, a small "forwarded from" line on
+   * top, the photo attached when there is one, split when it runs past Discord's limit.
+   */
+  async forward(fromChat: string, msgId: number, to: { source: 'discord' | 'telegram'; chatId: string }, note = ''): Promise<void> {
+    if (!this.telegram) throw new Error('telegram not connected');
+    if (to.source === 'telegram') {
+      if (note) await this.telegram.send(to.chatId, note);
+      await this.telegram.forward(fromChat, msgId, to.chatId);
+      return;
+    }
+    this.requireBridge();
+    const copy = await this.telegram.copyOf(fromChat, msgId);
+    const from = copy.author || (/^-?\d+$/.test(fromChat) ? 'Telegram' : `@${fromChat.replace(/^@/, '')}`);
+    const head = `-# forwarded from ${from} on Telegram`;
+    const body = [note, head, copy.text].filter(Boolean).join('\n');
+    const parts = splitForDiscord(body, 2000);
+    for (let i = 0; i < parts.length; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 1100));
+      const last = i === parts.length - 1;
+      if (last && copy.photo) await this.sendFile('discord', to.chatId, copy.photo, parts[i]);
+      else await this.send('discord', to.chatId, parts[i]);
+    }
+    if (parts.length === 0 && copy.photo) await this.sendFile('discord', to.chatId, copy.photo, '');
   }
 
   /** Compose a message as the user. Sending must be enabled per platform in config; the API checks that. */

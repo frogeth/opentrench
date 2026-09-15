@@ -510,6 +510,29 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { ok: true };
     }),
   );
+  // forward a Telegram message into a chat in the feed (either platform)
+  r.post(
+    '/forward',
+    wrap(async (req) => {
+      const fromChat = String(req.body?.fromChat ?? '').trim();
+      const msgId = Number(req.body?.msgId);
+      const source = req.body?.source === 'telegram' ? 'telegram' : 'discord';
+      const chatId = String(req.body?.chatId ?? '').trim();
+      const note = String(req.body?.note ?? '').replace(/\r\n/g, '\n').trim().slice(0, 1500);
+      if (!/^(-?\d+|@?[A-Za-z][A-Za-z0-9_]{2,31})$/.test(fromChat) || !Number.isInteger(msgId) || msgId <= 0 || !chatId) throw new Error('message and chat required');
+      const c = cfg.get();
+      if (source === 'discord' && !c.discord.send) throw new Error('sending on Discord is off (Settings → Accounts)');
+      if (source === 'telegram' && !c.telegram.send) throw new Error('sending on Telegram is off (Settings → Accounts)');
+      const watched = source === 'discord' ? c.discord.watch : c.telegram.watch;
+      if (!watched.includes(chatId)) throw new Error('you can only send to chats in your feed');
+      const key = `${source}:${chatId}`;
+      const last = lastSend.get(key) ?? 0;
+      if (Date.now() - last < 1000) throw new Error('slow down — one message per second per chat');
+      lastSend.set(key, Date.now());
+      await svc.forward(fromChat, msgId, { source, chatId }, note);
+      return { ok: true };
+    }),
+  );
   r.post(
     '/send',
     wrap(async (req) => {

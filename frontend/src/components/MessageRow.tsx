@@ -93,6 +93,7 @@ export function MessageRow({
   chartProvider = 'basedbot',
   onAuthorChanged,
   onReply,
+  onForward,
   onJump,
   onReact,
   onOpenChat,
@@ -114,6 +115,8 @@ export function MessageRow({
   onAuthorChanged?: () => void;
   /** start a reply to this message in the column's composer */
   onReply?: (m: FeedMessage) => void;
+  /** forward this (Telegram) message to a chat in the feed */
+  onForward?: (m: FeedMessage) => void;
   /** the chat chip was clicked: focus that chat */
   onOpenChat?: (m: FeedMessage) => void;
   /** a plain click on the row (not on a link, button, image or a text selection): "I'm looking at this chat now" */
@@ -179,6 +182,11 @@ export function MessageRow({
           {onReply && (
             <button onClick={() => { closeMenu(); onReply(m); }}>
               <Icon name="reply" size={12} /> Reply
+            </button>
+          )}
+          {onForward && !discord && (
+            <button onClick={() => { closeMenu(); onForward(m); }}>
+              <Icon name="forward" size={12} /> Forward…
             </button>
           )}
           {m.replyTo && onJump && (
@@ -255,6 +263,11 @@ export function MessageRow({
           {onReply && (
             <button className="row-reply" onClick={() => onReply(m)} title="reply" aria-label="reply">
               <Icon name="reply" size={12} />
+            </button>
+          )}
+          {onForward && !discord && (
+            <button className="row-reply" onClick={() => onForward(m)} title="forward to a chat" aria-label="forward">
+              <Icon name="forward" size={12} />
             </button>
           )}
           {onReact && (

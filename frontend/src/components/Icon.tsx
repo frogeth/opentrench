@@ -1,4 +1,5 @@
-export type IconName = 'chart' | 'live' | 'globe' | 'x' | 'telegram' | 'explorer' | 'copy' | 'search' | 'people' | 'top' | 'dev' | 'insider' | 'sniper' | 'bundle' | 'lock' | 'chat' | 'grip' | 'calls' | 'pencil' | 'close' | 'bell' | 'play' | 'filter' | 'send' | 'reply' | 'trash' | 'mint' | 'sea' | 'wallet' | 'eyeoff' | 'chevron';
+export type IconName = 'chart' | 'live' | 'globe' | 'x' | 'telegram' | 'explorer' | 'copy' | 'search' | 'people' | 'top' | 'dev' | 'insider' | 'sniper' | 'bundle' | 'lock' | 'chat' | 'grip' | 'calls' | 'pencil' | 'close' | 'bell' | 'play' | 'filter' | 'send' | 'reply'
+  | 'forward' | 'trash' | 'mint' | 'sea' | 'wallet' | 'eyeoff' | 'chevron';
 
 // Small inline glyphs. X and Telegram from Simple Icons (CC0); the rest hand-drawn.
 const PATHS: Record<IconName, string> = {
@@ -50,6 +51,7 @@ const PATHS: Record<IconName, string> = {
   // paper plane = send
   send: 'M2.5 3.5 21.5 12 2.5 20.5l2.4-7.2L15 12 4.9 10.7 2.5 3.5z',
   // curved arrow = reply
+  forward: 'M14 7V4l7 6-7 6v-3.2c-4.5 0-7.8 1.4-10 4.7.8-4.5 3.4-8.5 10-9.5z',
   reply: 'M10 7V4L3 10l7 6v-3.2c4.5 0 7.7 1.4 10 4.7-.9-4.6-3.6-9.3-10-10.5z',
   // funnel = filters
   filter: 'M3 4h18v2.6L14 14.2V20l-4 2v-7.8L3 6.6V4zm2.5 2 5.5 6.3V18.7l1-.5v-5.9L17.5 6h-12z',

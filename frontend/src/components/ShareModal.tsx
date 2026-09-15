@@ -25,6 +25,10 @@ export interface ShareItem {
   hint?: string;
   /** called with the chat names each successful send went to */
   onSent?: (names: string[]) => void;
+  /** how to deliver to one chat, instead of sending `text` (a forward, say); the note comes separately */
+  send?: (target: WatchedChat, note: string) => Promise<void>;
+  /** the button's verb ("Forward") */
+  verb?: string;
 }
 
 export function ShareModal({
@@ -40,7 +44,7 @@ export function ShareModal({
   canSend: Record<'discord' | 'telegram', boolean>;
   onClose: () => void;
 }) {
-  const { text, title, preview, hint, onSent } = item;
+  const { text, title, preview, hint, onSent, send, verb = 'Share' } = item;
   const [picked, setPicked] = useState<string[]>(() => {
     try {
       const saved: string[] = JSON.parse(localStorage.getItem('trenchfeed.shareTargets') ?? '[]');
@@ -81,7 +85,8 @@ export function ShareModal({
       const w = targets[i];
       setStatus((s) => ({ ...s, [key(w)]: 'sending' }));
       try {
-        await api.send(w.source, w.id, note.trim() ? `${note.trim()}\n${text}` : text);
+        if (send) await send(w, note.trim());
+        else await api.send(w.source, w.id, note.trim() ? `${note.trim()}\n${text}` : text);
         setStatus((s) => ({ ...s, [key(w)]: 'sent' }));
         onSent?.([shortName(w)]);
       } catch (e: any) {
@@ -158,15 +163,17 @@ export function ShareModal({
           </div>
         </div>
         <div className="fed-foot">
-          <a className="fed-link" href={telegramShareUrl(text, preview ?? text)} target="_blank" rel="noreferrer" title="open the Telegram share sheet for chats outside your feed">
-            share via the Telegram app instead
-          </a>
+          {!send && (
+            <a className="fed-link" href={telegramShareUrl(text, preview ?? text)} target="_blank" rel="noreferrer" title="open the Telegram share sheet for chats outside your feed">
+              share via the Telegram app instead
+            </a>
+          )}
           <span className="muted share-count">
             {picked.length}/{MAX_TARGETS}
           </span>
           <button onClick={onClose}>{allDone ? 'Done' : 'Cancel'}</button>
           <button className="primary" disabled={busy || picked.length === 0 || allDone} onClick={() => void share()}>
-            {busy ? 'Sharing…' : `Share to ${picked.length || ''} chat${picked.length === 1 ? '' : 's'}`}
+            {busy ? `${verb === 'Forward' ? 'Forwarding' : 'Sharing'}…` : `${verb} to ${picked.length || ''} chat${picked.length === 1 ? '' : 's'}`}
           </button>
         </div>
       </div>

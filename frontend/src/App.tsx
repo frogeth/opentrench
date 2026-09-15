@@ -46,7 +46,7 @@ import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type Teleg
 import { beep, type ChartProvider } from './format';
 import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, thesisFollowUps, tokenPasses } from './filters';
-import type { FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
+import type { BotMessage, FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
 
 /** Header status: the platform's logo, coloured by its connection state; the words live in the tooltip. */
 function Pill({ label, state }: { label: Source; state: string }) {
@@ -455,6 +455,22 @@ export default function App() {
     document.addEventListener('click', h, true);
     return () => document.removeEventListener('click', h, true);
   }, []);
+  /** forward a Telegram message (a chat's, or a bot column's report) to chats in the feed */
+  const openForward = (fromChat: string, msgId: number, who: string, text: string) =>
+    setShare({
+      text,
+      title: 'Forward message',
+      verb: 'Forward',
+      preview: `${who}: ${text.replace(/\s+/g, ' ').slice(0, 120)}${text.length > 120 ? '…' : ''}`,
+      hint: 'Telegram chats get a real forward. Discord chats get a copy in Discord formatting, photo included.',
+      send: (w, note) => api.forward(fromChat, msgId, w.source, w.id, note).then(() => undefined),
+    });
+  const forwardMessage = (m: FeedMessage) => {
+    const id = Number(m.id.split(':').pop());
+    if (m.source !== 'telegram' || !Number.isInteger(id)) return;
+    openForward(m.chatId, id, m.author, m.body ?? m.text);
+  };
+  const forwardBotMessage = (bot: string, m: BotMessage) => openForward(bot, m.id, `@${bot}`, m.text || '📎 media');
   const openShare = (address: string, symbol?: string) => setShare({ text: address, title: `Share ${symbol ? `$${symbol}` : 'contract'}`, hint: 'The address is sent, with your message above it if you add one.' });
   // Reactions: what you added this session (the platform stream brings the counts back)
   // Which reactions are yours: the server says (Telegram marks chosen ones, Discord deltas carry the
@@ -1175,7 +1191,7 @@ export default function App() {
       const title = col.type === 'cove' && (col.title === 'Cove' || col.title === 'BasedBot') ? buyLabel : col.title;
       return (
         <Column key={col.id} title={title} subtitle={`@${bot} · your Telegram`} kind={col.type} className={`col-cove${coveFlash === col.type ? ' col-flash' : ''}`} {...actions}>
-          <CoveView bot={bot} msgs={botMsgs[bot] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} />
+          <CoveView bot={bot} msgs={botMsgs[bot] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} onForward={forwardBotMessage} />
         </Column>
       );
     }
@@ -1183,7 +1199,7 @@ export default function App() {
       const bot = col.bot ?? '';
       return (
         <Column key={col.id} title={col.title} subtitle={bot ? `@${bot} · your Telegram` : 'no bot picked'} kind="tgbot" className={`col-cove${coveFlash === `tgbot:${bot.toLowerCase()}` ? ' col-flash' : ''}`} {...actions}>
-          {bot ? <CoveView bot={bot} msgs={botMsgs[bot] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} /> : <div className="empty">Edit this column and pick the bot to show.</div>}
+          {bot ? <CoveView bot={bot} msgs={botMsgs[bot] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} onForward={forwardBotMessage} /> : <div className="empty">Edit this column and pick the bot to show.</div>}
         </Column>
       );
     }
@@ -1279,6 +1295,7 @@ export default function App() {
         onSelect={select}
         onAuthorChanged={reloadLists}
         onReply={(m) => setReplyByCol((r) => ({ ...r, [col.id]: m }))}
+        onForward={forwardMessage}
         onOpenChat={(m) => openChat(m.chatName, m.source, m.chatId)}
         onPick={pickChat(col.id, names)}
         onReveal={revealMessage}
@@ -1471,6 +1488,7 @@ export default function App() {
                 onSelect={select}
                 onAuthorChanged={reloadLists}
                 onReply={(m) => setReplyByCol((r) => ({ ...r, focused: m }))}
+                onForward={forwardMessage}
                 onOpenChat={(m) => openChat(m.chatName, m.source, m.chatId)}
                 onPick={pickChat('focused', view.chat ? new Set([view.chat.name]) : null)}
                 onReveal={revealMessage}

@@ -33,6 +33,7 @@ export function ChatFeed({
   empty,
   render,
   onReply,
+  onForward,
   onOpenChat,
   onPick,
   onReveal,
@@ -56,6 +57,7 @@ export function ChatFeed({
   /** renders the column chrome around the body */
   render: (body: ReactNode, bodyRef: React.RefObject<HTMLDivElement>, onScroll: () => void, footer: ReactNode) => ReactNode;
   onReply?: (m: FeedMessage) => void;
+  onForward?: (m: FeedMessage) => void;
   onOpenChat?: (m: FeedMessage) => void;
   /** a plain click on a row picked that message's chat */
   onPick?: (m: FeedMessage) => void;
@@ -151,6 +153,7 @@ export function ChatFeed({
           chartProvider={chartProvider}
           onAuthorChanged={onAuthorChanged}
           onReply={onReply}
+          onForward={onForward}
           onOpenChat={onOpenChat}
           onPick={onPick}
           onJump={jumpTo}

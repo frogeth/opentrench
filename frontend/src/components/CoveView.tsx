@@ -16,12 +16,15 @@ export function CoveView({
   msgs,
   connected,
   onLoaded,
+  onForward,
 }: {
   bot: string;
   msgs: BotMessage[];
   connected: boolean;
   /** history fetched: merge into the live list */
   onLoaded: (bot: string, msgs: BotMessage[]) => void;
+  /** send one of the bot's messages (a report) to a chat in the feed */
+  onForward?: (bot: string, m: BotMessage) => void;
 }) {
   const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [err, setErr] = useState<string | null>(null);
@@ -135,6 +138,11 @@ export function CoveView({
             <div className="bmsg-time">
               {new Date(m.ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
               {m.edited && ' · updated'}
+              {onForward && !m.out && (m.text || m.hasMedia) && (
+                <button className="row-reply bmsg-fwd" onClick={() => onForward(bot, m)} title="send this to a chat (Discord or Telegram)" aria-label="forward">
+                  <Icon name="forward" size={12} /> send to chat
+                </button>
+              )}
             </div>
           </div>
         ))}

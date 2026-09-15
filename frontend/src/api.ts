@@ -216,6 +216,8 @@ export const api = {
   setRailOrder: (ids: string[]) => req('PUT', '/rail-order', { ids }),
   setDiscordSend: (enabled: boolean, confirm = '') => req<{ canSend: boolean }>('PUT', '/discord/send', { enabled, confirm }),
   setTelegramSend: (enabled: boolean) => req<{ canSend: boolean }>('PUT', '/telegram/send', { enabled }),
+  /** forward a Telegram message (chat id or bot username) into a chat in the feed */
+  forward: (fromChat: string, msgId: number, source: 'discord' | 'telegram', chatId: string, note = '') => req<{ ok: true }>('POST', '/forward', { fromChat, msgId, source, chatId, note }),
   send: (source: 'discord' | 'telegram', chatId: string, text: string, replyTo?: string) => req<{ ok: true }>('POST', '/send', { source, chatId, text, replyTo }),
   setJ7Token: (token: string) => req<{ hasToken: boolean }>('PUT', '/j7/token', { token }),
   lookupToken: (address: string) => req<import('./types').TokenInfo>('GET', `/token/${encodeURIComponent(address)}`),

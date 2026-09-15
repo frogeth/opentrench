@@ -110,6 +110,78 @@ export function webpagePreview(media: any, imageUrl: string): LinkPreview | unde
  * markup. Turn the ones we render — text links, bold, code — into the markdown
  * the UI already understands, so bot panels keep their links and emphasis.
  */
+/**
+ * The same text for Discord, which has its own markdown: bold, italic, underline, strike,
+ * spoilers, code, quotes. Discord does not render masked links in a person's message, so a
+ * text link becomes "text (url)" and a bare url stays as it is.
+ */
+export function entitiesToDiscord(text: string, entities: any[] | undefined): string {
+  if (!entities?.length || !text) return text;
+  const wrap: { start: number; end: number; open: string; close: string }[] = [];
+  for (const e of entities) {
+    const start = Number(e.offset), end = start + Number(e.length);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end > text.length) continue;
+    const inner = text.slice(start, end);
+    switch (e.className) {
+      case 'MessageEntityTextUrl': {
+        const url = String(e.url ?? '');
+        if (url && inner.trim() !== url) wrap.push({ start, end, open: '', close: ` (${url})` });
+        break;
+      }
+      case 'MessageEntityBold':
+        wrap.push({ start, end, open: '**', close: '**' });
+        break;
+      case 'MessageEntityItalic':
+        wrap.push({ start, end, open: '*', close: '*' });
+        break;
+      case 'MessageEntityUnderline':
+        wrap.push({ start, end, open: '__', close: '__' });
+        break;
+      case 'MessageEntityStrike':
+        wrap.push({ start, end, open: '~~', close: '~~' });
+        break;
+      case 'MessageEntitySpoiler':
+        wrap.push({ start, end, open: '||', close: '||' });
+        break;
+      case 'MessageEntityCode':
+        wrap.push({ start, end, open: '`', close: '`' });
+        break;
+      case 'MessageEntityPre':
+        wrap.push({ start, end, open: `\`\`\`${e.language ? String(e.language) : ''}\n`, close: '\n```' });
+        break;
+      case 'MessageEntityBlockquote':
+        wrap.push({ start, end, open: '> ', close: '' });
+        break;
+      default:
+        break;
+    }
+  }
+  if (wrap.length === 0) return text;
+  // outermost first; nested spans apply inside their parent, overlapping ones are skipped
+  wrap.sort((a, b) => a.start - b.start || b.end - a.end);
+  const render = (from: number, to: number, spans: typeof wrap): string => {
+    let out = '';
+    let pos = from;
+    for (let i = 0; i < spans.length; i++) {
+      const w = spans[i];
+      if (w.start < pos) continue; // overlaps the one just applied
+      const inside: typeof wrap = [];
+      let j = i + 1;
+      while (j < spans.length && spans[j].start < w.end) {
+        if (spans[j].end <= w.end) inside.push(spans[j]);
+        j++;
+      }
+      const inner = render(w.start, w.end, inside);
+      // a quote marks every line it spans
+      out += text.slice(pos, w.start) + w.open + (w.open === '> ' ? inner.replace(/\n/g, '\n> ') : inner) + w.close;
+      pos = w.end;
+      i = j - 1;
+    }
+    return out + text.slice(pos, to);
+  };
+  return render(0, text.length, wrap);
+}
+
 export function entitiesToMarkdown(text: string, entities: any[] | undefined): string {
   if (!entities?.length || !text) return text;
   const wrap: { start: number; end: number; open: string; close: string }[] = [];

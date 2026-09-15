@@ -7,7 +7,7 @@ import { Api } from 'telegram/tl/index.js';
 import { getPeerId } from 'telegram/Utils.js';
 import { CustomFile } from 'telegram/client/uploads.js';
 import type { BotMessage, FeedMessage, LoginStep, TelegramState } from '../types.js';
-import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, type TelegramPlain, entitiesToMarkdown } from './normalize.js';
+import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, type TelegramPlain, entitiesToMarkdown, entitiesToDiscord } from './normalize.js';
 import { extractLinks, type ExtractedMeta, type LinkIn } from '../links.js';
 import { canonicalChatId } from './ids.js';
 
@@ -294,6 +294,57 @@ export class TelegramWrapper extends EventEmitter {
         console.warn('[telegram] could not echo sent message', e?.message ?? e);
       }
     }
+  }
+
+  /** A chat id, or a bot's username for the bot columns' conversations. */
+  private async peerFor(chat: string): Promise<any> {
+    if (/^-?\d+$/.test(chat)) return this.client!.getInputEntity(bigInt(chat));
+    return this.botPeer(chat.replace(/^@/, ''));
+  }
+
+  /** Forward a message as Telegram does it: formatting, media and the "forwarded from" header intact. */
+  async forward(fromChat: string, msgId: number, toChat: string): Promise<void> {
+    if (!this.client || this.state !== 'connected') throw new Error('telegram not connected');
+    const fromPeer = await this.peerFor(fromChat);
+    const sent: any = await this.client.forwardMessages(bigInt(toChat), { messages: [msgId], fromPeer });
+    const first = Array.isArray(sent) ? sent[0] : sent;
+    if (first?.className === 'Message') {
+      try {
+        const { msg, meta } = await this.toFeed(first, toChat);
+        this.emit('message', msg, meta);
+      } catch (e: any) {
+        console.warn('[telegram] could not echo forwarded message', e?.message ?? e);
+      }
+    }
+  }
+
+  /**
+   * A message as a copy for another platform: its text in Discord markdown, who wrote it, and
+   * its photo when it has one.
+   */
+  async copyOf(chat: string, msgId: number): Promise<{ text: string; author: string; photo?: { name: string; mime: string; data: Buffer } }> {
+    if (!this.client || this.state !== 'connected') throw new Error('telegram not connected');
+    const peer = await this.peerFor(chat);
+    const got: any[] = await this.client.getMessages(peer, { ids: [msgId] });
+    const m: any = got?.[0];
+    if (!m || m.className !== 'Message') throw new Error('that message is gone');
+    const text = entitiesToDiscord(String(m.message ?? ''), m.entities);
+    let author = '';
+    try {
+      const sender: any = await m.getSender?.();
+      author = sender ? String(sender.title ?? [sender.firstName, sender.lastName].filter(Boolean).join(' ') ?? sender.username ?? '') : '';
+    } catch {
+      /* the chat's name will do */
+    }
+    let photo: { name: string; mime: string; data: Buffer } | undefined;
+    if (m.media?.className === 'MessageMediaPhoto' || (m.media?.className === 'MessageMediaDocument' && /^image\//.test(String(m.media.document?.mimeType ?? '')))) {
+      const data: any = await this.client.downloadMedia(m, {});
+      if (Buffer.isBuffer(data) && data.length > 0 && data.length <= 8 * 1024 * 1024) {
+        const mime = m.media.className === 'MessageMediaPhoto' ? 'image/jpeg' : String(m.media.document.mimeType);
+        photo = { name: `forward.${mime.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg'}`, mime, data };
+      }
+    }
+    return { text, author, photo };
   }
 
   /** Send an image (or any file) with an optional caption, as a photo when it is one. */
