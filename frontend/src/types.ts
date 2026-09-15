@@ -98,6 +98,8 @@ export interface Mention {
   /** up to 4 messages in the same chat after, filled in live */
   after: FeedMessage[];
   read: boolean;
+  /** a favorite caller's first call rather than a mention: the token they called */
+  call?: { address: string; symbol?: string };
 }
 
 /** Someone you could favorite: seen posting in the feed, or found in a chat's member list. */

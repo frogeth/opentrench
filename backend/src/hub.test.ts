@@ -402,6 +402,11 @@ describe('MessageHub', () => {
     hub.push(msg(3, SOL, { author: 'Alpha_Andy', chatId: 'b' }));
     expect(pings.map((p) => [p.token.address, p.msg.id])).toEqual([[SOL, 'discord:3']]);
     expect(hub.getStatus().favorites).toEqual(['@Alpha_Andy']);
+    // …and it lands in the pings list, marked as a call, with the chat around it
+    const listed = hub.mentions().find((m) => m.id === 'discord:3');
+    expect(listed?.call?.address).toBe(SOL);
+    expect(listed?.read).toBe(false);
+    expect(listed?.before.map((m) => m.id)).toEqual(['discord:2']);
   });
 
   it('updates market numbers and tracks ATH', () => {

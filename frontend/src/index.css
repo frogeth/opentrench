@@ -1099,6 +1099,7 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .ping-who .muted { font-size: 11px; display: inline-flex; align-items: center; gap: 4px; }
 .src-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--dc); }
 .src-dot.telegram { background: var(--tg); }
+.ping-kind-call { color: var(--gold, #e0b34a); border-color: rgba(224, 179, 74, 0.45); }
 .ping-kind { font-size: 10px; font-weight: 700; color: var(--accent); border: 1px solid rgba(65, 200, 146, 0.4); border-radius: 999px; padding: 1px 6px; white-space: nowrap; }
 .ping-time { font-size: 11px; white-space: nowrap; }
 .ping-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--err); flex: 0 0 auto; }

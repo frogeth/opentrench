@@ -332,20 +332,30 @@ export class MessageHub extends EventEmitter {
   private mentionList: Mention[] = [];
 
   /** A ping gets the 4 messages before it from the same chat; later messages there fill in `after`. */
+  /** A ping with the chat's messages either side of it, added to the list and announced. */
+  private addPing(msg: FeedMessage, call?: Mention['call'], emit = true): void {
+    if (this.mentionList.some((m) => m.id === msg.id)) return;
+    const same = this.buffer.filter((m) => m.chatId === msg.chatId && m.source === msg.source && m.id !== msg.id).sort((a, b) => a.ts - b.ts);
+    const mention: Mention = {
+      id: msg.id,
+      msg,
+      before: same.filter((m) => m.ts <= msg.ts).slice(-MENTION_CTX),
+      after: same.filter((m) => m.ts > msg.ts).slice(0, MENTION_CTX),
+      read: false,
+      ...(call ? { call } : {}),
+    };
+    this.mentionList.push(mention);
+    if (this.mentionList.length > MENTION_MAX) this.mentionList.splice(0, this.mentionList.length - MENTION_MAX);
+    if (emit) this.emit('event', { type: 'mention', mention } satisfies ServerEvent);
+  }
+  /** A favorite's first call lands in the pings list too, so the sound it makes has something on screen to match. */
+  private trackFavoriteCall(msg: FeedMessage, t: TokenInfo): void {
+    this.addPing(msg, { address: t.address, symbol: t.symbol });
+  }
+
   private trackMention(msg: FeedMessage, emit = true): void {
     if (msg.mention && !this.isPingMuted(msg)) {
-      if (this.mentionList.some((m) => m.id === msg.id)) return;
-      const same = this.buffer.filter((m) => m.chatId === msg.chatId && m.source === msg.source && m.id !== msg.id).sort((a, b) => a.ts - b.ts);
-      const mention: Mention = {
-        id: msg.id,
-        msg,
-        before: same.filter((m) => m.ts <= msg.ts).slice(-MENTION_CTX),
-        after: same.filter((m) => m.ts > msg.ts).slice(0, MENTION_CTX),
-        read: false,
-      };
-      this.mentionList.push(mention);
-      if (this.mentionList.length > MENTION_MAX) this.mentionList.splice(0, this.mentionList.length - MENTION_MAX);
-      if (emit) this.emit('event', { type: 'mention', mention } satisfies ServerEvent);
+      this.addPing(msg, undefined, emit);
       return;
     }
     for (const mention of this.mentionList) {
@@ -524,7 +534,10 @@ export class MessageHub extends EventEmitter {
         }
         if (live) {
           this.enrich(t);
-          if (this.isFavorite(msg.author)) this.emit('event', { type: 'ping', token: { ...t }, msg } satisfies ServerEvent);
+          if (this.isFavorite(msg.author)) {
+            this.emit('event', { type: 'ping', token: { ...t }, msg } satisfies ServerEvent);
+            this.trackFavoriteCall(msg, t);
+          }
         }
       }
       const chats = this.tokenChats.get(c.address)!;

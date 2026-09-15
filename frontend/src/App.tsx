@@ -43,7 +43,7 @@ import { Logo } from './components/Logo';
 import { Icon } from './components/Icon';
 import { Avatar } from './components/Avatar';
 import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
-import { beep, type ChartProvider } from './format';
+import { type ChartProvider } from './format';
 import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, thesisFollowUps, tokenPasses } from './filters';
 import type { BotMessage, FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
@@ -697,7 +697,7 @@ export default function App() {
   useEffect(() => {
     if (!ping) return;
     const label = ping.token.symbol ? `$${ping.token.symbol}` : ping.token.address.slice(0, 8);
-    if (sound) beep();
+    // the sound comes with the pings-list entry (below), so a favorite's call never chirps twice
     if (notify === 'granted') {
       try {
         const n = new Notification(`👑 ${ping.msg.author} called ${label}`, {
@@ -748,7 +748,9 @@ export default function App() {
       if (mentionSeen.current.has(p.id)) continue;
       mentionSeen.current.add(p.id);
       if (p.read || nowMs - p.msg.ts > 120_000) continue;
-      if (sound) playSound('chirp');
+      // a favorite's call has its own sound, and its desktop notification comes from the ping event
+      if (sound) playSound(p.call ? 'coin' : 'chirp');
+      if (p.call) continue;
       if (notify === 'granted') {
         try {
           const n = new Notification(`${p.msg.author} pinged you`, { body: `${p.msg.chatName}\n${(p.msg.body ?? p.msg.text).slice(0, 140)}`, icon: p.msg.avatar, tag: `ping:${p.id}` });
@@ -1351,7 +1353,7 @@ export default function App() {
           {sound ? '🔔' : '🔕'}
           {notify !== 'granted' && <span className="bell-off" title="desktop notifications not enabled">no notifs</span>}
         </button>
-        <button className={`gear pings-btn${pingsOpen ? ' on' : ''}`} onClick={() => openPings(!pingsOpen)} title="pings: who mentioned you">
+        <button className={`gear pings-btn${pingsOpen ? ' on' : ''}`} onClick={() => openPings(!pingsOpen)} title="pings: mentions, replies to you, and your favorites' calls">
           @{mentions.some((m) => !m.read) && <span className="pings-badge">{mentions.filter((m) => !m.read).length}</span>}
         </button>
         <button className={`gear layouts-btn${layoutsOpen ? ' on' : ''}`} onClick={() => setLayoutsOpen((o) => !o)} title={`layouts: save this arrangement of columns, or switch to a saved one${currentLayout ? ` · on ${currentLayout.name}` : ''}`}>
