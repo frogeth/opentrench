@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- OpenSea mint cards show what the mint page shows: minted so far out of the cap with a bar and how many are left, the floor, and the whole schedule, each stage with its name, when it runs, its price, the per-wallet limit, the allowlist size and whether your wallet is eligible. A wallet that has used up its allowance gets "You have reached your mint limit", the way OpenSea says it.
 - OpenSea mint: a real public mint failed with "calldata is shorter than a whole number of words". OpenSea appends a 4-byte attribution tag to the mint calldata (its own site sends it too) and the safety check refused it. The tag is allowed now; every other check on the calldata stays.
 - OpenSea mint queue: quoting a drop whose stage you can mint in has not opened yet (a presale you are not on, public in 15 minutes) no longer fails. The card waits with a countdown, quotes itself again the moment the stage opens and pings you. "Mint when it opens" arms it: the mint is sent by itself at the price OpenSea showed for that stage, with gas under the chain's ceiling; dearer than that and it is held for you with a note. The queue survives a restart. The card counts down by the second; a warm-up quote ten seconds before the stage means the armed send goes out about a second after it opens. (Brandzo.)
 ## v0.8.14 — 2026-09-15

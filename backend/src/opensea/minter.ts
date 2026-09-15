@@ -6,7 +6,7 @@ import { OpenSeaError } from './gql.js';
 import { OpenSeaSession } from './session.js';
 import { resolveCollection, eligibility as fetchEligibility, mintAction as fetchMintAction, type DropCollection, type Eligibility } from './drops.js';
 import { UnsafeMintAction, validateMintTransaction } from './validate.js';
-import type { MintJob } from '../types.js';
+import type { MintDropInfo, MintJob } from '../types.js';
 
 const GAS_LIMIT = 300_000;
 /** The most gas a mint may be signed for, however high the simulation came back. */
@@ -83,6 +83,29 @@ const LIVE: MinterDeps = {
     return () => clearTimeout(t);
   },
 };
+
+/** The drop as the card shows it: supply, floor and the schedule, each stage with this wallet's eligibility. */
+export function describeDrop(col: DropCollection, elig?: Eligibility): MintDropInfo {
+  const stages = (col.drop?.stages ?? [])
+    .map((s) => {
+      const e = elig?.stages.find((x) => x.type === s.type && x.index === s.index);
+      return {
+        label: s.label || s.type.toLowerCase().replace(/_/g, ' ').replace(/\bsale\b/, 'stage'),
+        type: s.type,
+        index: s.index,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        maxPerWallet: e?.eligibleMax ?? e?.maxPerWallet ?? s.maxPerWallet,
+        priceUnit: e?.priceUnit ?? s.priceUnit,
+        priceUsd: e?.priceUsd ?? s.priceUsd,
+        priceSymbol: e?.priceSymbol ?? s.priceSymbol,
+        allowlistCount: s.allowlistCount,
+        eligible: e ? e.eligible : undefined,
+      };
+    })
+    .sort((a, b) => (Date.parse(a.startTime ?? '') || 0) - (Date.parse(b.startTime ?? '') || 0));
+  return { minted: col.drop?.minted, max: col.drop?.maxSupply, floor: col.floor, disabledReason: col.drop?.disabledReason, activeIndex: col.drop?.activeIndex, stages };
+}
 
 /** Up to 6 significant decimal digits, never collapsing a small nonzero value to "0". */
 const fmt = (wei: bigint): string => new Intl.NumberFormat('en-US', { maximumSignificantDigits: 6, maximumFractionDigits: 18 }).format(Number(wei) / 1e18);
@@ -272,6 +295,7 @@ export class Minter extends EventEmitter {
       // table; if it does not, one of the two is wrong about where this mint is going.
       if (info.chainId !== col.networkId) return this.fail(job, `chain id mismatch: OpenSea says ${col.networkId} for ${col.chain}, we have ${info.chainId}`);
       const elig = await this.deps.eligibility(this.session(acct), col);
+      job.drop = describeDrop(col, elig);
       if (elig.kind !== col.drop.kind) return this.fail(job, 'OpenSea returned eligibility for a different drop type; try again');
       const now = t0;
       const openStages = col.drop.stages.filter((s) => Date.parse(s.startTime ?? '') <= now && (!s.endTime || now < Date.parse(s.endTime)));
@@ -323,6 +347,7 @@ export class Minter extends EventEmitter {
       const max = open.e.eligibleMax ?? open.e.maxPerWallet ?? open.s.maxPerWallet;
       const left = max === undefined ? Infinity : Math.max(0, max - elig.minted);
       job.stage = { type: open.s.type, index: open.s.index, startTime: open.s.startTime, endTime: open.s.endTime, maxPerWallet: max, alreadyMinted: elig.minted };
+      if (left === 0) return this.fail(job, `You have reached your mint limit for the ${open.s.type.toLowerCase().replace(/_/g, ' ')} stage (${elig.minted} of ${max} minted with this wallet).`);
       if (quantity > left) return this.fail(job, `this wallet can mint ${left} more (${elig.minted} of ${max} used), not ${quantity}`);
       let unitWei: bigint;
       try {

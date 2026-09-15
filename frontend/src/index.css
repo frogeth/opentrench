@@ -1248,6 +1248,18 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 .osj-head { display: flex; justify-content: space-between; font-size: 13px; }
 .osj-ready { border-color: rgba(65, 200, 146, 0.45); }
 .osj-waiting { border-color: rgba(242, 195, 102, 0.5); }
+.osj-drop { margin-top: 8px; font-size: 12px; }
+.osj-supply { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.osj-bar { height: 6px; border-radius: 3px; background: var(--panel); margin: 5px 0 6px; overflow: hidden; }
+.osj-bar span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.osj-sched { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.osj-stage { display: flex; gap: 8px; align-items: flex-start; }
+.osj-stage-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--line); margin-top: 5px; }
+.osj-stage.live .osj-stage-dot { background: var(--accent); box-shadow: 0 0 0 3px rgba(65, 200, 146, 0.25); }
+.osj-stage.over { opacity: 0.6; }
+.osj-stage-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.osj-stage-sub { font-size: 11px; }
+.osj-elig { flex: none; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; margin-top: 2px; }
 .osj-confirmed { border-color: rgba(65, 200, 146, 0.7); }
 .osj-failed { border-color: rgba(242, 102, 130, 0.5); }
 .osj-pending, .osj-sending { border-color: rgba(100, 126, 255, 0.5); }

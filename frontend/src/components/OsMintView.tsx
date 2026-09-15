@@ -27,6 +27,76 @@ const until = (iso?: string, now = Date.now()) => {
   return d > 0 ? `${d}d ${h % 24}h` : h > 0 ? `${h}h ${Math.floor((ms % 3600e3) / 60e3)}m` : `${Math.floor(ms / 60e3)}m`;
 };
 
+const unitFmt = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 4 });
+const whenStage = (s: { startTime?: string; endTime?: string }, now: number): { text: string; live: boolean; over: boolean } => {
+  const start = Date.parse(s.startTime ?? ''), end = Date.parse(s.endTime ?? '');
+  if (Number.isFinite(end) && now >= end) return { text: 'ended', live: false, over: true };
+  if (Number.isFinite(start) && now < start) return { text: `starts in ${countdown(s.startTime, now)}`, live: false, over: false };
+  return { text: Number.isFinite(end) ? `live · ends in ${until(s.endTime, now)}` : 'live', live: true, over: false };
+};
+
+/** Supply, floor and the whole schedule, the way OpenSea's mint page lays it out. */
+function DropInfo({ j, now }: { j: MintJob; now: number }) {
+  const d = j.drop;
+  if (!d) return null;
+  const left = d.minted !== undefined && d.max !== undefined ? Math.max(0, d.max - d.minted) : undefined;
+  const pct = d.minted !== undefined && d.max ? Math.min(100, (d.minted / d.max) * 100) : undefined;
+  return (
+    <div className="osj-drop">
+      {(d.minted !== undefined || d.floor) && (
+        <div className="osj-supply">
+          {d.minted !== undefined && (
+            <span>
+              <b>{d.minted.toLocaleString()}</b>
+              {d.max !== undefined && <span className="muted"> / {d.max.toLocaleString()} minted</span>}
+              {left !== undefined && <span className={left === 0 ? 'err' : 'muted'}> · {left === 0 ? 'sold out' : `${left.toLocaleString()} left`}</span>}
+            </span>
+          )}
+          {d.floor && (
+            <span className="muted">
+              floor {unitFmt.format(d.floor.unit)} {d.floor.symbol}
+              {d.floor.usd !== undefined ? ` ≈ $${d.floor.usd.toFixed(2)}` : ''}
+            </span>
+          )}
+        </div>
+      )}
+      {pct !== undefined && (
+        <div className="osj-bar" title={`${pct.toFixed(1)}% minted`}>
+          <span style={{ width: `${pct}%` }} />
+        </div>
+      )}
+      {d.disabledReason && <div className="osj-err">{d.disabledReason}</div>}
+      {d.stages.length > 0 && (
+        <div className="osj-sched">
+          {d.stages.map((s) => {
+            const w = whenStage(s, now);
+            const mine = j.stage && j.stage.type === s.type && j.stage.index === s.index;
+            return (
+              <div key={`${s.type}:${s.index}`} className={`osj-stage${w.live ? ' live' : ''}${w.over ? ' over' : ''}${mine ? ' mine' : ''}`}>
+                <span className="osj-stage-dot" />
+                <span className="osj-stage-main">
+                  <b>{s.label}</b>
+                  <span className="muted">
+                    {' '}
+                    · {w.text}
+                    {s.startTime && !w.live && !w.over ? ` (${new Date(s.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })})` : ''}
+                  </span>
+                  <span className="osj-stage-sub muted">
+                    {s.priceUnit !== undefined ? (s.priceUnit === 0 ? 'free' : `${unitFmt.format(s.priceUnit)} ${s.priceSymbol ?? ''}${s.priceUsd !== undefined ? ` ≈ $${s.priceUsd.toFixed(2)}` : ''}`) : ''}
+                    {s.maxPerWallet !== undefined ? ` · limit ${s.maxPerWallet} per wallet` : ''}
+                    {s.allowlistCount !== undefined ? ` · allowlist of ${s.allowlistCount.toLocaleString()}` : ''}
+                  </span>
+                </span>
+                <span className={`osj-elig ${s.eligible === true ? 'up' : s.eligible === false ? 'err' : 'muted'}`}>{s.eligible === true ? 'eligible' : s.eligible === false ? 'not eligible' : ''}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function JobCard({ j, now, onSend, sending, onDismiss, onRequote, onArm }: { j: MintJob; now: number; onSend: (id: string) => void; sending: boolean; onDismiss?: (id: string) => void; onRequote?: (j: MintJob) => void; onArm?: (id: string, on: boolean) => void }) {
   const sym = j.price?.symbol ?? 'ETH';
   const [confirming, setConfirming] = useState(false);
@@ -63,6 +133,7 @@ function JobCard({ j, now, onSend, sending, onDismiss, onRequote, onArm }: { j: 
           {j.stage && <div className="muted">{stageLabel(j.stage.type)} stage{j.stage.endTime ? ` · ends in ${until(j.stage.endTime, now)}` : ''}{j.stage.maxPerWallet !== undefined ? ` · ${j.stage.alreadyMinted ?? 0}/${j.stage.maxPerWallet} per wallet` : ''}</div>}
         </div>
       </div>
+      <DropInfo j={j} now={now} />
       {j.price && (
         <div className="osj-lines">
           <span>Pays from</span><b>{short(j.wallet)}</b>

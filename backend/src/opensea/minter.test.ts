@@ -85,6 +85,8 @@ describe('Minter queue', () => {
     expect(job.waitFor).toMatchObject({ type: 'PUBLIC_SALE', index: 0, startTime: '2026-09-13T00:15:00.000Z' });
     expect(job.price).toEqual({ unitWei: '2000000000000000', totalWei: '4000000000000000', symbol: 'ETH', usd: 10 });
     expect(job.stage).toMatchObject({ type: 'PUBLIC_SALE', maxPerWallet: 3, alreadyMinted: 0 });
+    // the card gets the whole schedule with this wallet's eligibility
+    expect(job.drop?.stages.map((s) => [s.type, s.eligible])).toEqual([['PRESALE', false], ['PUBLIC_SALE', true]]);
     expect(sch.timers).toHaveLength(1);
     // a warm-up quote ten seconds before the stage keeps the job waiting and sets the exact timer
     expect(sch.timers[0].ms).toBe(15 * 60_000 - 10_000);

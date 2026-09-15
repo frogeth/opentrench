@@ -147,6 +147,34 @@ describe('drops', () => {
     await expect(resolveCollection('chump', undefined, fetchImpl)).rejects.toMatchObject({ code: 'compat' });
   });
 
+  it('decodeCollection carries supply, floor and the stage labels, prices and allowlist sizes', () => {
+    const col = decodeCollection({
+      __typename: 'Collection',
+      slug: 'rare',
+      name: 'Rare',
+      address: DEAD_ADDR,
+      chain: { identifier: 'robinhood', networkId: 4663 },
+      floorPrice: { pricePerItem: { usd: 1.8, token: { unit: 0.00075, symbol: 'ETH' } } },
+      drop: {
+        __typename: 'Erc721SeaDropV1',
+        disabledReason: null,
+        identifier: { contractAddress: DEAD_ADDR, chain: { identifier: 'robinhood' } },
+        maxSupply: 1024,
+        totalSupply: 673,
+        activeDropStage: { stageIndex: 0 },
+        stages: [
+          { __typename: 'Erc721SeaDropV1Stage', label: 'GTD (holders)', stageType: 'SIGNED_PRESALE', stageIndex: 1, startTime: '2026-09-15T20:30:13.000Z', endTime: '2026-09-15T21:00:13.000Z', maxTotalMintableByWallet: 1, allowlistMemberCount: 927, price: { usd: 0, token: { unit: 0, symbol: 'ETH' } } },
+          { __typename: 'Erc721SeaDropV1Stage', label: 'Public stage', stageType: 'PUBLIC_SALE', stageIndex: 0, startTime: '2026-09-15T21:00:13.000Z', endTime: '2026-09-16T02:00:13.000Z', maxTotalMintableByWallet: 1, allowlistMemberCount: null, price: { usd: 1.99, token: { unit: 0.00083, symbol: 'ETH' } } },
+        ],
+      },
+    })!;
+    expect(col.floor).toEqual({ unit: 0.00075, symbol: 'ETH', usd: 1.8 });
+    expect(col.drop).toMatchObject({ minted: 673, maxSupply: 1024, activeIndex: 0 });
+    expect(col.drop!.stages[0]).toMatchObject({ label: 'GTD (holders)', allowlistCount: 927, priceUnit: 0 });
+    expect(col.drop!.stages[1]).toMatchObject({ label: 'Public stage', priceUnit: 0.00083, priceUsd: 1.99, priceSymbol: 'ETH' });
+    expect(col.drop!.stages[1].allowlistCount).toBeUndefined();
+  });
+
   it('decodeCollection produces drop: undefined when there is no drop', () => {
     const col = decodeCollection({
       __typename: 'Collection',

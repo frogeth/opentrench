@@ -1,8 +1,44 @@
 import { gql, OPENSEA, OpenSeaError } from './gql.js';
 import type { OpenSeaSession } from './session.js';
 
-export interface DropStage { kind: string; type: string; index: number; startTime?: string; endTime?: string; maxPerWallet?: number }
-export interface DropCollection { slug: string; name: string; image?: string; address: string; chain: string; networkId: number; drop?: { kind: string; address: string; stages: DropStage[] } }
+export interface DropStage {
+  kind: string;
+  type: string;
+  index: number;
+  startTime?: string;
+  endTime?: string;
+  maxPerWallet?: number;
+  /** what the creator called it ("GTD (holders)", "Public stage") */
+  label?: string;
+  /** the stage's list price, before eligibility */
+  priceUnit?: number;
+  priceUsd?: number;
+  priceSymbol?: string;
+  /** wallets on the allowlist, for allowlist stages */
+  allowlistCount?: number;
+}
+export interface DropCollection {
+  slug: string;
+  name: string;
+  image?: string;
+  address: string;
+  chain: string;
+  networkId: number;
+  /** the collection's floor, as OpenSea lists it */
+  floor?: { unit: number; symbol: string; usd?: number };
+  drop?: {
+    kind: string;
+    address: string;
+    stages: DropStage[];
+    /** minted so far and the cap (ERC-721 SeaDrop) */
+    minted?: number;
+    maxSupply?: number;
+    /** OpenSea's reason the drop cannot be minted right now, when it says so */
+    disabledReason?: string;
+    /** the stage OpenSea calls active */
+    activeIndex?: number;
+  };
+}
 export interface StageEligibility { type: string; index: number; eligible: boolean; maxPerWallet?: number; eligibleMax?: number; eligibleMinter?: string; priceUnit?: number; priceUsd?: number; priceSymbol?: string }
 export interface Eligibility {
   kind: string;
@@ -48,7 +84,7 @@ export function parseLocator(s: string): { slug: string } | { address: string } 
   return m ? { slug: m[1] } : undefined;
 }
 
-const COLLECTION_QUERY = `query MintCollectionMetadata($slug: String!) { collectionBySlug(slug: $slug) { __typename ... on Collection { slug name imageUrl address chain { identifier networkId } drop { __typename identifier { contractAddress chain { identifier } } stages { __typename stageType stageIndex startTime endTime maxTotalMintableByWallet } } } } }`;
+const COLLECTION_QUERY = `query MintCollectionMetadata($slug: String!) { collectionBySlug(slug: $slug) { __typename ... on Collection { slug name imageUrl address chain { identifier networkId } floorPrice { pricePerItem { usd token { unit symbol } } } drop { __typename disabledReason identifier { contractAddress chain { identifier } } ... on Erc721SeaDropV1 { maxSupply totalSupply } activeDropStage { stageIndex } stages { __typename label stageType stageIndex startTime endTime maxTotalMintableByWallet allowlistMemberCount price { usd token { unit symbol } } } } } } }`;
 const SEARCH_QUERY = `query MintCollectionSearch($query: String!) { collectionsByQuery(query: $query, limit: 50) { __typename slug address chain { identifier networkId } } }`;
 const ELIGIBILITY_QUERY = `query DropEligibilityQuery($collectionSlug: String!, $address: Address!) { dropBySlug(slug: $collectionSlug) { __typename ... on Erc721SeaDropV1 { minterQuantityMinted(minter: $address) } stages { __typename stageType stageIndex isEligible eligibleMinterAddress maxTotalMintableByWallet eligibleMaxTotalMintableByWallet eligiblePrice { usd token { unit symbol contractAddress chain { identifier } } } } } }`;
 const MINT_ACTION_QUERY = `query MintActionTimelineQuery($address: Address!, $fromAssets: [AssetQuantityInput!]!, $toAssets: [AssetQuantityInput!]!, $recipient: Address) { swap(address: $address, fromAssets: $fromAssets, toAssets: $toAssets, recipient: $recipient, action: MINT) { actions { __typename ... on TransactionAction { transactionSubmissionData { to data value chain { networkId identifier } } } } errors { __typename } } }`;
@@ -66,6 +102,11 @@ export function decodeCollection(c: any): DropCollection | undefined {
     startTime: s.startTime ?? undefined,
     endTime: s.endTime ?? undefined,
     maxPerWallet: int(s.maxTotalMintableByWallet),
+    label: s.label ? String(s.label).slice(0, 120) : undefined,
+    priceUnit: num(s.price?.token?.unit),
+    priceUsd: num(s.price?.usd),
+    priceSymbol: s.price?.token?.symbol ? String(s.price.token.symbol) : undefined,
+    allowlistCount: int(s.allowlistMemberCount),
   }));
   let drop: DropCollection['drop'];
   const rawDropAddress = c.drop?.identifier?.contractAddress;
@@ -76,8 +117,10 @@ export function decodeCollection(c: any): DropCollection | undefined {
     // The validator pins mint calldata's contract word to `col.address`, so a SeaDrop contract
     // living at a different address than the collection must never be treated as mintable.
     if (kind === 'Erc721SeaDropV1' && dropAddress !== address) return undefined;
-    drop = { kind, address: dropAddress, stages };
+    drop = { kind, address: dropAddress, stages, minted: int(c.drop.totalSupply), maxSupply: int(c.drop.maxSupply), disabledReason: c.drop.disabledReason ? String(c.drop.disabledReason).slice(0, 200) : undefined, activeIndex: int(c.drop.activeDropStage?.stageIndex) };
   }
+  const floorUnit = num(c.floorPrice?.pricePerItem?.token?.unit);
+  const floor = floorUnit !== undefined ? { unit: floorUnit, symbol: String(c.floorPrice?.pricePerItem?.token?.symbol ?? ''), usd: num(c.floorPrice?.pricePerItem?.usd) } : undefined;
   return {
     slug: c.slug,
     name: String(c.name ?? c.slug),
@@ -85,6 +128,7 @@ export function decodeCollection(c: any): DropCollection | undefined {
     address,
     chain: String(c.chain?.identifier ?? ''),
     networkId,
+    floor,
     drop,
   };
 }

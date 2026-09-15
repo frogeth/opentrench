@@ -393,6 +393,29 @@ export interface MintJob {
   armed?: { maxUnitWei: string; maxGasCostWei: string; at: number };
   /** a remark on a job that has not failed (why an armed send was held back, say) */
   note?: string;
+  /** the drop as OpenSea shows it: supply, floor, the whole schedule with this wallet's eligibility */
+  drop?: MintDropInfo;
+}
+export interface MintDropInfo {
+  minted?: number;
+  max?: number;
+  floor?: { unit: number; symbol: string; usd?: number };
+  disabledReason?: string;
+  activeIndex?: number;
+  stages: {
+    label: string;
+    type: string;
+    index: number;
+    startTime?: string;
+    endTime?: string;
+    maxPerWallet?: number;
+    priceUnit?: number;
+    priceUsd?: number;
+    priceSymbol?: string;
+    allowlistCount?: number;
+    /** this wallet can mint in it (undefined: OpenSea did not say) */
+    eligible?: boolean;
+  }[];
 }
 
 export interface Status {
