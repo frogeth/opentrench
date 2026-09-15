@@ -15,6 +15,9 @@ describe('validateMintTransaction', () => {
   it('passes a public mint for the wallet', () => {
     expect(() => validateMintTransaction(ok(calldata('161ac21f')), col, WALLET, { type: 'PUBLIC_SALE', index: 0 }, 1, 4663)).not.toThrow();
     expect(() => validateMintTransaction(ok(calldata('161ac21f', { minter: WALLET })), col, WALLET, { type: 'PUBLIC_SALE', index: 0 }, 1, 4663)).not.toThrow();
+    // OpenSea appends a 4-byte attribution tag after the arguments; anything else off a word is refused
+    expect(() => validateMintTransaction(ok(calldata('161ac21f') + '3d958fe2'), col, WALLET, { type: 'PUBLIC_SALE', index: 0 }, 1, 4663)).not.toThrow();
+    expect(() => validateMintTransaction(ok(calldata('161ac21f') + '3d95'), col, WALLET, { type: 'PUBLIC_SALE', index: 0 }, 1, 4663)).toThrow(/whole number of words/);
   });
   it('passes a signed presale on its stage index', () => {
     expect(() => validateMintTransaction(ok(calldata('4b61cd6f', { stage: 2 })), col, WALLET, { type: 'SIGNED_PRESALE', index: 2 }, 1, 4663)).not.toThrow();

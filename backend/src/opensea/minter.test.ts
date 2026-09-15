@@ -86,10 +86,17 @@ describe('Minter queue', () => {
     expect(job.price).toEqual({ unitWei: '2000000000000000', totalWei: '4000000000000000', symbol: 'ETH', usd: 10 });
     expect(job.stage).toMatchObject({ type: 'PUBLIC_SALE', maxPerWallet: 3, alreadyMinted: 0 });
     expect(sch.timers).toHaveLength(1);
-    expect(sch.timers[0].ms).toBe(15 * 60_000 + 250);
+    // a warm-up quote ten seconds before the stage keeps the job waiting and sets the exact timer
+    expect(sch.timers[0].ms).toBe(15 * 60_000 - 10_000);
+    await c.sleep(15 * 60_000 - 10_000);
+    sch.timers.shift()!.fn();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(job.state).toBe('waiting');
+    expect(sch.timers[0].ms).toBe(10_000);
     // the stage opens: the timer quotes again and the job is ready, with a fresh two-minute clock
-    await c.sleep(15 * 60_000 + 250);
-    sch.timers[0].fn();
+    await c.sleep(10_000);
+    sch.timers.shift()!.fn();
     await new Promise((r) => setTimeout(r, 0));
     await new Promise((r) => setTimeout(r, 0));
     expect(job.state).toBe('ready');
@@ -108,16 +115,16 @@ describe('Minter queue', () => {
     }));
     const job = await m.quote({ locator: 'chump', quantity: 1 });
     expect(job.state).toBe('waiting');
-    await c.sleep(15 * 60_000 + 250);
-    sch.timers.shift()!.fn();
+    await c.sleep(15 * 60_000);
+    sch.timers.shift()!.fn(); // the warm-up, fired late: still before the start? no — at the start
     await new Promise((r) => setTimeout(r, 0));
     await new Promise((r) => setTimeout(r, 0));
     expect(job.state).toBe('waiting');
     expect(job.note).toMatch(/asking OpenSea again/);
     expect(job.waitFor?.retries).toBe(1);
-    expect(sch.timers[0].ms).toBe(4000);
+    expect(sch.timers[0].ms).toBe(1000);
     opened = true;
-    await c.sleep(4000);
+    await c.sleep(1000);
     sch.timers.shift()!.fn();
     await new Promise((r) => setTimeout(r, 0));
     await new Promise((r) => setTimeout(r, 0));
@@ -132,8 +139,11 @@ describe('Minter queue', () => {
     expect(() => m.arm('nope', true)).toThrow(/no such/);
     const armed = m.arm(job.id, true);
     expect(armed.armed).toMatchObject({ maxUnitWei: '2000000000000000', maxGasCostWei: '2000000000000000' });
-    await c.sleep(15 * 60_000 + 250);
-    sch.timers[0].fn();
+    await c.sleep(15 * 60_000 - 10_000);
+    sch.timers.shift()!.fn();
+    for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
+    await c.sleep(10_000);
+    sch.timers.shift()!.fn();
     for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0));
     await m.watching(job.id);
     expect(job.state).toBe('confirmed');
@@ -153,8 +163,11 @@ describe('Minter queue', () => {
     const job = await m.quote({ locator: 'chump', quantity: 1 });
     m.arm(job.id, true);
     unit = 0.003;
-    await c.sleep(15 * 60_000 + 250);
-    sch.timers[0].fn();
+    await c.sleep(15 * 60_000 - 10_000);
+    sch.timers.shift()!.fn();
+    for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
+    await c.sleep(10_000);
+    sch.timers.shift()!.fn();
     for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
     expect(job.state).toBe('ready');
     expect(job.note).toMatch(/above the 0.002 you armed/);
@@ -177,7 +190,7 @@ describe('Minter queue', () => {
     const m2 = new Minter(() => KEY, () => ({}), d);
     await m2.restore([{ ...restored({ id: 'mwait', state: 'waiting', txHash: undefined, nonce: undefined, waitFor: { type: 'PUBLIC_SALE', index: 0, startTime: '2026-09-13T00:15:00.000Z' } }) }]);
     expect(m2.jobs[0].state).toBe('waiting');
-    expect(sch.timers[0].ms).toBe(15 * 60_000 + 250);
+    expect(sch.timers[0].ms).toBe(15 * 60_000 - 10_000);
     // restored long after the stage opened: nothing to wait for
     const late = new Minter(() => KEY, () => ({}), deps({ ...d, now: () => now + 3 * 3600_000 }));
     await late.restore([{ ...restored({ id: 'mlate', state: 'waiting', txHash: undefined, nonce: undefined, waitFor: { type: 'PUBLIC_SALE', index: 0, startTime: '2026-09-13T00:15:00.000Z' } }) }]);

@@ -118,7 +118,16 @@ function JobCard({ j, now, onSend, sending, onDismiss, onRequote, onArm }: { j: 
 }
 
 /** The OpenSea mint window: quote a drop, press Mint, watch the card go pending → confirmed. */
-export function OsMintView({ jobs, now, wallet, prefill, onPrefilled }: { jobs: MintJob[]; now: number; wallet?: string; prefill?: { locator: string; chain?: string } | null; onPrefilled: () => void }) {
+export function OsMintView({ jobs, now: coarseNow, wallet, prefill, onPrefilled }: { jobs: MintJob[]; now: number; wallet?: string; prefill?: { locator: string; chain?: string } | null; onPrefilled: () => void }) {
+  // the app clock ticks every fifteen seconds; a countdown to a stage wants every second
+  const waiting = jobs.some((j) => j.state === 'waiting');
+  const [tick, setTick] = useState(Date.now());
+  useEffect(() => {
+    if (!waiting) return;
+    const id = window.setInterval(() => setTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [waiting]);
+  const now = waiting ? Math.max(tick, coarseNow) : coarseNow;
   const [locator, setLocator] = useState('');
   const [chain, setChain] = useState<string | undefined>();
   const [qty, setQty] = useState(1);

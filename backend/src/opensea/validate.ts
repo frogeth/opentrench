@@ -57,7 +57,10 @@ export function validateMintTransaction(
   if (!SEADROP_TARGETS.has(tx.to.toLowerCase())) throw new UnsafeMintAction(`unexpected mint target ${tx.to}`);
 
   const data = tx.data.toLowerCase();
-  if ((data.length - 10) % 64 !== 0) throw new UnsafeMintAction('calldata is shorter than a whole number of words');
+  // OpenSea appends a 4-byte attribution tag after the arguments (its own site sends it too); the
+  // ABI decoder ignores trailing bytes, so a tag is fine. Anything else off a whole word is not.
+  const tail = (data.length - 10) % 64;
+  if (tail !== 0 && tail !== 8) throw new UnsafeMintAction('calldata is shorter than a whole number of words');
 
   if (!Object.hasOwn(SELECTOR, stage.type)) throw new UnsafeMintAction(`unknown stage type ${stage.type}`);
   const want = SELECTOR[stage.type];

@@ -33,9 +33,16 @@ const HARD_MAX_JOBS = 2 * MAX_JOBS;
 const MAX_QUANTITY = 99;
 /** A job waits for a coming stage up to this long; a mint further out than that is quoted by hand nearer the time. */
 const WAIT_MAX_MS = 7 * 24 * 3600_000;
-/** Once a waited-for stage's start time has passed, OpenSea is asked again this often, this many times, before giving up. */
+/**
+ * Once a waited-for stage's start time has passed, OpenSea is asked again every second for the
+ * first fifteen tries, then every four seconds, for two minutes in all, before giving up.
+ */
+const OPEN_RETRY_FAST_MS = 1_000;
 const OPEN_RETRY_MS = 4_000;
-const OPEN_RETRIES = 30;
+const OPEN_RETRY_FAST = 15;
+const OPEN_WINDOW_MS = 120_000;
+/** A waiting job is quoted once this long before its stage, so the OpenSea session and RPC are warm at the start. */
+const WARM_MS = 10_000;
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const GWEI = 1_000_000_000n;
 
@@ -275,11 +282,12 @@ export class Minter extends EventEmitter {
         // to come (a public stage after a presale, say) puts the job in the queue for that moment.
         const wf = job.waitFor;
         const waitedStart = wf ? Date.parse(wf.startTime) : NaN;
-        if (wf && now >= waitedStart && now - waitedStart < OPEN_RETRY_MS * OPEN_RETRIES) {
-          // the clock says it is open; OpenSea has not caught up yet — ask again shortly
-          job.waitFor = { ...wf, retries: (wf.retries ?? 0) + 1 };
+        if (wf && now >= waitedStart && now - waitedStart < OPEN_WINDOW_MS) {
+          // the clock says it is open; OpenSea has not caught up yet — ask again, fast at first
+          const retries = (wf.retries ?? 0) + 1;
+          job.waitFor = { ...wf, retries };
           this.put(job, { state: 'waiting', note: 'the stage should be open now; asking OpenSea again…' });
-          this.timer(job, OPEN_RETRY_MS);
+          this.timer(job, retries <= OPEN_RETRY_FAST ? OPEN_RETRY_FAST_MS : OPEN_RETRY_MS);
           return job;
         }
         const coming = col.drop.stages
@@ -302,7 +310,7 @@ export class Minter extends EventEmitter {
           job.price = price;
           job.waitFor = { type: coming.s.type, index: coming.s.index, startTime: coming.s.startTime ?? new Date(coming.start).toISOString(), retries: 0 };
           this.put(job, { state: 'waiting', error: undefined, note: undefined });
-          this.timer(job, coming.start - now + 250);
+          this.waitTimer(job, coming.start);
           return job;
         }
         if (!open) {
@@ -336,12 +344,18 @@ export class Minter extends EventEmitter {
       if (balance < totalWei + estimate) return this.fail(job, `needs ${fmt(totalWei + estimate)} ${job.price.symbol} (price + gas), wallet has ${fmt(balance)}`);
       // a requote is a fresh quote: the two-minute clock starts now
       this.put(job, { state: 'ready', ts: t0, waitFor: undefined, note: undefined });
-      if (job.armed) await this.autoSend(job);
+      if (job.armed) await this.autoSend(job, { col, at: t0 });
       return job;
     } catch (e: unknown) {
       console.warn('[osmint]', job.id, redact(rawMessage(e)));
       return this.fail(job, safeMessage(e) ?? 'the RPC or OpenSea call failed; check ⚙ → Trading → OpenSea RPCs');
     }
+  }
+
+  /** The timer for a stage starting at `start`: a warm-up quote shortly before it when there is time, else exactly at it. */
+  private waitTimer(job: MintJob, start: number): void {
+    const left = start - this.deps.now();
+    this.timer(job, left > 3 * WARM_MS ? left - WARM_MS : Math.max(0, left));
   }
 
   /** Quote a waiting job again after `ms`, unless it has moved on or been dismissed by then. */
@@ -373,7 +387,7 @@ export class Minter extends EventEmitter {
   }
 
   /** An armed job just came back ready: send it if the quote is inside what was armed, else hold it with a note. */
-  private async autoSend(job: MintJob): Promise<void> {
+  private async autoSend(job: MintJob, pre?: { col: DropCollection; at: number }): Promise<void> {
     const a = job.armed;
     if (!a || job.state !== 'ready' || !job.price) return;
     const sym = job.price.symbol;
@@ -385,10 +399,11 @@ export class Minter extends EventEmitter {
       this.put(job, { note: `not sent: gas came to ${fmt(BigInt(job.gas.estimateWei))} ${sym}, above the ${fmt(BigInt(a.maxGasCostWei))} ceiling. Press Mint if that is fine.` });
       return;
     }
-    await this.send(job.id);
+    await this.send(job.id, pre);
   }
 
-  async send(jobId: string): Promise<MintJob> {
+  /** `pre`: the collection as resolved by the quote moments ago (an armed send skips that round trip). */
+  async send(jobId: string, pre?: { col: DropCollection; at: number }): Promise<MintJob> {
     const job = this.jobs.find((j) => j.id === jobId);
     if (!job) throw new Error('no such quote');
     if (job.state !== 'ready') throw new Error(`quote is ${job.state}`);
@@ -406,7 +421,7 @@ export class Minter extends EventEmitter {
     let hash: `0x${string}` | undefined;
     let broadcastAttempted = false;
     try {
-      const col = await this.deps.resolve(job.collection.slug, job.collection.chain);
+      const col = pre && this.deps.now() - pre.at < 10_000 ? pre.col : await this.deps.resolve(job.collection.slug, job.collection.chain);
       // Everything the user approved in the quote is pinned here. OpenSea answers the same slug, so
       // a different contract, chain, drop contract or drop *kind* coming back means the quote is not
       // this mint. The kind is part of the pin because it selects how the calldata is read: a second
@@ -530,8 +545,8 @@ export class Minter extends EventEmitter {
       if (j.state === 'waiting') {
         const start = Date.parse(j.waitFor?.startTime ?? '');
         if (!Number.isFinite(start)) this.fail(j, 'the queued stage was lost over the restart; quote again');
-        else if (this.deps.now() - start > OPEN_RETRY_MS * OPEN_RETRIES) this.fail(j, `the stage opened at ${new Date(start).toLocaleString()} while opentrench was closed; quote again`);
-        else this.timer(j, start - this.deps.now() + 250);
+        else if (this.deps.now() - start > OPEN_WINDOW_MS) this.fail(j, `the stage opened at ${new Date(start).toLocaleString()} while opentrench was closed; quote again`);
+        else this.waitTimer(j, start);
       }
     }
     this.evict();
