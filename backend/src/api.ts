@@ -511,6 +511,18 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     }),
   );
   // forward a Telegram message into a chat in the feed (either platform)
+  // what a forward into Discord would send (read-only): the message rewritten in Discord markdown
+  r.get(
+    '/forward/preview',
+    wrap(async (req) => {
+      const fromChat = String(req.query.fromChat ?? '').trim();
+      const msgId = Number(req.query.msgId);
+      if (!/^(-?\d+|@?[A-Za-z][A-Za-z0-9_]{2,31})$/.test(fromChat) || !Number.isInteger(msgId) || msgId <= 0) throw new Error('message required');
+      if (!svc.telegram) throw new Error('telegram not connected');
+      const c = await svc.telegram.copyOf(fromChat, msgId);
+      return { text: c.text, author: c.author, photo: !!c.photo };
+    }),
+  );
   r.post(
     '/forward',
     wrap(async (req) => {

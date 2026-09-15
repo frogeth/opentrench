@@ -115,7 +115,36 @@ export function webpagePreview(media: any, imageUrl: string): LinkPreview | unde
  * spoilers, code, quotes, and [text](url) links. Links are wrapped in <> so a report with a
  * dozen of them does not unfurl into a dozen previews; a lone bare link keeps its preview.
  */
-export function entitiesToDiscord(text: string, entities: any[] | undefined): string {
+export function entitiesToDiscord(text: string, entities: any[] | undefined, opts: { report?: boolean } = {}): string {
+  const body = entitiesToDiscordBody(text, entities, !!opts.report);
+  return opts.report ? polishReport(body) : body;
+}
+
+/**
+ * A bot's report laid out for Discord: the bold first line becomes a heading, bold lines on
+ * their own become section headings, "↳ via …" lines become subtext, runs of blank lines
+ * collapse. Telegram wraps such bodies in a quote, which Discord renders as one grey slab;
+ * the quote is dropped here so the sections breathe.
+ */
+export function polishReport(text: string): string {
+  const lines = text.split('\n').map((l) => l.trimEnd());
+  const out: string[] = [];
+  let first = true;
+  for (const raw of lines) {
+    let line = raw;
+    const bold = /^\*\*([^*]{1,60})\*\*:?$/.exec(line.trim());
+    if (bold) line = first ? `## ${bold[1]}` : `### ${bold[1]}`;
+    else if (/^↳\s*/.test(line.trim())) line = `-# ${line.trim().replace(/^↳\s*/, '')}`;
+    if (line.trim()) first = false;
+    out.push(line);
+  }
+  return out
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function entitiesToDiscordBody(text: string, entities: any[] | undefined, report: boolean): string {
   if (!entities?.length || !text) return text;
   const wrap: { start: number; end: number; open: string; close: string }[] = [];
   for (const e of entities) {
@@ -156,7 +185,7 @@ export function entitiesToDiscord(text: string, entities: any[] | undefined): st
         wrap.push({ start, end, open: `\`\`\`${e.language ? String(e.language) : ''}\n`, close: '\n```' });
         break;
       case 'MessageEntityBlockquote':
-        wrap.push({ start, end, open: '> ', close: '' });
+        if (!report) wrap.push({ start, end, open: '> ', close: '' });
         break;
       default:
         break;

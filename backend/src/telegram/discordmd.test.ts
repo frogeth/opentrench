@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { entitiesToDiscord } from './normalize.js';
+import { entitiesToDiscord, polishReport } from './normalize.js';
 
 const ent = (className: string, offset: number, length: number, extra: Record<string, unknown> = {}) => ({ className, offset, length, ...extra });
 
@@ -20,6 +20,16 @@ describe('entitiesToDiscord', () => {
     expect(entitiesToDiscord('one\ntwo\nthree', [ent('MessageEntityBlockquote', 0, 7)])).toBe('> one\n> two\nthree');
     expect(entitiesToDiscord('x = 1', [ent('MessageEntityPre', 0, 5, { language: 'js' })])).toBe('```js\nx = 1\n```');
   });
+  it('lays a bot report out with headings and subtext, no quote slab', () => {
+    const text = '$COINOP\n\nTrade: Maestro\n\nCOIN-OP is a launchpad.\n\n\nCommunity\nNo data.\n↳ via @insertopcoin';
+    const q = text.indexOf('COIN-OP is'), c = text.indexOf('Community'), u = text.indexOf('@insertopcoin');
+    const ents = [ent('MessageEntityBold', 0, 7), ent('MessageEntityBlockquote', q, text.length - q), ent('MessageEntityBold', c, 9), ent('MessageEntityTextUrl', u, 13, { url: 'https://x.com/insertopcoin' })];
+    expect(entitiesToDiscord(text, ents, { report: true })).toBe('## $COINOP\n\nTrade: Maestro\n\nCOIN-OP is a launchpad.\n\n### Community\nNo data.\n-# via [@insertopcoin](<https://x.com/insertopcoin>)');
+    // the same message from a person keeps its quote and bold as typed
+    expect(entitiesToDiscord(text, ents).startsWith('**$COINOP**\n\nTrade: Maestro\n\n> COIN-OP')).toBe(true);
+    expect(polishReport('**A very long bold line that is really a sentence and not a heading at all, truly**\nx')).toBe('**A very long bold line that is really a sentence and not a heading at all, truly**\nx');
+  });
+
   it('leaves text alone without entities or with bad offsets', () => {
     expect(entitiesToDiscord('plain', undefined)).toBe('plain');
     expect(entitiesToDiscord('plain', [ent('MessageEntityBold', 3, 9)])).toBe('plain');

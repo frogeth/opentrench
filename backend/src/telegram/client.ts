@@ -329,14 +329,17 @@ export class TelegramWrapper extends EventEmitter {
     const got: any[] = await this.client.getMessages(peer, { ids: [msgId] });
     const m: any = got?.[0];
     if (!m || m.className !== 'Message') throw new Error('that message is gone');
-    const text = entitiesToDiscord(String(m.message ?? ''), m.entities);
     let author = '';
+    let fromBot = false;
     try {
       const sender: any = await m.getSender?.();
+      fromBot = !!sender?.bot;
       author = sender ? String(sender.title ?? [sender.firstName, sender.lastName].filter(Boolean).join(' ') ?? sender.username ?? '') : '';
     } catch {
       /* the chat's name will do */
     }
+    // a bot's report is laid out as one (headings, sections); a person's message stays as typed
+    const text = entitiesToDiscord(String(m.message ?? ''), m.entities, { report: fromBot });
     let photo: { name: string; mime: string; data: Buffer } | undefined;
     if (m.media?.className === 'MessageMediaPhoto' || (m.media?.className === 'MessageMediaDocument' && /^image\//.test(String(m.media.document?.mimeType ?? '')))) {
       const data: any = await this.client.downloadMedia(m, {});
