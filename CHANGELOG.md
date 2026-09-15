@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.8.12 — 2026-09-15
+
 - Fix: reacting on a reaction you had already set did nothing, or removed a different one. The page now knows which reactions are yours (Telegram marks them, Discord says who reacted), so clicking your own reaction removes it and clicking another adds it, with the server's answer winning after a moment. (Reported by Brandzo.)
 
 - Fix: Telegram pictures (groups, channels and people) showed as initials since 0.8.11: the avatar lookup had been narrowed to a cache that does not answer for them. The normal lookup is back; it was never the source of the flood, the dialog list was, and that is cached now.
