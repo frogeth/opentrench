@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Telegram picker: conversations with bots are listed too (a Bots filter), so a custom alert bot that posts to you can be in the feed like any chat. Bots were left out before. (Asked on Telegram: RH_Rombot.)
 - A favorite caller's first call now shows in the Pings panel (👑 called $X, with the chat around it) and has its own sound, a coin, instead of the same chirp as a mention with nothing on screen to match it.
 - Forward any Telegram message: a forward button on every row (and in the right-click menu), and "send to chat" under a bot's reports (Salpha research, say). Into a Telegram chat it is a real forward, formatting and media intact. Into Discord it becomes a copy in Discord's own markdown with a small "forwarded from" line, the photo attached, split when it is longer than Discord allows. An optional note goes above it. (Brandzo.)
 - Every chat keeps its own recent history (150 messages each) instead of all chats sharing one 500-message window. A few busy chats no longer push the quiet ones out, so switching to another layout shows its columns already filled rather than empty until something new arrives. (Brandzo.)

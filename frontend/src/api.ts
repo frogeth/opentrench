@@ -168,7 +168,7 @@ export interface TogetherInfo {
 export interface TelegramDialog {
   id: string;
   title: string;
-  type: 'group' | 'channel' | 'dm';
+  type: 'group' | 'channel' | 'dm' | 'bot';
 }
 
 /** one row of a composer's "/" menu (backend SlashMenuItem) */

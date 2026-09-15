@@ -4,7 +4,7 @@ import type { Source } from '../types';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 
-type TgKind = 'all' | 'group' | 'channel' | 'dm';
+type TgKind = 'all' | 'group' | 'channel' | 'dm' | 'bot';
 import { Icon } from './Icon';
 import { discordChatName, discordGlyph } from './ChannelSidebar';
 
@@ -70,7 +70,7 @@ export function AddChatsModal({
 
   let body;
   if (source === 'telegram') {
-    const counts = { all: dialogs.length, group: 0, channel: 0, dm: 0 } as Record<TgKind, number>;
+    const counts = { all: dialogs.length, group: 0, channel: 0, dm: 0, bot: 0 } as Record<TgKind, number>;
     for (const d of dialogs) counts[d.type]++;
     const inFeed = dialogs.filter((d) => cfg?.telegram.watch.includes(d.id)).length;
     const rows = dialogs
@@ -85,9 +85,9 @@ export function AddChatsModal({
       <div className="modal-list">
         <div className="pick-filters">
           <span className="seg seg-sm">
-            {(['all', 'group', 'channel', 'dm'] as const).map((k) => (
-              <button key={k} className={tgKind === k ? 'active' : ''} onClick={() => setTgKind(k)}>
-                {k === 'all' ? 'All' : k === 'group' ? 'Groups' : k === 'channel' ? 'Channels' : 'DMs'} <span className="muted">{counts[k]}</span>
+            {(['all', 'group', 'channel', 'dm', 'bot'] as const).map((k) => (
+              <button key={k} className={tgKind === k ? 'active' : ''} onClick={() => setTgKind(k)} title={k === 'bot' ? 'conversations with bots: a custom alert bot posts to you like any chat' : undefined}>
+                {k === 'all' ? 'All' : k === 'group' ? 'Groups' : k === 'channel' ? 'Channels' : k === 'dm' ? 'DMs' : 'Bots'} <span className="muted">{counts[k]}</span>
               </button>
             ))}
           </span>

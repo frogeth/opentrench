@@ -14,7 +14,8 @@ import { canonicalChatId } from './ids.js';
 export interface TelegramDialog {
   id: string;
   title: string;
-  type: 'group' | 'channel' | 'dm';
+  /** `bot`: a conversation with a bot (a custom alert bot, say), watched like any chat */
+  type: 'group' | 'channel' | 'dm' | 'bot';
 }
 
 /** What the feed calls a chat: a group's title, or a person's name / @username for a DM. */
@@ -210,11 +211,11 @@ export class TelegramWrapper extends EventEmitter {
   private async fetchDialogs(): Promise<TelegramDialog[]> {
     const dialogs = await this.client!.getDialogs({ limit: 500 });
     const list = dialogs
-      .filter((d) => d.isGroup || d.isChannel || (d.isUser && !(d.entity as any)?.bot))
+      .filter((d) => d.isGroup || d.isChannel || d.isUser)
       .map((d) => ({
         id: String(d.id),
         title: d.isUser ? chatDisplayName(d.entity, d.title ?? String(d.id)) : (d.title ?? '(untitled)'),
-        type: d.isUser ? ('dm' as const) : d.isChannel && !d.isGroup ? ('channel' as const) : ('group' as const),
+        type: d.isUser ? ((d.entity as any)?.bot ? ('bot' as const) : ('dm' as const)) : d.isChannel && !d.isGroup ? ('channel' as const) : ('group' as const),
       }));
     this.dialogsCache = { at: Date.now(), list };
     return list;
@@ -547,10 +548,8 @@ export class TelegramWrapper extends EventEmitter {
       .catch((e: any) => console.warn('[telegram] getMe failed', e?.message ?? e));
     client.addEventHandler((ev: NewMessageEvent) => {
       const bot = this.botFor(ev.message);
-      if (bot) {
-        this.emit('bot', bot, this.toBotMessage(ev.message));
-        return;
-      }
+      // a bot column gets its panel; the same conversation can also be a watched chat in the feed
+      if (bot) this.emit('bot', bot, this.toBotMessage(ev.message));
       void this.onNewMessage(ev);
     }, new NewMessage({}));
     // Bots edit their panel messages in place after a button press: relay edits too.
