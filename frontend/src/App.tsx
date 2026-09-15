@@ -457,20 +457,28 @@ export default function App() {
   }, []);
   const openShare = (address: string, symbol?: string) => setShare({ text: address, title: `Share ${symbol ? `$${symbol}` : 'contract'}`, hint: 'The address is sent, with your message above it if you add one.' });
   // Reactions: what you added this session (the platform stream brings the counts back)
-  const [myReactions, setMyReactions] = useState<Set<string>>(() => new Set());
+  // Which reactions are yours: the server says (Telegram marks chosen ones, Discord deltas carry the
+  // user), and a click shows at once through a short override until the server catches up.
+  const [reactOverride, setReactOverride] = useState<Map<string, { on: boolean; at: number }>>(() => new Map());
+  const myReactions = useMemo(() => {
+    const s = new Set<string>();
+    for (const m of messages) for (const r of m.reactions ?? []) if (r.mine) s.add(`${m.id}:${r.key}`);
+    for (const [k, o] of reactOverride) {
+      if (now - o.at > 8000) continue;
+      if (o.on) s.add(k);
+      else s.delete(k);
+    }
+    return s;
+  }, [messages, reactOverride, now]);
   const react = (m: FeedMessage, key: string, name: string, on: boolean) => {
     if (!canSend[m.source]) return;
     const msgId = m.id.split(':').pop()!;
     const k = `${m.id}:${key}`;
-    setMyReactions((s) => {
-      const n = new Set(s);
-      on ? n.add(k) : n.delete(k);
-      return n;
-    });
+    setReactOverride((o) => new Map(o).set(k, { on, at: Date.now() }));
     void api.react(m.source, m.chatId, msgId, key, name, on).catch(() =>
-      setMyReactions((s) => {
-        const n = new Set(s);
-        on ? n.delete(k) : n.add(k);
+      setReactOverride((o) => {
+        const n = new Map(o);
+        n.delete(k);
         return n;
       }),
     );

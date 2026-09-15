@@ -26,8 +26,10 @@ export function mapTelegramReactions(results: any[] | undefined): Reaction[] {
     const count = Number(r?.count ?? 0);
     if (!count) continue;
     const re = r.reaction;
-    if (re?.emoticon) out.push({ key: String(re.emoticon), name: String(re.emoticon), count });
-    else if (re?.documentId !== undefined) out.push({ key: `custom:${String(re.documentId)}`, name: '★', count });
+    // chosenOrder is present only on reactions you set yourself
+    const mine = r?.chosenOrder !== undefined && r?.chosenOrder !== null ? true : undefined;
+    if (re?.emoticon) out.push({ key: String(re.emoticon), name: String(re.emoticon), count, ...(mine ? { mine } : {}) });
+    else if (re?.documentId !== undefined) out.push({ key: `custom:${String(re.documentId)}`, name: '★', count, ...(mine ? { mine } : {}) });
   }
   return out;
 }

@@ -112,4 +112,15 @@ describe('entitiesToMarkdown', () => {
     expect(md).toBe('[$AERON](https://t.me/cove_trading_bot?start=p_1) · mc $260K\nPnL +131% · [Sell 100%](https://t.me/cove_trading_bot?start=s_1) · `Move`');
     expect(entitiesToMarkdown('plain', undefined)).toBe('plain');
   });
+
+  it('marks the reactions you chose', () => {
+    const rs = mapTelegramReactions([
+      { count: 3, reaction: { emoticon: '🔥' }, chosenOrder: 0 },
+      { count: 1, reaction: { emoticon: '👀' } },
+    ]);
+    expect(rs).toEqual([
+      { key: '🔥', name: '🔥', count: 3, mine: true },
+      { key: '👀', name: '👀', count: 1 },
+    ]);
+  });
 });

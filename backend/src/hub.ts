@@ -529,14 +529,15 @@ export class MessageHub extends EventEmitter {
     this.changed();
   }
 
-  /** Adjust one reaction's count (Discord sends add/remove deltas). */
-  applyReactionDelta(msgId: string, reaction: Omit<Reaction, 'count'>, delta: number): void {
+  /** Adjust one reaction's count (Discord sends add/remove deltas); `byMe` when the reacting user is you. */
+  applyReactionDelta(msgId: string, reaction: Omit<Reaction, 'count'>, delta: number, byMe = false): void {
     const m = this.buffer.find((x) => x.id === msgId);
     if (!m) return;
     const list = m.reactions ?? [];
     const existing = list.find((r) => r.key === reaction.key);
+    if (existing && byMe) existing.mine = delta > 0;
     if (existing) existing.count += delta;
-    else if (delta > 0) list.push({ ...reaction, count: delta });
+    else if (delta > 0) list.push({ ...reaction, count: delta, ...(byMe ? { mine: true } : {}) });
     m.reactions = list.filter((r) => r.count > 0);
     this.emit('event', { type: 'reactions', msgId, reactions: m.reactions } satisfies ServerEvent);
     this.changed();

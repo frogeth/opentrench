@@ -178,7 +178,8 @@ export class Services {
 
   private onDiscordReaction(d: any, delta: number): void {
     if (!this.cfg.get().discord.watch.includes(String(d.channel_id))) return;
-    this.hub.applyReactionDelta(`discord:${d.message_id}`, discordReaction(d.emoji), delta);
+    const me = this.discord.self?.id;
+    this.hub.applyReactionDelta(`discord:${d.message_id}`, discordReaction(d.emoji), delta, !!me && String(d.user_id ?? '') === me);
   }
 
   /** Wire the bridge once; called from the constructor. */

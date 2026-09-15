@@ -12,6 +12,8 @@ export interface Reaction {
   name: string;
   count: number;
   imageUrl?: string;
+  /** you reacted with this (Telegram: chosen; Discord: a delta from your own user id) */
+  mine?: boolean;
 }
 
 export interface ReplyContext {
