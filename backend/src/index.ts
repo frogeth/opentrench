@@ -30,7 +30,7 @@ const HOST = '127.0.0.1';
 const secretKey = readSecretKey();
 if (!secretKey) console.warn('[backend] no secret key: tokens in config.json are stored in plain text (the desktop app supplies one)');
 const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'config.json'), new SecretBox(secretKey));
-const hub: MessageHub = new MessageHub(500, createDefaultEnricher({ o1ApiKey: () => cfg.get().o1ApiKey }), {
+const hub: MessageHub = new MessageHub(150, createDefaultEnricher({ o1ApiKey: () => cfg.get().o1ApiKey }), {
   security: createSecurityFetcher(),
   securityBatch: createSecurityBatchFetcher(),
   // the affiliate is opentrench's own, always

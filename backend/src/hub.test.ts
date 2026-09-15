@@ -36,10 +36,20 @@ describe('MessageHub', () => {
     expect(m.msg.contracts).toEqual([{ chain: 'evm', address: EVM }]);
   });
 
-  it('caps the buffer', () => {
+  it('caps the buffer per chat, so a busy chat never crowds a quiet one out', () => {
     const hub = new MessageHub(3);
     for (let i = 0; i < 5; i++) hub.push(msg(i));
     expect(hub.hello().messages.map((m) => m.id)).toEqual(['discord:2', 'discord:3', 'discord:4']);
+    // a quieter chat keeps its own last three however busy the first one is
+    for (let i = 10; i < 12; i++) hub.push({ ...msg(i), chatId: 'quiet', chatName: 'quiet' });
+    for (let i = 20; i < 40; i++) hub.push(msg(i));
+    expect(hub.hello().messages.filter((m) => m.chatId === 'quiet').map((m) => m.id)).toEqual(['discord:10', 'discord:11']);
+    expect(hub.hello().messages.filter((m) => m.chatId !== 'quiet').map((m) => m.id)).toEqual(['discord:37', 'discord:38', 'discord:39']);
+    // the total cap still holds, oldest first
+    const small = new MessageHub(3, undefined, { totalMessages: 4 });
+    for (let i = 0; i < 3; i++) small.push(msg(i));
+    for (let i = 10; i < 13; i++) small.push({ ...msg(i), chatId: 'quiet', chatName: 'quiet' });
+    expect(small.hello().messages.map((m) => m.id)).toEqual(['discord:2', 'discord:10', 'discord:11', 'discord:12']);
   });
 
   it('tracks status and broadcasts it', () => {

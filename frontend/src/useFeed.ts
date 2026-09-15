@@ -1,7 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BotMessage, FeedMessage, J7Tweet, Mention, MintEvent, MintJob, NftRanking, RankingKey, ServerEvent, Status, TokenInfo } from './types';
 
-const MAX = 500;
+/** messages kept per chat (matches the backend), and in all: a busy chat never pushes a quiet one's history out */
+const PER_CHAT = 150;
+const MAX = 4000;
+const chatKey = (m: FeedMessage) => `${m.source}:${m.chatId}`;
+/** newest first: add one message, dropping its chat's oldest past the per-chat cap */
+function addMessage(list: FeedMessage[], msg: FeedMessage): FeedMessage[] {
+  const next = [msg, ...list];
+  const key = chatKey(msg);
+  let n = 0;
+  for (let i = 0; i < next.length; i++) {
+    if (chatKey(next[i]) === key && ++n > PER_CHAT) {
+      next.splice(i, 1);
+      break;
+    }
+  }
+  return next.length > MAX ? next.slice(0, MAX) : next;
+}
 
 export function useFeed() {
   /** newest first */
@@ -92,7 +108,7 @@ export function useFeed() {
           setRankings(ev.rankings ?? {});
           setMintJobs(ev.mintJobs ?? []);
         } else if (ev.type === 'message') {
-          setMessages((m) => [ev.msg, ...m].slice(0, MAX));
+          setMessages((m) => addMessage(m, ev.msg));
         } else if (ev.type === 'token') {
           setTokens((t) => ({ ...t, [ev.token.address]: ev.token }));
         } else if (ev.type === 'tokens') {

@@ -84,6 +84,8 @@ export interface Snapshot {
 }
 
 export interface HubOptions {
+  /** messages kept in all (default: ten per-chat caps, at least 4000) */
+  totalMessages?: number;
   retryDelaysMs?: number[];
   cove?: () => CoveOptions;
   /** which bot the buy links point at (default Cove) */
@@ -131,12 +133,18 @@ export class MessageHub extends EventEmitter {
   private botPolicy: () => BotPolicy;
   private favorites: () => string[];
 
+  /** messages kept in all: a safety net over the per-chat cap */
+  private total: number;
+  /** how many of the buffer each chat holds, by source:chatId */
+  private perChat = new Map<string, number>();
   constructor(
+    /** messages kept per chat: a busy chat never crowds a quiet one out, so every column in every layout has its recent history */
     private cap = 500,
     private fetcher?: TokenFetcher,
     opts: HubOptions = {},
   ) {
     super();
+    this.total = opts.totalMessages ?? Math.max(cap * 10, 4000);
     this.retryDelays = opts.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
     this.cove = opts.cove ?? (() => ({ amounts: [25, 50, 100] }));
     this.buyOpts = opts.buy ?? (() => ({ provider: 'cove' }));
@@ -271,12 +279,50 @@ export class MessageHub extends EventEmitter {
 
   // ---------- ingest ----------
 
+  private static chatKey(m: FeedMessage): string {
+    return `${m.source}:${m.chatId}`;
+  }
+  /** Count the new message for its chat; drop that chat's oldest past the per-chat cap, and the oldest of all past the total. */
+  private retain(msg: FeedMessage): void {
+    const key = MessageHub.chatKey(msg);
+    const n = (this.perChat.get(key) ?? 0) + 1;
+    this.perChat.set(key, n);
+    if (n > this.cap) {
+      const i = this.buffer.findIndex((m) => MessageHub.chatKey(m) === key);
+      if (i >= 0) this.drop(i);
+    }
+    while (this.buffer.length > this.total) this.drop(0);
+  }
+  private drop(i: number): void {
+    const [gone] = this.buffer.splice(i, 1);
+    if (!gone) return;
+    const key = MessageHub.chatKey(gone);
+    const left = (this.perChat.get(key) ?? 1) - 1;
+    if (left > 0) this.perChat.set(key, left);
+    else this.perChat.delete(key);
+  }
+  /** Rebuild the buffer under the caps, newest kept, after a snapshot load. */
+  private trimAll(): void {
+    const counts = new Map<string, number>();
+    const keep: FeedMessage[] = [];
+    for (let i = this.buffer.length - 1; i >= 0 && keep.length < this.total; i--) {
+      const m = this.buffer[i];
+      const key = MessageHub.chatKey(m);
+      const n = (counts.get(key) ?? 0) + 1;
+      if (n > this.cap) continue;
+      counts.set(key, n);
+      keep.push(m);
+    }
+    this.buffer = keep.reverse();
+    this.perChat = counts;
+  }
+
   push(msg: FeedMessage, meta?: ExtractedMeta): void {
     if (this.buffer.some((m) => m.id === msg.id)) return; // already have it (e.g. our own send echoed twice)
     msg.contracts = detectContracts(msg.text);
     this.register(msg, meta, true);
     this.buffer.push(msg);
-    if (this.buffer.length > this.cap) this.buffer.splice(0, this.buffer.length - this.cap);
+    this.retain(msg);
     this.emit('event', { type: 'message', msg } satisfies ServerEvent);
     this.trackMention(msg);
     this.changed();
@@ -680,7 +726,8 @@ export class MessageHub extends EventEmitter {
 
   load(snap: Snapshot | undefined, now = Date.now()): void {
     if (!snap || snap.version !== 1) return;
-    this.buffer = (snap.messages ?? []).slice(-this.cap);
+    this.buffer = snap.messages ?? [];
+    this.trimAll();
     for (const m of this.buffer) m.hidden = this.isHidden(m); // policy may have changed since the snapshot
     this.mentionList = [];
     for (const m of [...this.buffer].sort((a, b) => a.ts - b.ts)) if (m.mention) this.trackMention(m, false);
