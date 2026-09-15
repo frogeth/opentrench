@@ -11,7 +11,7 @@
  * separate self-bot session. It opens a WebSocket to the opentrench backend on
  * localhost and: tells it who you are, your servers, channels and roles; forwards
  * new messages, edits, deletes and reactions from watched channels; performs sends,
- * reactions and history reads on request with Discord's own client functions.
+ * reactions, history reads and slash commands on request with Discord's own client functions.
  * It never reads or transmits your token.
  */
 
@@ -23,10 +23,14 @@ import { findByPropsLazy, findLazy } from "@webpack";
 import { ChannelStore, Constants, FluxDispatcher, GuildChannelStore, GuildMemberStore, GuildRoleStore, GuildStore, RestAPI, SnowflakeUtils, UserStore } from "@webpack/common";
 
 const ReactionActions = findByPropsLazy("addReaction", "removeReaction");
+/** the gateway session this client is on; an interaction names it so the reply comes back here */
+const SessionInfo: any = findByPropsLazy("getSessionId");
+/** slash commands seen in searches, by id, so running one sends the full definition the way the client does */
+const commandCache = new Map<string, any>();
 /** Discord's upload class (the same one its own composer uses) */
 const CloudUpload: any = findLazy(m => m.prototype?.trackUploadFinished);
 
-const VERSION = 1;
+const VERSION = 2;
 
 const settings = definePluginSettings({
     port: {
@@ -108,6 +112,48 @@ const helloSoon = () => {
     helloTimer = setTimeout(hello, 1500);
 };
 
+/** the option tree of a slash command, trimmed to what opentrench needs to read arguments */
+function trimOptions(options: any): any[] | undefined {
+    if (!Array.isArray(options) || options.length === 0) return undefined;
+    return options.slice(0, 25).map((o: any) => ({
+        type: Number(o.type),
+        name: String(o.name),
+        description: o.description ? String(o.description) : undefined,
+        required: !!o.required,
+        choices: Array.isArray(o.choices) ? o.choices.slice(0, 25).map((c: any) => ({ name: String(c.name), value: c.value })) : undefined,
+        options: trimOptions(o.options),
+    }));
+}
+
+/** a server's (or the DMs') command index, kept five minutes: what the client's "/" menu is built from */
+const indexCache = new Map<string, { at: number; apps: Map<string, any>; commands: any[]; }>();
+
+/**
+ * The slash commands usable in a channel, from the same command index the client's own "/" menu
+ * reads (the older search endpoint answers empty these days). `query` narrows by name prefix.
+ */
+async function searchCommands(channelId: string, query: string): Promise<{ apps: Map<string, any>; commands: any[]; }> {
+    const ch: any = ChannelStore.getChannel(channelId);
+    const key = ch?.guild_id ? `guild:${ch.guild_id}` : "dm";
+    let hit = indexCache.get(key);
+    if (!hit || Date.now() - hit.at > 5 * 60_000) {
+        const url = ch?.guild_id ? `/guilds/${ch.guild_id}/application-command-index` : "/users/@me/application-command-index";
+        const res: any = await RestAPI.get({ url, retries: 1 });
+        const body = res?.body ?? {};
+        const apps = new Map<string, any>();
+        for (const a of body.applications ?? []) apps.set(String(a.id), a);
+        const commands: any[] = (body.application_commands ?? []).filter((c: any) => c && (c.type ?? 1) === 1);
+        for (const c of commands) commandCache.set(String(c.id), c);
+        if (commandCache.size > 5000) commandCache.clear();
+        if (indexCache.size > 50) indexCache.clear();
+        hit = { at: Date.now(), apps, commands };
+        indexCache.set(key, hit);
+    }
+    const q = query.toLowerCase();
+    const commands = (q ? hit.commands.filter(c => String(c.name).toLowerCase().startsWith(q)) : hit.commands).slice(0, 400);
+    return { apps: hit.apps, commands };
+}
+
 async function handleRequest(req: Json) {
     const { id, op } = req;
     try {
@@ -177,6 +223,53 @@ async function handleRequest(req: Json) {
                 for (const u of Object.values(users) as any[]) push(u, undefined, "Discord");
             }
             result = out;
+        } else if (op === "commands") {
+            const channelId = String(req.channelId);
+            const { apps, commands } = await searchCommands(channelId, String(req.query ?? "").trim());
+            result = commands.map(c => {
+                const app = apps.get(String(c.application_id));
+                return {
+                    id: String(c.id),
+                    applicationId: String(c.application_id),
+                    version: String(c.version),
+                    name: String(c.name),
+                    description: String(c.description ?? ""),
+                    options: trimOptions(c.options),
+                    app: app?.name ? String(app.name) : undefined,
+                    icon: app?.icon ? `https://cdn.discordapp.com/app-icons/${app.id}/${app.icon}.png?size=64` : undefined,
+                };
+            });
+        } else if (op === "command") {
+            // run a slash command: the interaction the client's own composer would send
+            const channelId = String(req.channelId);
+            const ch: any = ChannelStore.getChannel(channelId);
+            let cmd = commandCache.get(String(req.commandId));
+            if (!cmd) cmd = (await searchCommands(channelId, String(req.name ?? ""))).commands.find(c => String(c.id) === String(req.commandId));
+            if (!cmd) throw new Error("that command is not available here any more");
+            const sessionId = SessionInfo?.getSessionId?.();
+            if (!sessionId) throw new Error("no gateway session yet; is Discord connected?");
+            await RestAPI.post({
+                url: "/interactions",
+                body: {
+                    type: 2,
+                    application_id: String(cmd.application_id),
+                    guild_id: ch?.guild_id ? String(ch.guild_id) : undefined,
+                    channel_id: channelId,
+                    session_id: String(sessionId),
+                    data: {
+                        version: String(cmd.version),
+                        id: String(cmd.id),
+                        name: String(cmd.name),
+                        type: 1,
+                        options: Array.isArray(req.options) ? req.options : [],
+                        application_command: cmd,
+                        attachments: [],
+                    },
+                    nonce: SnowflakeUtils.fromTimestamp(Date.now()),
+                    analytics_location: "slash_ui",
+                },
+            });
+            result = true;
         } else if (op === "hello") {
             hello();
             result = true;

@@ -4,6 +4,7 @@ import { DiscordBridge, type DiscordChannel, type DiscordSelf } from './discord/
 import { DiscordGateway } from './discord/gateway.js';
 import { fetchChannelHistory } from './discord/rest.js';
 import { discordReaction, normalizeDiscord } from './discord/normalize.js';
+import { buildOptions, type SlashCommand } from './discord/slash.js';
 import { TelegramWrapper, type TelegramDialog } from './telegram/client.js';
 import { isWatched } from './telegram/ids.js';
 import { extractLinks, type ExtractedMeta } from './links.js';
@@ -18,6 +19,20 @@ import { CHAINS } from './opensea/chains.js';
 import { createLaunchWatcher } from './deploys.js';
 import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction } from './types.js';
+
+/** one row of the composer's "/" menu */
+export interface SlashMenuItem {
+  name: string;
+  description: string;
+  /** the bot or application it belongs to */
+  app?: string;
+  icon?: string;
+  /** what goes into the box when picked */
+  fill: string;
+  /** Discord: the command id; its options give the signature */
+  id?: string;
+  options?: import('./discord/slash.js').SlashOption[];
+}
 
 export class Services {
   /** the Vencord plugin inside the user's Discord client: reads and writes */
@@ -357,6 +372,50 @@ export class Services {
   botPress(bot: string, msgId: number, data: string) {
     if (!this.telegram) throw new Error('telegram not connected');
     return this.telegram.botPress(bot, msgId, data);
+  }
+
+  private discordCommandCache = new Map<string, { at: number; list: SlashCommand[] }>();
+  /**
+   * The "/" menu for a chat. Discord: the slash commands usable in that channel, found through the
+   * client's own search (cached five minutes per channel and prefix). Telegram: the commands every
+   * bot in the chat publishes. One shape for the composer: `fill` is what goes into the box.
+   */
+  async commands(source: 'discord' | 'telegram', chatId: string, q = ''): Promise<SlashMenuItem[]> {
+    const prefix = q.toLowerCase();
+    if (source === 'telegram') {
+      if (!this.telegram) throw new Error('telegram not connected');
+      const list = await this.telegram.chatCommands(chatId);
+      return list
+        .filter((c) => c.command.toLowerCase().startsWith(prefix))
+        .map((c) => ({ name: c.command, description: c.description, app: c.botName, fill: c.dm || !c.bot ? `/${c.command}` : `/${c.command}@${c.bot}` }));
+    }
+    const list = await this.discordCommands(chatId, prefix);
+    return list.map((c) => ({ name: c.name, description: c.description, app: c.app, icon: c.icon, fill: `/${c.name}`, id: c.id, options: c.options }));
+  }
+  private async discordCommands(chatId: string, prefix: string): Promise<SlashCommand[]> {
+    const key = `${chatId}\u0000${prefix}`;
+    const hit = this.discordCommandCache.get(key);
+    if (hit && Date.now() - hit.at < 5 * 60_000) return hit.list;
+    this.requireBridge();
+    const raw: any = await this.discord.request('commands', { channelId: chatId, query: prefix });
+    const list: SlashCommand[] = (Array.isArray(raw) ? raw : [])
+      .filter((c) => c && typeof c.id === 'string' && typeof c.name === 'string')
+      .map((c) => ({ id: String(c.id), applicationId: String(c.applicationId ?? ''), version: String(c.version ?? ''), name: String(c.name), description: String(c.description ?? ''), options: Array.isArray(c.options) ? c.options : undefined, app: c.app ? String(c.app) : undefined, icon: c.icon ? String(c.icon) : undefined }));
+    if (this.discordCommandCache.size > 500) this.discordCommandCache.clear();
+    this.discordCommandCache.set(key, { at: Date.now(), list });
+    return list;
+  }
+  /**
+   * Run a Discord slash command typed as text: `/name` plus positional arguments. The command is
+   * looked up by name in that channel, the arguments mapped onto its options, and the client
+   * sends the interaction the way its own composer would.
+   */
+  async runCommand(chatId: string, name: string, args: string): Promise<void> {
+    const lower = name.toLowerCase();
+    const found = (await this.discordCommands(chatId, lower)).find((c) => c.name.toLowerCase() === lower);
+    if (!found) throw new Error(`no /${name} command here`);
+    const options = buildOptions(found.options, args);
+    await this.discord.request('command', { channelId: chatId, commandId: found.id, applicationId: found.applicationId, version: found.version, name: found.name, options });
   }
 
   /** Compose a message as the user. Sending must be enabled per platform in config; the API checks that. */

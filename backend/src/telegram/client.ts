@@ -378,6 +378,50 @@ export class TelegramWrapper extends EventEmitter {
     );
   }
 
+  private chatCommandsCache = new Map<string, { at: number; list: { command: string; description: string; bot: string; botName: string; dm: boolean }[] }>();
+  /**
+   * The slash commands of every bot in a chat (a Telegram client's "/" menu): the chat's full info
+   * lists each bot's BotInfo with its commands. Cached ten minutes. `dm` says the chat is the bot
+   * itself, where a bare `/cmd` is enough; in a group `/cmd@bot` is unambiguous.
+   */
+  async chatCommands(chatId: string): Promise<{ command: string; description: string; bot: string; botName: string; dm: boolean }[]> {
+    if (!this.client || this.state !== 'connected') throw new Error('telegram not connected');
+    const hit = this.chatCommandsCache.get(chatId);
+    if (hit && Date.now() - hit.at < 10 * 60_000) return hit.list;
+    const peer: any = await this.client.getInputEntity(bigInt(chatId));
+    let infos: any[] = [];
+    let users: any[] = [];
+    let dm = false;
+    if (peer instanceof Api.InputPeerChannel) {
+      const r: any = await this.client.invoke(new Api.channels.GetFullChannel({ channel: peer }));
+      infos = r?.fullChat?.botInfo ?? [];
+      users = r?.users ?? [];
+    } else if (peer instanceof Api.InputPeerChat) {
+      const r: any = await this.client.invoke(new Api.messages.GetFullChat({ chatId: peer.chatId }));
+      infos = r?.fullChat?.botInfo ?? [];
+      users = r?.users ?? [];
+    } else if (peer instanceof Api.InputPeerUser) {
+      const r: any = await this.client.invoke(new Api.users.GetFullUser({ id: peer }));
+      infos = r?.fullUser?.botInfo ? [r.fullUser.botInfo] : [];
+      users = r?.users ?? [];
+      dm = true;
+    }
+    const list: { command: string; description: string; bot: string; botName: string; dm: boolean }[] = [];
+    for (const info of infos) {
+      const uid = info?.userId?.toString?.() ?? (dm ? peer.userId?.toString?.() : undefined);
+      const u = users.find((x: any) => x?.id?.toString?.() === uid);
+      // a collectible username lives in `usernames` with `username` empty
+      const bot = String(u?.username ?? u?.usernames?.find((n: any) => n?.active)?.username ?? u?.usernames?.[0]?.username ?? '');
+      const botName = String(u?.firstName ?? u?.username ?? 'bot');
+      for (const c of info?.commands ?? []) {
+        if (!c || typeof c.command !== 'string') continue;
+        list.push({ command: String(c.command).replace(/^\//, '').slice(0, 64), description: String(c.description ?? '').slice(0, 200), bot, botName, dm });
+      }
+    }
+    this.chatCommandsCache.set(chatId, { at: Date.now(), list: list.slice(0, 300) });
+    return list;
+  }
+
   private botCommandsCache = new Map<string, { at: number; list: { command: string; description: string }[] }>();
   /** The slash commands a bot publishes (what Telegram shows when you type "/"), cached ten minutes. */
   async botCommands(username: string): Promise<{ command: string; description: string }[]> {

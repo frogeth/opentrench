@@ -171,6 +171,26 @@ export interface TelegramDialog {
   type: 'group' | 'channel' | 'dm';
 }
 
+/** one row of a composer's "/" menu (backend SlashMenuItem) */
+export interface SlashItem {
+  name: string;
+  description: string;
+  app?: string;
+  icon?: string;
+  /** what goes into the box when picked */
+  fill: string;
+  id?: string;
+  options?: SlashOption[];
+}
+export interface SlashOption {
+  type: number;
+  name: string;
+  description?: string;
+  required?: boolean;
+  choices?: { name: string; value: string | number }[];
+  options?: SlashOption[];
+}
+
 export const api = {
   config: () => req<MaskedConfig>('GET', '/config'),
   discordChannels: () => req<DiscordChannel[]>('GET', '/discord/channels'),
@@ -220,6 +240,10 @@ export const api = {
   botHistory: (bot: string) => req<import('./types').BotMessage[]>('GET', `/bot/${encodeURIComponent(bot)}/history`),
   botStart: (bot: string, payload: string) => req<{ ok: true }>('POST', `/bot/${encodeURIComponent(bot)}/start`, { payload }),
   botSend: (bot: string, text: string) => req<{ ok: true }>('POST', `/bot/${encodeURIComponent(bot)}/send`, { text }),
+  /** the "/" menu for a chat in the feed: Discord slash commands or the bots' commands in a Telegram chat */
+  commands: (source: 'discord' | 'telegram', chatId: string, q = '') => req<SlashItem[]>('GET', `/commands/${source}/${encodeURIComponent(chatId)}?q=${encodeURIComponent(q)}`),
+  /** run a Discord slash command typed as text */
+  runCommand: (chatId: string, name: string, args: string) => req<{ ok: true }>('POST', '/commands/run', { chatId, name, args }),
   /** the bot's published slash commands */
   botCommands: (bot: string) => req<{ command: string; description: string }[]>('GET', `/bot/${encodeURIComponent(bot)}/commands`),
   botPress: (bot: string, msgId: number, data: string) => req<{ message?: string; alert?: boolean; url?: string; gone?: boolean }>('POST', `/bot/${encodeURIComponent(bot)}/press`, { msgId, data }),

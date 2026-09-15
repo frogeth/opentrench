@@ -3,6 +3,7 @@ import type { FeedMessage, Source } from '../types';
 import { api } from '../api';
 import { Logo } from './Logo';
 import { Icon } from './Icon';
+import { commandIn, signature, useSlashMenu } from './SlashMenu';
 
 export interface SendTarget {
   id: string;
@@ -72,13 +73,51 @@ export function Composer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targets, targetId]);
 
-  if (targets.length === 0) return null;
   const enabled = !!target && canSend[target.source];
+  // "/" lists what this chat offers: Discord slash commands, or the commands of the bots in a Telegram chat
+  const slash = useSlashMenu({
+    text,
+    setText,
+    cacheKey: target ? `${target.source}:${target.id}` : '',
+    enabled: enabled && !reply,
+    load: (q) => (target ? api.commands(target.source, target.id, q) : Promise.resolve([])),
+    onPick: (item) => void runOrSend(item.fill),
+  });
+  const typed = target?.source === 'discord' ? commandIn(text) : undefined;
+  const typedCmd = typed ? slash.known(typed.name) : undefined;
+
+  if (targets.length === 0) return null;
   const max = target?.source === 'discord' ? 2000 : 4096;
 
+  /** a Discord `/command args` runs as a slash command; anything else is a message */
+  const runOrSend = async (body: string) => {
+    if (!target || busy || !enabled) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const cmd = target.source === 'discord' ? commandIn(body) : undefined;
+      if (cmd && !reply) {
+        try {
+          await api.runCommand(target.id, cmd.name, cmd.args);
+        } catch (e: any) {
+          // no such command here: Discord itself would post it as text, so do the same
+          if (!/^no \//.test(String(e?.message ?? ''))) throw e;
+          await api.send(target.source, target.id, body);
+        }
+      } else await api.send(target.source, target.id, body);
+      setText('');
+      onSent?.();
+    } catch (e: any) {
+      setErr(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+      box.current?.focus();
+    }
+  };
   const send = async () => {
     const body = text.trim();
     if (!target || (!body && files.length === 0) || busy || !enabled) return;
+    if (files.length === 0 && !reply && target.source === 'discord' && commandIn(body)) return runOrSend(body);
     setBusy(true);
     setErr(null);
     try {
@@ -168,6 +207,7 @@ export function Composer({
           }}
           onDragOver={(e) => e.preventDefault()}
           onKeyDown={(e) => {
+            if (slash.onKeyDown(e)) return;
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               void send();
@@ -175,12 +215,21 @@ export function Composer({
             if (e.key === 'Escape' && reply) onCancelReply();
           }}
         />
+        {slash.menu}
         <button className="composer-send" disabled={!enabled || busy || (!text.trim() && files.length === 0)} onClick={() => void send()} title="send (Enter)">
           <Icon name="send" size={14} />
         </button>
       </div>
       <div className="composer-foot">
-        {target?.source === 'discord' && enabled && <span className="composer-warn">sending as your Discord account (self-bot)</span>}
+        {typedCmd ? (
+          <span className="cmd-sig" title={typedCmd.description}>
+            <b>{signature(typedCmd)}</b>
+            {typedCmd.app && <span className="muted"> · {typedCmd.app}</span>}
+            {typedCmd.description && <span className="muted"> · {typedCmd.description}</span>}
+          </span>
+        ) : (
+          target?.source === 'discord' && enabled && <span className="composer-warn">sending as your Discord account (self-bot)</span>
+        )}
         {text.length > max * 0.8 && (
           <span className={text.length >= max ? 'err' : 'muted'}>
             {text.length}/{max}

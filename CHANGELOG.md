@@ -7,7 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
-- Bot columns (Cove, Salpha, any Telegram bot): type "/" and the bot's own commands appear above the box, the way Telegram shows them. Arrows to move, Enter or a click to send, Tab to fill it in and add arguments. (Suggested on Discord.)
+- Type "/" in any composer and the commands that chat offers appear above the box, the way Discord and Telegram show them. Arrows to move, Enter or a click to send, Tab to fill it in and add arguments, Escape to clear. Discord channels list the server's slash commands (through the plugin, so this needs the Discord setup redone or the next app update); typed as `/chart pepe` they run as real slash commands, with the command's arguments in order. Telegram chats list every bot's commands and send `/cmd@bot` so the right bot answers. Bot columns (Cove, Salpha…) list their bot's commands. (Suggested on Discord.)
 
 - Chat rows: the reply, react and ⋯ buttons are always visible now (faint, full on hover) instead of appearing only when the mouse is over the row.
 

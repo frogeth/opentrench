@@ -477,6 +477,39 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { canSend: enabled };
     }),
   );
+  // the "/" menu for a chat in the feed, and running a Discord slash command typed as text
+  r.get(
+    '/commands/:source/:chatId',
+    wrap(async (req) => {
+      const source = req.params.source === 'telegram' ? 'telegram' : 'discord';
+      const chatId = String(req.params.chatId ?? '').trim();
+      const q = String(req.query.q ?? '')
+        .trim()
+        .slice(0, 32);
+      const c = cfg.get();
+      const watched = source === 'discord' ? c.discord.watch : c.telegram.watch;
+      if (!watched.includes(chatId)) throw new Error('not a chat in your feed');
+      return svc.commands(source, chatId, q);
+    }),
+  );
+  r.post(
+    '/commands/run',
+    wrap(async (req) => {
+      const chatId = String(req.body?.chatId ?? '').trim();
+      const name = String(req.body?.name ?? '').trim().replace(/^\//, '');
+      const args = String(req.body?.args ?? '').trim();
+      if (!chatId || !/^[\w-]{1,32}$/.test(name)) throw new Error('chat and command required');
+      const c = cfg.get();
+      if (!c.discord.send) throw new Error('sending on Discord is off (Settings → Accounts)');
+      if (!c.discord.watch.includes(chatId)) throw new Error('you can only send to chats in your feed');
+      const key = `discord:${chatId}`;
+      const last = lastSend.get(key) ?? 0;
+      if (Date.now() - last < 1000) throw new Error('slow down — one message per second per chat');
+      lastSend.set(key, Date.now());
+      await svc.runCommand(chatId, name, args);
+      return { ok: true };
+    }),
+  );
   r.post(
     '/send',
     wrap(async (req) => {

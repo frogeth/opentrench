@@ -970,13 +970,16 @@ button.share { cursor: pointer; }
 .bkey-url { color: #4ea3ff; }
 .cove-toast { margin: 0 12px 6px; padding: 6px 10px; background: rgba(65, 200, 146, 0.14); border: 1px solid rgba(65, 200, 146, 0.4); border-radius: 8px; font-size: 12px; }
 .cove-composer { border-top: 1px solid var(--line); }
-.cove-composer .composer-row { position: relative; }
+.composer-row { position: relative; }
 /* "/" command suggestions above the bot composer */
 .cmd-list { position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 6px; background: var(--panel); border: 1px solid var(--line-2, var(--line)); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); overflow: hidden; z-index: 20; display: flex; flex-direction: column; }
 .cmd-rows { overflow-y: auto; max-height: 220px; }
 .cmd { display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left; background: none; border: none; color: var(--text); padding: 7px 12px; cursor: pointer; font-size: 13px; }
 .cmd b { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
-.cmd span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
+.cmd img { width: 16px; height: 16px; border-radius: 4px; align-self: center; flex: none; }
+.cmd i { font-style: normal; color: var(--dim); font-size: 11px; flex: none; margin-left: auto; padding-left: 8px; }
+.cmd-sig b { font-family: var(--mono); font-weight: 600; }
 .cmd.on, .cmd:hover { background: var(--hover); }
 .cmd.on b { color: var(--accent); }
 .cmd-hint { padding: 4px 12px 6px; font-size: 10px; color: var(--dim); border-top: 1px solid var(--line); }
