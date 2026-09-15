@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.8.15 — 2026-09-15
+
 - Every text box, select and textarea in the app shares one style; the add-column button sits in the bottom-right corner, the same distance in as the Pings pill.
 - Secrets at rest, everywhere: a backend run from the repo (`npm start`, or the checkout the desktop app attaches to) used to keep the wallet key, Telegram session and API tokens in plain text in config.json, since only the app's own backend got a sealing key. It now keeps a key of its own in the OS keychain (macOS login keychain, Linux Secret Service, Windows DPAPI) and seals the file on the next start. Nothing changes for the desktop app's own backend.
 - The OpenSea Mint column is a guided mint, not a chat: Drop › Amount › Mint across the top; the drop as one panel (supply, floor, schedule, your wallet with a face drawn from its address and what it can still mint); then "How many?" with a stepper capped at your remaining allowance, which quotes the price for that amount; then one button in the foot for the state the mint is in (Mint, Mint when it opens, Look up again). The paste box lives in the foot. Queue and history fold into one line each. Laid out so several wallets slot in later.
