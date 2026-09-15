@@ -112,8 +112,8 @@ export function webpagePreview(media: any, imageUrl: string): LinkPreview | unde
  */
 /**
  * The same text for Discord, which has its own markdown: bold, italic, underline, strike,
- * spoilers, code, quotes. Discord does not render masked links in a person's message, so a
- * text link becomes "text (url)" and a bare url stays as it is.
+ * spoilers, code, quotes, and [text](url) links. Links are wrapped in <> so a report with a
+ * dozen of them does not unfurl into a dozen previews; a lone bare link keeps its preview.
  */
 export function entitiesToDiscord(text: string, entities: any[] | undefined): string {
   if (!entities?.length || !text) return text;
@@ -124,10 +124,16 @@ export function entitiesToDiscord(text: string, entities: any[] | undefined): st
     const inner = text.slice(start, end);
     switch (e.className) {
       case 'MessageEntityTextUrl': {
+        // Discord renders [text](url) for anyone now; <url> keeps it from unfurling
         const url = String(e.url ?? '');
-        if (url && inner.trim() !== url) wrap.push({ start, end, open: '', close: ` (${url})` });
+        if (url && inner.trim() !== url) wrap.push({ start, end, open: '[', close: `](<${url}>)` });
+        else if (url) wrap.push({ start, end, open: '<', close: '>' });
         break;
       }
+      case 'MessageEntityUrl':
+        // a bare link keeps its preview when it is the only one; several would spam the channel
+        if (entities.filter((x) => x?.className === 'MessageEntityUrl' || x?.className === 'MessageEntityTextUrl').length > 1) wrap.push({ start, end, open: '<', close: '>' });
+        break;
       case 'MessageEntityBold':
         wrap.push({ start, end, open: '**', close: '**' });
         break;

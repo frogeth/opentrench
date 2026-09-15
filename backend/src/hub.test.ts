@@ -409,6 +409,29 @@ describe('MessageHub', () => {
     expect(listed?.before.map((m) => m.id)).toEqual(['discord:2']);
   });
 
+  it('a bot answering a call in the same chat is an echo, not a caller; a bot posting first is the call', () => {
+    const shown = { default: 'show', allow: [], calls: 'all', pings: 'none', pingAllow: [] } as any;
+    const hub = new MessageHub(500, undefined, { bots: () => shown });
+    hub.push(msg(1, EVM, { author: 'alice', chatId: 'a', chatName: '#a' }));
+    hub.push(msg(2, `scan ${EVM}`, { author: 'Rick', isBot: true, chatId: 'a', chatName: '#a' }));
+    hub.push(msg(3, EVM, { author: 'bob', chatId: 'a', chatName: '#a' }));
+    expect(hub.getToken(EVM)!.calls.map((c) => c.author)).toEqual(['alice', 'bob']);
+    hub.push(msg(4, SOL, { author: 'AlertBot', isBot: true, chatId: 'b', chatName: '#b' }));
+    hub.push(msg(5, SOL, { author: 'carol', chatId: 'b', chatName: '#b' }));
+    expect(hub.getToken(SOL)!.calls.map((c) => c.author)).toEqual(['AlertBot', 'carol']);
+    // a snapshot from before the rule loses the echoes it had counted
+    const snap = hub.snapshot();
+    snap.botFix = 0;
+    const t = snap.tokens.find((x) => x.address === EVM)!;
+    t.calls.splice(1, 0, { author: 'Rick', chatName: '#a', source: 'discord', msgId: 'discord:2', ts: 2 });
+    t.seen = 3;
+    const again = new MessageHub(500, undefined, { bots: () => shown });
+    again.load(snap);
+    expect(again.getToken(EVM)!.calls.map((c) => c.author)).toEqual(['alice', 'bob']);
+    expect(again.getToken(EVM)!.seen).toBe(2);
+    expect(again.getToken(SOL)!.calls.map((c) => c.author)).toEqual(['AlertBot', 'carol']);
+  });
+
   it('updates market numbers and tracks ATH', () => {
     const hub = new MessageHub(500);
     hub.push(msg(1, EVM));

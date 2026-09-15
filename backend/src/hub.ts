@@ -32,6 +32,7 @@ import type {
   TokenInfo,
   Mention,
   PersonSeen,
+  CallRecord,
 } from './types.js';
 
 /** Identifies this server process; the UI reloads when it changes so a restart with a new build never leaves stale assets. */
@@ -81,6 +82,8 @@ export interface Snapshot {
   mintJobs?: MintJob[];
   /** 2 once the quote-side candle repair (backfill.ts) has run over this state */
   candleFix?: number;
+  /** 1 once bot echoes were dropped from the calls (a bot answering a call in the same chat had counted as a caller) */
+  botFix?: number;
 }
 
 export interface HubOptions {
@@ -214,7 +217,9 @@ export class MessageHub extends EventEmitter {
    */
   applyRemoteToken(peer: string, incoming: TokenInfo): void {
     if (!incoming || typeof incoming.address !== 'string' || !Array.isArray(incoming.calls)) return;
-    const calls = incoming.calls.filter((c) => c && typeof c.msgId === 'string' && typeof c.chatName === 'string' && Number.isFinite(c.ts)).slice(-MAX_CALLS);
+    const sane = incoming.calls.filter((c) => c && typeof c.msgId === 'string' && typeof c.chatName === 'string' && Number.isFinite(c.ts));
+    // a friend on an older build may still count a bot's echo of a call in the same chat as a caller
+    const calls = sane.filter((c) => !c.bot || !sane.some((x) => x !== c && !x.bot && x.source === c.source && x.chatName === c.chatName && x.ts <= c.ts)).slice(-MAX_CALLS);
     let t = this.tokens.get(incoming.address);
     const fresh = !t;
     if (!t) {
@@ -552,7 +557,10 @@ export class MessageHub extends EventEmitter {
         t.seen = chats.size;
       }
       const already = t.calls.some((x) => x.msgId === msg.id);
-      if (!blocked && !chats.has(key) && !already) {
+      // a bot (Rick, Phanes, TokenScan…) answering a contract someone already posted in that chat is an
+      // echo of that call, not a caller; a bot that posts first (an alert bot) is the call
+      const echoed = msg.isBot && t.calls.some((x) => x.source === msg.source && x.chatName === msg.chatName);
+      if (!blocked && !echoed && !chats.has(key) && !already) {
         chats.add(key);
         t.seen = chats.size;
         if (!t.calledIn.includes(msg.chatName)) t.calledIn.push(msg.chatName);
@@ -566,6 +574,7 @@ export class MessageHub extends EventEmitter {
           link: msg.link,
           ts: msg.ts,
           marketCap: t.marketCap,
+          ...(msg.isBot ? { bot: true as const } : {}),
         });
         if (t.calls.length > MAX_CALLS) t.calls.splice(0, t.calls.length - MAX_CALLS);
         anyNew = true;
@@ -718,12 +727,47 @@ export class MessageHub extends EventEmitter {
     t.buy = buildCoveLinks(network, t.address, this.cove());
   }
 
+  /**
+   * One-time repair: calls by a bot in a chat where a person had called the same token are echoes
+   * (the rule above, applied to what was counted before it existed). Bots are the authors the
+   * buffer shows posting as bots.
+   */
+  private dropBotEchoes(): number {
+    const bots = new Set<string>();
+    for (const m of this.buffer) if (m.isBot) bots.add(`${m.source}|${normAuthor(m.author)}`);
+    if (bots.size === 0) return 0;
+    let dropped = 0;
+    for (const t of this.tokens.values()) {
+      const keep = t.calls.filter((c) => {
+        const bot = bots.has(`${c.source}|${normAuthor(c.author)}`);
+        if (!bot) return true;
+        // an echo answers a person's earlier call; a bot that called first (an alert bot) stays
+        const human = t.calls.some((x) => x !== c && x.source === c.source && x.chatName === c.chatName && x.ts <= c.ts && !bots.has(`${x.source}|${normAuthor(x.author)}`));
+        return !human;
+      });
+      if (keep.length === t.calls.length) continue;
+      dropped += t.calls.length - keep.length;
+      const chats = this.tokenChats.get(t.address);
+      for (const c of t.calls) if (!keep.includes(c)) chats?.delete(callKey(this.chatIdFor(c) ?? '', c.author));
+      t.calls = keep;
+      t.seen = chats?.size ?? keep.length;
+      t.calledIn = [...new Set(keep.map((c) => c.chatName))];
+      if (keep[0] && t.firstCaller?.msgId !== keep[0].msgId) t.firstCaller = { ...keep[0] };
+    }
+    return dropped;
+  }
+  /** the chat id a call was made in, from the buffer (calls carry the chat's name only) */
+  private chatIdFor(c: CallRecord): string | undefined {
+    return this.buffer.find((m) => m.id === c.msgId)?.chatId ?? this.buffer.find((m) => m.source === c.source && m.chatName === c.chatName)?.chatId;
+  }
+
   // ---------- persistence ----------
 
   snapshot(): Snapshot {
     return {
       version: 1,
       candleFix: 2,
+      botFix: 1,
       messages: this.buffer,
       tokens: [...this.tokens.values()],
       tokenChats: Object.fromEntries([...this.tokenChats].map(([a, s]) => [a, [...s]])),
@@ -749,6 +793,10 @@ export class MessageHub extends EventEmitter {
     if ((snap.candleFix ?? 0) < 2) {
       const r = repairCandleMarketCaps([...this.tokens.values()]);
       if (r.reset) console.warn(`[backfill] repair: ${r.reset} candle-derived call market cap(s) sent back for re-reading with the right token side, ${r.dropped} dropped as nonsense`);
+    }
+    if ((snap.botFix ?? 0) < 1) {
+      const n = this.dropBotEchoes();
+      if (n) console.warn(`[hub] repair: ${n} bot echo(es) dropped from the calls (a bot answering a call had counted as a caller)`);
     }
     this.restoredMintJobs = (snap.mintJobs ?? []).filter((j) => j && typeof j.id === 'string' && !!j.txHash);
     for (const t of this.tokens.values()) {

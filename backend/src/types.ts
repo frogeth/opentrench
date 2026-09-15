@@ -152,6 +152,8 @@ export interface CallRecord {
   marketCap?: number;
   /** set once the backfill ran: 'candle' = read from the 1-minute candle of the call's minute (exact), 'cached' = no candle for that minute, the registration number stays */
   mcSource?: 'candle' | 'cached' | 'scan';
+  /** posted by a bot (an alert bot that called first); a friend's copy uses it to drop bot echoes */
+  bot?: true;
 }
 
 /** Holder security from GoPlus (EVM) or RugCheck (Solana). Percentages are 0..100. */
