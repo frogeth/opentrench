@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import type { MintJob } from '../types';
 import { api } from '../api';
 import { copyText } from '../format';
@@ -97,41 +97,73 @@ function DropInfo({ j, now }: { j: MintJob; now: number }) {
   );
 }
 
-function JobCard({ j, now, onSend, sending, onDismiss, onRequote, onArm }: { j: MintJob; now: number; onSend: (id: string) => void; sending: boolean; onDismiss?: (id: string) => void; onRequote?: (j: MintJob) => void; onArm?: (id: string, on: boolean) => void }) {
-  const sym = j.price?.symbol ?? 'ETH';
+const STATE_LABEL: Record<MintJob['state'], string> = { quoting: 'Quoting…', waiting: 'Waiting', ready: 'Ready to mint', sending: 'Sending', pending: 'In flight', confirmed: 'Minted', failed: 'Failed' };
+const isExpired = (j: MintJob, now: number) => j.state === 'ready' && now - j.ts > 120_000;
+const txUrl = (j: MintJob) => (j.txHash && EXPLORER[j.collection.chain] ? `${EXPLORER[j.collection.chain]}${j.txHash}` : undefined);
+/** one line that says where a job stands, for the queue and history rows */
+const statusLine = (j: MintJob, now: number): string => {
+  switch (j.state) {
+    case 'waiting':
+      return `${j.armed ? 'armed · ' : ''}${stageLabel(j.waitFor?.type ?? 'stage')} opens in ${countdown(j.waitFor?.startTime, now)}`;
+    case 'pending':
+      return j.error ? 'in flight · still watching' : 'in flight';
+    case 'confirmed':
+      return `minted${j.tokenIds?.length ? ` #${j.tokenIds.join(', #')}` : ''}${j.price ? ` for ${eth(j.price.totalWei, j.price.symbol)}` : ''}`;
+    case 'failed':
+      return j.error ?? 'failed';
+    case 'ready':
+      return isExpired(j, now) ? 'quote expired' : 'quoted, ready to mint';
+    default:
+      return STATE_LABEL[j.state];
+  }
+};
+
+/** A two-step button: the first click asks, the second (a real pointer click within five seconds) does it. */
+function useConfirm(resetKeys: unknown[]) {
   const [confirming, setConfirming] = useState(false);
-  const confirmTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(confirmTimer.current), []);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
   // a fresh quote/state transition retracts a stale confirmation prompt
-  useEffect(() => setConfirming(false), [j.state, j.id]);
-  const [arming, setArming] = useState(false);
-  useEffect(() => setArming(false), [j.state, j.id, j.armed?.at]);
-  const head = j.state === 'quoting' ? '… Quoting' : j.state === 'waiting' ? `⏱ ${j.armed ? 'Armed' : 'Waiting'} · ${stageLabel(j.waitFor?.type ?? 'stage')} opens in ${countdown(j.waitFor?.startTime, now)}` : j.state === 'ready' ? '◎ Ready to mint' : j.state === 'sending' ? '⏳ Sending' : j.state === 'pending' ? (j.error ? '🔵 Pending · watching' : '🔵 Pending') : j.state === 'confirmed' ? '✓ Mint confirmed' : '✗ Mint failed';
-  const tx = j.txHash && EXPLORER[j.collection.chain] ? `${EXPLORER[j.collection.chain]}${j.txHash}` : undefined;
-  const expired = j.state === 'ready' && now - j.ts > 120_000;
-  const clickMint = (e: MouseEvent) => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setConfirming(false), resetKeys);
+  const click = (e: MouseEvent, go: () => void) => {
     // the confirm step must be a real pointer click (detail > 0); a synthetic/keyboard-dispatched
     // click (e.g. a stray Enter bubbling to a focused button) has detail === 0 and is ignored here
     if (confirming && e.detail === 0) return;
     if (!confirming) {
       setConfirming(true);
-      window.clearTimeout(confirmTimer.current);
-      confirmTimer.current = window.setTimeout(() => setConfirming(false), 5000);
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => setConfirming(false), 5000);
       return;
     }
-    window.clearTimeout(confirmTimer.current);
+    window.clearTimeout(timer.current);
     setConfirming(false);
-    onSend(j.id);
+    go();
   };
+  return { confirming, click };
+}
+
+/** The drop being looked at: everything OpenSea's mint page shows, and the one action that fits its state. */
+function DropPanel({ j, now, onSend, sending, onDismiss, onRequote, onArm }: { j: MintJob; now: number; onSend: (id: string) => void; sending: boolean; onDismiss: (id: string) => void; onRequote: (j: MintJob) => void; onArm: (id: string, on: boolean) => void }) {
+  const sym = j.price?.symbol ?? 'ETH';
+  const mint = useConfirm([j.state, j.id]);
+  const arm = useConfirm([j.state, j.id, j.armed?.at]);
+  const expired = isExpired(j, now);
+  const tx = txUrl(j);
+  const badge =
+    j.state === 'waiting' ? `⏱ ${j.armed ? 'Armed' : 'Waiting'} · ${stageLabel(j.waitFor?.type ?? 'stage')} opens in ${countdown(j.waitFor?.startTime, now)}` : j.state === 'ready' ? (expired ? 'Quote expired' : '◎ Ready to mint') : j.state === 'confirmed' ? '✓ Minted' : j.state === 'failed' ? '✗ ' + (j.txHash ? 'Mint failed' : 'Not mintable') : STATE_LABEL[j.state];
   return (
-    <div className={`bmsg osj osj-${j.state}`}>
-      <div className="osj-head"><b>{head}</b><span className="muted">{new Date(j.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></div>
-      <div className="osj-col">
+    <div className={`osm-panel osj-${j.state}${expired ? ' osj-expired' : ''}`}>
+      <div className="osm-panel-head">
         {j.collection.image && <img src={j.collection.image} alt="" />}
-        <div>
-          <b>{j.collection.name}</b> <span className="muted">· {j.collection.chain}</span>
-          {j.stage && <div className="muted">{stageLabel(j.stage.type)} stage{j.stage.endTime ? ` · ends in ${until(j.stage.endTime, now)}` : ''}{j.stage.maxPerWallet !== undefined ? ` · ${j.stage.alreadyMinted ?? 0}/${j.stage.maxPerWallet} per wallet` : ''}</div>}
+        <div className="osm-panel-title">
+          <b>{j.collection.name}</b>
+          <span className="muted">
+            {j.collection.chain}
+            {j.stage ? ` · ${stageLabel(j.stage.type)} stage${j.stage.maxPerWallet !== undefined ? ` · ${j.stage.alreadyMinted ?? 0}/${j.stage.maxPerWallet} per wallet` : ''}` : ''}
+          </span>
         </div>
+        <span className={`osm-badge osm-badge-${j.state}`}>{badge}</span>
       </div>
       <DropInfo j={j} now={now} />
       {j.price && (
@@ -149,46 +181,59 @@ function JobCard({ j, now, onSend, sending, onDismiss, onRequote, onArm }: { j: 
       {(j.state === 'waiting' || j.state === 'ready') && j.note && <div className="osj-note">{j.note}</div>}
       {j.state === 'waiting' && !j.note && <div className="osj-note muted">{j.armed ? `Sends by itself the moment the stage opens, at up to ${eth(j.price?.totalWei, sym)} plus gas under the ${j.collection.chain} ceiling. No click needed.` : 'Quotes itself again the moment the stage opens and pings you. Arm it to mint without a click.'}</div>}
       {j.state === 'failed' && j.error && <div className="osj-err">{j.error}</div>}
-      <div className="bkeys"><div className="bkey-row">
-        {j.state === 'ready' && (expired ? (
-          <span className="muted">Quote expired — quote again</span>
-        ) : (
-          <button className={`bkey ${confirming ? 'osj-confirm' : 'osj-mint'}`} disabled={sending} onClick={clickMint}>
-            {confirming ? `Confirm: send ${eth(j.price?.totalWei, sym)} from ${short(j.wallet)}?` : `Mint ${j.quantity} for ${eth(j.price?.totalWei, sym)}`}
-          </button>
-        ))}
-        {j.state === 'waiting' && onArm && !j.armed && (
-          <button
-            className={`bkey ${arming ? 'osj-confirm' : 'osj-mint'}`}
-            disabled={!j.price}
-            title={j.price ? 'send this mint automatically when the stage opens' : 'OpenSea has not shown a price for that stage yet'}
-            onClick={(e) => {
-              if (arming && e.detail === 0) return;
-              if (!arming) return setArming(true);
-              setArming(false);
-              onArm(j.id, true);
-            }}
-          >
-            {arming ? `Confirm: auto-mint ${j.quantity} for ${eth(j.price?.totalWei, sym)} from ${short(j.wallet)} when it opens?` : 'Mint when it opens'}
+      <div className="osm-actions">
+        {j.state === 'ready' && !expired && (
+          <button className={`bkey ${mint.confirming ? 'osj-confirm' : 'osj-mint'}`} disabled={sending} onClick={(e) => mint.click(e, () => onSend(j.id))}>
+            {mint.confirming ? `Confirm: send ${eth(j.price?.totalWei, sym)} from ${short(j.wallet)}?` : `Mint ${j.quantity} for ${eth(j.price?.totalWei, sym)}`}
           </button>
         )}
-        {j.state === 'waiting' && onArm && j.armed && (
+        {j.state === 'waiting' && !j.armed && (
+          <button className={`bkey ${arm.confirming ? 'osj-confirm' : 'osj-mint'}`} disabled={!j.price} title={j.price ? 'send this mint automatically when the stage opens' : 'OpenSea has not shown a price for that stage yet'} onClick={(e) => arm.click(e, () => onArm(j.id, true))}>
+            {arm.confirming ? `Confirm: auto-mint ${j.quantity} for ${eth(j.price?.totalWei, sym)} from ${short(j.wallet)} when it opens?` : 'Mint when it opens'}
+          </button>
+        )}
+        {j.state === 'waiting' && j.armed && (
           <button className="bkey" onClick={() => onArm(j.id, false)} title="do not send automatically">Disarm</button>
+        )}
+        {(j.state === 'failed' || expired) && j.collection.slug && (
+          <button className="bkey" onClick={() => onRequote(j)} title="quote this collection again">Quote again</button>
         )}
         {tx && <a className="bkey bkey-url" href={tx} target="_blank" rel="noreferrer">tx <Icon name="explorer" size={10} /></a>}
         {j.collection.slug && <a className="bkey bkey-url" href={`https://opensea.io/collection/${j.collection.slug}`} target="_blank" rel="noreferrer">OpenSea <Icon name="explorer" size={10} /></a>}
-        {j.state === 'failed' && j.collection.slug && onRequote && (
-          <button className="bkey" onClick={() => onRequote(j)} title="quote this collection again">Quote again</button>
+        {(j.state === 'failed' || j.state === 'confirmed' || j.state === 'waiting' || expired) && (
+          <button className="bkey osj-dismiss" onClick={() => onDismiss(j.id)} title="remove">Dismiss</button>
         )}
-        {(j.state === 'failed' || j.state === 'confirmed' || j.state === 'waiting' || (j.state === 'ready' && expired)) && onDismiss && (
-          <button className="bkey osj-dismiss" onClick={() => onDismiss(j.id)} title="remove this card">Dismiss</button>
-        )}
-      </div></div>
+      </div>
     </div>
   );
 }
 
-/** The OpenSea mint window: quote a drop, press Mint, watch the card go pending → confirmed. */
+/** One line per job in the queue and the history; click to bring it into the panel. */
+function JobRow({ j, now, focused, onFocus, onDismiss, onArm }: { j: MintJob; now: number; focused: boolean; onFocus: (id: string) => void; onDismiss: (id: string) => void; onArm: (id: string, on: boolean) => void }) {
+  const tx = txUrl(j);
+  const dismissable = j.state === 'failed' || j.state === 'confirmed' || j.state === 'waiting' || isExpired(j, now);
+  return (
+    <div className={`osm-row osm-row-${j.state}${focused ? ' focused' : ''}`} onClick={() => onFocus(j.id)} title="show in the panel">
+      {j.collection.image ? <img src={j.collection.image} alt="" /> : <span className="osm-row-img" />}
+      <span className="osm-row-main">
+        <b>{j.collection.name}</b>
+        <span className={`osm-row-status${j.state === 'failed' ? ' err' : j.state === 'confirmed' ? ' up' : ''}`}>{statusLine(j, now)}</span>
+      </span>
+      <span className="osm-row-time muted">{new Date(j.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+      <span className="osm-row-actions" onClick={(e) => e.stopPropagation()}>
+        {j.state === 'waiting' && j.armed && <button className="hdr-toggle" onClick={() => onArm(j.id, false)}>disarm</button>}
+        {tx && <a className="hdr-toggle" href={tx} target="_blank" rel="noreferrer">tx</a>}
+        {dismissable && <button className="hdr-toggle osm-row-x" onClick={() => onDismiss(j.id)} title="remove">✕</button>}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The OpenSea mint window: a lookup bar, the drop being looked at as one panel (supply, floor,
+ * schedule, quote, the action for its state), the queue of mints waiting for their stage, and a
+ * history of what was sent.
+ */
 export function OsMintView({ jobs, now: coarseNow, wallet, prefill, onPrefilled }: { jobs: MintJob[]; now: number; wallet?: string; prefill?: { locator: string; chain?: string } | null; onPrefilled: () => void }) {
   // the app clock ticks every fifteen seconds; a countdown to a stage wants every second
   const waiting = jobs.some((j) => j.state === 'waiting');
@@ -206,8 +251,9 @@ export function OsMintView({ jobs, now: coarseNow, wallet, prefill, onPrefilled 
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const body = useRef<HTMLDivElement>(null);
-  const nearBottom = useRef(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  /** a row the user clicked to look at; otherwise the newest job that is not in the queue or the log */
+  const [focusId, setFocusId] = useState<string | null>(null);
   const lastPrefill = useRef<typeof prefill>(null);
   const toastTimer = useRef<number | undefined>(undefined);
   const copyTimer = useRef<number | undefined>(undefined);
@@ -231,11 +277,24 @@ export function OsMintView({ jobs, now: coarseNow, wallet, prefill, onPrefilled 
     window.clearTimeout(copyTimer.current);
     copyTimer.current = window.setTimeout(() => setCopied(false), 1200);
   };
+
+  const sorted = [...jobs].sort((a, b) => b.ts - a.ts);
+  const focused = focusId ? sorted.find((j) => j.id === focusId) : undefined;
+  // the panel: what was asked for last, unless the user clicked a row
+  const current = focused ?? sorted.find((j) => j.state === 'quoting' || j.state === 'ready' || j.state === 'sending' || j.state === 'waiting' || (j.state === 'failed' && !j.txHash)) ?? sorted[0];
+  const queue = sorted.filter((j) => j !== current && (j.state === 'waiting' || j.state === 'pending'));
+  const history = sorted.filter((j) => j !== current && !queue.includes(j) && j.state !== 'quoting' && j.state !== 'sending');
+
   const quote = async (l = locator, c = chain, q = qty) => {
     if (!l.trim()) return;
     setQuoteBusy(true);
+    setFocusId(null);
     try {
-      await api.osQuote(l.trim(), q, c);
+      const j = await api.osQuote(l.trim(), q, c);
+      // one drop, one panel: an older quote of the same collection that went nowhere is cleared
+      for (const old of jobs) {
+        if (old.id !== j.id && old.collection.slug && old.collection.slug === j.collection.slug && old.state === 'failed' && !old.txHash) api.osDismiss(old.id).catch(() => {});
+      }
     } catch (e: any) {
       flash(e?.message ?? 'quote failed');
     } finally {
@@ -252,16 +311,8 @@ export function OsMintView({ jobs, now: coarseNow, wallet, prefill, onPrefilled 
     void quote(prefill.locator, prefill.chain, qty);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill]);
-  const onBodyScroll = () => {
-    const el = body.current;
-    if (!el) return;
-    nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-  };
-  useLayoutEffect(() => {
-    const el = body.current;
-    if (el && nearBottom.current) el.scrollTop = el.scrollHeight;
-  }, [jobs]);
   const dismiss = async (id: string) => {
+    if (focusId === id) setFocusId(null);
     try {
       await api.osDismiss(id);
     } catch (e: any) {
@@ -287,42 +338,55 @@ export function OsMintView({ jobs, now: coarseNow, wallet, prefill, onPrefilled 
   };
   return (
     <div className="cove osm">
-      <div className="osm-bar muted">
-        <Icon name="wallet" size={12} />
+      <div className="osm-lookup">
+        <input
+          value={locator}
+          onChange={(e) => {
+            setLocator(e.target.value);
+            setChain(undefined);
+          }}
+          placeholder="collection slug, opensea.io link or 0x address"
+          spellCheck={false}
+          disabled={!wallet}
+          onKeyDown={(e) => e.key === 'Enter' && void quote()}
+        />
+        <input className="osm-qty" type="number" min={1} max={99} value={qty} onChange={(e) => setQty(Math.max(1, Math.min(99, Number(e.target.value) || 1)))} title="quantity" disabled={!wallet} />
+        <button className="composer-send osm-quote" disabled={quoteBusy || !locator.trim() || !wallet} onClick={() => void quote()} title="quote (Enter)">
+          {quoteBusy ? '…' : 'Quote'}
+        </button>
         {wallet ? (
           <button className="osm-wallet-chip" onClick={() => void copyWallet()} title={wallet}>
             <Icon name="copy" size={10} /> {copied ? 'copied' : short(wallet)}
           </button>
         ) : (
-          'no wallet — add one in ⚙ → Trading'
+          <span className="muted osm-hint">no wallet</span>
         )}
       </div>
-      <div className="cove-body" ref={body} onScroll={onBodyScroll}>
-        {jobs.length === 0 && <div className="empty">Paste a collection below, or press Mint on a MintGo card or a minting row in OpenSea Volume.</div>}
-        {jobs.map((j) => (
-          <JobCard key={j.id} j={j} now={now} onSend={send} sending={sendingId === j.id} onDismiss={dismiss} onArm={arm} onRequote={(job) => void quote(job.collection.slug, job.collection.chain, job.quantity)} />
-        ))}
+      <div className="osm-body">
+        {!wallet && <div className="empty">Add a wallet in ⚙ → Trading to quote a drop.</div>}
+        {wallet && !current && <div className="empty">Paste a collection above, or press Mint on a MintGo card or a minting row in OpenSea Volume.</div>}
+        {current && <DropPanel j={current} now={now} onSend={send} sending={sendingId === current.id} onDismiss={dismiss} onArm={arm} onRequote={(job) => void quote(job.collection.slug, job.collection.chain, job.quantity)} />}
+        {queue.length > 0 && (
+          <div className="osm-section">
+            <div className="osm-section-head">
+              <b>Queue</b> <span className="muted">{queue.length}</span>
+            </div>
+            {queue.map((j) => (
+              <JobRow key={j.id} j={j} now={now} focused={false} onFocus={setFocusId} onDismiss={dismiss} onArm={arm} />
+            ))}
+          </div>
+        )}
+        {history.length > 0 && (
+          <div className="osm-section">
+            <button className="osm-section-head osm-section-toggle" onClick={() => setHistoryOpen((o) => !o)}>
+              <b>History</b> <span className="muted">{history.length}</span>
+              <span className="osm-section-chev">{historyOpen ? '▾' : '▸'}</span>
+            </button>
+            {historyOpen && history.map((j) => <JobRow key={j.id} j={j} now={now} focused={false} onFocus={setFocusId} onDismiss={dismiss} onArm={arm} />)}
+          </div>
+        )}
       </div>
       {toast && <div className="cove-toast">{toast}</div>}
-      <div className="composer cove-composer osm-composer">
-        {!wallet && <div className="muted osm-hint">Add a wallet in ⚙ → Trading to quote a drop.</div>}
-        <div className="composer-row">
-          <input
-            value={locator}
-            onChange={(e) => {
-              setLocator(e.target.value);
-              setChain(undefined);
-            }}
-            placeholder="collection slug, opensea.io link or 0x address"
-            spellCheck={false}
-            onKeyDown={(e) => e.key === 'Enter' && void quote()}
-          />
-          <input className="osm-qty" type="number" min={1} max={99} value={qty} onChange={(e) => setQty(Math.max(1, Math.min(99, Number(e.target.value) || 1)))} title="quantity" />
-          <button className="composer-send" disabled={quoteBusy || !locator.trim()} onClick={() => void quote()} title="quote (Enter)">
-            Quote
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

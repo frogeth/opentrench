@@ -692,8 +692,10 @@ export class Minter extends EventEmitter {
   dismiss(jobId: string): boolean {
     const i = this.jobs.findIndex((j) => j.id === jobId);
     if (i < 0) return false;
-    const s = this.jobs[i].state;
-    if (s !== 'failed' && s !== 'confirmed' && s !== 'waiting') return false;
+    const j = this.jobs[i];
+    const s = j.state;
+    const expired = s === 'ready' && this.deps.now() - j.ts > QUOTE_TTL_MS;
+    if (s !== 'failed' && s !== 'confirmed' && s !== 'waiting' && !expired) return false;
     this.timers.get(jobId)?.();
     this.timers.delete(jobId);
     this.reqs.delete(jobId);

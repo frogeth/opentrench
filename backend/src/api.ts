@@ -609,7 +609,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     wrap((req) => {
       const id = String(req.params.id ?? '');
       if (!/^m[a-z0-9]{1,40}$/.test(id)) throw new Error('bad job id');
-      if (!svc.minter.dismiss(id)) throw new Error('only a finished or waiting mint can be dismissed');
+      if (!svc.minter.dismiss(id)) throw new Error('only a finished, waiting or expired mint can be dismissed');
       return { ok: true };
     }),
   );
