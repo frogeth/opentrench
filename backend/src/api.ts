@@ -670,6 +670,15 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { ok: true };
     }),
   );
+  // the bot's published slash commands, for the composer's "/" suggestions
+  r.get(
+    '/bot/:bot/commands',
+    wrap(async (req) => {
+      const bot = String(req.params.bot);
+      if (!BOT_RE.test(bot)) throw new Error('bad bot');
+      return svc.botCommands(bot);
+    }),
+  );
   r.post(
     '/bot/:bot/send',
     wrap(async (req) => {

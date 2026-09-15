@@ -350,6 +350,10 @@ export class Services {
     if (!this.telegram) throw new Error('telegram not connected');
     return this.telegram.botSend(bot, text);
   }
+  botCommands(bot: string) {
+    if (!this.telegram) throw new Error('telegram not connected');
+    return this.telegram.botCommands(bot);
+  }
   botPress(bot: string, msgId: number, data: string) {
     if (!this.telegram) throw new Error('telegram not connected');
     return this.telegram.botPress(bot, msgId, data);

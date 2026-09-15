@@ -378,6 +378,23 @@ export class TelegramWrapper extends EventEmitter {
     );
   }
 
+  private botCommandsCache = new Map<string, { at: number; list: { command: string; description: string }[] }>();
+  /** The slash commands a bot publishes (what Telegram shows when you type "/"), cached ten minutes. */
+  async botCommands(username: string): Promise<{ command: string; description: string }[]> {
+    const key = username.toLowerCase();
+    const hit = this.botCommandsCache.get(key);
+    if (hit && Date.now() - hit.at < 10 * 60_000) return hit.list;
+    const peer = await this.botPeer(username);
+    const full: any = await this.client!.invoke(new Api.users.GetFullUser({ id: peer }));
+    const raw: any[] = full?.fullUser?.botInfo?.commands ?? [];
+    const list = raw
+      .filter((c) => c && typeof c.command === 'string')
+      .map((c) => ({ command: String(c.command).replace(/^\//, '').slice(0, 64), description: String(c.description ?? '').slice(0, 200) }))
+      .slice(0, 100);
+    this.botCommandsCache.set(key, { at: Date.now(), list });
+    return list;
+  }
+
   async botSend(username: string, text: string): Promise<void> {
     const peer = await this.botPeer(username);
     await this.client!.sendMessage(peer, { message: text, linkPreview: false });

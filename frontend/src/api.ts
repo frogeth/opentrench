@@ -220,6 +220,8 @@ export const api = {
   botHistory: (bot: string) => req<import('./types').BotMessage[]>('GET', `/bot/${encodeURIComponent(bot)}/history`),
   botStart: (bot: string, payload: string) => req<{ ok: true }>('POST', `/bot/${encodeURIComponent(bot)}/start`, { payload }),
   botSend: (bot: string, text: string) => req<{ ok: true }>('POST', `/bot/${encodeURIComponent(bot)}/send`, { text }),
+  /** the bot's published slash commands */
+  botCommands: (bot: string) => req<{ command: string; description: string }[]>('GET', `/bot/${encodeURIComponent(bot)}/commands`),
   botPress: (bot: string, msgId: number, data: string) => req<{ message?: string; alert?: boolean; url?: string; gone?: boolean }>('POST', `/bot/${encodeURIComponent(bot)}/press`, { msgId, data }),
   react: (source: 'discord' | 'telegram', chatId: string, msgId: string, key: string, name: string, on: boolean) =>
     req<{ ok: true }>('POST', '/react', { source, chatId, msgId, key, name, on }),

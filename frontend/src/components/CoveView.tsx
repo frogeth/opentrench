@@ -25,6 +25,30 @@ export function CoveView({
   const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [err, setErr] = useState<string | null>(null);
   const [text, setText] = useState('');
+  // the bot's slash commands: typing "/" lists them, arrows move, Enter or a click sends the one picked
+  const [commands, setCommands] = useState<{ command: string; description: string }[]>([]);
+  const [cmdIdx, setCmdIdx] = useState(0);
+  useEffect(() => {
+    if (!connected) return;
+    let alive = true;
+    api
+      .botCommands(bot)
+      .then((c) => alive && setCommands(c))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [bot, connected]);
+  const cmdQuery = /^\/([a-z0-9_]*)$/i.exec(text.trim());
+  const suggestions = cmdQuery ? commands.filter((c) => c.command.toLowerCase().startsWith(cmdQuery[1].toLowerCase())) : [];
+  const sendCommand = async (command: string) => {
+    setText('');
+    try {
+      await api.botSend(bot, `/${command}`);
+    } catch (e: any) {
+      flash(e?.message ?? 'send failed');
+    }
+  };
   const [toast, setToast] = useState<string | null>(null);
   const [pressing, setPressing] = useState<string | null>(null);
   const body = useRef<HTMLDivElement>(null);
@@ -135,14 +159,63 @@ export function CoveView({
             value={text}
             disabled={!connected}
             placeholder={connected ? `Message @${bot} (e.g. /start, /settings)` : 'connect Telegram first'}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              setCmdIdx(0);
+            }}
             onKeyDown={(e) => {
+              if (suggestions.length > 0) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setCmdIdx((i) => (i + 1) % suggestions.length);
+                  return;
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setCmdIdx((i) => (i - 1 + suggestions.length) % suggestions.length);
+                  return;
+                }
+                if (e.key === 'Tab') {
+                  e.preventDefault();
+                  setText(`/${suggestions[cmdIdx].command} `);
+                  return;
+                }
+                if (e.key === 'Escape') {
+                  setText('');
+                  return;
+                }
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  void sendCommand(suggestions[cmdIdx].command);
+                  return;
+                }
+              }
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 void send();
               }
             }}
           />
+          {suggestions.length > 0 && (
+            <div className="cmd-list" role="listbox">
+              <div className="cmd-rows">
+                {suggestions.map((c, i) => (
+                  <button
+                    key={c.command}
+                    className={`cmd${i === cmdIdx ? ' on' : ''}`}
+                    ref={i === cmdIdx ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
+                    onMouseEnter={() => setCmdIdx(i)}
+                    onClick={() => void sendCommand(c.command)}
+                    title={`send /${c.command}`}
+                  >
+                    <b>/{c.command}</b>
+                    {c.description && <span>{c.description}</span>}
+                  </button>
+                ))}
+              </div>
+              <div className="cmd-hint">↑↓ pick · Enter send · Tab fill in</div>
+            </div>
+          )}
           <button className="composer-send" disabled={!connected || !text.trim()} onClick={() => void send()} title="send (Enter)">
             <Icon name="send" size={14} />
           </button>
