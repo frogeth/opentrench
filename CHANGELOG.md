@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.8.14 — 2026-09-15
+
 - Rick, Phanes and the other scanner bots no longer count as callers when they answer a contract someone already posted in that chat; existing echoes are dropped on update. A bot that posts a contract first (an alert bot) is still the call.
 - Forwards into Discord: a bot's report is laid out as one, with a heading, section headings and the "via" line as subtext instead of one grey quote block; links are proper [text](url) links that do not unfurl, so a Salpha report is not a wall of raw URLs followed by a dozen previews. A lone bare link keeps its preview.
 ## v0.8.13 — 2026-09-15
