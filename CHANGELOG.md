@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Chat rows: the reply, react and ⋯ buttons are always visible now (faint, full on hover) instead of appearing only when the mouse is over the row.
+
 - Scanner bots feed the first scan. When Rick, Phanes, TokenScan or any bot answers a contract in the same chat within three minutes, its market cap becomes that call's, and the entry when it is the first call; Rick's "You are first @ X" sets the entry outright. The API loops still take over for updates. Suggested by the author, prompted by a wrong entry on $FLY.
 - The multiple on a call card now measures from the first call (the entry), not the latest one; each later call's own market cap stays in the hover list. (Reported by yannz.)
 - Fix: the "N calls for $X" hover list could not be scrolled — scrolling inside it closed it. (Reported by yannz.)

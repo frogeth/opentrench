@@ -255,8 +255,8 @@ b { font-weight: 600; }
 .chat-tag-link { cursor: pointer; }
 .chat-tag-link:hover { color: var(--text); border-color: var(--line-strong); }
 .amenu { position: relative; display: inline-flex; }
-.amenu-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; line-height: 1; padding: 0 4px; opacity: 0; border-radius: 4px; }
-.row:hover .amenu-btn, .call:hover .amenu-btn, .amenu-btn:focus { opacity: 0.7; }
+.amenu-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; line-height: 1; padding: 0 4px; opacity: 0.45; border-radius: 4px; }
+.row:hover .amenu-btn, .call:hover .amenu-btn, .amenu-btn:focus, .amenu-btn:hover { opacity: 1; }
 .amenu-btn:hover { opacity: 1; color: var(--text); background: var(--panel-2); }
 .amenu-pop {
   position: absolute; top: 18px; left: 0; z-index: 20; min-width: 160px;
@@ -911,8 +911,8 @@ button.link:disabled { opacity: 0.6; cursor: default; }
 .composer-foot:empty { display: none; }
 .composer-warn { color: var(--gold); }
 .composer-foot .err { color: var(--err); }
-.row-reply { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0 4px; opacity: 0; display: inline-flex; border-radius: 4px; }
-.row:hover .row-reply { opacity: 0.7; }
+.row-reply { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0 4px; opacity: 0.45; display: inline-flex; border-radius: 4px; }
+.row:hover .row-reply { opacity: 1; }
 .row-reply:hover { opacity: 1 !important; color: var(--text); background: var(--panel-2); }
 .send-toggle { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
 .send-warn { border: 1px solid rgba(242, 102, 130, 0.5); background: rgba(242, 102, 130, 0.06); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
