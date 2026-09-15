@@ -198,7 +198,17 @@ export function CoveView({
           />
           {suggestions.length > 0 && (
             <div className="cmd-list" role="listbox">
-              <div className="cmd-rows">
+              <div
+                className="cmd-rows"
+                // the column body clips overflow, so the list gets the room above the box, never more
+                ref={(el) => {
+                  const body = el?.closest('.col-body');
+                  const row = el?.closest('.composer-row');
+                  if (!el || !body || !row) return;
+                  const room = row.getBoundingClientRect().top - body.getBoundingClientRect().top - 44;
+                  el.style.maxHeight = `${Math.max(64, Math.min(220, room))}px`;
+                }}
+              >
                 {suggestions.map((c, i) => (
                   <button
                     key={c.command}
