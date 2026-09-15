@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Fix: Telegram group and channel pictures showed as initials since 0.8.11 (the avatar lookup had been narrowed to the session cache, which does not answer for chats). Chats resolve normally again; user pictures still never trigger the flood-limited fallback.
+
 ## v0.8.11 — 2026-09-14
 
 - Desktop: an older backend left behind by the previous version is replaced automatically at launch, no dialog. Before, a dialog asked about "attaching", and attaching to the old one showed an old page with features missing. Only if the old copy refuses to close does the app say so, in plain words. A newer backend (a dev checkout ahead of the app) is used as before.

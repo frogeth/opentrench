@@ -226,13 +226,18 @@ export class TelegramWrapper extends EventEmitter {
     if (!this.client || this.state !== 'connected') return null;
     let buf: Buffer | null = null;
     try {
-      // the session cache only: an id gramJS has not met would make it fall back to messages.GetDialogs
-      // (flood-limited hard), and a user we never saw has no photo we could fetch anyway
-      let entity: any;
-      try {
-        entity = this.client.session.getInputEntity(bigInt(id));
-      } catch {
-        entity = null;
+      // Users: the session cache only. An id gramJS has not met would make it fall back to
+      // messages.GetDialogs (flood-limited hard), and a user we never saw has no photo we could
+      // fetch anyway. Chats and channels (negative ids) are few and all in the dialog list, so
+      // the normal lookup is fine for them.
+      let entity: any = null;
+      if (id.startsWith('-')) entity = await this.client.getInputEntity(bigInt(id));
+      else {
+        try {
+          entity = this.client.session.getInputEntity(bigInt(id));
+        } catch {
+          entity = null;
+        }
       }
       if (!entity) {
         this.avatars.set(id, null);
