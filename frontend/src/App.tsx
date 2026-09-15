@@ -996,7 +996,7 @@ export default function App() {
     // a revealed message skips the hidden/repeat/media/filter/search gates, never the chat scope:
     // a message only ever shows in a column that carries its chat
     // a contracts-only column may keep the caller's next messages after a call (their thesis): those pass the contracts gate by being follow-ups
-    const followUps = f?.contractsOnly && (f.thesis ?? 0) > 0 ? thesisFollowUps(messages.filter((m) => inWatch(m) && inScope(m.chatName, names) && (showBots || !m.hidden)), f.thesis ?? 0) : null;
+    const followUps = f?.contractsOnly && ((f.thesis ?? 0) > 0 || (f.thesisBefore ?? 0) > 0) ? thesisFollowUps(messages.filter((m) => inWatch(m) && inScope(m.chatName, names) && (showBots || !m.hidden)), f.thesis ?? 0, f.thesisBefore ?? 0) : null;
     const passes = (m: FeedMessage) => (followUps?.has(m.id) ? messagePasses(m, { ...f, contractsOnly: false }) : messagePasses(m, f));
     return messages.filter(
       (m) =>

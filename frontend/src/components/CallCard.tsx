@@ -122,7 +122,8 @@ export function CallCard({
   }`.trim();
   const hot = t.seen >= 3 ? ' call-hot-3' : t.seen === 2 ? ' call-hot-2' : '';
   const isNew = now - t.firstSeenTs < 8000;
-  const mcAt = c?.marketCap ?? t.firstCallMarketCap;
+  // the entry: market cap at the first call; the multiple is measured from there (each later call's own MC is in the hover list)
+  const mcAt = t.firstCallMarketCap ?? t.calls[0]?.marketCap ?? c?.marketCap;
   const mult = t.marketCap && mcAt ? t.marketCap / mcAt : undefined;
   const nearAth = t.marketCap && t.athMarketCap ? t.marketCap >= t.athMarketCap * 0.95 : false;
 
@@ -220,7 +221,7 @@ export function CallCard({
           )}
           {money(mcAt) && <span className="call-mcat">MC: {money(mcAt)}</span>}
           {mult !== undefined && (
-            <Tip text={`${money(mcAt)} at call → ${money(t.marketCap)} now`}>
+            <Tip text={`${money(mcAt)} at the first call → ${money(t.marketCap)} now`}>
               <span className={`call-mult${mult >= 1 ? ' up' : ' down'}`}>{fmtX(mult)}</span>
             </Tip>
           )}

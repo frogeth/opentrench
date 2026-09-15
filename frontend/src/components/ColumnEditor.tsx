@@ -442,14 +442,24 @@ export function ColumnEditor({
                       Contracts only
                     </button>
                     {f.contractsOnly && (
-                      <span className="fchips fchips-inline" title="also keep the caller's next messages after a call, so their thesis shows with the contract">
-                        <span className="muted">+ caller's next</span>
-                        {[0, 1, 2, 3].map((n) => (
-                          <button key={n} className={`fchip${(f.thesis ?? 0) === n ? ' on' : ''}`} onClick={() => set('thesis', n)}>
-                            {n}
-                          </button>
-                        ))}
-                      </span>
+                      <>
+                        <span className="fchips fchips-inline" title="also keep the caller's next messages after a call, so their thesis shows with the contract">
+                          <span className="muted">+ caller's next</span>
+                          {[0, 1, 2, 3].map((n) => (
+                            <button key={n} className={`fchip${(f.thesis ?? 0) === n ? ' on' : ''}`} onClick={() => set('thesis', n)}>
+                              {n}
+                            </button>
+                          ))}
+                        </span>
+                        <span className="fchips fchips-inline" title="and the caller's messages just before the call">
+                          <span className="muted">+ caller's previous</span>
+                          {[0, 1, 2, 3].map((n) => (
+                            <button key={n} className={`fchip${(f.thesisBefore ?? 0) === n ? ' on' : ''}`} onClick={() => set('thesisBefore', n)}>
+                              {n}
+                            </button>
+                          ))}
+                        </span>
+                      </>
                     )}
                   </div>
                 </div>

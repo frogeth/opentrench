@@ -27,6 +27,7 @@ export function HoverCard({
   const anchor = useRef<HTMLSpanElement>(null);
   const timer = useRef<number | undefined>(undefined);
   const opened = useRef(false);
+  const cardEl = useRef<HTMLDivElement>(null);
 
   const place = () => {
     const r = anchor.current?.getBoundingClientRect();
@@ -55,7 +56,11 @@ export function HoverCard({
   useEffect(() => () => window.clearTimeout(timer.current), []);
   useEffect(() => {
     if (!open) return;
-    const off = () => setOpen(false);
+    // the page scrolling away closes the card; scrolling the card's own list must not
+    const off = (e: Event) => {
+      if (e.type === 'scroll' && cardEl.current && e.target instanceof Node && cardEl.current.contains(e.target)) return;
+      setOpen(false);
+    };
     window.addEventListener('scroll', off, true);
     window.addEventListener('resize', off);
     return () => {
@@ -71,6 +76,7 @@ export function HoverCard({
         pos &&
         createPortal(
           <div
+            ref={cardEl}
             className={`hc${pos.above ? ' hc-above' : ''}`}
             style={{ left: pos.left, top: pos.top, width, transform: pos.above ? 'translateY(-100%)' : undefined }}
             onMouseEnter={() => window.clearTimeout(timer.current)}

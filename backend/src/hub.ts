@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { mergeLaunchpad } from './long.js';
 import { repairCandleMarketCaps } from './backfill.js';
+import { isScanPost } from './scanpost.js';
 import type { LaunchpadInfo } from './launchpads.js';
 import { detectContracts } from './contracts.js';
 import type { TokenFetcher } from './enrich.js';
@@ -405,9 +406,45 @@ export class MessageHub extends EventEmitter {
    * hidden (flagged isBot) and never create or count a call; their links
    * still enrich tokens humans already called.
    */
+  /**
+   * A scanner bot's answer (Rick, Phanes, TokenScan…) in the same chat, seconds after a call: its
+   * market cap becomes that call's, and the entry when it is the first call. Rick's "You are
+   * first @ X" is the entry as the chat saw it. Only calls this bot has not already priced, and
+   * only within three minutes, so an old scan cannot rewrite a newer call.
+   */
+  private applyScanPost(msg: FeedMessage): void {
+    const fig = isScanPost(msg);
+    if (!fig) return;
+    for (const c of msg.contracts) {
+      const t = this.tokens.get(c.address);
+      if (!t) continue;
+      const replyId = (msg.replyTo as { id?: string } | undefined)?.id;
+      const call =
+        (replyId && t.calls.find((x) => x.msgId === replyId)) ??
+        [...t.calls].reverse().find((x) => x.source === msg.source && x.chatName === msg.chatName && msg.ts - x.ts >= 0 && msg.ts - x.ts < 3 * 60_000);
+      if (!call || call.mcSource === 'scan') continue;
+      let changed = false;
+      if (fig.marketCap !== undefined) {
+        call.marketCap = fig.marketCap;
+        call.mcSource = 'scan';
+        if (call === t.calls[0]) t.firstCallMarketCap = fig.marketCap;
+        if (t.marketCap === undefined) t.marketCap = fig.marketCap; // the first number anyone has; the refresh loop replaces it
+        changed = true;
+      }
+      if (fig.firstAt !== undefined && call === t.calls[0]) {
+        t.firstCallMarketCap = fig.firstAt;
+        call.marketCap = fig.firstAt;
+        call.mcSource = 'scan';
+        changed = true;
+      }
+      if (changed) this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
+    }
+  }
+
   private register(msg: FeedMessage, meta: ExtractedMeta | undefined, live: boolean): void {
     msg.hidden = this.isHidden(msg);
     const blocked = msg.hidden || this.isCallMuted(msg);
+    if (live && msg.isBot) this.applyScanPost(msg);
     let anyNew = false;
     for (const c of msg.contracts) {
       let t = this.tokens.get(c.address);

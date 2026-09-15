@@ -61,18 +61,29 @@ export function tokenPasses(t: TokenInfo, f: ColumnFilters | undefined, now = Da
  * Contracts-only columns can keep the caller's next few messages in the same chat after a call
  * (the thesis), up to `n` per call within 15 minutes. `list` is chronological; returns the ids to keep.
  */
-export function thesisFollowUps(list: FeedMessage[], n: number): Set<string> {
+export function thesisFollowUps(list: FeedMessage[], after: number, before = 0): Set<string> {
   const keep = new Set<string>();
-  if (n <= 0) return keep;
-  for (let i = 0; i < list.length; i++) {
-    const call = list[i];
+  if (after <= 0 && before <= 0) return keep;
+  const chrono = list.length > 1 && list[0].ts > list[list.length - 1].ts ? [...list].reverse() : list;
+  const sameThread = (m: FeedMessage, call: FeedMessage) => m.chatId === call.chatId && m.source === call.source && m.author === call.author;
+  for (let i = 0; i < chrono.length; i++) {
+    const call = chrono[i];
     if (call.contracts.length === 0) continue;
     let taken = 0;
-    for (let j = i + 1; j < list.length && taken < n; j++) {
-      const m = list[j];
+    for (let j = i + 1; j < chrono.length && taken < after; j++) {
+      const m = chrono[j];
       if (m.ts - call.ts > 15 * 60_000) break;
-      if (m.chatId !== call.chatId || m.source !== call.source || m.author !== call.author) continue;
+      if (!sameThread(m, call)) continue;
       if (m.contracts.length > 0) break; // their next call starts its own thread
+      keep.add(m.id);
+      taken++;
+    }
+    taken = 0;
+    for (let j = i - 1; j >= 0 && taken < before; j--) {
+      const m = chrono[j];
+      if (call.ts - m.ts > 15 * 60_000) break;
+      if (!sameThread(m, call)) continue;
+      if (m.contracts.length > 0) break;
       keep.add(m.id);
       taken++;
     }

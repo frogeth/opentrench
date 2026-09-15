@@ -63,6 +63,8 @@ export interface ColumnFilters {
   contractsOnly?: boolean;
   /** contracts-only columns: also keep the caller's next N messages in that chat (their thesis), 0–3 */
   thesis?: number;
+  /** …and the caller's previous N messages before the call, 0–3 */
+  thesisBefore?: number;
   // calls columns
   chains?: string[];
   launchpads?: string[];
