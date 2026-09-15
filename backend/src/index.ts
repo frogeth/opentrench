@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { ConfigStore } from './config.js';
 import { SecretBox, readSecretKey } from './secrets.js';
+import { keychainKey } from './keychain.js';
 import { MessageHub } from './hub.js';
 import { createSecurityBatchFetcher, createSecurityFetcher } from './security.js';
 import { createHoverFetchers } from './hover.js';
@@ -25,11 +26,15 @@ const root = path.resolve(here, '..'); // backend/ (parent of src/ or dist/)
 const PORT = Number(process.env.PORT ?? 3210);
 const HOST = '127.0.0.1';
 
-// The desktop app hands over the key it keeps in the OS keychain; tokens and wallet keys in
-// config.json are sealed with it. Started bare (`npm start`), the file stays plain text as before.
-const secretKey = readSecretKey();
-if (!secretKey) console.warn('[backend] no secret key: tokens in config.json are stored in plain text (the desktop app supplies one)');
-const cfg = new ConfigStore(process.env.TRENCHFEED_CONFIG ?? path.join(root, 'config.json'), new SecretBox(secretKey));
+// Tokens, sessions and wallet keys in config.json are sealed at rest. The desktop app hands over
+// the key it keeps in the OS keychain; a backend started bare (`npm start`, a checkout the app
+// attaches to) keeps one of its own in the OS keychain instead. Only with neither is the file plain.
+const configFile = process.env.TRENCHFEED_CONFIG ?? path.join(root, 'config.json');
+const fromApp = readSecretKey();
+const secretKey = fromApp ?? keychainKey({ blobFile: `${configFile}.key` });
+if (!secretKey) console.warn('[backend] no secret key and no OS keychain: tokens and wallet keys in config.json are stored in plain text');
+else console.log(`[backend] secrets in config.json sealed with the key from ${fromApp ? 'the desktop app' : 'the OS keychain'}`);
+const cfg = new ConfigStore(configFile, new SecretBox(secretKey));
 const hub: MessageHub = new MessageHub(150, createDefaultEnricher({ o1ApiKey: () => cfg.get().o1ApiKey }), {
   security: createSecurityFetcher(),
   securityBatch: createSecurityBatchFetcher(),

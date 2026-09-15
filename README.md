@@ -24,7 +24,7 @@ every caller pinned where they called, and the full call list.
 
 > **Discord** connects through a small [Vencord plugin](vencord/) inside your own Discord app, so there is no token and no self-bot session. From 0.8.7 the desktop app installs it for you: ⚙ → Accounts → Discord → **Set up Discord**. Discord has to be open for that side of the feed to work. A user token still works as a read-only fallback. Website and setup guides: **https://opentrench.app**
 
-> **OpenSea mint wallet**: use a dedicated wallet, not one holding real funds. The private key lives in plain text in `config.json` on this machine — anyone with file access on your machine can read it. Mint transactions are irreversible once sent. MintGo and OpenSea expose no official public API for any of this; opentrench reads their unofficial web endpoints, which can change without notice.
+> **OpenSea mint wallet**: use a dedicated wallet, not one holding real funds. The private key is stored encrypted in `config.json` with a key kept in your OS keychain, but anyone who can run code as your user on this machine can still get at it. Mint transactions are irreversible once sent. MintGo and OpenSea expose no official public API for any of this; opentrench reads their unofficial web endpoints, which can change without notice.
 
 ## Install
 
@@ -196,9 +196,9 @@ The desktop app runs the same backend with Electron's bundled Node and keeps
 Tokens, sessions and the mint wallet key inside `config.json` are encrypted
 with a random key the app keeps in the OS keychain (`secret.key`, sealed by
 Electron's safeStorage: Keychain on macOS, DPAPI on Windows). A plain-text
-file from an older version is sealed on first launch. Only a backend the app
-started can read them; a backend started from the repo sees them as unset and
-leaves them untouched.
+file from an older version is sealed on first launch. Only a backend holding
+that key can read them; a backend started from the repo (which keeps a key of
+its own, see Setup) sees them as unset and leaves them untouched.
 First run from the repo copies the dev checkout's files there. If a server is
 already listening on 3210 the app attaches to it instead of starting another.
 External links open in your default browser. The build is unsigned: on first
@@ -210,9 +210,12 @@ launch right-click the app → Open.
 2. **Telegram** — enter API ID + hash from https://my.telegram.org, save.
    Enter phone → code → 2FA password if prompted. Then tick chats to watch.
 
-Everything is stored in `backend/config.json` (git-ignored, mode 600). A
-backend started this way has no keychain key, so it keeps tokens in plain text;
-the desktop app seals them (see Desktop app above).
+Everything is stored in `backend/config.json` (git-ignored, mode 600). Tokens,
+sessions and the mint wallet key are encrypted there with a random key the
+backend keeps in your OS keychain (the login keychain on macOS, the Secret
+Service via `secret-tool` on Linux, DPAPI on Windows with the sealed blob in
+`config.json.key`). Where none of those exist the file stays plain text and the
+backend says so at start.
 Nothing is sent anywhere except to Discord and Telegram.
 
 ## Tests
