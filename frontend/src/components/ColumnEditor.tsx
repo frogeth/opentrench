@@ -11,7 +11,7 @@ export const chatKey = (w: { source: string; id: string }) => `${w.source}:${w.i
 const CHAINS: [string, string][] = [
   ['solana', 'Solana'], ['ethereum', 'Ethereum'], ['base', 'Base'], ['bsc', 'BSC'], ['robinhood', 'Robinhood'],
   ['hyperevm', 'HyperEVM'], ['arbitrum', 'Arbitrum'], ['monad', 'Monad'], ['blast', 'Blast'], ['avalanche', 'Avalanche'],
-  ['ink', 'Ink'], ['megaeth', 'MegaETH'], ['plasma', 'Plasma'], ['story', 'Story'], ['stable', 'Stable'],
+  ['ink', 'Ink'], ['megaeth', 'MegaETH'], ['plasma', 'Plasma'], ['story', 'Story'], ['stable', 'Stable'], ['arc', 'Arc'],
 ];
 const LAUNCHPADS: [string, string][] = [
   ['pumpfun', 'Pump.fun'], ['letsbonk', 'letsbonk'], ['bankr', 'Bankr'], ['stonks', 'Stonks'], ['pons', 'Pons'],

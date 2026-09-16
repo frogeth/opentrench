@@ -50,6 +50,7 @@ export const NETWORK_LABEL: Record<string, string> = {
   tempo: 'TEMPO',
   ink: 'INK',
   stable: 'STBL',
+  arc: 'ARC',
 };
 
 export function netLabel(network: string | undefined, chain: 'sol' | 'evm'): string {

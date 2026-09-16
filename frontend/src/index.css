@@ -339,6 +339,7 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .net-mark svg { display: block; }
 .net-plain { width: auto; height: auto; border: none; background: none; }
 .net-robinhood { color: #3ddc84; border-color: #3ddc84; }
+.net-arc { color: #fff; background: #1c315a; border-color: #2a4a86; }
 .net-base { color: #3b7bff; border-color: #3b7bff; }
 .net-ethereum, .net-evm { color: var(--evm); border-color: var(--evm); }
 .net-solana, .net-sol { color: var(--sol); border-color: var(--sol); }
