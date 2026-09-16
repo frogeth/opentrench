@@ -50,6 +50,8 @@ function xUrl(v: string | null | undefined): string | undefined {
   const s = v.trim();
   if (!s) return undefined;
   if (/^https?:\/\//i.test(s)) return s;
+  // "x.com/name" or "twitter.com/name" typed without the scheme
+  if (/^(?:www\.)?(?:x|twitter)\.com\//i.test(s)) return `https://${s}`;
   const bare = s.replace(/^@/, '');
   return /^[A-Za-z0-9_]{1,15}$/.test(bare) ? `https://x.com/${bare}` : undefined;
 }
@@ -59,6 +61,8 @@ function tgUrl(v: string | null | undefined): string | undefined {
   const s = v.trim();
   if (!s) return undefined;
   if (/^https?:\/\//i.test(s)) return s;
+  // "t.me/name" typed without the scheme
+  if (/^t\.me\//i.test(s)) return `https://${s}`;
   const bare = s.replace(/^@/, '');
   return /^[A-Za-z0-9_]{3,}$/.test(bare) ? `https://t.me/${bare}` : undefined;
 }
