@@ -70,17 +70,31 @@ function MintCard({ e, now, open, onToggle, onMint }: { e: MintEvent; now: numbe
 /** The MintGo column body: one card per mint, newest first; click a card for its links and a Mint button. */
 export function MintFeed({ mints, now, state, error, filters, onMint }: { mints: MintEvent[]; now: number; state?: Status['mintgo']; error?: string; filters?: ColumnFilters; onMint?: (e: MintEvent) => void }) {
   const [open, setOpen] = useState<string | null>(null);
-  const list = mints.filter((e) => mintPasses(e, filters));
+  const live = mints.filter((e) => mintPasses(e, filters));
+  // Hovering holds the feed still (suggested by lunchbag): a mint you are about to click does not slide away under
+  // the pointer. The list shown is the one from the moment the pointer came in; new mints wait behind a pill.
+  const [hold, setHold] = useState(false);
+  const frozen = useRef<MintEvent[] | null>(null);
+  if (hold && frozen.current === null) frozen.current = live;
+  if (!hold) frozen.current = null;
+  const list = hold && frozen.current ? frozen.current : live;
+  const shownIds = new Set(list.map((e) => e.id));
+  const pending = hold ? live.filter((e) => !shownIds.has(e.id)).length : 0;
   const emptyText = state === 'connecting' ? 'Connecting to MintGo…' : state === 'connected' ? 'Waiting for the first mint…' : "MintGo isn't running.";
   return (
-    <>
+    <div className={`mint-feed${hold ? ' mint-feed-hold' : ''}`} onMouseEnter={() => setHold(true)} onMouseLeave={() => setHold(false)}>
       {state === 'error' && <div className="empty err">MintGo unavailable: {error ?? 'connection lost'} — retrying.</div>}
       {state !== 'error' && list.length === 0 && <div className="empty">{emptyText}</div>}
+      {pending > 0 && (
+        <button className="mint-pending" onClick={() => setHold(false)} title="the feed is held still while the pointer is over it; click, or move the pointer away, to let them in">
+          {pending} new mint{pending === 1 ? '' : 's'} waiting · paused while you hover
+        </button>
+      )}
       {list.map((e) => (
         <VirtualItem key={e.id} id={`mint:${e.id}`} estimate={open === e.id ? 110 : 58}>
           <MintCard e={e} now={now} open={open === e.id} onToggle={() => setOpen((o) => (o === e.id ? null : e.id))} onMint={onMint} />
         </VirtualItem>
       ))}
-    </>
+    </div>
   );
 }

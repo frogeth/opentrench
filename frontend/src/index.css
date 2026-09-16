@@ -1389,3 +1389,7 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 .pair-chip { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; white-space: nowrap; flex: none; }
 .pair-chip-sep { opacity: 0.55; }
 .call-sub .pair-chip { font-size: 11px; }
+
+/* the mint feed holds still under the pointer; arrivals queue behind this pill */
+.mint-pending { position: sticky; top: 4px; z-index: 4; display: block; margin: 4px auto; background: var(--panel); border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 3px 10px; font-size: 11px; cursor: pointer; }
+.mint-pending:hover { background: var(--hover); }
