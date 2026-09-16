@@ -6,10 +6,16 @@ import { MessageRow } from './MessageRow';
 import { VirtualItem } from './Virtual';
 import { useScrollAnchor } from '../useScrollAnchor';
 
-/** Discord-style grouping: hide the header when the message just above (in display order) is the same author within 5 min. */
+/**
+ * Discord-style grouping: hide the header when the message just above (in display order) is the
+ * same author within 5 min. A message carrying a contract keeps its header: a run of calls from
+ * one poster (a mirror bot relaying scans, say) must read as calls with a name and a time, not
+ * as a pile of chips.
+ */
 export function continued(list: FeedMessage[], i: number): boolean {
   const above = list[i - 1];
   const m = list[i];
+  if (m.contracts.length > 0) return false;
   return !!above && above.author === m.author && above.chatName === m.chatName && Math.abs(above.ts - m.ts) < 5 * 60_000 && !m.replyTo;
 }
 

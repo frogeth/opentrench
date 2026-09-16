@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Chat columns: a message that carries a contract always shows its author and time, even right after another message from the same poster, so a run of calls relayed by one account reads as calls rather than a stack of bare token chips. (Brandzo.)
 - Telegram groups: messages from the group's owner and admins carry a gold tag next to the name, owner, admin, or the custom admin title the group gave them, the way Telegram shows it.
 - Arc tokens get an explorer link (A/X Explorer, arcexplorer.org), and Arc mint transactions link there too.
 ## v0.9.0 — 2026-09-16
