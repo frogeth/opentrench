@@ -848,7 +848,11 @@ export class MessageHub extends EventEmitter {
     const c = detectContracts(String(raw ?? ''))[0];
     if (!c) return Promise.resolve(undefined);
     const known = this.tokens.get(c.address);
-    if (known) return Promise.resolve({ ...known });
+    if (known) {
+      // a token nobody could place yet (a chain the chart sites lack, a feed that was rate-limited): try again on demand
+      if (!known.network) this.enrich(known);
+      return Promise.resolve({ ...known });
+    }
     const hit = this.lookups.get(c.address);
     if (hit && Date.now() - hit.at < 60_000) return hit.p;
     const p = (async () => {
