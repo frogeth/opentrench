@@ -279,6 +279,7 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .settings button.mini { padding: 0 6px; font-size: 10px; }
 .bot-tag { font-size: 9px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--line); text-transform: uppercase; }
 .hidden-tag { color: var(--err); border-color: rgba(255, 92, 92, 0.4); }
+.admin-tag { color: var(--gold); border-color: rgba(242, 195, 102, 0.45); text-transform: none; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-hidden { opacity: 0.55; }
 .row-text { white-space: pre-wrap; word-break: break-word; margin-top: 2px; font-size: 13px; line-height: 1.4; }
 .row-contracts { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }

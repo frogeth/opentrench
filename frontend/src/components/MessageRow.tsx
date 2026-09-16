@@ -258,6 +258,11 @@ export function MessageRow({
         <div className="row-meta">
           <span className="author">{m.author}</span>
           {m.isBot && <span className="bot-tag">bot</span>}
+          {m.authorTag && (
+            <span className="bot-tag admin-tag" title={m.authorTag === 'owner' ? 'group owner' : m.authorTag === 'admin' ? 'group admin' : `admin · ${m.authorTag}`}>
+              {m.authorTag}
+            </span>
+          )}
           {m.hidden && <span className="bot-tag hidden-tag">hidden</span>}
           <AuthorMenu author={m.author} link={m.link} favorite={fav} bot={m.isBot} hidden={!!m.hidden} onChanged={onAuthorChanged} />
           {onReply && (

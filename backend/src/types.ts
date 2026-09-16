@@ -67,6 +67,8 @@ export interface FeedMessage {
   avatar?: string;
   /** the author is a bot user (raw fact from the platform) */
   isBot: boolean;
+  /** the author's standing in the chat: owner, admin, or the custom admin title the group gave them (Telegram groups) */
+  authorTag?: string;
   /** set by the hub: blacklisted, or a bot the bot policy does not allow. Hidden posts never count as calls. */
   hidden?: boolean;
   /** everything, flattened (embeds included): what contract detection and search look at */

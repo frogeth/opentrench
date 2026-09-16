@@ -124,3 +124,12 @@ describe('entitiesToMarkdown', () => {
     ]);
   });
 });
+
+
+describe('admin tags', () => {
+  it('an admin rank rides through to the feed message; none is none', () => {
+    const base = { id: 1, chatId: '-100', chatTitle: 'G', senderId: '7', senderName: 'x', isBot: false, text: 'gm', date: 1 } as any;
+    expect((normalizeTelegram({ ...base, authorTag: 'owner' }) as any).authorTag).toBe('owner');
+    expect('authorTag' in normalizeTelegram(base)).toBe(false);
+  });
+});

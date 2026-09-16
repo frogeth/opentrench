@@ -22,6 +22,7 @@ const EXPLORERS: Record<string, string> = {
   story: 'https://www.storyscan.io/token/',
   megaeth: 'https://megaeth.blockscout.com/token/',
   ink: 'https://explorer.inkonchain.com/token/',
+  arc: 'https://www.arcexplorer.org/token/',
 };
 
 export function explorerUrl(network: string | undefined, address: string): string | undefined {

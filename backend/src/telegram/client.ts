@@ -477,6 +477,45 @@ export class TelegramWrapper extends EventEmitter {
     return list;
   }
 
+  /** chat → its admins (user id → owner / admin / custom title), ten minutes at a time */
+  private adminsCache = new Map<string, { at: number; ranks: Map<string, string>; loading?: Promise<Map<string, string>> }>();
+  private async adminRank(chatId: string, userId: string): Promise<string | undefined> {
+    if (!this.client || this.state !== 'connected') return undefined;
+    let entry = this.adminsCache.get(chatId);
+    if (!entry || Date.now() - entry.at > 10 * 60_000) {
+      if (entry?.loading) return (await entry.loading).get(userId);
+      const loading = this.loadAdmins(chatId);
+      entry = { at: Date.now(), ranks: entry?.ranks ?? new Map(), loading };
+      this.adminsCache.set(chatId, entry);
+      try {
+        entry.ranks = await loading;
+      } finally {
+        entry.loading = undefined;
+      }
+      if (this.adminsCache.size > 300) this.adminsCache.delete(this.adminsCache.keys().next().value!);
+    }
+    return entry.ranks.get(userId);
+  }
+  private async loadAdmins(chatId: string): Promise<Map<string, string>> {
+    const ranks = new Map<string, string>();
+    const peer: any = await this.client!.getInputEntity(bigInt(chatId));
+    const put = (p: any) => {
+      const uid = p?.userId?.toString?.();
+      if (!uid) return;
+      const custom = typeof p.rank === 'string' && p.rank.trim() ? p.rank.trim().slice(0, 24) : undefined;
+      if (p.className === 'ChannelParticipantCreator' || p.className === 'ChatParticipantCreator') ranks.set(uid, custom ?? 'owner');
+      else if (p.className === 'ChannelParticipantAdmin' || p.className === 'ChatParticipantAdmin') ranks.set(uid, custom ?? 'admin');
+    };
+    if (peer instanceof Api.InputPeerChannel) {
+      const r: any = await this.client!.invoke(new Api.channels.GetParticipants({ channel: peer, filter: new Api.ChannelParticipantsAdmins(), offset: 0, limit: 200, hash: bigInt(0) }));
+      for (const p of r?.participants ?? []) put(p);
+    } else if (peer instanceof Api.InputPeerChat) {
+      const r: any = await this.client!.invoke(new Api.messages.GetFullChat({ chatId: peer.chatId }));
+      for (const p of r?.fullChat?.participants?.participants ?? []) put(p);
+    }
+    return ranks;
+  }
+
   private botCommandsCache = new Map<string, { at: number; list: { command: string; description: string }[] }>();
   /** The slash commands a bot publishes (what Telegram shows when you type "/"), cached ten minutes. */
   async botCommands(username: string): Promise<{ command: string; description: string }[]> {
@@ -787,6 +826,8 @@ export class TelegramWrapper extends EventEmitter {
         replyTo = { author: rName, text: String(r.message ?? '').trim() || (r.media ? '📎 media' : ''), id: `telegram:${chatId}:${r.id}` };
       }
     }
+    // a group's admins carry a tag (owner, admin, or the title the group gave them); channels post as the channel and get none
+    const authorTag = senderId && sender?.bot !== true && sender?.className === 'User' ? await this.adminRank(chatId, senderId).catch(() => undefined) : undefined;
     const mediaUrl = `/api/telegram/media/${chatId}/${m.id}`;
     const media = classifyMedia(m.media, mediaUrl);
     const preview = webpagePreview(m.media, `${mediaUrl}?thumb=1`);
@@ -802,6 +843,7 @@ export class TelegramWrapper extends EventEmitter {
       senderId,
       senderName,
       isBot: sender?.bot === true,
+      authorTag,
       text,
       date: m.date,
       hasMedia: !!m.media && m.media.className !== 'MessageMediaWebPage',

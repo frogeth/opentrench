@@ -66,6 +66,8 @@ export interface FeedMessage {
   author: string;
   avatar?: string;
   isBot: boolean;
+  /** owner / admin / custom admin title, for Telegram group admins */
+  authorTag?: string;
   /** blacklisted, or a bot the bot policy does not allow; never counts as a call */
   hidden?: boolean;
   /** everything, flattened (embeds included): what contract detection and search look at */

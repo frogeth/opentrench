@@ -8,6 +8,8 @@ export interface TelegramPlain {
   senderId?: string;
   senderName: string;
   isBot: boolean;
+  /** owner / admin / custom admin title, when the sender is an admin of the group */
+  authorTag?: string;
   text: string;
   date: number; // unix seconds
   hasMedia: boolean;
@@ -43,6 +45,7 @@ export function normalizeTelegram(p: TelegramPlain): FeedMessage {
     author: p.senderName,
     avatar: p.senderId ? `/api/telegram/avatar/${p.senderId}` : undefined,
     isBot: p.isBot,
+    ...(p.authorTag ? { authorTag: p.authorTag } : {}),
     text: p.text,
     ts: p.date * 1000,
     contracts: [],

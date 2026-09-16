@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Telegram groups: messages from the group's owner and admins carry a gold tag next to the name, owner, admin, or the custom admin title the group gave them, the way Telegram shows it.
+- Arc tokens get an explorer link (A/X Explorer, arcexplorer.org), and Arc mint transactions link there too.
 ## v0.9.0 — 2026-09-16
 
 - Cove buy buttons and the trade panel work for Arc tokens (Cove's chain code for Arc, confirmed against its own panels).

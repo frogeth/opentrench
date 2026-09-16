@@ -21,8 +21,8 @@ export const CHAINS: Record<string, ChainInfo> = {
   ink: { id: 'ink', name: 'Ink', chainId: 57073, symbol: 'ETH', defaultRpc: 'https://rpc-qnd.inkonchain.com', explorerTx: 'https://explorer.inkonchain.com/tx/', maxFeeGwei: 25, maxTipGwei: 5, maxGasCostWei: 2_000_000_000_000_000n },
   // Arc (Circle): USDC is the gas token, 18 decimals, so "gwei" here is 1e-9 USDC and the cost
   // ceiling is 1 USDC. Chain id checked against the RPC (eth_chainId 0x13b2) on 2026-09-15; the
-  // explorer host is the one the community shares and was not answering yet that day.
-  arc: { id: 'arc', name: 'Arc', chainId: 5042, symbol: 'USDC', defaultRpc: 'https://rpc.blockdaemon.mainnet.arc.io', explorerTx: 'https://arc-mainnet.cloud.blockscout.com/tx/', maxFeeGwei: 2000, maxTipGwei: 500, maxGasCostWei: 1_000_000_000_000_000_000n },
+  // explorer is A/X Explorer (arcexplorer.org), the one BasedBot links to; it answers for tx, token and address pages.
+  arc: { id: 'arc', name: 'Arc', chainId: 5042, symbol: 'USDC', defaultRpc: 'https://rpc.blockdaemon.mainnet.arc.io', explorerTx: 'https://www.arcexplorer.org/tx/', maxFeeGwei: 2000, maxTipGwei: 500, maxGasCostWei: 1_000_000_000_000_000_000n },
 };
 
 /** Own-property lookup: `chain` comes from external input, and a plain `obj[chain]` can be tricked into resolving `constructor`/`__proto__`/etc off the prototype chain instead of returning undefined. */
