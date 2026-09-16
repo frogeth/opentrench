@@ -9,7 +9,6 @@ import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
 import { AuthorMenu } from './AuthorMenu';
 import { ChainBadge, PairChip } from './ChainBadge';
-import { ChartFrame } from './ChartFrame';
 import { LaunchpadBadge } from './LaunchpadBadge';
 import { HoverCard, Tip } from './HoverCard';
 import { SecurityStrip } from './SecurityStrip';
@@ -346,7 +345,7 @@ export function CallCard({
       </div>
 
       {showChart && embed && (
-        <ChartFrame src={embed} alt={t.embedUrl} title={`${t.symbol ?? 'token'} chart`} />
+        <iframe className="token-chart" src={embed} title={`${t.symbol ?? 'token'} chart`} loading="lazy" allow="clipboard-write" allowFullScreen />
       )}
     </div>
   );

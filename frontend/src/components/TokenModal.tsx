@@ -10,7 +10,6 @@ import { Icon } from './Icon';
 import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
 import { ChainBadge, PairChip } from './ChainBadge';
-import { ChartFrame } from './ChartFrame';
 import { LaunchpadBadge } from './LaunchpadBadge';
 import { SecurityStrip } from './SecurityStrip';
 import { Tip } from './HoverCard';
@@ -254,7 +253,7 @@ export function TokenModal({ t, now, favorites, me = [], onClose, onShare, onBuy
             {chartState === 'none' && embed ? (
               // candles unavailable (rate limit, unknown pool): the provider's own chart stands in, so the drilldown never shows an empty grid
               <div className="tmodal-chart tmodal-chart-embed">
-                <ChartFrame src={embed} alt={t.embedUrl} title={`${t.symbol ?? 'token'} chart`} className="tmodal-embed" />
+                <iframe className="tmodal-embed" src={embed} title={`${t.symbol ?? 'token'} chart`} allow="clipboard-write" allowFullScreen />
                 <div className="tmodal-chart-note" title={chartReason}>
                   {embedName} chart · {chartReason ?? 'candles unavailable'}
                 </div>
