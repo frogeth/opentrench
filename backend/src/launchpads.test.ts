@@ -271,6 +271,8 @@ describe('Warp (Arc)', () => {
     expect(done).toMatchObject({ launchpadNote: 'graduated to WarpDex', pairAddress: '0x507a494fde26960cb36d50912cab83c71ecc7ea7' });
     expect(done!.twitter).toMatch(/circlewarp/);
     expect(mapWarp({ error: 'Token not found' }, live.address)).toBeUndefined();
+    // a token Warp's terminal merely indexes (another launchpad's, a pool's) is not a Warp launch
+    expect(mapWarp({ ...live, status: 'external', source: 'v4', curve: null }, live.address)).toBeUndefined();
     expect(mapWarp({ ...live, address: '0x' + '1'.repeat(40) }, live.address)).toBeUndefined();
   });
   it('fetchWarp asks the read API and a 404 is not a Warp token', async () => {
@@ -320,14 +322,15 @@ describe('DYOR Launch (Arc)', () => {
   const TOKEN = '0x07704b06981ea962b87296362a1281484d160000';
   const CURVE = '0x1111111111111111111111111111111111111111';
   const w = (hex: string) => hex.replace(/^0x/, '').padStart(64, '0');
-  const rpc = (over: { known?: boolean; graduated?: boolean; raised?: bigint; target?: bigint }) =>
+  const rpc = (over: { known?: boolean; older?: boolean; graduated?: boolean; raised?: bigint; target?: bigint }) =>
     (async (_url: string, init: any) => {
       const calls: any[] = JSON.parse(init.body);
       return new Response(
         JSON.stringify(
           calls.map((c) => {
             const data: string = c.params[0].data;
-            if (data.startsWith('0x86e14352')) return { id: c.id, result: '0x' + w(over.known ? CURVE : '0') };
+            if (data.startsWith('0x86e14352')) return over.known ? { id: c.id, result: '0x' + w(CURVE) } : { id: c.id, error: { code: 3, message: 'execution reverted', data: '0xcbdb7b30' } };
+            if (data.startsWith('0x9fc66651')) return over.older ? { id: c.id, result: '0x' + w('11b') } : { id: c.id, error: { code: 3, message: 'execution reverted', data: '0xcbdb7b30' } };
             if (data.startsWith('0xe7c2b772')) return { id: c.id, result: '0x' + w(over.graduated ? '1' : '0') };
             if (data.startsWith('0xdcce240a')) return { id: c.id, result: '0x' + w((over.raised ?? 0n).toString(16)) };
             if (data.startsWith('0xbdf50293')) return { id: c.id, result: '0x' + w((over.target ?? 0n).toString(16)) };
@@ -337,10 +340,12 @@ describe('DYOR Launch (Arc)', () => {
         { status: 200 },
       );
     }) as unknown as typeof fetch;
-  const chains = [{ network: 'arc', chainId: 5042, factory: '0xa2448256e2A2e2Fc02a8faff1Dbcc91C640FFcD8', rpc: 'https://rpc' }];
+  const chains = [{ network: 'arc', chainId: 5042, factory: '0xa2448256e2A2e2Fc02a8faff1Dbcc91C640FFcD8', rpc: 'https://rpc', reader: '0xDb3e73989EaE0a5132d668099C529F51A97EE8C3' }];
   it('the factory names a curve: DYOR token, with its progress or graduation', async () => {
     expect(await fetchDyor(TOKEN, rpc({ known: true, raised: 6163n, target: 18000n }), chains)).toEqual({ launchpad: 'dyor', launchpadUrl: `https://dyorswap.org/token?address=${TOKEN}&chainId=5042`, network: 'arc', launchpadNote: 'bonding · 34.2%' });
     expect((await fetchDyor(TOKEN, rpc({ known: true, graduated: true }), chains))?.launchpadNote).toBe('graduated');
     expect(await fetchDyor(TOKEN, rpc({ known: false }), chains)).toBeUndefined();
+    // an earlier V2 launch: the current factory reverts, the site's reader still answers
+    expect(await fetchDyor(TOKEN, rpc({ known: false, older: true }), chains)).toEqual({ launchpad: 'dyor', launchpadUrl: `https://dyorswap.org/token?address=${TOKEN}&chainId=5042`, network: 'arc' });
   });
 });

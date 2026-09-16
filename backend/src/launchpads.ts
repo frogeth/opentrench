@@ -583,6 +583,9 @@ export function mapWarp(d: any, address: string): LaunchpadInfo | undefined {
   if (!d || typeof d !== 'object' || d.error) return undefined;
   const a = address.toLowerCase();
   if (String(d.address ?? d.id ?? '').toLowerCase() !== a) return undefined;
+  // Warp's terminal also indexes tokens from other launchpads and pools; those come back `external` and are not Warp launches
+  const status = String(d.status ?? '').toLowerCase();
+  if (status !== 'live' && status !== 'migrated') return undefined;
   const out: LaunchpadInfo = { launchpad: 'warp', launchpadUrl: `https://circlewarp.fun/trade/${a}`, network: 'arc' };
   if (d.name) out.name = String(d.name);
   if (d.ticker) out.symbol = String(d.ticker);
@@ -664,11 +667,11 @@ export async function fetchPeach(address: string, fetchImpl: typeof fetch = fetc
 // ---------- DYOR Launch (Arc, Robinhood): factory + curve, no API ----------
 
 /** LaunchFactory per chain (dyorswap.org/docs/launch-curve); the curve is created per token by the factory */
-export const DYOR_CHAINS: { network: string; chainId: number; factory: string; rpc: string }[] = [
-  { network: 'arc', chainId: 5042, factory: '0xa2448256e2A2e2Fc02a8faff1Dbcc91C640FFcD8', rpc: ARC_RPC },
+export const DYOR_CHAINS: { network: string; chainId: number; factory: string; rpc: string; /** the reader contract dyorswap.org's own page asks; it also knows the earlier (V2) launches the current factory does not */ reader?: string }[] = [
+  { network: 'arc', chainId: 5042, factory: '0xa2448256e2A2e2Fc02a8faff1Dbcc91C640FFcD8', rpc: ARC_RPC, reader: '0xDb3e73989EaE0a5132d668099C529F51A97EE8C3' },
   { network: 'robinhood', chainId: 4663, factory: '0xA22CAC40344aEf32BD0952e98b2E1B3ef8914C0F', rpc: ROBINHOOD_RPC },
 ];
-const DYOR_SEL = { launchCurveOf: '0x86e14352', graduated: '0xe7c2b772', salePairReserve: '0xdcce240a', graduationPairAmount: '0xbdf50293' } as const;
+const DYOR_SEL = { launchCurveOf: '0x86e14352', graduated: '0xe7c2b772', salePairReserve: '0xdcce240a', graduationPairAmount: '0xbdf50293', /** the reader's per-token call (undocumented; answers a number for a DYOR token, reverts for anything else) */ readerToken: '0x9fc66651' } as const;
 
 /**
  * DYOR: the factory's launchCurveOf(token) names the curve when the token is one of theirs; the
@@ -686,7 +689,13 @@ export async function fetchDyor(address: string, fetchImpl: typeof fetch = fetch
       continue;
     }
     const curve = typeof rows[0]?.result === 'string' ? wordAddr(rows[0].result, 0) : undefined;
-    if (!curve || /^0x0{40}$/.test(curve)) continue;
+    if (!curve || /^0x0{40}$/.test(curve)) {
+      // not on the current factory; an earlier DYOR launch (V2) still answers on the reader the site itself uses
+      if (!chain.reader) continue;
+      const older = await rpcBatch(chain.rpc, [{ method: 'eth_call', params: [{ to: chain.reader, data: DYOR_SEL.readerToken + arg }, 'latest'] }], fetchImpl).catch(() => []);
+      if (typeof older[0]?.result !== 'string' || older[0].result.length <= 2) continue;
+      return { launchpad: 'dyor', launchpadUrl: `https://dyorswap.org/token?address=${a}&chainId=${chain.chainId}`, network: chain.network };
+    }
     const out: LaunchpadInfo = { launchpad: 'dyor', launchpadUrl: `https://dyorswap.org/token?address=${a}&chainId=${chain.chainId}`, network: chain.network };
     try {
       const st = await rpcBatch(chain.rpc, [
