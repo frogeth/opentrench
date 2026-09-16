@@ -407,6 +407,18 @@ export function createLaunchpadClassifier(p: LaunchpadProbes): (address: string,
       }
     }
     if (bySuffix) return bySuffix;
+    if (chain === 'sol') {
+      // not every pump.fun mint ends in "pump" (a vanity suffix the creator can skip): ask pump.fun
+      // itself, a 404 is cheap and settles it
+      if (p.pumpfun) {
+        try {
+          return await p.pumpfun(address);
+        } catch (e: any) {
+          log(`pumpfun probe failed for ${address}: ${e?.message ?? e}`);
+        }
+      }
+      return undefined;
+    }
     if (chain !== 'evm') return undefined;
     for (const [name, probe] of [
       ['long', p.long],

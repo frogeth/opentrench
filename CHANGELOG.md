@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- pump.fun tokens whose mint does not end in "pump" (the vanity suffix is optional) get their picture and badge: pump.fun itself is asked for every Solana token the chart sites cannot picture.
 - Two Arc launchpads: Argus (argus.world) and Warp (circlewarp.fun). Their tokens get the badge, a link to the token page, bonding or graduated status, and for Warp the live price, market cap, liquidity and progress to graduation from its own API. Argus is read straight from its Portal contracts, with the launch's name, image and socials when the RPC still has the event. Both appear in the launchpad filters.
 - Arc (Circle's chain): tokens called on Arc get their chain, price and market cap (GeckoTerminal lists the network; Dexscreener does not yet), with Arc's badge, label and chain filter. The OpenSea mint window knows the chain (id 5042, USDC gas, checked against the RPC) for when OpenSea lists Arc drops. BasedBot charts work for Arc tokens. No public Arc explorer answered yet, so token explorer links wait.
 - OpenSea mint: a drop that has minted out is refused with "Sold out: 3,333 of 3,333 minted" even when OpenSea still lists the public stage as open (the mint would only revert). A quantity past what is left is refused with the number, and a drop OpenSea has paused says why. (Brandzo, Yield Farm.)

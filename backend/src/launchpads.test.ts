@@ -279,3 +279,23 @@ describe('Warp (Arc)', () => {
     expect(await fetchWarp('0x' + '2'.repeat(40), fake, 'https://api')).toBeUndefined();
   });
 });
+
+
+describe('pump.fun mints without the vanity suffix', () => {
+  it('a Solana address that does not end in "pump" is still asked of pump.fun', async () => {
+    const asked: string[] = [];
+    const cls = createLaunchpadClassifier({
+      pumpfun: async (a) => {
+        asked.push(a);
+        return a === 'pfkK22P3jt3XDF8S2BzjscqXJ2dWFZXbLqoNFREf2Eh' ? { launchpad: 'pumpfun', launchpadUrl: 'https://pump.fun/coin/' + a, network: 'solana', imageUrl: 'https://img/x.png' } : undefined;
+      },
+      log: () => {},
+    });
+    expect((await cls('pfkK22P3jt3XDF8S2BzjscqXJ2dWFZXbLqoNFREf2Eh', 'sol'))?.imageUrl).toBe('https://img/x.png');
+    expect(await cls('So11111111111111111111111111111111111111112', 'sol')).toBeUndefined();
+    expect(asked).toHaveLength(2);
+    // a letsbonk suffix still wins without a pump.fun call
+    expect((await cls('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbonk', 'sol'))?.launchpad).toBe('letsbonk');
+    expect(asked).toHaveLength(2);
+  });
+});
