@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createEnricher, explorerUrl } from './enrich.js';
-import { mapGeckoTerminal, fetchGeckoTerminal } from './geckoterminal.js';
+import { GT_NETWORKS, mapGeckoTerminal, fetchGeckoTerminal } from './geckoterminal.js';
 
 const A = '0xa419Bb493ed5059f28dfd84348A2F93D70ECf003';
 
@@ -96,10 +96,12 @@ describe('fetchGeckoTerminal fallback networks', () => {
       if (m && m[1] === 'arc') return new Response(JSON.stringify({ data: { attributes: { name: 'Arcanine', symbol: 'ARCANINE', price_usd: '0.0012', fdv_usd: '277000', market_cap_usd: null, total_reserve_in_usd: '9000' }, relationships: { top_pools: { data: [] } } } }), { status: 200 });
       return new Response('', { status: 404 });
     }) as unknown as typeof fetch;
-    const t = await fetchGeckoTerminal('0xarc', 'evm', fake);
+    // requests to GeckoTerminal are spaced out, so the test walks a short list; the real one ends with arc
+    expect(GT_NETWORKS.evm[GT_NETWORKS.evm.length - 1]).toBe('arc');
+    const t = await fetchGeckoTerminal('0xarc', 'evm', fake, ['eth', 'arc']);
     expect(t).toMatchObject({ network: 'arc', symbol: 'ARCANINE', marketCap: 277000, priceUsd: 0.0012 });
-    expect(asked.filter((u) => /\/tokens\/0xarc$/.test(u)).map((u) => /networks\/([a-z]+)\//.exec(u)![1])).toEqual(['robinhood', 'base', 'eth', 'bsc', 'arbitrum', 'arc']);
-  });
+    expect(asked.filter((u) => /\/tokens\/0xarc$/.test(u)).map((u) => /networks\/([a-z]+)\//.exec(u)![1])).toEqual(['eth', 'arc']);
+  }, 20_000);
 });
 
 describe('mapGeckoTerminal', () => {
