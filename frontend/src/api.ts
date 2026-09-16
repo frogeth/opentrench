@@ -169,6 +169,8 @@ export interface TelegramDialog {
   id: string;
   title: string;
   type: 'group' | 'channel' | 'dm' | 'bot';
+  /** public @handle, when there is one */
+  username?: string;
 }
 
 /** one row of a composer's "/" menu (backend SlashMenuItem) */

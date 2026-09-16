@@ -1378,3 +1378,4 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 .osm-row-actions { flex: none; display: flex; gap: 4px; }
 .osm-row-x:hover { color: var(--err); border-color: var(--err); }
 .layouts-current { font-size: 11px; color: var(--muted); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
+.pick-handle { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }

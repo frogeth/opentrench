@@ -43,7 +43,9 @@ export function AddChatsModal({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const query = q.trim().toLowerCase();
+  // a handle pasted from Telegram arrives as "@name" wrapped in invisible bidi marks; a search should survive that
+  const query = q.replace(/[\u200e\u200f\u2066-\u2069\u200b\ufeff]/g, '').trim().replace(/^@/, '').toLowerCase();
+  const tgHit = (d: TelegramDialog) => d.title.toLowerCase().includes(query) || (d.username?.toLowerCase().includes(query) ?? false);
   // Telegram: groups, channels and DMs pile up fast; narrow by kind, or to what is already in the feed
   const [tgKind, setTgKind] = useState<TgKind>('all');
   const [tgInFeed, setTgInFeed] = useState(false);
@@ -75,7 +77,7 @@ export function AddChatsModal({
     const inFeed = dialogs.filter((d) => cfg?.telegram.watch.includes(d.id)).length;
     const rows = dialogs
       .filter((d) => (tgKind === 'all' || d.type === tgKind) && (!tgInFeed || (cfg?.telegram.watch.includes(d.id) ?? false)))
-      .filter((d) => !query || d.title.toLowerCase().includes(query))
+      .filter((d) => !query || tgHit(d))
       .sort((a, b) => {
         const wa = cfg?.telegram.watch.includes(a.id) ? 0 : 1;
         const wb = cfg?.telegram.watch.includes(b.id) ? 0 : 1;
@@ -102,6 +104,7 @@ export function AddChatsModal({
               <button className="pick-main" onClick={() => onPreview('telegram', d.id, d.title)} title="preview without adding">
                 <Avatar src={`/api/telegram/avatar/${d.id}`} name={d.title} size={22} />
                 <span className="pick-name">{d.title}</span>
+                {d.username && <span className="muted pick-handle">@{d.username}</span>}
                 <span className="muted">{d.type}</span>
               </button>
               <button className="pick-eye" onClick={() => onPreview('telegram', d.id, d.title)} title="preview">

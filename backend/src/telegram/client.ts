@@ -16,6 +16,8 @@ export interface TelegramDialog {
   title: string;
   /** `bot`: a conversation with a bot (a custom alert bot, say), watched like any chat */
   type: 'group' | 'channel' | 'dm' | 'bot';
+  /** public @handle, when the user, bot or channel has one (searchable in the picker) */
+  username?: string;
 }
 
 /** What the feed calls a chat: a group's title, or a person's name / @username for a DM. */
@@ -216,6 +218,7 @@ export class TelegramWrapper extends EventEmitter {
         id: String(d.id),
         title: d.isUser ? chatDisplayName(d.entity, d.title ?? String(d.id)) : (d.title ?? '(untitled)'),
         type: d.isUser ? ((d.entity as any)?.bot ? ('bot' as const) : ('dm' as const)) : d.isChannel && !d.isGroup ? ('channel' as const) : ('group' as const),
+        ...((d.entity as any)?.username ? { username: String((d.entity as any).username) } : {}),
       }));
     this.dialogsCache = { at: Date.now(), list };
     return list;
