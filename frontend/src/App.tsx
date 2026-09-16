@@ -1311,6 +1311,22 @@ export default function App() {
       );
     }
     const msgs = chatMsgsFor(names, col.filters);
+    // a server or channel picked in the rail narrows every column; a column whose own chats lie outside it is empty for that reason, not for lack of messages
+    const outOfScope = scope !== null && !view.preview && names !== null && names.size > 0 && ![...names].some((n) => scope.has(n));
+    const emptyNote =
+      watched.length === 0 ? (
+        'No chats in your feed yet. Use the + in the rail.'
+      ) : outOfScope ? (
+        <>
+          The rail is showing {view.chat ? 'one channel' : 'one server'}, and this column's {names!.size === 1 ? 'chat is' : 'chats are'} not in it.
+          <br />
+          <button className="seen-all" onClick={() => setView({ rail: 'all' })} style={{ marginTop: 10 }}>
+            show all channels
+          </button>
+        </>
+      ) : (
+        'Nothing here yet.'
+      );
     return (
       <ChatFeed
         key={col.id}
@@ -1331,7 +1347,7 @@ export default function App() {
         onReact={canSend.discord || canSend.telegram ? react : undefined}
         canReact={canSend}
         mine={myReactions}
-        empty={<div className="empty">{watched.length === 0 ? 'No chats in your feed yet. Use the + in the rail.' : 'Nothing here yet.'}</div>}
+        empty={<div className="empty">{emptyNote}</div>}
         render={(body, bodyRef, onScroll, footer) => (
           <Column
             title={col.title}
