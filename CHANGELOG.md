@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.9.3 — 2026-09-16
+
 - A Telegram bot you add to the feed (its own chat, like a custom alert bot) is no longer hidden by the bot policy and its contracts count as calls; only the blacklist can hide it.
 - The Telegram picker finds chats by @handle too, shows the handle next to the name, and a name pasted from Telegram (with the @ and the invisible marks Telegram wraps it in) still matches.
 - The app no longer silently stops a backend started from a checkout when an update makes it look older; it asks Use it / Replace it (its own leftover backends are still replaced without asking).
