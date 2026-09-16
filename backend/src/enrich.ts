@@ -1,6 +1,6 @@
 import type { Chain, TokenInfo } from './types.js';
 import { fetchDexscreener } from './dexscreener.js';
-import { fetchGeckoTerminal } from './geckoterminal.js';
+import { fetchGeckoTerminal, gtThrottled } from './geckoterminal.js';
 import { probeChains } from './rpcprobe.js';
 import {
   createLaunchpadClassifier,
@@ -47,6 +47,8 @@ export interface EnrichSources {
   geckoterminal?: (address: string, chain: Chain, networks?: string[]) => Promise<Partial<TokenInfo> | undefined>;
   /** chains no chart site indexes: their own RPCs say whether the contract lives there */
   rpcProbe?: (address: string) => Promise<Partial<TokenInfo> | undefined>;
+  /** GeckoTerminal is backing off a 429: a token the probe placed is returned now, its price comes with the next refresh */
+  gtBusy?: () => boolean;
   /** launchpad classifier: badge + image/socials for fresh launches no chart site knows yet */
   launchpad?: (address: string, chain: Chain) => Promise<LaunchpadInfo | undefined>;
   log?: (msg: string) => void;
@@ -82,7 +84,7 @@ export function createEnricher(src: EnrichSources): TokenFetcher {
         log(`rpc probe failed for ${address}: ${e?.message ?? e}`);
       }
     }
-    if (!info && src.geckoterminal) {
+    if (!info && src.geckoterminal && !(placed && src.gtBusy?.())) {
       try {
         info = await src.geckoterminal(address, chain, placed?.network ? [placed.network] : undefined);
         if (!info && !placed) log(`no pair on dexscreener or geckoterminal for ${address}`);
@@ -117,6 +119,7 @@ export function createDefaultEnricher(opts: { o1ApiKey?: () => string | undefine
     dexscreener: (a) => fetchDexscreener(a),
     geckoterminal: (a, c, networks) => fetchGeckoTerminal(a, c, undefined, networks),
     rpcProbe: (a) => probeChains(a),
+    gtBusy: () => gtThrottled(),
     launchpad: createLaunchpadClassifier({
       bankr: (a) => fetchBankrLaunch(a),
       stonks: (a) => fetchStonks(a),

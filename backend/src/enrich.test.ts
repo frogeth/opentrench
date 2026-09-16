@@ -110,6 +110,17 @@ describe('createEnricher with an RPC probe', () => {
       log: () => {},
     });
     expect(await rich('0xc518663010994da18bbb1ecf2bba6f49e326342c', 'evm')).toMatchObject({ network: 'arc', priceUsd: 0.5, marketCap: 11_400, name: 'Sashimi' });
+    // while GeckoTerminal is backing off, a placed token is returned at once without asking it
+    let gtAsked = 0;
+    const busy = createEnricher({
+      dexscreener: async () => undefined,
+      rpcProbe: async () => ({ network: 'arc', symbol: 'SASHIMI' }),
+      geckoterminal: async () => (gtAsked++, undefined),
+      gtBusy: () => true,
+      log: () => {},
+    });
+    expect(await busy('0xc518663010994da18bbb1ecf2bba6f49e326342c', 'evm')).toMatchObject({ network: 'arc', symbol: 'SASHIMI' });
+    expect(gtAsked).toBe(0);
     // a Solana address never hits the EVM probe
     let probed = 0;
     const sol = createEnricher({ dexscreener: async () => undefined, rpcProbe: async () => (probed++, undefined), geckoterminal: async () => undefined, log: () => {} });
