@@ -75,6 +75,27 @@ function scheduler() {
   return { timers, schedule: (ms: number, fn: () => void) => { const t = { ms, fn }; timers.push(t); return () => { const i = timers.indexOf(t); if (i >= 0) timers.splice(i, 1); }; } };
 }
 
+describe('Minter supply', () => {
+  it('a drop that minted out is refused even though OpenSea still lists an open stage', async () => {
+    const gone: DropCollection = { ...col, drop: { ...col.drop!, minted: 3333, maxSupply: 3333 } };
+    const m = new Minter(() => KEY, () => ({}), deps({ resolve: async () => gone }));
+    const job = await m.quote({ locator: 'chump', quantity: 1 });
+    expect(job.state).toBe('failed');
+    expect(job.error).toBe('Sold out: 3,333 of 3,333 minted.');
+    expect(job.drop).toMatchObject({ minted: 3333, max: 3333 });
+    // and a quantity past what is left is refused with the number
+    const few: DropCollection = { ...col, drop: { ...col.drop!, minted: 3331, maxSupply: 3333 } };
+    const m2 = new Minter(() => KEY, () => ({}), deps({ resolve: async () => few }));
+    expect((await m2.quote({ locator: 'chump', quantity: 3 })).error).toBe('Only 2 left, not 3.');
+    expect((await m2.quote({ locator: 'chump', quantity: 2 })).state).toBe('ready');
+  });
+  it('a drop OpenSea has paused is refused with its reason', async () => {
+    const paused: DropCollection = { ...col, drop: { ...col.drop!, disabledReason: 'Mint disabled by the creator' } };
+    const m = new Minter(() => KEY, () => ({}), deps({ resolve: async () => paused }));
+    expect((await m.quote({ locator: 'chump', quantity: 1 })).error).toMatch(/paused this drop: Mint disabled/);
+  });
+});
+
 describe('Minter queue', () => {
   it('waits for the coming stage this wallet can mint in, then quotes itself again when it starts', async () => {
     const c = clock();

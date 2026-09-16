@@ -211,8 +211,9 @@ function DropPanel({ j, now, wallet }: { j: MintJob; now: number; wallet?: strin
   const d = j.drop;
   const live = d?.stages.some((s) => whenStage(s, now).live);
   const canMint = j.stage?.maxPerWallet !== undefined ? Math.max(0, j.stage.maxPerWallet - (j.stage.alreadyMinted ?? 0)) : undefined;
+  const soldOut = d?.minted !== undefined && d?.max !== undefined && d.minted >= d.max;
   const badge =
-    j.state === 'quoting' ? 'Looking up…' : j.state === 'waiting' ? `⏱ ${stageLabel(j.waitFor?.type ?? 'stage')} in ${countdown(j.waitFor?.startTime, now)}` : d?.disabledReason ? 'Paused' : live ? '● Minting now' : d?.stages.length ? 'Not open' : '';
+    j.state === 'quoting' ? 'Looking up…' : soldOut ? 'Sold out' : j.state === 'waiting' ? `⏱ ${stageLabel(j.waitFor?.type ?? 'stage')} in ${countdown(j.waitFor?.startTime, now)}` : d?.disabledReason ? 'Paused' : live ? '● Minting now' : d?.stages.length ? 'Not open' : '';
   return (
     <div className={`osm-panel osm-drop osj-${j.state}`}>
       <div className="osm-panel-head">
@@ -224,7 +225,7 @@ function DropPanel({ j, now, wallet }: { j: MintJob; now: number; wallet?: strin
             {d?.floor ? ` · floor ${unitFmt.format(d.floor.unit)} ${d.floor.symbol}${d.floor.usd !== undefined ? ` ≈ $${d.floor.usd.toFixed(2)}` : ''}` : ''}
           </span>
         </div>
-        {badge && <span className={`osm-badge${live && j.state !== 'waiting' ? ' osm-badge-ready' : j.state === 'waiting' ? ' osm-badge-waiting' : ''}`}>{badge}</span>}
+        {badge && <span className={`osm-badge${soldOut ? ' osm-badge-failed' : live && j.state !== 'waiting' ? ' osm-badge-ready' : j.state === 'waiting' ? ' osm-badge-waiting' : ''}`}>{badge}</span>}
       </div>
       <DropInfo j={j} now={now} floorInline />
       {wallet && (

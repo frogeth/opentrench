@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- OpenSea mint: a drop that has minted out is refused with "Sold out: 3,333 of 3,333 minted" even when OpenSea still lists the public stage as open (the mint would only revert). A quantity past what is left is refused with the number, and a drop OpenSea has paused says why. (Brandzo, Yield Farm.)
 ## v0.8.15 — 2026-09-15
 
 - Every text box, select and textarea in the app shares one style; the add-column button sits in the bottom-right corner, the same distance in as the Pings pill.

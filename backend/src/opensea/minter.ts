@@ -297,6 +297,13 @@ export class Minter extends EventEmitter {
       const elig = await this.deps.eligibility(this.session(acct), col);
       job.drop = describeDrop(col, elig);
       if (elig.kind !== col.drop.kind) return this.fail(job, 'OpenSea returned eligibility for a different drop type; try again');
+      // OpenSea keeps listing the public stage after the supply is gone; the mint would only revert
+      if (col.drop.maxSupply !== undefined && col.drop.minted !== undefined) {
+        const supplyLeft = col.drop.maxSupply - col.drop.minted;
+        if (supplyLeft <= 0) return this.fail(job, `Sold out: ${col.drop.minted.toLocaleString()} of ${col.drop.maxSupply.toLocaleString()} minted.`);
+        if (quantity > supplyLeft) return this.fail(job, `Only ${supplyLeft.toLocaleString()} left, not ${quantity}.`);
+      }
+      if (col.drop.disabledReason) return this.fail(job, `OpenSea has paused this drop: ${col.drop.disabledReason}`);
       const now = t0;
       const openStages = col.drop.stages.filter((s) => Date.parse(s.startTime ?? '') <= now && (!s.endTime || now < Date.parse(s.endTime)));
       const paired = openStages.map((s) => ({ s, e: elig.stages.find((x) => x.type === s.type && x.index === s.index) }));
