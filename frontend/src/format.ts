@@ -137,6 +137,8 @@ const BASEDBOT_SLUG: Record<string, string> = {
   solana: 'solana',
   bsc: 'bsc',
   arbitrum: 'arbitrum',
+  // BasedBot's own embed for Arc: basedbot.app/embed/token/arc/<address>
+  arc: 'arc',
 };
 
 /** Candle size that fills the chart for a token of this age: fresh launches get 1m, older ones 15m. */
