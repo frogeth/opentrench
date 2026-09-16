@@ -121,6 +121,14 @@ describe('createEnricher with an RPC probe', () => {
     });
     expect(await busy('0xc518663010994da18bbb1ecf2bba6f49e326342c', 'evm')).toMatchObject({ network: 'arc', symbol: 'SASHIMI' });
     expect(gtAsked).toBe(0);
+    // a launchpad's note (bonding, graduated) rides along with its badge
+    const noted = createEnricher({
+      dexscreener: async () => undefined,
+      geckoterminal: async () => undefined,
+      launchpad: async () => ({ launchpad: 'warp', launchpadUrl: 'https://circlewarp.fun/trade/0xabc', launchpadNote: 'bonding · 13% to $69K', network: 'arc' }),
+      log: () => {},
+    });
+    expect(await noted('0xc518663010994da18bbb1ecf2bba6f49e326342c', 'evm')).toMatchObject({ launchpad: 'warp', launchpadNote: 'bonding · 13% to $69K', network: 'arc' });
     // a Solana address never hits the EVM probe
     let probed = 0;
     const sol = createEnricher({ dexscreener: async () => undefined, rpcProbe: async () => (probed++, undefined), geckoterminal: async () => undefined, log: () => {} });

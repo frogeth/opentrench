@@ -92,6 +92,7 @@ export function createEnricher(src: EnrichSources): TokenFetcher {
           info = info ?? {};
           info.launchpad = lp.launchpad;
           info.launchpadUrl = lp.launchpadUrl;
+          if (lp.launchpadNote) info.launchpadNote = lp.launchpadNote;
           for (const k of FILL_KEYS) if (!info[k] && lp[k]) (info as any)[k] = lp[k];
         }
       } catch (e: any) {

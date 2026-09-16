@@ -449,8 +449,9 @@ export const ARGUS_PORTALS: { address: string; v4: boolean }[] = [
 const ARGUS_SEL = { launches: '0x1f2d8550', bonded: '0xe88dc357' } as const; // keccak of launches(address), bonded()
 /** v4 TokenCreated(address indexed token, address indexed creator, string name, string symbol, bytes32 poolId, string imageURI, string website, string twitter, string telegram) */
 const ARGUS_TOKEN_CREATED = '0x1d8917231579f8ce39407f0d616f36f357b07329b0ce5164d0754ac15145ce0a';
-/** how far back the launch event is looked for; Arc RPCs prune older logs and the busy Portal emits thousands a day */
-const ARGUS_LOG_SPAN = 200_000;
+/** Arc RPCs cap eth_getLogs at 100k blocks a query; the launch event is looked for window by window, newest first, this many windows back */
+const ARGUS_LOG_WINDOW = 99_000;
+const ARGUS_LOG_WINDOWS = 8;
 
 async function rpcBatch(rpc: string, calls: { method: string; params: unknown[] }[], fetchImpl: typeof fetch): Promise<any[]> {
   const ctl = new AbortController();
@@ -505,8 +506,15 @@ export async function fetchArgus(address: string, fetchImpl: typeof fetch = fetc
   if (hit.portal.v4 && latest > 0) {
     // the launch event carries what the chain sites lack; Arc RPCs prune old logs, so a miss here is not an error
     try {
-      const [lg] = await rpcBatch(rpc, [{ method: 'eth_getLogs', params: [{ address: hit.portal.address, fromBlock: '0x' + Math.max(0, latest - ARGUS_LOG_SPAN).toString(16), toBlock: 'latest', topics: [ARGUS_TOKEN_CREATED, '0x' + arg] }] }], fetchImpl);
-      const log = Array.isArray(lg?.result) ? lg.result[0] : undefined;
+      let log: any;
+      for (let i = 0; i < ARGUS_LOG_WINDOWS && !log; i++) {
+        const to = latest - i * ARGUS_LOG_WINDOW;
+        const from = Math.max(0, to - ARGUS_LOG_WINDOW + 1);
+        const [lg] = await rpcBatch(rpc, [{ method: 'eth_getLogs', params: [{ address: hit.portal.address, fromBlock: '0x' + from.toString(16), toBlock: '0x' + to.toString(16), topics: [ARGUS_TOKEN_CREATED, '0x' + arg] }] }], fetchImpl);
+        if (lg?.error) break; // pruned that far back: what we have will do
+        log = Array.isArray(lg?.result) ? lg.result[0] : undefined;
+        if (from === 0) break;
+      }
       if (log?.data) {
         // data: (string name, string symbol, bytes32 poolId, string imageURI, string website, string twitter, string telegram)
         const strings = decodeDynamicStrings(String(log.data), [0, 1, 3, 4, 5, 6]);
