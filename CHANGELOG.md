@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Live charts (chat chips, call cards, the drilldown fallback) say "loading BasedBot chart…" over the black frame while the provider answers, and after ten seconds offer a one-click switch to Dexscreener when it is slow. (Roms saw a black chart that was still loading.)
 - MintGo column: the feed holds still while your pointer is over it, so the mint you are about to click does not slide away. New mints queue behind a "N new mints waiting" pill and flow in when the pointer leaves (or you click the pill). (Suggested by lunchbag.)
 - Clicking a trending row opens the token drilldown (chart, every call, buy buttons) instead of only highlighting it in the calls column. (Suggested by Brandzo.)
 ## v0.9.4 — 2026-09-16

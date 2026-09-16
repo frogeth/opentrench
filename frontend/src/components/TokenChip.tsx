@@ -6,6 +6,7 @@ import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
 import { ChainBadge, PairChip } from './ChainBadge';
 import { LaunchpadBadge } from './LaunchpadBadge';
+import { ChartFrame } from './ChartFrame';
 import { useVisible } from '../useVisible';
 
 /** Compact token strip under a chat message: image with badges, ticker, the numbers that matter, links, buys. */
@@ -130,7 +131,7 @@ export function TokenChip({
       {showChart && embed && (
         <div className="chip-chart">
           {visible ? (
-            <iframe className="token-chart" src={embed} title="chart" allow="clipboard-write" allowFullScreen />
+            <ChartFrame src={embed} alt={t?.embedUrl} title="chart" />
           ) : (
             <div className="token-chart token-chart-idle" />
           )}
