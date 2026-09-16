@@ -1664,6 +1664,7 @@ export default function App() {
           t={tokens[openToken] ?? lookedUp!}
           now={now}
           favorites={status.favorites}
+          me={[status.discordUser, status.telegramUser]}
           onClose={() => {
             setOpenToken(null);
             setLookedUp(null);

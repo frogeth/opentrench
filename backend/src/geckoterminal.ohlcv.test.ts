@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { __resetRateLimit, fetchGeckoTerminalMulti, fetchOhlcv, gtThrottled } from './geckoterminal.js';
+import { __resetRateLimit, __setRateLimitedAt, fetchGeckoTerminalMulti, fetchOhlcv, gtThrottled } from './geckoterminal.js';
 
 describe('fetchOhlcv', () => {
   it('names the token so GT returns its side of the pool, and the page boundary', async () => {
@@ -16,7 +16,7 @@ describe('fetchOhlcv', () => {
     expect(String(fetchImpl.mock.calls[0][0])).not.toMatch(/token=|before_timestamp=/);
   });
 
-  it('after a 429, candles stand aside for a minute while market lookups still go out', async () => {
+  it('after a 429 everything holds for half a minute; then market lookups go while candles stand aside for the full minute', async () => {
     __resetRateLimit();
     const calls: string[] = [];
     let status = 429;
@@ -29,8 +29,11 @@ describe('fetchOhlcv', () => {
     status = 200;
     await expect(fetchOhlcv('base', 'pool', '1m', 5, fetchImpl)).rejects.toThrow('reserved for market data');
     expect(calls.length).toBe(1); // the candle request never left the machine
+    // half a minute later: market data asks again (the queue's hold has passed), candles still wait out the minute
+    __setRateLimitedAt(Date.now() - 31_000);
     await fetchGeckoTerminalMulti('base', ['0xa'], fetchImpl);
-    expect(calls.length).toBe(2); // market data still asks
+    expect(calls.length).toBe(2);
+    await expect(fetchOhlcv('base', 'pool', '1m', 5, fetchImpl)).rejects.toThrow('reserved for market data');
     __resetRateLimit();
     await fetchOhlcv('base', 'pool', '1m', 5, fetchImpl);
     expect(calls.length).toBe(3);

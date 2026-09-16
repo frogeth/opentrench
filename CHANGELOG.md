@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Token drilldown: the chart falls back to your chart provider's embed (BasedBot, Dexscreener, …) when candles are unavailable, and says why (GeckoTerminal rate limit, no pool yet) instead of an empty grid. The backend now pauses all GeckoTerminal requests for half a minute after a rate limit instead of collecting more of them.
+- Token drilldown calls: one row per person. The same caller scanning in several chats is one row with ×N and every chat listed (entry from the earliest scan), and your own Discord and Telegram scans fold into a single "you" row.
 ## v0.9.3 — 2026-09-16
 
 - A Telegram bot you add to the feed (its own chat, like a custom alert bot) is no longer hidden by the bot policy and its contracts count as calls; only the blacklist can hide it.

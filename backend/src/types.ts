@@ -437,6 +437,8 @@ export interface Status {
   favorites: string[];
   /** who the Discord plugin is signed in as */
   discordUser?: string;
+  /** the Telegram account's @handle, lower-case, when it has one (your own scans on both platforms fold into one row) */
+  telegramUser?: string;
   /** how Discord is connected: the Vencord bridge (read + write) or a legacy token (read only) */
   discordMode?: 'bridge' | 'token' | 'none';
   /** TrenchTogether: sharing on this machine, and the friends this machine follows */

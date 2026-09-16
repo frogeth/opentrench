@@ -640,7 +640,10 @@ export class Services {
       this.addPreviews(m);
     });
     tg.on('reactions', (msgId: string, reactions: Reaction[]) => this.hub.setReactions(msgId, reactions));
-    tg.on('self', () => this.hub.recomputeBuyLinks());
+    tg.on('self', () => {
+      this.hub.setTelegramUser(tg.selfUsername);
+      this.hub.recomputeBuyLinks();
+    });
     tg.on('bot', (bot: string, msg: import('./types.js').BotMessage) => this.hub.emit('event', { type: 'bot', bot, msg }));
     tg.on('botDelete', (ids: number[]) => this.hub.emit('event', { type: 'botDelete', ids }));
     this.telegram = tg;

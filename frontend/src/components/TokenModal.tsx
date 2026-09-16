@@ -2,7 +2,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import type { CallRecord, TokenInfo } from '../types';
 import { api } from '../api';
-import { copyText, isFavorite, money, price, shortAddr, telegramShareUrl, timeAgo } from '../format';
+import { CHART_PROVIDERS, chartEmbedUrl, copyText, isFavorite, money, normName, price, shortAddr, telegramShareUrl, timeAgo, type ChartProvider } from '../format';
 import { Avatar } from './Avatar';
 import { CaMenuContext } from './RichText';
 import { Logo } from './Logo';
@@ -37,7 +37,7 @@ const serverOf = (c: CallRecord) => {
  * Token drill-down: header like the call card, server chips, a candlestick
  * chart (market cap axis) with every call pinned on it, and the callers list.
  */
-export function TokenModal({ t, now, favorites, onClose, onShare, onBuy }: { t: TokenInfo; now: number; favorites: string[]; onClose: () => void; onShare?: (address: string, symbol?: string) => void; onBuy?: (url: string) => void }) {
+export function TokenModal({ t, now, favorites, me = [], onClose, onShare, onBuy }: { t: TokenInfo; now: number; favorites: string[]; /** the user's own names on each platform: their scans fold into one row */ me?: (string | undefined)[]; onClose: () => void; onShare?: (address: string, symbol?: string) => void; onBuy?: (url: string) => void }) {
   const caMenu = useContext(CaMenuContext);
   const [interval, setInterval_] = useState<Interval>('5m');
   const [server, setServer] = useState<string | null>(null);
@@ -45,6 +45,7 @@ export function TokenModal({ t, now, favorites, onClose, onShare, onBuy }: { t: 
   const [candles, setCandles] = useState<Candle[]>([]);
   const [mcPerPrice, setMcPerPrice] = useState<number | undefined>(undefined);
   const [chartState, setChartState] = useState<'loading' | 'ready' | 'none'>('loading');
+  const [chartReason, setChartReason] = useState<string | undefined>(undefined);
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
 
@@ -65,8 +66,13 @@ export function TokenModal({ t, now, favorites, onClose, onShare, onBuy }: { t: 
           setCandles(r.candles);
           setMcPerPrice(r.mcPerPrice);
           setChartState(r.candles.length ? 'ready' : 'none');
+          setChartReason(r.candles.length ? undefined : r.reason ?? 'no candles for this pool yet');
         })
-        .catch(() => !dead && setChartState('none'));
+        .catch((e: Error) => {
+          if (dead) return;
+          setChartState('none');
+          setChartReason(/429|rate limit|budget/i.test(e.message) ? 'GeckoTerminal is rate-limiting candles right now' : e.message);
+        });
     setChartState('loading');
     void load();
     const id = window.setInterval(load, 30_000);
@@ -76,18 +82,49 @@ export function TokenModal({ t, now, favorites, onClose, onShare, onBuy }: { t: 
     };
   }, [t.address, interval]);
 
+  // the fallback chart follows the provider chosen in Settings (same key the chat cards use)
+  const embedProvider = useMemo<ChartProvider>(() => {
+    try {
+      const v = localStorage.getItem('trenchfeed.chartProvider');
+      return CHART_PROVIDERS.some((p) => p.id === v) ? (v as ChartProvider) : 'basedbot';
+    } catch {
+      return 'basedbot';
+    }
+  }, []);
+  const embed = chartEmbedUrl(t, embedProvider, now);
+  const embedName = embed && embed.includes('basedbot') ? 'BasedBot' : embed && embed.includes('birdeye') ? 'Birdeye' : embed && embed.includes('gmgn') ? 'GMGN' : embed && embed.includes('geckoterminal') ? 'GeckoTerminal' : 'Dexscreener';
+
   const servers = useMemo(() => {
     const m = new Map<string, number>();
     for (const c of t.calls) m.set(serverOf(c), (m.get(serverOf(c)) ?? 0) + 1);
     return [...m.entries()];
   }, [t.calls]);
   const calls = useMemo(() => (server ? t.calls.filter((c) => serverOf(c) === server) : t.calls), [t.calls, server]);
+  // One row per person: the same caller scanning in several chats is one row with ×N and every chat listed;
+  // the user's own Discord and Telegram names are one person. The row carries the earliest scan (entry, 1st badge).
+  const mine = useMemo(() => new Set(me.filter((n): n is string => !!n).map(normName)), [me]);
+  const isMe = (c: CallRecord) => mine.has(normName(c.author));
   const listed = useMemo(() => {
-    const withX = calls.map((c) => ({ c, x: c.marketCap && t.marketCap ? t.marketCap / c.marketCap : undefined }));
-    if (tab === 'earliest') return withX;
-    if (tab === 'top') return [...withX].sort((a, b) => (b.x ?? -1) - (a.x ?? -1));
-    return [...withX].reverse();
-  }, [calls, tab, t.marketCap]);
+    const groups = new Map<string, { c: CallRecord; latest: CallRecord; where: string[]; n: number; you: boolean }>();
+    for (const c of calls) {
+      const you = isMe(c);
+      const key = you ? '\u0000me' : `${c.source}:${normName(c.author)}`;
+      const place = chatOf(c) !== serverOf(c) ? `${serverOf(c)} / ${chatOf(c)}` : serverOf(c);
+      const g = groups.get(key);
+      if (!g) groups.set(key, { c, latest: c, where: [place], n: 1, you });
+      else {
+        g.n++;
+        if (c.ts < g.c.ts) g.c = c;
+        if (c.ts > g.latest.ts) g.latest = c;
+        if (!g.where.includes(place)) g.where.push(place);
+      }
+    }
+    const rows = [...groups.values()].map((g) => ({ ...g, x: g.c.marketCap && t.marketCap ? t.marketCap / g.c.marketCap : undefined }));
+    if (tab === 'earliest') return rows.sort((a, b) => a.c.ts - b.c.ts);
+    if (tab === 'top') return rows.sort((a, b) => (b.x ?? -1) - (a.x ?? -1));
+    return rows.sort((a, b) => b.latest.ts - a.latest.ts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calls, tab, t.marketCap, mine]);
   const firstId = t.calls[0]?.msgId;
 
   const copy = async () => {
@@ -212,7 +249,17 @@ export function TokenModal({ t, now, favorites, onClose, onShare, onBuy }: { t: 
                 )}
               </span>
             </div>
-            <CandleChart candles={candles} mcPerPrice={mcPerPrice} calls={calls} state={chartState} now={now} />
+            {chartState === 'none' && embed ? (
+              // candles unavailable (rate limit, unknown pool): the provider's own chart stands in, so the drilldown never shows an empty grid
+              <div className="tmodal-chart tmodal-chart-embed">
+                <iframe className="tmodal-embed" src={embed} title={`${t.symbol ?? 'token'} chart`} allow="clipboard-write" allowFullScreen />
+                <div className="tmodal-chart-note" title={chartReason}>
+                  {embedName} chart · {chartReason ?? 'candles unavailable'}
+                </div>
+              </div>
+            ) : (
+              <CandleChart candles={candles} mcPerPrice={mcPerPrice} calls={calls} state={chartState} reason={chartReason} now={now} />
+            )}
           </div>
           <div className="tmodal-calls">
             <div className="tmodal-tabs">
@@ -229,17 +276,17 @@ export function TokenModal({ t, now, favorites, onClose, onShare, onBuy }: { t: 
             </div>
             <div className="tmodal-list">
               {listed.length === 0 && <div className="hint">no calls yet</div>}
-              {listed.map(({ c, x }) => (
-                <a key={c.msgId} className="tcall" href={c.link} target="_blank" rel="noreferrer">
-                  <Avatar src={c.avatar} name={c.author} size={28} crown={isFavorite(favorites, c.author)} />
+              {listed.map(({ c, latest, where, n, you, x }) => (
+                <a key={c.msgId} className="tcall" href={c.link} target="_blank" rel="noreferrer" title={n > 1 ? `${n} scans: ${where.join(', ')}` : undefined}>
+                  <Avatar src={latest.avatar} name={latest.author} size={28} crown={isFavorite(favorites, c.author)} />
                   <span className="tcall-main">
                     <span className="tcall-who">
-                      <b>{c.author}</b>
+                      <b>{you ? 'you' : c.author}</b>
+                      {n > 1 && <span className="tcall-n">×{n}</span>}
                       {c.msgId === firstId && <span className="first-badge">1st</span>}
                     </span>
                     <span className="tcall-where">
-                      <Logo source={c.source} size={9} /> {serverOf(c)}
-                      {chatOf(c) !== serverOf(c) && <> / {chatOf(c)}</>} · {timeAgo(c.ts, now)}
+                      <Logo source={c.source} size={9} /> {where.join(' · ')} · {timeAgo(n > 1 ? latest.ts : c.ts, now)}
                     </span>
                   </span>
                   <span className="tcall-nums">
@@ -257,7 +304,7 @@ export function TokenModal({ t, now, favorites, onClose, onShare, onBuy }: { t: 
 }
 
 /** Candlesticks on a market-cap axis with each call's avatar pinned where it happened. */
-function CandleChart({ candles, mcPerPrice, calls, state, now }: { candles: Candle[]; mcPerPrice?: number; calls: CallRecord[]; state: 'loading' | 'ready' | 'none'; now: number }) {
+function CandleChart({ candles, mcPerPrice, calls, state, reason, now }: { candles: Candle[]; mcPerPrice?: number; calls: CallRecord[]; state: 'loading' | 'ready' | 'none'; reason?: string; now: number }) {
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const series = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -357,7 +404,7 @@ function CandleChart({ candles, mcPerPrice, calls, state, now }: { candles: Cand
         </Tip>
       ))}
       {state === 'loading' && <div className="tmodal-chart-msg">loading chart…</div>}
-      {state === 'none' && <div className="tmodal-chart-msg">no chart data for this pool yet</div>}
+      {state === 'none' && <div className="tmodal-chart-msg">{reason ?? 'no chart data for this pool yet'}</div>}
     </div>
   );
 }

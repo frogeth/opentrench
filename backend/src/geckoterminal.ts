@@ -152,7 +152,7 @@ let chain: Promise<void> = Promise.resolve();
 let lastAt = 0;
 function spaced<T>(fn: () => Promise<T>): Promise<T> {
   const run = chain.then(async () => {
-    const wait = lastAt + MIN_SPACING_MS - Date.now();
+    const wait = Math.max(lastAt + MIN_SPACING_MS, lastRateLimitAt + HOLD_MS) - Date.now();
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     lastAt = Date.now();
   });
@@ -170,9 +170,15 @@ class RateLimited extends Error {}
  */
 export type GtPriority = 'market' | 'extra';
 const BACKOFF_MS = 60_000;
+/** after a 429 every request (market data too) waits this long: firing on just collects more 429s and keeps the window shut */
+const HOLD_MS = 30_000;
 let lastRateLimitAt = 0;
 export function __resetRateLimit(): void {
   lastRateLimitAt = 0;
+}
+/** tests: pretend the last 429 happened at `ts` */
+export function __setRateLimitedAt(ts: number): void {
+  lastRateLimitAt = ts;
 }
 /** true while extras are standing aside */
 export function gtThrottled(now = Date.now()): boolean {

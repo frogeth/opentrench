@@ -677,7 +677,10 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .tmodal-onchart .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
 .tmodal-chart { position: relative; flex: 1; min-height: 0; margin: 0 8px 8px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
 .tmodal-canvas { position: absolute; inset: 0; }
-.tmodal-chart-msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; pointer-events: none; }
+.tmodal-chart-msg { position: absolute; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; pointer-events: none; }
+.tmodal-chart-embed { display: flex; flex-direction: column; }
+.tmodal-embed { flex: 1; width: 100%; min-height: 0; border: none; background: #000; }
+.tmodal-chart-note { flex: none; padding: 4px 10px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pin { position: absolute; transform: translate(-50%, -50%); z-index: 3; cursor: default; }
 .pin .avatar { border: 2px solid var(--ok); box-shadow: 0 0 0 2px #0a0c0f; }
 .pin-more { position: absolute; right: -8px; bottom: -6px; font-size: 9px; font-weight: 700; background: var(--ok); color: #000; border-radius: 999px; padding: 0 4px; }
@@ -692,6 +695,8 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .tcall-main { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
 .tcall-who { display: flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
 .tcall-who b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tcall-n { font-size: 10px; font-weight: 700; color: var(--accent); border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 5px; flex: none; line-height: 1.4; }
+.tcall-where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .first-badge { font-size: 9px; font-weight: 800; color: #000; background: var(--warn); border-radius: 4px; padding: 0 4px; flex: none; }
 .tcall-where { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tcall-nums { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
