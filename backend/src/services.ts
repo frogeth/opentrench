@@ -20,6 +20,9 @@ import { createLaunchWatcher } from './deploys.js';
 import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction } from './types.js';
 
+/** the sharing port: fixed, except a second instance on one machine (a test bench) may pick another */
+const togetherPort = (): number => Number(process.env.TRENCHFEED_TOGETHER_PORT) || TOGETHER_PORT;
+
 /** Break a long message at line ends (then spaces) so every piece fits Discord's limit. */
 export function splitForDiscord(text: string, max = 2000): string[] {
   const out: string[] = [];
@@ -130,7 +133,7 @@ export class Services {
   togetherPairings(): string[] {
     const t = this.cfg.get().together;
     if (!t.share || !t.token) return [];
-    return lanAddresses().map((host) => encodePairing({ host, port: TOGETHER_PORT, token: t.token, name: this.togetherName() }));
+    return lanAddresses().map((host) => encodePairing({ host, port: togetherPort(), token: t.token, name: this.togetherName() }));
   }
   private togetherStatus(): void {
     this.hub.setTogether({
@@ -138,7 +141,7 @@ export class Services {
       requests: this.togetherHost.pending().map(({ id, name, from, code, ts }) => ({ id, name, from, code, ts })),
       outgoing: [...this.outgoing.values()].map(({ id, name, host, port, code, state, error }) => ({ id, name, host, port, code, state, error })),
       sharing: this.togetherHost.listening,
-      port: TOGETHER_PORT,
+      port: togetherPort(),
       clients: this.togetherHost.clients,
       peers: [...this.guests.values()].map((g) => ({ name: g.name, url: g.url, state: g.state, error: g.lastError })),
     });
@@ -154,8 +157,8 @@ export class Services {
     if (t.share && !t.token) this.cfg.update((c) => (c.together.token = newToken()));
     if (t.share && !this.togetherHost.listening) {
       try {
-        await this.togetherHost.start(TOGETHER_PORT);
-        console.log(`[together] sharing calls on port ${TOGETHER_PORT}`);
+        await this.togetherHost.start(togetherPort());
+        console.log(`[together] sharing calls on port ${togetherPort()}`);
       } catch (e: any) {
         console.warn('[together] cannot listen:', e?.message ?? e);
       }
@@ -221,7 +224,7 @@ export class Services {
     this.togetherHost = new TogetherHost(hub, { name: () => this.togetherName(), token: () => this.cfg.get().together.token, version: process.env.TRENCHFEED_APP_VERSION ?? 'dev' });
     this.togetherHost.on('clients', () => this.togetherStatus());
     this.togetherHost.on('requests', () => this.togetherStatus());
-    this.discovery = new TogetherDiscovery({ name: () => this.togetherName(), port: () => TOGETHER_PORT, announce: () => this.togetherHost.listening, version: process.env.TRENCHFEED_APP_VERSION ?? 'dev' });
+    this.discovery = new TogetherDiscovery({ name: () => this.togetherName(), port: () => togetherPort(), announce: () => this.togetherHost.listening, version: process.env.TRENCHFEED_APP_VERSION ?? 'dev' });
     this.discovery.on('nearby', () => this.togetherStatus());
     this.discovery.start();
     hub.on('event', (e) => {
