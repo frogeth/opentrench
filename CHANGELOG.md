@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- TrenchTogether without the link: a machine with sharing on announces itself on the local network, so friends see it by name under Nearby in the Together tab and press Connect. The other side gets an Allow / Ignore prompt with a four-character code shown on both screens, and Allow does the pairing. The pairing string stays as "pair by link" for people not on the same network, shown once instead of once per address.
 - Synthra Launches (app.synthra.org) on Arc and Robinhood: badge, bonding progress, curve complete or graduated, price and market cap (Robinhood's ETH-priced launches converted with Synthra's own rate), image and socials from its metadata service, and a launchpad filter entry.
 - Trending column: each row now says who found the token (first caller, chat, when; click to see that message) and shows the faces of everyone who scanned it in the window. The hover list of scans opens each message in the app instead of the browser. Entry and current market cap, the multiple and the most-scanned ordering were already there. (Suggested on Discord.)
 - Two more Arc launchpads: Peach (peach.ag, from its launchpad API: name, image, price, market cap, liquidity, progress or graduated) and DYOR Launch (dyorswap.org, from its factory and curve contracts on Arc and Robinhood: bonding progress or graduated). Badges, token-page links and launchpad filters for both.

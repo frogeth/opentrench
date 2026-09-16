@@ -13,7 +13,7 @@ import { J7Client } from './j7.js';
 import { MintGoClient } from './mintgo.js';
 import os from 'node:os';
 import { RankingsPoller, keyFor } from './opensea/rankings.js';
-import { TOGETHER_PORT, TogetherGuest, TogetherHost, encodePairing, lanAddresses, newToken } from './together.js';
+import { TOGETHER_PORT, TogetherDiscovery, TogetherGuest, TogetherHost, encodePairing, lanAddresses, newCode, newToken, pollPairing, requestPairing } from './together.js';
 import { Minter } from './opensea/minter.js';
 import { CHAINS } from './opensea/chains.js';
 import { createLaunchWatcher } from './deploys.js';
@@ -62,7 +62,67 @@ export class Services {
   readonly rankings = new RankingsPoller();
   // ---------- TrenchTogether ----------
   readonly togetherHost: TogetherHost; // built in the constructor: field initializers run before `hub` is assigned
+  readonly discovery: TogetherDiscovery;
   private guests = new Map<string, TogetherGuest>();
+  /** this machine's own pairing asks, by request id */
+  private outgoing = new Map<string, { id: string; name: string; host: string; port: number; code: string; state: 'pending' | 'approved' | 'denied' | 'failed'; error?: string; timer?: NodeJS.Timeout }>();
+  /** Ask a machine heard on the network to follow it; Allow on their side adds the peer here. */
+  async followNearby(id: string): Promise<void> {
+    const n = this.discovery.list().find((x) => x.id === id);
+    if (!n) throw new Error('that machine is not on the network any more');
+    if (this.cfg.get().together.peers.some((p) => p.host === n.host && p.port === n.port)) throw new Error(`you already follow ${n.name}`);
+    for (const o of this.outgoing.values()) if (o.host === n.host && o.port === n.port && o.state === 'pending') throw new Error(`already asked ${n.name}; waiting for them`);
+    const code = newCode();
+    const r = await requestPairing(n.host, n.port, this.togetherName(), code);
+    const o = { id: r.id, name: r.name || n.name, host: n.host, port: n.port, code, state: 'pending' as const };
+    this.outgoing.set(r.id, o);
+    this.togetherStatus();
+    const started = Date.now();
+    const poll = async () => {
+      const cur = this.outgoing.get(r.id);
+      if (!cur || cur.state !== 'pending') return;
+      try {
+        const p = await pollPairing(n.host, n.port, r.id);
+        if (p.state === 'approved' && p.token) {
+          this.cfg.update((c) => {
+            c.together.peers = c.together.peers.filter((x) => !(x.host === n.host && x.port === n.port));
+            c.together.peers.push({ host: n.host, port: n.port, token: p.token!, name: p.name || cur.name });
+          });
+          cur.state = 'approved';
+          this.togetherStatus();
+          await this.syncTogether();
+          return;
+        }
+        if (p.state === 'denied' || p.state === 'gone') {
+          cur.state = p.state === 'denied' ? 'denied' : 'failed';
+          cur.error = p.state === 'gone' ? 'their machine forgot the request (sharing turned off?)' : undefined;
+          this.togetherStatus();
+          return;
+        }
+      } catch (e: any) {
+        cur.error = e?.message ?? String(e);
+      }
+      if (Date.now() - started > 10 * 60_000) {
+        cur.state = 'failed';
+        cur.error = 'no answer in ten minutes';
+        this.togetherStatus();
+        return;
+      }
+      cur.timer = setTimeout(() => void poll(), 2000);
+      cur.timer.unref();
+    };
+    void poll();
+  }
+  togetherStatusNow(): void {
+    this.togetherStatus();
+  }
+  /** drop one of this machine's asks from the list */
+  forgetOutgoing(id: string): void {
+    const o = this.outgoing.get(id);
+    if (o?.timer) clearTimeout(o.timer);
+    this.outgoing.delete(id);
+    this.togetherStatus();
+  }
   togetherName(): string {
     return this.cfg.get().together.name || os.userInfo().username || os.hostname();
   }
@@ -74,6 +134,9 @@ export class Services {
   }
   private togetherStatus(): void {
     this.hub.setTogether({
+      nearby: this.discovery.list().map(({ id, name, host, port, version }) => ({ id, name, host, port, version })),
+      requests: this.togetherHost.pending().map(({ id, name, from, code, ts }) => ({ id, name, from, code, ts })),
+      outgoing: [...this.outgoing.values()].map(({ id, name, host, port, code, state, error }) => ({ id, name, host, port, code, state, error })),
       sharing: this.togetherHost.listening,
       port: TOGETHER_PORT,
       clients: this.togetherHost.clients,
@@ -157,6 +220,10 @@ export class Services {
     this.hub.nftState.mintJobs = () => this.minter.jobs;
     this.togetherHost = new TogetherHost(hub, { name: () => this.togetherName(), token: () => this.cfg.get().together.token, version: process.env.TRENCHFEED_APP_VERSION ?? 'dev' });
     this.togetherHost.on('clients', () => this.togetherStatus());
+    this.togetherHost.on('requests', () => this.togetherStatus());
+    this.discovery = new TogetherDiscovery({ name: () => this.togetherName(), port: () => TOGETHER_PORT, announce: () => this.togetherHost.listening, version: process.env.TRENCHFEED_APP_VERSION ?? 'dev' });
+    this.discovery.on('nearby', () => this.togetherStatus());
+    this.discovery.start();
     hub.on('event', (e) => {
       if (e.type === 'ping') void this.ping(e.token, e.msg);
     });

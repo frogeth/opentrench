@@ -1679,6 +1679,21 @@ export default function App() {
         </div>
       )}
       {cfg && status.discordMode !== undefined && <BridgeNotice cfg={cfg} status={status} onOpenSettings={() => setSettingsOpen(true)} />}
+      {(status.together?.requests?.length ?? 0) > 0 && (
+        <div className="tg-banner">
+          {status.together!.requests.map((r) => (
+            <div key={r.id} className="tg-banner-row">
+              <span>
+                👤 <b>{r.name}</b> wants to follow your calls · code <code className="tg-code">{r.code}</code>
+              </span>
+              <button className="primary" onClick={() => void api.answerRequest(r.id, true).catch(() => {})}>
+                Allow
+              </button>
+              <button onClick={() => void api.answerRequest(r.id, false).catch(() => {})}>Ignore</button>
+            </div>
+          ))}
+        </div>
+      )}
       {setupOpen && (
         <Onboarding
           status={status}

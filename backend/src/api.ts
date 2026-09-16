@@ -198,6 +198,33 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { ...cfg.masked().together, status: hub.getStatus().together };
     }),
   );
+  // one click on a name heard on the network: ask to follow; the friend's Allow does the rest
+  r.post(
+    '/together/nearby/:id/follow',
+    wrap(async (req) => {
+      await svc.followNearby(String(req.params.id));
+      return { status: hub.getStatus().together };
+    }),
+  );
+  r.delete(
+    '/together/outgoing/:id',
+    wrap((req) => {
+      svc.forgetOutgoing(String(req.params.id));
+      return { status: hub.getStatus().together };
+    }),
+  );
+  // a friend asked to follow this machine: allow hands them the secret, ignore does not
+  r.post(
+    '/together/requests/:id/:answer',
+    wrap((req) => {
+      const ok = req.params.answer === 'allow';
+      if (!ok && req.params.answer !== 'deny') throw new Error('allow or deny');
+      const r = svc.togetherHost.answer(String(req.params.id), ok);
+      if (!r) throw new Error('that request is gone');
+      svc.togetherStatusNow();
+      return { status: hub.getStatus().together };
+    }),
+  );
   r.post(
     '/together/reconnect',
     wrap(async () => {

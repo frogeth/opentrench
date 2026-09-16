@@ -407,7 +407,18 @@ export interface Status {
   /** how Discord is connected: the Vencord bridge (read + write) or a legacy token (read only) */
   discordMode?: 'bridge' | 'token' | 'none';
   /** TrenchTogether: sharing on this machine, and the friends this machine follows */
-  together?: { sharing: boolean; port: number; clients: number; peers: { name: string; url: string; state: 'connecting' | 'connected' | 'disconnected' | 'unauthorized'; error?: string }[] };
+  together?: {
+    sharing: boolean;
+    port: number;
+    clients: number;
+    peers: { name: string; url: string; state: 'connecting' | 'connected' | 'disconnected' | 'unauthorized'; error?: string }[];
+    /** machines sharing on this network right now */
+    nearby: { id: string; name: string; host: string; port: number; version: string }[];
+    /** friends asking to follow this machine, waiting for Allow */
+    requests: { id: string; name: string; from: string; code: string; ts: number }[];
+    /** this machine's own asks, and where they stand */
+    outgoing: { id: string; name: string; host: string; port: number; code: string; state: 'pending' | 'approved' | 'denied' | 'failed'; error?: string }[];
+  };
 }
 
 export type ServerEvent =

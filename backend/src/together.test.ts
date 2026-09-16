@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { MessageHub } from './hub.js';
-import { TogetherGuest, TogetherHost, decodePairing, encodePairing, lanAddresses, shareable } from './together.js';
+import { TogetherGuest, TogetherHost, broadcastAddresses, decodePairing, encodePairing, lanAddresses, newCode, parseBeacon, pollPairing, requestPairing, shareable } from './together.js';
 import type { CallRecord, TokenInfo } from './types.js';
 
 const NOW = Date.now();
@@ -120,5 +120,55 @@ describe('host and guest', () => {
   });
   it('shareable drops the via tag so a re-share does not chain names', () => {
     expect(shareable({ ...token('0xa', [call('m', 'A')]), via: 'Bob' }).via).toBeUndefined();
+  });
+});
+
+
+describe('finding each other', () => {
+  it('parses a beacon and refuses anything else', () => {
+    expect(parseBeacon(JSON.stringify({ t: 'opentrench', v: 1, id: 'abc', name: 'Moussa', port: 3211, version: '0.9.1' }))).toEqual({ t: 'opentrench', v: 1, id: 'abc', name: 'Moussa', port: 3211, version: '0.9.1' });
+    expect(parseBeacon('{"t":"other","v":1,"id":"x","name":"y","port":1}')).toBeUndefined();
+    expect(parseBeacon('{"t":"opentrench","v":1,"id":"x","name":"y","port":70000}')).toBeUndefined();
+    expect(parseBeacon('not json')).toBeUndefined();
+  });
+  it('broadcast addresses come from each interface netmask, plus the limited broadcast', () => {
+    const ifaces = {
+      lo0: [{ address: '127.0.0.1', netmask: '255.0.0.0', family: 'IPv4', internal: true }],
+      en0: [{ address: '192.168.1.75', netmask: '255.255.255.0', family: 'IPv4', internal: false }, { address: 'fe80::1', netmask: 'ffff::', family: 'IPv6', internal: false }],
+      en5: [{ address: '10.0.0.12', netmask: '255.255.0.0', family: 'IPv4', internal: false }],
+    } as any;
+    expect(broadcastAddresses(ifaces)).toEqual(['255.255.255.255', '192.168.1.255', '10.0.255.255']);
+  });
+  it('codes are four unambiguous characters', () => {
+    for (let i = 0; i < 20; i++) expect(newCode()).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}$/);
+  });
+});
+
+describe('pairing by request', () => {
+  it('a friend asks, the host allows, the friend gets the token; ignore gives nothing; browsers are refused', async () => {
+    const host = new TogetherHost(new MessageHub(10), { name: () => 'Moussa', token: () => 'secret', version: 'test' });
+    const port = await host.start(0, '127.0.0.1');
+    try {
+      const asked = await requestPairing('127.0.0.1', port, 'frog', 'AB34');
+      expect(asked.name).toBe('Moussa');
+      expect(host.pending().map((r) => [r.name, r.code, r.from])).toEqual([['frog', 'AB34', '127.0.0.1']]);
+      expect(await pollPairing('127.0.0.1', port, asked.id)).toEqual({ state: 'pending', token: undefined, name: undefined });
+      // asking again from the same machine and name is the same request, not a second one
+      expect((await requestPairing('127.0.0.1', port, 'frog', 'AB34')).id).toBe(asked.id);
+      expect(host.pending()).toHaveLength(1);
+      host.answer(asked.id, true);
+      expect(await pollPairing('127.0.0.1', port, asked.id)).toEqual({ state: 'approved', token: 'secret', name: 'Moussa' });
+      expect(host.pending()).toHaveLength(0);
+      const other = await requestPairing('127.0.0.1', port, 'stranger', 'ZZ99');
+      host.answer(other.id, false);
+      expect(await pollPairing('127.0.0.1', port, other.id)).toEqual({ state: 'denied', token: undefined, name: undefined });
+      expect((await pollPairing('127.0.0.1', port, 'nope')).state).toBe('gone');
+      const res = await fetch(`http://127.0.0.1:${port}/together/request`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'http://evil' }, body: JSON.stringify({ name: 'x', code: 'AAAA' }) });
+      expect(res.status).toBe(403);
+      const bad = await fetch(`http://127.0.0.1:${port}/together/request`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: '', code: 'toolong' }) });
+      expect(bad.status).toBe(400);
+    } finally {
+      host.stop();
+    }
   });
 });

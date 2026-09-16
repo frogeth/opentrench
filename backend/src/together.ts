@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import crypto from 'node:crypto';
+import dgram from 'node:dgram';
 import http from 'node:http';
 import os from 'node:os';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -22,6 +23,13 @@ import type { ServerEvent, TokenInfo } from './types.js';
 export const TOGETHER_PORT = 3211;
 const HELLO_PATH = '/together/hello';
 const STREAM_PATH = '/together/stream';
+const REQUEST_PATH = '/together/request';
+/** discovery beacons: one UDP broadcast every few seconds while sharing, name and port only */
+export const DISCOVERY_PORT = 3212;
+const BEACON_MS = 3_000;
+const NEARBY_TTL_MS = 12_000;
+const REQUEST_TTL_MS = 10 * 60_000;
+const REQUEST_MAX = 20;
 const SHARE_WINDOW_MS = 24 * 3600e3;
 
 export interface Pairing {
@@ -76,11 +84,57 @@ export function shareable(t: TokenInfo): TokenInfo {
 }
 
 /** Serves the share stream on the LAN while sharing is on. */
+/** someone on the network asked to follow this machine's calls; the user allows or ignores it */
+export interface PairingRequest {
+  id: string;
+  name: string;
+  from: string;
+  /** four characters both screens show, so the host can tell it is really the friend asking */
+  code: string;
+  ts: number;
+  state: 'pending' | 'approved' | 'denied';
+}
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const newCode = (): string => Array.from(crypto.randomBytes(4), (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
+
+function readJson(req: http.IncomingMessage, limit = 4096): Promise<any> {
+  return new Promise((resolve) => {
+    let body = '';
+    req.on('data', (c) => {
+      body += c;
+      if (body.length > limit) req.destroy();
+    });
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(body));
+      } catch {
+        resolve(undefined);
+      }
+    });
+    req.on('error', () => resolve(undefined));
+  });
+}
+
 export class TogetherHost extends EventEmitter {
   private server?: http.Server;
   private wss?: WebSocketServer;
   private unhook?: () => void;
   clients = 0;
+  /** pairing requests from the network, newest last */
+  readonly requests = new Map<string, PairingRequest>();
+  /** the user's answer to a request */
+  answer(id: string, ok: boolean): PairingRequest | undefined {
+    const r = this.requests.get(id);
+    if (!r || r.state !== 'pending') return r;
+    r.state = ok ? 'approved' : 'denied';
+    this.emit('requests');
+    return r;
+  }
+  pending(): PairingRequest[] {
+    const now = Date.now();
+    for (const [id, r] of this.requests) if (now - r.ts > REQUEST_TTL_MS) this.requests.delete(id);
+    return [...this.requests.values()].filter((r) => r.state === 'pending');
+  }
   constructor(
     private readonly hub: MessageHub,
     private readonly opts: { name: () => string; token: () => string; version: string },
@@ -93,12 +147,39 @@ export class TogetherHost extends EventEmitter {
   /** Bind on every interface. Resolves with the port. */
   start(port = TOGETHER_PORT, host = '0.0.0.0'): Promise<number> {
     if (this.server) return Promise.resolve((this.server.address() as { port: number }).port);
-    const server = http.createServer((req, res) => {
+    const server = http.createServer(async (req, res) => {
       const url = new URL(req.url ?? '/', 'http://x');
       if (req.headers.origin !== undefined) return void res.writeHead(403).end('no browsers');
       if (url.pathname === HELLO_PATH && sameToken(url.searchParams.get('token') ?? '', this.opts.token())) {
         res.setHeader('content-type', 'application/json');
         return void res.end(JSON.stringify({ name: this.opts.name(), version: this.opts.version }));
+      }
+      // a friend found this machine on the network and asks to follow: no secret needed to ask,
+      // the user's Allow on this side is what hands the token over
+      if (url.pathname === REQUEST_PATH && req.method === 'POST') {
+        const body = await readJson(req);
+        const name = String(body?.name ?? '').trim().slice(0, 40);
+        const code = String(body?.code ?? '').toUpperCase().slice(0, 4);
+        if (!name || !/^[A-Z0-9]{4}$/.test(code)) return void res.writeHead(400).end('name and code');
+        this.pending();
+        if (this.requests.size >= REQUEST_MAX) return void res.writeHead(429).end('too many requests waiting');
+        const from = req.socket.remoteAddress?.replace(/^::ffff:/, '') ?? '?';
+        // the same friend asking twice gets the same request
+        let r = [...this.requests.values()].find((x) => x.state === 'pending' && x.from === from && x.name === name);
+        if (!r) {
+          r = { id: crypto.randomBytes(8).toString('base64url'), name, from, code, ts: Date.now(), state: 'pending' };
+          this.requests.set(r.id, r);
+          console.log(`[together] ${name} (${from}) asks to follow, code ${code}`);
+          this.emit('requests');
+        }
+        res.setHeader('content-type', 'application/json');
+        return void res.end(JSON.stringify({ id: r.id, name: this.opts.name() }));
+      }
+      if (url.pathname.startsWith(REQUEST_PATH + '/') && req.method === 'GET') {
+        const r = this.requests.get(url.pathname.slice(REQUEST_PATH.length + 1));
+        res.setHeader('content-type', 'application/json');
+        if (!r) return void res.writeHead(404).end(JSON.stringify({ state: 'gone' }));
+        return void res.end(JSON.stringify(r.state === 'approved' ? { state: 'approved', token: this.opts.token(), name: this.opts.name() } : { state: r.state }));
       }
       res.writeHead(404).end();
     });
@@ -254,5 +335,148 @@ export class TogetherGuest extends EventEmitter {
     if (!t || typeof t.address !== 'string' || !Array.isArray(t.calls)) return;
     this.live.add(t.address);
     this.apply(this.name, t as TokenInfo);
+  }
+}
+
+
+// ---------- finding each other on the network ----------
+
+export interface Nearby {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  version: string;
+  lastSeen: number;
+}
+interface Beacon {
+  t: 'opentrench';
+  v: 1;
+  id: string;
+  name: string;
+  port: number;
+  version: string;
+}
+
+/** the beacon another machine sent, or nothing if it is not one of ours */
+export function parseBeacon(buf: Buffer | string): Beacon | undefined {
+  try {
+    const b = JSON.parse(String(buf));
+    if (b?.t !== 'opentrench' || b?.v !== 1 || typeof b.id !== 'string' || typeof b.name !== 'string') return undefined;
+    const port = Number(b.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return undefined;
+    return { t: 'opentrench', v: 1, id: b.id.slice(0, 32), name: b.name.slice(0, 40), port, version: String(b.version ?? '').slice(0, 20) };
+  } catch {
+    return undefined;
+  }
+}
+
+/** every IPv4 broadcast address this machine can reach, from its interfaces' netmasks */
+export function broadcastAddresses(ifaces: NodeJS.Dict<os.NetworkInterfaceInfo[]> = os.networkInterfaces()): string[] {
+  const out = new Set<string>(['255.255.255.255']);
+  for (const list of Object.values(ifaces)) {
+    for (const i of list ?? []) {
+      if (i.family !== 'IPv4' || i.internal || !i.netmask) continue;
+      const a = i.address.split('.').map(Number), m = i.netmask.split('.').map(Number);
+      if (a.length !== 4 || m.length !== 4) continue;
+      out.add(a.map((x, k) => (x & m[k]) | (~m[k] & 255)).join('.'));
+    }
+  }
+  return [...out];
+}
+
+/**
+ * While sharing is on, this machine says "here I am" on the LAN every few seconds: a name, a port
+ * and a random id, nothing more. Every opentrench listens and keeps a list of who it hears, so a
+ * friend appears by name in the Together tab and can be asked to pair with one click.
+ */
+export class TogetherDiscovery extends EventEmitter {
+  private sock?: dgram.Socket;
+  private timer?: NodeJS.Timeout;
+  readonly id = crypto.randomBytes(6).toString('base64url');
+  private heard = new Map<string, Nearby>();
+  constructor(private readonly opts: { name: () => string; port: () => number; announce: () => boolean; version: string; discoveryPort?: number }) {
+    super();
+  }
+  start(): void {
+    if (this.sock) return;
+    const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    sock.on('error', (e) => console.warn('[together] discovery socket:', e.message));
+    sock.on('message', (msg, rinfo) => {
+      const b = parseBeacon(msg);
+      if (!b || b.id === this.id) return;
+      const had = this.heard.get(b.id);
+      this.heard.set(b.id, { id: b.id, name: b.name, host: rinfo.address, port: b.port, version: b.version, lastSeen: Date.now() });
+      if (!had || had.name !== b.name || had.host !== rinfo.address) this.emit('nearby');
+    });
+    sock.bind(this.opts.discoveryPort ?? DISCOVERY_PORT, '0.0.0.0', () => {
+      try {
+        sock.setBroadcast(true);
+      } catch {
+        /* some interfaces refuse; unicast listeners still hear us */
+      }
+    });
+    this.sock = sock;
+    this.timer = setInterval(() => this.tick(), BEACON_MS);
+    this.timer.unref();
+    this.tick();
+  }
+  private tick(): void {
+    // forget who went quiet
+    const now = Date.now();
+    let changed = false;
+    for (const [id, n] of this.heard)
+      if (now - n.lastSeen > NEARBY_TTL_MS) {
+        this.heard.delete(id);
+        changed = true;
+      }
+    if (changed) this.emit('nearby');
+    if (!this.opts.announce() || !this.sock) return;
+    const beacon: Beacon = { t: 'opentrench', v: 1, id: this.id, name: this.opts.name(), port: this.opts.port(), version: this.opts.version };
+    const data = Buffer.from(JSON.stringify(beacon));
+    for (const addr of broadcastAddresses()) this.sock.send(data, this.opts.discoveryPort ?? DISCOVERY_PORT, addr, () => {});
+  }
+  /** who is sharing on this network right now, most recently heard first */
+  list(): Nearby[] {
+    const now = Date.now();
+    return [...this.heard.values()].filter((n) => now - n.lastSeen <= NEARBY_TTL_MS).sort((a, b) => b.lastSeen - a.lastSeen);
+  }
+  stop(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
+    this.sock?.close();
+    this.sock = undefined;
+    this.heard.clear();
+  }
+}
+
+/** Ask a sharing machine to follow it. Returns the request id to poll, and the host's name. */
+export async function requestPairing(host: string, port: number, name: string, code: string, fetchImpl: typeof fetch = fetch): Promise<{ id: string; name: string }> {
+  const h = host.includes(':') ? `[${host}]` : host;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 5000);
+  try {
+    const res = await fetchImpl(`http://${h}:${port}${REQUEST_PATH}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, code }), signal: ctl.signal });
+    if (!res.ok) throw new Error(res.status === 429 ? 'they have too many requests waiting' : `they answered ${res.status}`);
+    const j = await res.json();
+    if (typeof j?.id !== 'string') throw new Error('odd answer from their machine');
+    return { id: j.id, name: String(j.name ?? '') };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** Where a request stands on the other machine; the token arrives once they pressed Allow. */
+export async function pollPairing(host: string, port: number, id: string, fetchImpl: typeof fetch = fetch): Promise<{ state: 'pending' | 'approved' | 'denied' | 'gone'; token?: string; name?: string }> {
+  const h = host.includes(':') ? `[${host}]` : host;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 5000);
+  try {
+    const res = await fetchImpl(`http://${h}:${port}${REQUEST_PATH}/${encodeURIComponent(id)}`, { signal: ctl.signal });
+    const j = await res.json().catch(() => ({}));
+    const state = j?.state === 'approved' || j?.state === 'denied' || j?.state === 'pending' ? j.state : 'gone';
+    return { state, token: typeof j?.token === 'string' ? j.token : undefined, name: typeof j?.name === 'string' ? j.name : undefined };
+  } finally {
+    clearTimeout(t);
   }
 }

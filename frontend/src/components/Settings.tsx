@@ -983,6 +983,7 @@ function TogetherSection({ status }: { status: Status }) {
   const [name, setName] = useState('');
   const [pairing, setPairing] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
+  const [byLink, setByLink] = useState(false);
   const { busy, err, run } = useAsync();
   const load = () =>
     api
@@ -1008,6 +1009,13 @@ function TogetherSection({ status }: { status: Status }) {
       setPairing('');
     });
   if (!info) return <div className="hint">Loading…</div>;
+  const nearby = live?.nearby ?? [];
+  const requests = live?.requests ?? [];
+  const outgoing = live?.outgoing ?? [];
+  const followed = (host: string, port: number) => info.peers.some((p) => p.host === host && p.port === port);
+  const asked = (host: string, port: number) => outgoing.find((o) => o.host === host && o.port === port && o.state === 'pending');
+  const shortName = (s: string) => s.replace(/\s*\([^)]*\)\s*$/, '');
+  const primary = info.pairings[0];
   return (
     <>
       <section>
@@ -1016,14 +1024,37 @@ function TogetherSection({ status }: { status: Status }) {
         </h2>
         <div className="hint">
           Share your calls with a friend on the same Wi-Fi (or the same VPN). What travels is the call: the token, who called it where, and the market numbers your machine already
-          fetched. Never a chat message. On their side your calls show tagged <b>via {info.name || 'you'}</b>, and their machine stops asking the APIs for tokens you keep fresh, so
-          two machines on one connection stop fighting over the same rate limits.
+          fetched. Never a chat message. Their side shows your calls tagged <b>via {info.name || 'you'}</b>, and their machine stops asking the APIs for tokens you keep fresh.
         </div>
       </section>
+
+      {requests.length > 0 && (
+        <section className="tg-requests">
+          <h2>Asking to follow you</h2>
+          {requests.map((r) => (
+            <div key={r.id} className="tg-row tg-request">
+              <span className="tg-face">👤</span>
+              <span className="tg-main">
+                <b>{r.name}</b>
+                <span className="muted">
+                  wants to follow your calls · code <code className="tg-code">{r.code}</code> · from {r.from}
+                </span>
+              </span>
+              <button className="primary" disabled={busy} onClick={() => run(async () => void (await api.answerRequest(r.id, true)))}>
+                Allow
+              </button>
+              <button disabled={busy} onClick={() => run(async () => void (await api.answerRequest(r.id, false)))}>
+                Ignore
+              </button>
+            </div>
+          ))}
+          <div className="hint">The code is on their screen too. If it does not match, ignore it.</div>
+        </section>
+      )}
+
       <section>
         <h2>
-          Share my calls{' '}
-          <span className={`pill ${live?.sharing ? 'pill-on' : ''}`}>{live?.sharing ? `on · ${live.clients} connected` : 'off'}</span>
+          Share my calls <span className={`pill ${live?.sharing ? 'pill-on' : ''}`}>{live?.sharing ? `on · ${live.clients} connected` : 'off'}</span>
         </h2>
         <div className="row-inline">
           <input placeholder="your name, as your friend will see it" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} onKeyDown={onEnter(!busy, () => run(async () => setInfo(await api.setTogether({ name }))))} />
@@ -1034,47 +1065,83 @@ function TogetherSection({ status }: { status: Status }) {
             {info.share ? 'Stop sharing' : 'Start sharing'}
           </button>
         </div>
-        {info.share && (
-          <>
-            <div className="hint">Send your friend one of these. Paste it in their opentrench under Together → Follow a friend. Anyone with the string can read your calls; rotate it to cut everyone off.</div>
-            {info.pairings.length === 0 && <div className="hint">No network address found. Are you connected to Wi-Fi or Ethernet?</div>}
-            {info.pairings.map((p) => (
-              <div key={p} className="row-inline pairing-row">
-                <code className="pairing">{p}</code>
-                <button onClick={() => void copy(p)}>{copied === p ? 'Copied' : 'Copy'}</button>
-              </div>
-            ))}
-            <div className="row-inline">
-              <button disabled={busy} onClick={() => run(async () => { await api.rotateTogether(); await load(); })}>
-                Rotate the secret
-              </button>
-              <span className="hint">Listens on port {live?.port ?? 3211} of this machine only while sharing is on; the rest of opentrench stays on 127.0.0.1.</span>
-            </div>
-          </>
-        )}
-      </section>
-      <section>
-        <h2>Follow a friend</h2>
-        <div className="row-inline">
-          <input placeholder="opentrench://together/…" value={pairing} onChange={(e) => setPairing(e.target.value)} spellCheck={false} onKeyDown={onEnter(!busy && pairing.trim().length > 0, addPeer)} />
-          <button className="primary" disabled={busy || !pairing.trim()} onClick={addPeer}>
-            Follow
-          </button>
+        <div className="hint">
+          {info.share
+            ? `While sharing is on, this machine shows up by name in the Together tab of every opentrench on this network, and friends can ask to follow with one click. You approve each one here. Only port ${live?.port ?? 3211} opens on the LAN; the rest of opentrench stays on 127.0.0.1.`
+            : 'Turn sharing on and friends on this network see you by name and can ask to follow. Nothing is shared until you allow someone.'}
         </div>
-        {info.peers.length === 0 && <div className="hint">Nobody yet. Paste a pairing string from a friend who turned on sharing.</div>}
+      </section>
+
+      <section>
+        <h2>
+          Nearby <span className="pill pill-mode">{nearby.length === 0 ? 'nobody sharing yet' : `${nearby.length} sharing`}</span>
+        </h2>
+        {nearby.length === 0 && (
+          <div className="hint">Machines with sharing on announce themselves on the network every few seconds. Ask your friend to press Start sharing, and they appear here.</div>
+        )}
+        {nearby.map((n) => {
+          const o = asked(n.host, n.port);
+          const done = followed(n.host, n.port);
+          return (
+            <div key={n.id} className="tg-row">
+              <span className="tg-face">👤</span>
+              <span className="tg-main">
+                <b>{n.name}</b>
+                <span className="muted">
+                  <span className="tg-dot on" /> sharing · {n.host}
+                  {n.version ? ` · v${n.version}` : ''}
+                </span>
+              </span>
+              {done ? (
+                <span className="pill pill-on">following</span>
+              ) : o ? (
+                <span className="muted tg-wait">
+                  waiting for them · your code <code className="tg-code">{o.code}</code>
+                </span>
+              ) : (
+                <button className="primary" disabled={busy} onClick={() => run(async () => void (await api.followNearby(n.id)))}>
+                  Connect
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {outgoing
+          .filter((o) => o.state !== 'pending' && o.state !== 'approved')
+          .map((o) => (
+            <div key={o.id} className="tg-row tg-row-muted">
+              <span className="tg-face">👤</span>
+              <span className="tg-main">
+                <b>{o.name}</b>
+                <span className="err">{o.state === 'denied' ? 'they said no' : o.error ?? 'could not ask'}</span>
+              </span>
+              <button disabled={busy} onClick={() => run(async () => void (await api.forgetOutgoing(o.id)))}>
+                ✕
+              </button>
+            </div>
+          ))}
+      </section>
+
+      <section>
+        <h2>
+          Following <span className="pill pill-mode">{info.peers.length}</span>
+        </h2>
+        {info.peers.length === 0 && <div className="hint">Nobody yet. Connect to someone under Nearby, or pair by link below.</div>}
         {info.peers.map((p) => {
           const peer = live?.peers.find((x) => x.url.includes(`${p.host.includes(':') ? `[${p.host}]` : p.host}:${p.port}`));
           const st = peer?.state ?? 'disconnected';
           return (
-            <div key={`${p.host}:${p.port}`} className="row-inline peer-row">
-              <b>{p.name || p.host}</b>
-              <span className="muted">
-                {p.host}:{p.port}
+            <div key={`${p.host}:${p.port}`} className="tg-row">
+              <span className="tg-face">👤</span>
+              <span className="tg-main">
+                <b>{p.name || p.host}</b>
+                <span className="muted">
+                  <span className={`tg-dot ${st === 'connected' ? 'on' : st === 'connecting' ? 'mid' : 'off'}`} /> {st === 'unauthorized' ? 'their secret changed' : st} · {p.host}:{p.port}
+                  {peer?.error && st !== 'connected' ? ` · ${peer.error === 'ECONNREFUSED' ? 'refused: is sharing on over there?' : peer.error === 'ETIMEDOUT' ? 'no answer' : peer.error}` : ''}
+                </span>
               </span>
-              <StatePill state={st === 'unauthorized' ? 'auth_error' : st} />
-              {peer?.error && st !== 'connected' && <span className="muted" title="last connection error">{peer.error === 'ECONNREFUSED' ? 'refused: is sharing on over there?' : peer.error === 'ETIMEDOUT' || /timeout/i.test(peer.error) ? 'no route: same Wi-Fi? client isolation?' : peer.error === 'EHOSTUNREACH' || peer.error === 'ENETUNREACH' ? 'unreachable: different network' : peer.error}</span>}
               {st !== 'connected' && (
-                <button disabled={busy} onClick={() => run(async () => { await api.reconnectPeers(); })}>
+                <button disabled={busy} onClick={() => run(async () => void (await api.reconnectPeers()))}>
                   Reconnect
                 </button>
               )}
@@ -1084,7 +1151,49 @@ function TogetherSection({ status }: { status: Status }) {
             </div>
           );
         })}
-        <div className="hint">Their calls appear in your feed with a small <b>via</b> tag. Unauthorized means their secret changed: ask for a fresh pairing string.</div>
+        <div className="hint">Their calls appear in your feed with a small <b>via</b> tag.</div>
+      </section>
+
+      <section>
+        <button className="hdr-toggle" onClick={() => setByLink((v) => !v)}>
+          {byLink ? '▾' : '▸'} Pair by link instead (not on the same network, or broadcast blocked)
+        </button>
+        {byLink && (
+          <>
+            {info.share && primary && (
+              <>
+                <div className="hint">Send your friend this. Anyone with it can read your calls; rotate the secret to cut everyone off.</div>
+                <div className="row-inline pairing-row">
+                  <code className="pairing">{primary}</code>
+                  <button onClick={() => void copy(primary)}>{copied === primary ? 'Copied' : 'Copy'}</button>
+                </div>
+                {info.pairings.length > 1 && (
+                  <details className="tg-more">
+                    <summary className="hint">Other addresses of this machine ({info.pairings.length - 1})</summary>
+                    {info.pairings.slice(1).map((p) => (
+                      <div key={p} className="row-inline pairing-row">
+                        <code className="pairing">{p}</code>
+                        <button onClick={() => void copy(p)}>{copied === p ? 'Copied' : 'Copy'}</button>
+                      </div>
+                    ))}
+                  </details>
+                )}
+                <div className="row-inline">
+                  <button disabled={busy} onClick={() => run(async () => { await api.rotateTogether(); await load(); })}>
+                    Rotate the secret
+                  </button>
+                </div>
+              </>
+            )}
+            {info.share && !primary && <div className="hint">No network address found. Are you connected to Wi-Fi or Ethernet?</div>}
+            <div className="row-inline">
+              <input placeholder="opentrench://together/…" value={pairing} onChange={(e) => setPairing(e.target.value)} spellCheck={false} onKeyDown={onEnter(!busy && pairing.trim().length > 0, addPeer)} />
+              <button className="primary" disabled={busy || !pairing.trim()} onClick={addPeer}>
+                Follow
+              </button>
+            </div>
+          </>
+        )}
       </section>
       {err && <div className="err">{err}</div>}
     </>

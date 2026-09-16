@@ -259,6 +259,9 @@ export const api = {
   addPeer: (pairing: string) => req<TogetherInfo>('POST', '/together/peers', { pairing }),
   reconnectPeers: () => req<{ status: import('./types').Status['together'] }>('POST', '/together/reconnect'),
   removePeer: (host: string, port: number) => req<TogetherInfo>('DELETE', '/together/peers', { host, port }),
+  followNearby: (id: string) => req<{ status: import('./types').Status['together'] }>('POST', `/together/nearby/${encodeURIComponent(id)}/follow`),
+  forgetOutgoing: (id: string) => req<{ status: import('./types').Status['together'] }>('DELETE', `/together/outgoing/${encodeURIComponent(id)}`),
+  answerRequest: (id: string, allow: boolean) => req<{ status: import('./types').Status['together'] }>('POST', `/together/requests/${encodeURIComponent(id)}/${allow ? 'allow' : 'deny'}`),
   /** hide call cards from the calls columns (the token keeps being tracked) */
   markHidden: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/hidden', { add, remove }),
   setColumns: (columns: ColumnDef[]) => req<ColumnDef[]>('PUT', '/columns', { columns }),
