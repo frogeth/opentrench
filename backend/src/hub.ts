@@ -823,6 +823,7 @@ export class MessageHub extends EventEmitter {
         if (info) {
           for (const k of DATA_KEYS) if (info[k] !== undefined) (live as any)[k] = info[k];
           for (const k of META_KEYS) if (info[k] && !live[k]) live[k] = info[k];
+          live.enrichedAt = Date.now();
           if (live.marketCap !== undefined) live.athMarketCap = Math.max(live.athMarketCap ?? 0, live.marketCap);
           this.noteFirstCallMc(live);
           this.applyBuy(live);
@@ -849,8 +850,9 @@ export class MessageHub extends EventEmitter {
     if (!c) return Promise.resolve(undefined);
     const known = this.tokens.get(c.address);
     if (known) {
-      // a token nobody could place yet (a chain the chart sites lack, a feed that was rate-limited): try again on demand
-      if (!known.network) this.enrich(known);
+      // opened by hand: a token nobody could place yet, or one the sources last described a while ago
+      // (a launchpad added since, a curve that graduated), is asked about again
+      if (!known.network || !known.enrichedAt || Date.now() - known.enrichedAt > 10 * 60_000) this.enrich(known);
       return Promise.resolve({ ...known });
     }
     const hit = this.lookups.get(c.address);
