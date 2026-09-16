@@ -66,6 +66,8 @@ export interface FeedMessage {
   author: string;
   avatar?: string;
   isBot: boolean;
+  /** the chat is this bot's own conversation (a bot the user added to the feed on purpose): never hidden by the bot policy */
+  botChat?: boolean;
   /** owner / admin / custom admin title, for Telegram group admins */
   authorTag?: string;
   /** blacklisted, or a bot the bot policy does not allow; never counts as a call */

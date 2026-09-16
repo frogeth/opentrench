@@ -400,16 +400,20 @@ export class MessageHub extends EventEmitter {
     return this.botPolicy().allow.some((b) => normName(b) === name);
   }
 
-  /** Blacklisted callers, and bots the policy does not allow, are hidden and never count. */
-  isHidden(msg: Pick<FeedMessage, 'author' | 'isBot'>): boolean {
+  /**
+   * Blacklisted callers, and bots the policy does not allow, are hidden and never count.
+   * A bot posting in its own chat (the user added that conversation to the feed) is what that
+   * feed is for: the policy never hides it, only the blacklist can.
+   */
+  isHidden(msg: Pick<FeedMessage, 'author' | 'isBot' | 'botChat'>): boolean {
     if (this.isBlacklisted(msg.author)) return true;
-    if (!msg.isBot) return false;
+    if (!msg.isBot || msg.botChat) return false;
     return !(this.botPolicy().default === 'show' || this.isAllowedBot(msg.author));
   }
 
   /** A shown bot whose contract posts should not become calls (policy `calls: 'allow'`, bot not allow-listed). */
-  isCallMuted(msg: Pick<FeedMessage, 'author' | 'isBot'>): boolean {
-    if (!msg.isBot) return false;
+  isCallMuted(msg: Pick<FeedMessage, 'author' | 'isBot' | 'botChat'>): boolean {
+    if (!msg.isBot || msg.botChat) return false;
     const p = this.botPolicy();
     return p.default === 'show' && p.calls === 'allow' && !this.isAllowedBot(msg.author);
   }

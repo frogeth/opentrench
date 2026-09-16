@@ -45,6 +45,7 @@ export function normalizeTelegram(p: TelegramPlain): FeedMessage {
     author: p.senderName,
     avatar: p.senderId ? `/api/telegram/avatar/${p.senderId}` : undefined,
     isBot: p.isBot,
+    ...(p.isBot && p.senderId && p.senderId === p.chatId ? { botChat: true } : {}),
     ...(p.authorTag ? { authorTag: p.authorTag } : {}),
     text: p.text,
     ts: p.date * 1000,

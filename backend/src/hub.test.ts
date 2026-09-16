@@ -236,6 +236,21 @@ describe('MessageHub', () => {
     expect(events.map((e) => e.type)).toEqual(['hello']);
   });
 
+  it('a bot in its own chat (added to the feed on purpose) is never hidden by the policy and its contracts count', () => {
+    const policy: BotPolicy = { default: 'hide', allow: [], calls: 'allow' };
+    let black: string[] = [];
+    const hub = new MessageHub(500, undefined, { bots: () => policy, blacklist: () => black });
+    hub.push(msg(1, EVM, { source: 'telegram', author: 'RH_Rombot', isBot: true, botChat: true, chatId: '8907690046', chatName: 'RH_Rombot' }));
+    hub.push(msg(2, EVM, { source: 'telegram', author: 'Rick', isBot: true, chatId: '-100', chatName: 'Crypto Trenches' }));
+    const [rom, rick] = hub.hello().messages;
+    expect(rom.hidden).toBe(false);
+    expect(rick.hidden).toBe(true);
+    expect(hub.hello().tokens[0]).toMatchObject({ calledIn: ['RH_Rombot'], firstCaller: { author: 'RH_Rombot' } });
+    black = ['rh_rombot'];
+    hub.rebuild();
+    expect(hub.hello().messages[0].hidden).toBe(true);
+  });
+
   it('bot policy: hidden by default, allow-listed bots show and count; "show" default flips it', () => {
     let policy: BotPolicy = { default: 'hide', allow: ['@AlertsBot'] };
     let black: string[] = [];
