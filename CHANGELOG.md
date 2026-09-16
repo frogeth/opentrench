@@ -7,6 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Clicking a trending row opens the token drilldown (chart, every call, buy buttons) instead of only highlighting it in the calls column. (Suggested by Brandzo.)
+## v0.9.4 — 2026-09-16
+
 - Every token now shows what it is paired with (/ WETH, / USDC, / SOL …) next to its chain mark: call cards and compact rows, the token drilldown, the trending column and chat chips. Hover for the venue (Uniswap, Raydium, pump.fun, a launchpad's bonding curve).
 - Token drilldown: the chart falls back to your chart provider's embed (BasedBot, Dexscreener, …) when candles are unavailable, and says why (GeckoTerminal rate limit, no pool yet) instead of an empty grid. The backend now pauses all GeckoTerminal requests for half a minute after a rate limit instead of collecting more of them.
 - Token drilldown calls: one row per person. The same caller scanning in several chats is one row with ×N and every chat listed (entry from the earliest scan), and your own Discord and Telegram scans fold into a single "you" row.
