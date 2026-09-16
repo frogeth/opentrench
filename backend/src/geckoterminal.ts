@@ -129,6 +129,12 @@ export function mapGeckoTerminal(slug: string, tokenJson: any, poolJson?: any, i
   }
   const p = poolJson?.data?.attributes;
   if (p) {
+    // "ARCH / USDC" (or "USDC / ARCH" when our token sits on the quote side): the other side is what it is paired with
+    const sides = String(p.name ?? '').split('/').map((x: string) => x.trim()).filter(Boolean);
+    const other = sides.length === 2 ? sides.find((x: string) => x.toLowerCase() !== String(a.symbol ?? '').toLowerCase()) : undefined;
+    if (other) out.quoteSymbol = other.replace(/\s+\d+(\.\d+)?%$/, '');
+    const dex = poolJson?.data?.relationships?.dex?.data?.id;
+    if (dex) out.dex = String(dex);
     const ch = num(p.price_change_percentage?.h24);
     if (ch !== undefined) out.change24h = ch;
     const pliq = num(p.reserve_in_usd);

@@ -42,6 +42,8 @@ describe('launchpads', () => {
       launchpad: 'pumpfun',
       launchpadUrl: 'https://pump.fun/coin/Mintpump',
       network: 'solana',
+      quoteSymbol: 'SOL',
+      dex: 'pump.fun',
       name: 'Fantasy',
       symbol: 'FIX',
       imageUrl: '/api/ipfs/QmImg',
@@ -342,7 +344,7 @@ describe('DYOR Launch (Arc)', () => {
     }) as unknown as typeof fetch;
   const chains = [{ network: 'arc', chainId: 5042, factory: '0xa2448256e2A2e2Fc02a8faff1Dbcc91C640FFcD8', rpc: 'https://rpc', reader: '0xDb3e73989EaE0a5132d668099C529F51A97EE8C3' }];
   it('the factory names a curve: DYOR token, with its progress or graduation', async () => {
-    expect(await fetchDyor(TOKEN, rpc({ known: true, raised: 6163n, target: 18000n }), chains)).toEqual({ launchpad: 'dyor', launchpadUrl: `https://dyorswap.org/token?address=${TOKEN}&chainId=5042`, network: 'arc', launchpadNote: 'bonding · 34.2%' });
+    expect(await fetchDyor(TOKEN, rpc({ known: true, raised: 6163n, target: 18000n }), chains)).toEqual({ launchpad: 'dyor', launchpadUrl: `https://dyorswap.org/token?address=${TOKEN}&chainId=5042`, network: 'arc', quoteSymbol: 'USDC', dex: 'dyor', launchpadNote: 'bonding · 34.2%' });
     expect((await fetchDyor(TOKEN, rpc({ known: true, graduated: true }), chains))?.launchpadNote).toBe('graduated');
     expect(await fetchDyor(TOKEN, rpc({ known: false }), chains)).toBeUndefined();
     // an earlier V2 launch: the current factory reverts, the site's reader still answers

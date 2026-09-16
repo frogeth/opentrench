@@ -9,7 +9,7 @@ import { Logo } from './Logo';
 import { Icon } from './Icon';
 import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
-import { ChainBadge } from './ChainBadge';
+import { ChainBadge, PairChip } from './ChainBadge';
 import { LaunchpadBadge } from './LaunchpadBadge';
 import { SecurityStrip } from './SecurityStrip';
 import { Tip } from './HoverCard';
@@ -181,6 +181,7 @@ export function TokenModal({ t, now, favorites, me = [], onClose, onShare, onBuy
                 {shortAddr(t.address)} <Icon name="copy" size={10} />
               </span>
               {price(t.priceUsd) && <span className="call-price">{price(t.priceUsd)}</span>}
+              <PairChip t={t} />
             </div>
             <div className="tmodal-links">
               <TokenLinks t={t} showChart={showChart} onToggleChart={() => setShowChart((s) => !s)} canChart={false} />

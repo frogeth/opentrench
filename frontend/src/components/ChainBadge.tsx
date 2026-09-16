@@ -46,3 +46,15 @@ export function ChainBadge({
     </span>
   );
 }
+
+/** What the token trades against (WETH, USDC, SOL, …) and where; nothing until a pool is known. */
+export function PairChip({ t, className = '' }: { t: { quoteSymbol?: string; dex?: string } | undefined; className?: string }) {
+  if (!t?.quoteSymbol) return null;
+  const venue = t.dex ? t.dex.replace(/[_-]/g, ' ') : undefined;
+  return (
+    <span className={`pair-chip ${className}`} title={venue ? `paired with ${t.quoteSymbol} on ${venue}` : `paired with ${t.quoteSymbol}`}>
+      <span className="pair-chip-sep">/</span>
+      {t.quoteSymbol}
+    </span>
+  );
+}

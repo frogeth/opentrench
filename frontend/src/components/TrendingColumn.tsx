@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { CallRecord, TokenInfo } from '../types';
 import { money, timeAgo } from '../format';
 import { Avatar } from './Avatar';
-import { ChainBadge } from './ChainBadge';
+import { ChainBadge, PairChip } from './ChainBadge';
 import { HoverCard } from './HoverCard';
 import { Logo } from './Logo';
 import { VirtualItem } from './Virtual';
@@ -133,6 +133,7 @@ export function TrendingList({
                 {r.t.imageUrl ? <img className="avatar" src={r.t.imageUrl} alt="" style={{ width: 24, height: 24, borderRadius: 6 }} /> : <Avatar name={r.t.symbol ?? '?'} size={24} />}
                 <b>{r.t.symbol ? `$${r.t.symbol}` : r.t.address.slice(0, 6)}</b>
                 <ChainBadge network={r.t.network} chain={r.t.chain} />
+                <PairChip t={r.t} />
               </span>
               <span>{r.n}</span>
               <span className="muted">{r.entry ? money(r.entry) : '—'}</span>

@@ -1384,3 +1384,8 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 .osm-row-x:hover { color: var(--err); border-color: var(--err); }
 .layouts-current { font-size: 11px; color: var(--muted); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
 .pick-handle { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
+
+/* what the token is paired with: a quiet "/ WETH" next to the chain mark */
+.pair-chip { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; white-space: nowrap; flex: none; }
+.pair-chip-sep { opacity: 0.55; }
+.call-sub .pair-chip { font-size: 11px; }

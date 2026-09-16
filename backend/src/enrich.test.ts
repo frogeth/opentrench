@@ -162,7 +162,7 @@ describe('mapGeckoTerminal', () => {
         relationships: { top_pools: { data: [{ id: 'robinhood_0xpool' }] } },
       },
     };
-    const pool = { data: { attributes: { price_change_percentage: { h24: '12.5' }, reserve_in_usd: '60' } } };
+    const pool = { data: { attributes: { name: 'BITCAT / WETH', price_change_percentage: { h24: '12.5' }, reserve_in_usd: '60' }, relationships: { dex: { data: { id: 'uniswap_v2' } } } } };
     const info = { data: { attributes: { websites: ['https://bitcat.fun'], twitter_handle: 'bitcat', telegram_handle: null } } };
     expect(mapGeckoTerminal('robinhood', token, pool, info)).toEqual({
       network: 'robinhood',
@@ -174,6 +174,8 @@ describe('mapGeckoTerminal', () => {
       pairAddress: '0xpool',
       chartUrl: 'https://www.geckoterminal.com/robinhood/pools/0xpool',
       embedUrl: 'https://www.geckoterminal.com/robinhood/pools/0xpool?embed=1&info=0&swaps=0&grayscale=0&light_chart=0',
+      quoteSymbol: 'WETH',
+      dex: 'uniswap_v2',
       change24h: 12.5,
       website: 'https://bitcat.fun',
       twitter: 'https://x.com/bitcat',

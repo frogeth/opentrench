@@ -4,7 +4,7 @@ import type { Contract, TokenInfo } from '../types';
 import { chartEmbedUrl, copyText, money, shortAddr, type ChartProvider } from '../format';
 import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
-import { ChainBadge } from './ChainBadge';
+import { ChainBadge, PairChip } from './ChainBadge';
 import { LaunchpadBadge } from './LaunchpadBadge';
 import { useVisible } from '../useVisible';
 
@@ -65,6 +65,7 @@ export function TokenChip({
               {t?.symbol ?? shortAddr(c.address)}
             </button>
             {t?.name && t.name !== t.symbol && <span className="chip-name">{t.name}</span>}
+            <PairChip t={t} />
             {repeat && (
               <span className="chip-repeat" title="already posted in this chat">
                 🔁 repeat

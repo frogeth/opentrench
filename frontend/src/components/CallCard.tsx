@@ -8,7 +8,7 @@ import { Icon } from './Icon';
 import { BuyRow } from './BuyRow';
 import { TokenLinks } from './TokenLinks';
 import { AuthorMenu } from './AuthorMenu';
-import { ChainBadge } from './ChainBadge';
+import { ChainBadge, PairChip } from './ChainBadge';
 import { LaunchpadBadge } from './LaunchpadBadge';
 import { HoverCard, Tip } from './HoverCard';
 import { SecurityStrip } from './SecurityStrip';
@@ -160,6 +160,7 @@ export function CallCard({
           {copied ? 'copied' : (t.symbol ?? shortAddr(t.address))}
         </button>
         <ChainBadge network={t.network} chain={t.chain} size={10} />
+        <PairChip t={t} />
         {isFirst ? <span className="first-badge">1st</span> : <span className={`call-seen${t.seen >= 2 ? ' call-seen-hot' : ''}`}>🔥{t.seen}×</span>}
         {c && <span className="call-row-who muted">{c.author}</span>}
         <span className="call-row-r">
@@ -293,6 +294,7 @@ export function CallCard({
               {shortAddr(t.address)} <Icon name="copy" size={10} />
             </span>
             {hasPrice && price(t.priceUsd) && <span className="call-price">{price(t.priceUsd)}</span>}
+            <PairChip t={t} />
             <span className="call-line-r">
               {money(t.athMarketCap) && <span className={`call-ath${nearAth ? ' near' : ''}`}>ATH: {money(t.athMarketCap)}</span>}
             </span>

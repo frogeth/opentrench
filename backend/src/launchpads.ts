@@ -80,7 +80,7 @@ export function classifyBySuffix(address: string, chain: Chain): LaunchpadInfo |
 
 export function mapPumpfun(c: any): LaunchpadInfo | undefined {
   if (!c?.mint) return undefined;
-  const out: LaunchpadInfo = { launchpad: 'pumpfun', launchpadUrl: `https://pump.fun/coin/${c.mint}`, network: 'solana' };
+  const out: LaunchpadInfo = { launchpad: 'pumpfun', launchpadUrl: `https://pump.fun/coin/${c.mint}`, network: 'solana', quoteSymbol: 'SOL', dex: 'pump.fun' };
   if (c.name) out.name = String(c.name);
   if (c.symbol) out.symbol = String(c.symbol);
   const img = ipfsToHttp(c.image_uri);
@@ -514,7 +514,7 @@ export async function fetchArgus(address: string, fetchImpl: typeof fetch = fetc
     if (!hit && typeof res === 'string' && res.length > 66 && !/^0x0{64}/.test(res)) hit = { portal: portals[i], result: res };
   });
   if (!hit) return undefined;
-  const out: LaunchpadInfo = { launchpad: 'argus', launchpadUrl: `https://argus.world/token/${a}`, network: 'arc' };
+  const out: LaunchpadInfo = { launchpad: 'argus', launchpadUrl: `https://argus.world/token/${a}`, network: 'arc', quoteSymbol: 'USDC', dex: 'argus' };
   const hook = hit.portal.v4 ? wordAddr(hit.result, 4) : undefined;
   const buyTax = hit.portal.v4 ? parseInt(word(hit.result, 6) ?? '0', 16) : NaN;
   const sellTax = hit.portal.v4 ? parseInt(word(hit.result, 7) ?? '0', 16) : NaN;
@@ -592,7 +592,7 @@ export function mapWarp(d: any, address: string): LaunchpadInfo | undefined {
   // Warp's terminal also indexes tokens from other launchpads and pools; those come back `external` and are not Warp launches
   const status = String(d.status ?? '').toLowerCase();
   if (status !== 'live' && status !== 'migrated') return undefined;
-  const out: LaunchpadInfo = { launchpad: 'warp', launchpadUrl: `https://circlewarp.fun/trade/${a}`, network: 'arc' };
+  const out: LaunchpadInfo = { launchpad: 'warp', launchpadUrl: `https://circlewarp.fun/trade/${a}`, network: 'arc', quoteSymbol: 'USDC', dex: 'warp' };
   if (d.name) out.name = String(d.name);
   if (d.ticker) out.symbol = String(d.ticker);
   const img = ipfsToHttp(d.image ? String(d.image) : undefined);
@@ -635,7 +635,7 @@ export function mapPeach(d: any, address: string): LaunchpadInfo | undefined {
   if (!d || typeof d !== 'object' || d.error) return undefined;
   const a = address.toLowerCase();
   if (String(d.token ?? '').toLowerCase() !== a) return undefined;
-  const out: LaunchpadInfo = { launchpad: 'peach', launchpadUrl: `https://www.peach.ag/arc/tokens/${a}`, network: 'arc' };
+  const out: LaunchpadInfo = { launchpad: 'peach', launchpadUrl: `https://www.peach.ag/arc/tokens/${a}`, network: 'arc', quoteSymbol: 'USDC', dex: 'peach' };
   const num = (v: unknown): number | undefined => {
     if (v === null || v === undefined || v === '') return undefined;
     const n = Number(v);
@@ -702,7 +702,7 @@ export async function fetchDyor(address: string, fetchImpl: typeof fetch = fetch
       if (typeof older[0]?.result !== 'string' || older[0].result.length <= 2) continue;
       return { launchpad: 'dyor', launchpadUrl: `https://dyorswap.org/token?address=${a}&chainId=${chain.chainId}`, network: chain.network };
     }
-    const out: LaunchpadInfo = { launchpad: 'dyor', launchpadUrl: `https://dyorswap.org/token?address=${a}&chainId=${chain.chainId}`, network: chain.network };
+    const out: LaunchpadInfo = { launchpad: 'dyor', launchpadUrl: `https://dyorswap.org/token?address=${a}&chainId=${chain.chainId}`, network: chain.network, quoteSymbol: chain.network === 'arc' ? 'USDC' : 'ETH', dex: 'dyor' };
     try {
       const st = await rpcBatch(chain.rpc, [
         { method: 'eth_call', params: [{ to: curve, data: DYOR_SEL.graduated }, 'latest'] },
@@ -736,7 +736,7 @@ export function mapSynthra(t: any, chain: (typeof SYNTHRA_CHAINS)[number], rate 
   if (!t || typeof t !== 'object' || typeof t.id !== 'string') return undefined;
   const a = t.id.toLowerCase();
   // the app's launchpad list; a per-token route could not be verified from here, the list is the entry
-  const out: LaunchpadInfo = { launchpad: 'synthra', launchpadUrl: 'https://app.synthra.org/#/launchpad', network: chain.network };
+  const out: LaunchpadInfo = { launchpad: 'synthra', launchpadUrl: 'https://app.synthra.org/#/launchpad', network: chain.network, quoteSymbol: chain.quoteIsUsd ? 'USDC' : 'ETH', dex: 'synthra' };
   const num = (v: unknown): number | undefined => {
     if (v === null || v === undefined || v === '') return undefined;
     const n = Number(v);

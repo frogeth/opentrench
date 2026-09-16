@@ -63,6 +63,8 @@ const DATA_KEYS = [
   'imageUrl',
   'network',
   'pairAddress',
+  'quoteSymbol',
+  'dex',
   'chartUrl',
   'embedUrl',
   'explorerUrl',

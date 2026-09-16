@@ -221,6 +221,10 @@ export interface TokenInfo {
   /** dexscreener-style chain id: ethereum | base | bsc | solana | robinhood | … */
   network?: string;
   pairAddress?: string;
+  /** the other side of the main pool (WETH, USDC, SOL, …): what the token is paired with */
+  quoteSymbol?: string;
+  /** the venue of that pool (uniswap, raydium, pumpswap, …), or the launchpad's bonding curve */
+  dex?: string;
   chartUrl?: string;
   /** iframe-able live chart (Dexscreener or GeckoTerminal embed) */
   embedUrl?: string;
