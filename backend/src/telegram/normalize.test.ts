@@ -133,3 +133,12 @@ describe('admin tags', () => {
     expect('authorTag' in normalizeTelegram(base)).toBe(false);
   });
 });
+
+describe('bot chats', () => {
+  it("a bot posting in its own conversation is marked botChat; the same bot in a group is not, nor is a person's DM", () => {
+    const base = { id: 1, chatTitle: 'RH_Rombot', senderName: '@RH_Rombot', isBot: true, text: 'spike', date: 1 } as any;
+    expect(normalizeTelegram({ ...base, chatId: '8907690046', senderId: '8907690046' }).botChat).toBe(true);
+    expect('botChat' in normalizeTelegram({ ...base, chatId: '-1002354433918', senderId: '8907690046' })).toBe(false);
+    expect('botChat' in normalizeTelegram({ ...base, isBot: false, chatId: '55', senderId: '55' })).toBe(false);
+  });
+});
