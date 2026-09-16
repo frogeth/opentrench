@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { __resetStonksCache, classifyBySuffix, createLaunchpadClassifier, decodeStrings, fetchPons, fetchStonks, ipfsToHttp, mapBankrLaunch, mapClanker, mapFlap, mapPumpfun, mapStonksCoin, mapVirtuals, fetchArgus, fetchWarp, mapWarp, decodeDynamicStrings } from './launchpads.js';
+import { __resetStonksCache, classifyBySuffix, createLaunchpadClassifier, decodeStrings, fetchPons, fetchStonks, ipfsToHttp, mapBankrLaunch, mapClanker, mapFlap, mapPumpfun, mapStonksCoin, mapVirtuals, fetchArgus, fetchWarp, mapWarp, decodeDynamicStrings, mapPeach, fetchPeach, fetchDyor } from './launchpads.js';
 
 const A = '0xa419Bb493ed5059f28dfd84348A2F93D70ECf003';
 
@@ -297,5 +297,50 @@ describe('pump.fun mints without the vanity suffix', () => {
     // a letsbonk suffix still wins without a pump.fun call
     expect((await cls('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbonk', 'sol'))?.launchpad).toBe('letsbonk');
     expect(asked).toHaveLength(2);
+  });
+});
+
+
+describe('Peach (Arc)', () => {
+  const t = { token: '0x69a2950134c4c3a78cf293baaa831cd78923cc85', name: 'Peach Arc', symbol: 'PEACH', image_url: 'https://img/peach.png', x: 'https://x.com/peachlfg', status: 'BONDING', progress: '12.4', price_usd: '0.0000025', market_cap_usd: '2500', liquidity_usd: '10', volume_24h_usd: '3', price_change_24h: '0', created_at: '1789574529' };
+  it('maps a bonding token and a graduated one', () => {
+    expect(mapPeach(t, t.token)).toMatchObject({ launchpad: 'peach', launchpadUrl: `https://www.peach.ag/arc/tokens/${t.token}`, network: 'arc', name: 'Peach Arc', symbol: 'PEACH', imageUrl: 'https://img/peach.png', priceUsd: 0.0000025, marketCap: 2500, pairCreatedAt: 1789574529000, launchpadNote: 'bonding · 12%' });
+    expect(mapPeach({ ...t, status: 'GRADUATED', progress: '100' }, t.token)?.launchpadNote).toBe('graduated');
+    expect(mapPeach({ error: 'token not found' }, t.token)).toBeUndefined();
+    expect(mapPeach({ ...t, token: '0x' + '1'.repeat(40) }, t.token)).toBeUndefined();
+  });
+  it('fetchPeach: a 404 is not a Peach token', async () => {
+    const fake = (async (url: string) => (url.endsWith('/tokens/' + t.token) ? new Response(JSON.stringify(t), { status: 200 }) : new Response(JSON.stringify({ error: 'token not found' }), { status: 404 }))) as unknown as typeof fetch;
+    expect((await fetchPeach(t.token, fake, 'https://api'))?.launchpad).toBe('peach');
+    expect(await fetchPeach('0x' + '2'.repeat(40), fake, 'https://api')).toBeUndefined();
+  });
+});
+
+describe('DYOR Launch (Arc)', () => {
+  const TOKEN = '0x07704b06981ea962b87296362a1281484d160000';
+  const CURVE = '0x1111111111111111111111111111111111111111';
+  const w = (hex: string) => hex.replace(/^0x/, '').padStart(64, '0');
+  const rpc = (over: { known?: boolean; graduated?: boolean; raised?: bigint; target?: bigint }) =>
+    (async (_url: string, init: any) => {
+      const calls: any[] = JSON.parse(init.body);
+      return new Response(
+        JSON.stringify(
+          calls.map((c) => {
+            const data: string = c.params[0].data;
+            if (data.startsWith('0x86e14352')) return { id: c.id, result: '0x' + w(over.known ? CURVE : '0') };
+            if (data.startsWith('0xe7c2b772')) return { id: c.id, result: '0x' + w(over.graduated ? '1' : '0') };
+            if (data.startsWith('0xdcce240a')) return { id: c.id, result: '0x' + w((over.raised ?? 0n).toString(16)) };
+            if (data.startsWith('0xbdf50293')) return { id: c.id, result: '0x' + w((over.target ?? 0n).toString(16)) };
+            return { id: c.id, result: '0x' };
+          }),
+        ),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+  const chains = [{ network: 'arc', chainId: 5042, factory: '0xa2448256e2A2e2Fc02a8faff1Dbcc91C640FFcD8', rpc: 'https://rpc' }];
+  it('the factory names a curve: DYOR token, with its progress or graduation', async () => {
+    expect(await fetchDyor(TOKEN, rpc({ known: true, raised: 6163n, target: 18000n }), chains)).toEqual({ launchpad: 'dyor', launchpadUrl: `https://dyorswap.org/token?address=${TOKEN}&chainId=5042`, network: 'arc', launchpadNote: 'bonding · 34.2%' });
+    expect((await fetchDyor(TOKEN, rpc({ known: true, graduated: true }), chains))?.launchpadNote).toBe('graduated');
+    expect(await fetchDyor(TOKEN, rpc({ known: false }), chains)).toBeUndefined();
   });
 });

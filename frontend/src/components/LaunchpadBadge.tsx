@@ -16,6 +16,8 @@ const LOGOS: Record<string, { src: string; label: string; short: string }> = {
   // Argus's icon.svg is a white eye on a black disc that fills the file; at badge size the disc read as a black square, so the eye alone is embedded
   argus: { src: ARGUS_EYE, label: 'Argus', short: 'AG' },
   warp: { src: 'https://circlewarp.fun/favicon.svg', label: 'Warp', short: 'W' },
+  peach: { src: 'https://www.peach.ag/images/logo.png', label: 'Peach', short: '🍑' },
+  dyor: { src: 'https://dyorswap.org/favicon.ico', label: 'DYOR', short: 'DY' },
 };
 
 export function LaunchpadBadge({ launchpad, url, note, size = 18 }: { launchpad?: string; url?: string; /** one more line for the tooltip (Long: anchored to NVDA) */ note?: string; size?: number }) {

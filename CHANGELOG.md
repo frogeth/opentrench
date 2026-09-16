@@ -7,6 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Two more Arc launchpads: Peach (peach.ag, from its launchpad API: name, image, price, market cap, liquidity, progress or graduated) and DYOR Launch (dyorswap.org, from its factory and curve contracts on Arc and Robinhood: bonding progress or graduated). Badges, token-page links and launchpad filters for both.
+- Cove buy buttons on Arbitrum, Stable, X Layer and Avalanche too, now that Cove published its full chain-code table.
+- o1 launches on Arc and Monad are recognised (o1's API added both chains).
 ## v0.9.1 — 2026-09-16
 
 - Scanner cards (Rick, Phanes, TokenScan, and mirrors relaying them) count only the token they are about. The pair address and the top-holder wallets a card links had each counted as a separate token, which is why one Rick post could fill a column with strange calls. Existing stray tokens are cleaned up once on update. (Brandzo.)

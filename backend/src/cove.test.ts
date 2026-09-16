@@ -68,7 +68,7 @@ describe('cove', () => {
   });
 
   it('returns undefined for unsupported or unknown chains', () => {
-    expect(buildCoveLinks('arbitrum', BITCAT, { amounts: [50] })).toBeUndefined();
+    expect(buildCoveLinks('zora', BITCAT, { amounts: [50] })).toBeUndefined();
     expect(buildCoveLinks(undefined, BITCAT, { amounts: [50] })).toBeUndefined();
   });
 

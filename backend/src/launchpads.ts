@@ -7,7 +7,7 @@ import type { Chain, TokenInfo } from './types.js';
  * the launchpad itself becomes a badge on the card.
  */
 
-export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long' | 'argus' | 'warp';
+export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long' | 'argus' | 'warp' | 'peach' | 'dyor';
 
 export interface LaunchpadInfo extends Partial<TokenInfo> {
   launchpad: Launchpad;
@@ -348,6 +348,9 @@ const O1_API = 'https://api.launch.o1.exchange/v1';
 const O1_CHAINS: [number, string][] = [
   [8453, 'base'],
   [4663, 'robinhood'],
+  // docs.o1.exchange/launchpad/api: Monad and Arc mainnet joined the list
+  [143, 'monad'],
+  [5042, 'arc'],
 ];
 
 export async function fetchO1(address: string, apiKey: string | undefined, fetchImpl: typeof fetch = fetch): Promise<LaunchpadInfo | undefined> {
@@ -386,6 +389,8 @@ export interface LaunchpadProbes {
   /** Long (Robinhood Chain): cheap, it only asks for the `1e18` suffix */
   argus?: (address: string) => Promise<LaunchpadInfo | undefined>;
   warp?: (address: string) => Promise<LaunchpadInfo | undefined>;
+  peach?: (address: string) => Promise<LaunchpadInfo | undefined>;
+  dyor?: (address: string) => Promise<LaunchpadInfo | undefined>;
   long?: (a: string) => Promise<LaunchpadInfo | undefined>;
   log?: (m: string) => void;
 }
@@ -424,6 +429,8 @@ export function createLaunchpadClassifier(p: LaunchpadProbes): (address: string,
       ['long', p.long],
       ['argus', p.argus],
       ['warp', p.warp],
+      ['peach', p.peach],
+      ['dyor', p.dyor],
       ['bankr', p.bankr],
       ['stonks', p.stonks],
       ['pons', p.pons],
@@ -608,4 +615,93 @@ export async function fetchWarp(address: string, fetchImpl: typeof fetch = fetch
   if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return undefined;
   const json = await getJson(`${api}/api/tokens/${address.toLowerCase()}`, fetchImpl);
   return json ? mapWarp(json, address) : undefined;
+}
+
+
+// ---------- Peach (Arc): public launchpad API ----------
+
+const PEACH_API = 'https://api.peach.ag/arc/v1/launchpad';
+
+export function mapPeach(d: any, address: string): LaunchpadInfo | undefined {
+  if (!d || typeof d !== 'object' || d.error) return undefined;
+  const a = address.toLowerCase();
+  if (String(d.token ?? '').toLowerCase() !== a) return undefined;
+  const out: LaunchpadInfo = { launchpad: 'peach', launchpadUrl: `https://www.peach.ag/arc/tokens/${a}`, network: 'arc' };
+  const num = (v: unknown): number | undefined => {
+    if (v === null || v === undefined || v === '') return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  if (d.name) out.name = String(d.name);
+  if (d.symbol) out.symbol = String(d.symbol);
+  const img = ipfsToHttp(d.image_url ? String(d.image_url) : d.image_uri ? String(d.image_uri) : undefined);
+  if (img) out.imageUrl = img;
+  const x = xUrl(d.x ? String(d.x) : d.twitter ? String(d.twitter) : undefined);
+  if (x) out.twitter = x;
+  if (d.website) out.website = String(d.website);
+  const tg = tgUrl(d.telegram ? String(d.telegram) : undefined);
+  if (tg) out.telegram = tg;
+  const price = num(d.price_usd), mcap = num(d.market_cap_usd), liq = num(d.liquidity_usd), vol = num(d.volume_24h_usd), chg = num(d.price_change_24h), created = num(d.created_at);
+  if (price !== undefined && price > 0) out.priceUsd = price;
+  if (mcap !== undefined) out.marketCap = mcap;
+  if (liq !== undefined) out.liquidity = liq;
+  if (vol !== undefined) out.volume24h = vol;
+  if (chg !== undefined) out.change24h = chg;
+  if (created) out.pairCreatedAt = created * 1000;
+  const status = String(d.status ?? '').toUpperCase();
+  const progress = num(d.progress);
+  out.launchpadNote = status === 'GRADUATED' ? 'graduated' : progress !== undefined ? `bonding · ${Math.round(progress)}%` : status ? status.toLowerCase() : 'bonding';
+  return out;
+}
+
+/** Peach: its launchpad API answers 404 for anything it did not launch. */
+export async function fetchPeach(address: string, fetchImpl: typeof fetch = fetch, api = PEACH_API): Promise<LaunchpadInfo | undefined> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return undefined;
+  const json = await getJson(`${api}/tokens/${address.toLowerCase()}`, fetchImpl);
+  return json ? mapPeach(json, address) : undefined;
+}
+
+// ---------- DYOR Launch (Arc, Robinhood): factory + curve, no API ----------
+
+/** LaunchFactory per chain (dyorswap.org/docs/launch-curve); the curve is created per token by the factory */
+export const DYOR_CHAINS: { network: string; chainId: number; factory: string; rpc: string }[] = [
+  { network: 'arc', chainId: 5042, factory: '0xa2448256e2A2e2Fc02a8faff1Dbcc91C640FFcD8', rpc: ARC_RPC },
+  { network: 'robinhood', chainId: 4663, factory: '0xA22CAC40344aEf32BD0952e98b2E1B3ef8914C0F', rpc: ROBINHOOD_RPC },
+];
+const DYOR_SEL = { launchCurveOf: '0x86e14352', graduated: '0xe7c2b772', salePairReserve: '0xdcce240a', graduationPairAmount: '0xbdf50293' } as const;
+
+/**
+ * DYOR: the factory's launchCurveOf(token) names the curve when the token is one of theirs; the
+ * curve's graduated() and its raised / target pair amounts give the status.
+ */
+export async function fetchDyor(address: string, fetchImpl: typeof fetch = fetch, chains = DYOR_CHAINS): Promise<LaunchpadInfo | undefined> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return undefined;
+  const a = address.toLowerCase();
+  const arg = a.slice(2).padStart(64, '0');
+  for (const chain of chains) {
+    let rows: any[];
+    try {
+      rows = await rpcBatch(chain.rpc, [{ method: 'eth_call', params: [{ to: chain.factory, data: DYOR_SEL.launchCurveOf + arg }, 'latest'] }], fetchImpl);
+    } catch {
+      continue;
+    }
+    const curve = typeof rows[0]?.result === 'string' ? wordAddr(rows[0].result, 0) : undefined;
+    if (!curve || /^0x0{40}$/.test(curve)) continue;
+    const out: LaunchpadInfo = { launchpad: 'dyor', launchpadUrl: `https://dyorswap.org/token?address=${a}&chainId=${chain.chainId}`, network: chain.network };
+    try {
+      const st = await rpcBatch(chain.rpc, [
+        { method: 'eth_call', params: [{ to: curve, data: DYOR_SEL.graduated }, 'latest'] },
+        { method: 'eth_call', params: [{ to: curve, data: DYOR_SEL.salePairReserve }, 'latest'] },
+        { method: 'eth_call', params: [{ to: curve, data: DYOR_SEL.graduationPairAmount }, 'latest'] },
+      ], fetchImpl);
+      const graduated = /1$/.test(String(st[0]?.result ?? ''));
+      const raised = BigInt(st[1]?.result ?? '0x0');
+      const target = BigInt(st[2]?.result ?? '0x0');
+      out.launchpadNote = graduated ? 'graduated' : target > 0n ? `bonding · ${Number((raised * 1000n) / target) / 10}%` : 'bonding';
+    } catch {
+      out.launchpadNote = 'bonding';
+    }
+    return out;
+  }
+  return undefined;
 }
