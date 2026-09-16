@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createEnricher, explorerUrl } from './enrich.js';
-import { mapGeckoTerminal } from './geckoterminal.js';
+import { mapGeckoTerminal, fetchGeckoTerminal } from './geckoterminal.js';
 
 const A = '0xa419Bb493ed5059f28dfd84348A2F93D70ECf003';
 
@@ -84,6 +84,21 @@ describe('explorerUrl', () => {
     expect(explorerUrl('ink', 'X')).toBe('https://explorer.inkonchain.com/token/X');
     expect(explorerUrl('nope', 'X')).toBeUndefined();
     expect(explorerUrl(undefined, 'X')).toBeUndefined();
+  });
+});
+
+describe('fetchGeckoTerminal fallback networks', () => {
+  it('reaches Arc after the usual networks, and the token comes back on network arc', async () => {
+    const asked: string[] = [];
+    const fake = (async (url: string) => {
+      asked.push(url);
+      const m = /networks\/([a-z]+)\/tokens\/0xarc$/.exec(url);
+      if (m && m[1] === 'arc') return new Response(JSON.stringify({ data: { attributes: { name: 'Arcanine', symbol: 'ARCANINE', price_usd: '0.0012', fdv_usd: '277000', market_cap_usd: null, total_reserve_in_usd: '9000' }, relationships: { top_pools: { data: [] } } } }), { status: 200 });
+      return new Response('', { status: 404 });
+    }) as unknown as typeof fetch;
+    const t = await fetchGeckoTerminal('0xarc', 'evm', fake);
+    expect(t).toMatchObject({ network: 'arc', symbol: 'ARCANINE', marketCap: 277000, priceUsd: 0.0012 });
+    expect(asked.filter((u) => /\/tokens\/0xarc$/.test(u)).map((u) => /networks\/([a-z]+)\//.exec(u)![1])).toEqual(['robinhood', 'base', 'eth', 'bsc', 'arbitrum', 'arc']);
   });
 });
 

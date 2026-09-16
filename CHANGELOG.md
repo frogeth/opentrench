@@ -7,7 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
-- Arc (Circle's chain) has its badge, label and chain filter, so Arc tokens and mints are recognisable the moment the market data providers list the network. Explorer links and the OpenSea mint window need Arc's mainnet chain id, RPC and explorer, which Circle publishes with the public mainnet on September 16; they follow then.
+- Arc (Circle's chain): tokens called on Arc get their chain, price and market cap (GeckoTerminal lists the network; Dexscreener does not yet), with Arc's badge, label and chain filter. The OpenSea mint window knows the chain (id 5042, USDC gas, checked against the RPC) for when OpenSea lists Arc drops. No public Arc explorer answered yet, so token explorer links wait.
 - OpenSea mint: a drop that has minted out is refused with "Sold out: 3,333 of 3,333 minted" even when OpenSea still lists the public stage as open (the mint would only revert). A quantity past what is left is refused with the number, and a drop OpenSea has paused says why. (Brandzo, Yield Farm.)
 ## v0.8.15 — 2026-09-15
 

@@ -12,7 +12,8 @@ const MIN_SPACING_MS = 2500;
 
 /** GT network slugs to probe, most likely first. */
 export const GT_NETWORKS: Record<Chain, string[]> = {
-  evm: ['robinhood', 'base', 'eth', 'bsc', 'arbitrum'],
+  // arc: Circle's chain; Dexscreener does not list it (2026-09-15), GeckoTerminal does, as `arc`
+  evm: ['robinhood', 'base', 'eth', 'bsc', 'arbitrum', 'arc'],
   sol: ['solana'],
 };
 
