@@ -100,7 +100,11 @@ async function waitFor(ms) {
   return false;
 }
 
-/** What the backend on the port says it is; null when it predates /api/version or is unreachable. */
+/**
+ * What the backend on the port says it is: `{ version, managed }`, where `managed` means a desktop
+ * app started it (as opposed to `node dist/index.js` from a checkout); null when it predates
+ * /api/version or is unreachable.
+ */
 function backendVersion() {
   return new Promise((resolve) => {
     const req = http.get(`${URL}/api/version`, { timeout: 1500 }, (res) => {
@@ -108,7 +112,9 @@ function backendVersion() {
       res.on('data', (d) => (body += d));
       res.on('end', () => {
         try {
-          resolve(res.statusCode === 200 ? String(JSON.parse(body).version ?? '') : null);
+          if (res.statusCode !== 200) return resolve(null);
+          const j = JSON.parse(body);
+          resolve({ version: String(j.version ?? ''), managed: j.managed !== false });
         } catch {
           resolve(null);
         }
@@ -141,7 +147,8 @@ async function startBackend() {
     // Attaching to a backend from another build is how a column type the backend has never heard
     // of silently turns into a chat column: its config parser rewrites what it doesn't know. A
     // stale `npm start` from an older checkout is the usual culprit.
-    const v = await backendVersion();
+    const info = await backendVersion();
+    const v = info?.version ?? null;
     const cmp = compareVersions(v, app.getVersion());
     if (cmp >= 0) {
       // the same build (the usual case: a restart while the backend kept running) or a newer one
@@ -149,7 +156,23 @@ async function startBackend() {
       console.log('[desktop] backend already running on', URL, cmp > 0 ? `(newer: ${v}) — attaching` : '— attaching');
       return true;
     }
-    // older: almost always one left behind by the previous version. Replace it, no questions.
+    if (info && !info.managed) {
+      // a checkout's own backend that reports an older number: usually one started before the
+      // version bump, holding the developer's real config. An update must not kill it unasked.
+      const { response } = await dialog.showMessageBox({
+        type: 'question',
+        message: `A backend run from a checkout (${v}) is on port ${PORT}`,
+        detail: `This app is ${app.getVersion()}. Use that backend as it is, or stop it and start this app's own (a different config).`,
+        buttons: ['Use it', 'Replace it'],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (response === 0) {
+        console.log(`[desktop] attaching to the checkout backend (${v}) on ${URL} at the user's request`);
+        return true;
+      }
+    }
+    // older and started by a desktop app: one left behind by the previous version. Replace it, no questions.
     console.log(`[desktop] a backend from ${v || 'an older build'} is on port ${PORT}; this app is ${app.getVersion()} — replacing it`);
     const r = await stale.stopListener(PORT, ping, (m) => console.log('[desktop]', m));
     if (!r.ok) {

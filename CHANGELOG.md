@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- The app no longer silently stops a backend started from a checkout when an update makes it look older; it asks Use it / Replace it (its own leftover backends are still replaced without asking).
 ## v0.9.2 — 2026-09-16
 
 - A chat column whose chats sit outside the server or channel picked in the rail now says so, with a "show all channels" button, instead of a bare "Nothing here yet." (a friend's single-chat column looked broken while a server was selected).

@@ -165,7 +165,9 @@ const APP_VERSION =
       return 'dev';
     }
   })();
-app.get('/api/version', (_req, res) => res.json({ version: APP_VERSION }));
+// `managed`: started by a desktop app (which may replace it on an update); a checkout's own
+// `node dist/index.js` is not, and the app asks before touching it
+app.get('/api/version', (_req, res) => res.json({ version: APP_VERSION, managed: Number.isFinite(parentPid) && parentPid > 0 }));
 app.use('/api', createApi(cfg, hub, svc, hover, (t) => refreshMarket([t])));
 
 const dist = path.resolve(root, '..', 'frontend', 'dist');
