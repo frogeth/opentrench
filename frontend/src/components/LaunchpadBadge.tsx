@@ -18,6 +18,7 @@ const LOGOS: Record<string, { src: string; label: string; short: string }> = {
   warp: { src: 'https://circlewarp.fun/favicon.svg', label: 'Warp', short: 'W' },
   peach: { src: 'https://www.peach.ag/images/logo.png', label: 'Peach', short: '🍑' },
   dyor: { src: 'https://dyorswap.org/favicon.ico', label: 'DYOR', short: 'DY' },
+  synthra: { src: 'https://synthra.org/favicon.ico', label: 'Synthra', short: 'SY' },
 };
 
 export function LaunchpadBadge({ launchpad, url, note, size = 18 }: { launchpad?: string; url?: string; /** one more line for the tooltip (Long: anchored to NVDA) */ note?: string; size?: number }) {

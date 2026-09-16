@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { __resetStonksCache, classifyBySuffix, createLaunchpadClassifier, decodeStrings, fetchPons, fetchStonks, ipfsToHttp, mapBankrLaunch, mapClanker, mapFlap, mapPumpfun, mapStonksCoin, mapVirtuals, fetchArgus, fetchWarp, mapWarp, decodeDynamicStrings, mapPeach, fetchPeach, fetchDyor } from './launchpads.js';
+import { __resetStonksCache, classifyBySuffix, createLaunchpadClassifier, decodeStrings, fetchPons, fetchStonks, ipfsToHttp, mapBankrLaunch, mapClanker, mapFlap, mapPumpfun, mapStonksCoin, mapVirtuals, fetchArgus, fetchWarp, mapWarp, decodeDynamicStrings, mapPeach, fetchPeach, fetchDyor, mapSynthra, fetchSynthra, SYNTHRA_CHAINS } from './launchpads.js';
 
 const A = '0xa419Bb493ed5059f28dfd84348A2F93D70ECf003';
 
@@ -347,5 +347,38 @@ describe('DYOR Launch (Arc)', () => {
     expect(await fetchDyor(TOKEN, rpc({ known: false }), chains)).toBeUndefined();
     // an earlier V2 launch: the current factory reverts, the site's reader still answers
     expect(await fetchDyor(TOKEN, rpc({ known: false, older: true }), chains)).toEqual({ launchpad: 'dyor', launchpadUrl: `https://dyorswap.org/token?address=${TOKEN}&chainId=5042`, network: 'arc' });
+  });
+});
+
+
+describe('Synthra Launches (Arc, Robinhood)', () => {
+  const BULL = { id: '0x4ff16c25fc5eb159297ebd5c6bd9fe816054be9d', name: 'USDCBULL', symbol: 'BULL', metadataURI: 'ipfs://bafkreigonn', createdAt: '1789578976', status: 'LIVE', progressBps: 1234, priceUsdc: '0.0000032898', marketCapUsdc: '3289.84', holderCount: 0, volumeUsdc: '494.99', pool: '0x12f0ecc5640605360a3e08c19ccf5d2093733927', lastTradeAt: '1789579095' };
+  const meta = { success: true, data: { name: 'USDCBULL', symbol: 'BULL', socials: { x: 'https://x.com/usdcbull', telegram: 't.me/usdcbull', website: 'https://usdcbull.xyz' }, image: { full: 'https://api/image/full', thumb: 'https://api/image/thumb' } } };
+  const fake = (over: { arc?: any; rh?: any; rate?: number }) =>
+    (async (url: string, init?: any) => {
+      if (url.includes('arc-mainnet')) return new Response(JSON.stringify({ data: { token: over.arc ?? null } }), { status: 200 });
+      if (url.includes('robinhood-mainnet')) return new Response(JSON.stringify({ data: { token: over.rh ?? null } }), { status: 200 });
+      if (url.includes('/quote-rate')) return new Response(JSON.stringify({ success: true, data: { rates: over.rate ? [{ chainId: 4663, rate: over.rate }] : [] } }), { status: 200 });
+      if (url.includes('/metadata/')) return new Response(JSON.stringify(meta), { status: 200 });
+      void init;
+      return new Response('', { status: 404 });
+    }) as unknown as typeof fetch;
+  it('an Arc launch: badge, status, dollars straight from the curve, image and socials from the metadata service', async () => {
+    const t = await fetchSynthra(BULL.id, fake({ arc: BULL }), SYNTHRA_CHAINS, 'https://api');
+    expect(t).toMatchObject({ launchpad: 'synthra', network: 'arc', name: 'USDCBULL', symbol: 'BULL', launchpadNote: 'bonding · 12%', priceUsd: 0.0000032898, marketCap: 3289.84, pairAddress: '0x12f0ecc5640605360a3e08c19ccf5d2093733927', pairCreatedAt: 1789578976000, imageUrl: 'https://api/image/thumb', website: 'https://usdcbull.xyz' });
+    expect(t!.twitter).toMatch(/usdcbull/);
+    expect(t!.telegram).toMatch(/usdcbull/);
+  });
+  it('a Robinhood launch is priced in ETH: converted with the quote rate, or numbers left out without one', async () => {
+    const rh = { ...BULL, status: 'GRADUATED', progressBps: 10000, priceUsdc: '0.000001', marketCapUsdc: '1' };
+    const priced = await fetchSynthra(BULL.id, fake({ rh, rate: 2500 }), SYNTHRA_CHAINS, 'https://api');
+    expect(priced).toMatchObject({ network: 'robinhood', launchpadNote: 'graduated', priceUsd: 0.0025, marketCap: 2500 });
+    const unpriced = await fetchSynthra(BULL.id, fake({ rh }), SYNTHRA_CHAINS, 'https://api');
+    expect(unpriced?.launchpadNote).toBe('graduated');
+    expect(unpriced?.marketCap).toBeUndefined();
+  });
+  it('unknown to both subgraphs: not Synthra; a complete curve says so', async () => {
+    expect(await fetchSynthra(BULL.id, fake({}), SYNTHRA_CHAINS, 'https://api')).toBeUndefined();
+    expect(mapSynthra({ ...BULL, status: 'COMPLETE' }, SYNTHRA_CHAINS[0])?.launchpadNote).toBe('curve complete · graduating');
   });
 });

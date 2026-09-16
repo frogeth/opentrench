@@ -7,7 +7,7 @@ import type { Chain, TokenInfo } from './types.js';
  * the launchpad itself becomes a badge on the card.
  */
 
-export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long' | 'argus' | 'warp' | 'peach' | 'dyor';
+export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long' | 'argus' | 'warp' | 'peach' | 'dyor' | 'synthra';
 
 export interface LaunchpadInfo extends Partial<TokenInfo> {
   launchpad: Launchpad;
@@ -391,6 +391,7 @@ export interface LaunchpadProbes {
   warp?: (address: string) => Promise<LaunchpadInfo | undefined>;
   peach?: (address: string) => Promise<LaunchpadInfo | undefined>;
   dyor?: (address: string) => Promise<LaunchpadInfo | undefined>;
+  synthra?: (address: string) => Promise<LaunchpadInfo | undefined>;
   long?: (a: string) => Promise<LaunchpadInfo | undefined>;
   log?: (m: string) => void;
 }
@@ -431,6 +432,7 @@ export function createLaunchpadClassifier(p: LaunchpadProbes): (address: string,
       ['warp', p.warp],
       ['peach', p.peach],
       ['dyor', p.dyor],
+      ['synthra', p.synthra],
       ['bankr', p.bankr],
       ['stonks', p.stonks],
       ['pons', p.pons],
@@ -709,6 +711,98 @@ export async function fetchDyor(address: string, fetchImpl: typeof fetch = fetch
       out.launchpadNote = graduated ? 'graduated' : target > 0n ? `bonding · ${Number((raised * 1000n) / target) / 10}%` : 'bonding';
     } catch {
       out.launchpadNote = 'bonding';
+    }
+    return out;
+  }
+  return undefined;
+}
+
+
+// ---------- Synthra Launches (Arc, Robinhood): launches subgraph + metadata service ----------
+
+/** docs.synthra.org/docs/contract-addresses; the subgraph per chain is what the app itself reads */
+export const SYNTHRA_CHAINS: { network: string; chainId: number; subgraph: string; /** the quote asset is USD on Arc; on Robinhood it is ETH and needs the rate */ quoteIsUsd: boolean }[] = [
+  { network: 'arc', chainId: 5042, subgraph: 'https://subgraph.synthra.org/subgraphs/name/arc-mainnet/synthra-launches', quoteIsUsd: true },
+  { network: 'robinhood', chainId: 4663, subgraph: 'https://subgraph.synthra.org/subgraphs/name/robinhood-mainnet/synthra-launches', quoteIsUsd: false },
+];
+const SYNTHRA_API = 'https://api-mainnet.synthra.org/api/v1/launchpad';
+const SYNTHRA_TOKEN_QUERY = 'query($id: ID!) { token(id: $id) { id name symbol metadataURI createdAt status progressBps priceUsdc marketCapUsdc holderCount volumeUsdc pool lastTradeAt } }';
+
+export function mapSynthra(t: any, chain: (typeof SYNTHRA_CHAINS)[number], rate = 1): LaunchpadInfo | undefined {
+  if (!t || typeof t !== 'object' || typeof t.id !== 'string') return undefined;
+  const a = t.id.toLowerCase();
+  // the app's launchpad list; a per-token route could not be verified from here, the list is the entry
+  const out: LaunchpadInfo = { launchpad: 'synthra', launchpadUrl: 'https://app.synthra.org/#/launchpad', network: chain.network };
+  const num = (v: unknown): number | undefined => {
+    if (v === null || v === undefined || v === '') return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  if (t.name) out.name = String(t.name);
+  if (t.symbol) out.symbol = String(t.symbol);
+  const price = num(t.priceUsdc), mcap = num(t.marketCapUsdc), vol = num(t.volumeUsdc), created = num(t.createdAt);
+  if (price !== undefined && price > 0) out.priceUsd = price * rate;
+  if (mcap !== undefined) out.marketCap = mcap * rate;
+  if (vol !== undefined) out.volume24h = vol * rate;
+  if (created) out.pairCreatedAt = created * 1000;
+  if (t.pool && /^0x[0-9a-fA-F]{40}$/.test(String(t.pool))) out.pairAddress = String(t.pool).toLowerCase();
+  const status = String(t.status ?? '').toUpperCase();
+  const bps = num(t.progressBps);
+  out.launchpadNote = status === 'GRADUATED' ? 'graduated' : status === 'COMPLETE' ? 'curve complete · graduating' : bps !== undefined ? `bonding · ${Math.round(bps / 100)}%` : 'bonding';
+  void a;
+  return out;
+}
+
+async function synthraSubgraph(url: string, address: string, fetchImpl: typeof fetch): Promise<any | undefined> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetchImpl(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: SYNTHRA_TOKEN_QUERY, variables: { id: address.toLowerCase() } }), signal: ctl.signal });
+    if (!res.ok) return undefined;
+    const json = await res.json();
+    return json?.data?.token ?? undefined;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/**
+ * Synthra: the launches subgraph names the token when it is one of theirs (Arc first, then
+ * Robinhood). The metadata service fills the image and socials when it answers; the quote-rate
+ * endpoint turns ETH-priced Robinhood launches into dollars.
+ */
+export async function fetchSynthra(address: string, fetchImpl: typeof fetch = fetch, chains = SYNTHRA_CHAINS, api = SYNTHRA_API): Promise<LaunchpadInfo | undefined> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return undefined;
+  for (const chain of chains) {
+    const t = await synthraSubgraph(chain.subgraph, address, fetchImpl).catch(() => undefined);
+    if (!t) continue;
+    let rate = 1;
+    if (!chain.quoteIsUsd) {
+      const q = await getJson(`${api}/quote-rate?chainId=${chain.chainId}`, fetchImpl).catch(() => undefined);
+      const r = Number(q?.data?.rates?.find((x: any) => Number(x?.chainId) === chain.chainId)?.rate);
+      rate = Number.isFinite(r) && r > 0 ? r : 0;
+    }
+    const out = mapSynthra(t, chain, rate || 1);
+    if (!out) continue;
+    if (!rate) {
+      // no dollar rate for an ETH-priced launch: keep the badge and status, not numbers in the wrong unit
+      delete out.priceUsd;
+      delete out.marketCap;
+      delete out.volume24h;
+    }
+    if (t.metadataURI) {
+      const meta = await getJson(`${api}/metadata/${encodeURIComponent(String(t.metadataURI))}`, fetchImpl).catch(() => undefined);
+      const d = meta?.data;
+      if (d) {
+        const img = d.image?.thumb ?? d.image?.full;
+        if (img) out.imageUrl = String(img);
+        const soc = d.socials ?? {};
+        const x = xUrl(soc.x ?? soc.twitter);
+        if (x) out.twitter = x;
+        const tg = tgUrl(soc.telegram);
+        if (tg) out.telegram = tg;
+        if (soc.website) out.website = String(soc.website);
+      }
     }
     return out;
   }
