@@ -1,6 +1,40 @@
-import { useEffect, useRef, type ReactNode, type RefObject, type UIEvent, type DragEvent } from 'react';
+import { useEffect, useRef, type ReactNode, type RefObject, type UIEvent, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import type { ColumnDef } from '../api';
 import { Icon } from './Icon';
+
+/**
+ * Follows one pointer from `down` until it is released: the handle captures the pointer, so a release over a chart or
+ * website iframe (which would otherwise swallow it) or a trackpad cancel still ends the drag, and the resize cursor holds.
+ */
+function trackPointer(down: ReactPointerEvent<HTMLElement>, cursor: string, move: (ev: PointerEvent) => void, end: (ev: PointerEvent) => void) {
+  down.preventDefault();
+  const el = down.currentTarget;
+  const id = down.pointerId;
+  const finish = (ev: PointerEvent) => {
+    if (ev.pointerId !== id) return;
+    el.removeEventListener('pointermove', remember);
+    el.removeEventListener('pointermove', onMove);
+    el.removeEventListener('pointerup', finish);
+    el.removeEventListener('pointercancel', finish);
+    el.removeEventListener('lostpointercapture', finish);
+    window.removeEventListener('blur', onBlur);
+    document.body.style.cursor = '';
+    try { el.releasePointerCapture(id); } catch { /* already released */ }
+    end(ev);
+  };
+  const onMove = (ev: PointerEvent) => { if (ev.pointerId === id) move(ev); };
+  const onBlur = () => finish(new PointerEvent('pointercancel', { pointerId: id, clientX: last.x, clientY: last.y }));
+  const last = { x: down.clientX, y: down.clientY };
+  const remember = (ev: PointerEvent) => { last.x = ev.clientX; last.y = ev.clientY; };
+  el.addEventListener('pointermove', remember);
+  el.addEventListener('pointermove', onMove);
+  el.addEventListener('pointerup', finish);
+  el.addEventListener('pointercancel', finish);
+  el.addEventListener('lostpointercapture', finish);
+  window.addEventListener('blur', onBlur);
+  document.body.style.cursor = cursor;
+  try { el.setPointerCapture(id); } catch { /* no capture (synthetic event): the listeners above still run while the pointer is over the handle */ }
+}
 
 /** The draggable right edge of a column (or a stack of two): live width while dragging, final on release, 0 on double-click = reset. */
 export function ResizeHandle({ onResize }: { onResize: (width: number, done: boolean) => void }) {
@@ -10,19 +44,11 @@ export function ResizeHandle({ onResize }: { onResize: (width: number, done: boo
       title="drag to resize · double-click to reset"
       onDoubleClick={() => onResize(0, true)}
       onPointerDown={(e) => {
-        e.preventDefault();
-        const col = (e.currentTarget as HTMLElement).parentElement!;
+        const col = e.currentTarget.parentElement!;
         const startX = e.clientX;
         const startW = col.getBoundingClientRect().width;
         const clamp = (x: number) => Math.max(320, Math.min(1600, Math.round(startW + x - startX)));
-        const move = (ev: PointerEvent) => onResize(clamp(ev.clientX), false);
-        const up = (ev: PointerEvent) => {
-          window.removeEventListener('pointermove', move);
-          window.removeEventListener('pointerup', up);
-          onResize(clamp(ev.clientX), true);
-        };
-        window.addEventListener('pointermove', move);
-        window.addEventListener('pointerup', up);
+        trackPointer(e, 'col-resize', (ev) => onResize(clamp(ev.clientX), false), (ev) => onResize(clamp(ev.clientX), true));
       }}
     />
   );
@@ -36,20 +62,12 @@ export function SplitHandle({ onRatio }: { onRatio: (ratio: number, done: boolea
       title="drag to resize · double-click to even out"
       onDoubleClick={() => onRatio(0.5, true)}
       onPointerDown={(e) => {
-        e.preventDefault();
-        const stack = (e.currentTarget as HTMLElement).parentElement!;
+        const stack = e.currentTarget.parentElement!;
         const at = (y: number) => {
           const r = stack.getBoundingClientRect();
           return Math.max(0.2, Math.min(0.8, (y - r.top) / Math.max(1, r.height)));
         };
-        const move = (ev: PointerEvent) => onRatio(at(ev.clientY), false);
-        const up = (ev: PointerEvent) => {
-          window.removeEventListener('pointermove', move);
-          window.removeEventListener('pointerup', up);
-          onRatio(at(ev.clientY), true);
-        };
-        window.addEventListener('pointermove', move);
-        window.addEventListener('pointerup', up);
+        trackPointer(e, 'row-resize', (ev) => onRatio(at(ev.clientY), false), (ev) => onRatio(at(ev.clientY), true));
       }}
     />
   );

@@ -124,7 +124,7 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .col-add { position: fixed; right: 12px; bottom: 12px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--chrome); color: var(--text); font-size: 22px; line-height: 1; cursor: pointer; z-index: 40; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
 .col-add:hover { background: var(--accent); color: #000; border-color: var(--accent); }
 .col-head {
-  display: flex; align-items: center; gap: 8px; padding: 0 16px; height: 48px; flex: none;
+  display: flex; align-items: center; gap: 8px; padding: 0 16px; height: 48px; flex: none; min-width: 0; overflow: hidden;
   border-bottom: 1px solid var(--line); background: var(--bg);
 }
 /* the title shrinks last: a crowded header (toggles + buttons) ellipsizes it instead of squeezing it to nothing */
@@ -139,7 +139,8 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 }
 .col-head h2 { font-size: 14px; margin: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .col-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.col-head .col-extra { margin-left: 0; flex: none; }
+/* the toggles give way before the buttons do: a narrow column clips them on the right rather than pushing × off the edge */
+.col-head .col-extra { margin-left: 0; flex: 0 1 auto; min-width: 0; overflow: hidden; }
 .col-head .col-extra label { display: inline-flex; align-items: center; gap: 3px; }
 .col-count { color: var(--muted); font-size: 11px; }
 /* per-column zoom chip: shows only when the column is not at 100%; click resets */
@@ -720,7 +721,7 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .coled-all { font-weight: 600; }
 
 /* ---------- resize handle, callers column, virtual slots ---------- */
-.col-resize { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 5; }
+.col-resize { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 5; touch-action: none; }
 .col-resize:hover, .col-resize:active { background: rgba(65, 200, 146, 0.35); }
 /* a resized column is exactly that wide; the last column always fills the rest */
 .col-fixed { flex-grow: 0; }
@@ -1220,7 +1221,7 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 /* ---- stacked columns: one column split in two, sharing a width ---- */
 .col-stack { display: flex; flex-direction: column; min-width: 320px; flex: 1 1 0; min-height: 0; position: relative; border-right: 1px solid var(--line); }
 .col-stack > .col { border-right: none; min-height: 0; min-width: 0; }
-.col-split { flex: none; height: 7px; margin: -3px 0; cursor: row-resize; z-index: 5; position: relative; }
+.col-split { flex: none; height: 7px; margin: -3px 0; cursor: row-resize; z-index: 5; position: relative; touch-action: none; }
 .col-split::after { content: ''; position: absolute; left: 0; right: 0; top: 3px; height: 1px; background: var(--line); }
 .col-split:hover, .col-split:active { background: rgba(65, 200, 146, 0.35); }
 
