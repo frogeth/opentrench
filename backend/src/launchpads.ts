@@ -7,7 +7,7 @@ import type { Chain, TokenInfo } from './types.js';
  * the launchpad itself becomes a badge on the card.
  */
 
-export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long';
+export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long' | 'argus' | 'warp';
 
 export interface LaunchpadInfo extends Partial<TokenInfo> {
   launchpad: Launchpad;
@@ -384,6 +384,8 @@ export interface LaunchpadProbes {
   o1?: (a: string) => Promise<LaunchpadInfo | undefined>;
   pumpfun?: (a: string) => Promise<LaunchpadInfo | undefined>;
   /** Long (Robinhood Chain): cheap, it only asks for the `1e18` suffix */
+  argus?: (address: string) => Promise<LaunchpadInfo | undefined>;
+  warp?: (address: string) => Promise<LaunchpadInfo | undefined>;
   long?: (a: string) => Promise<LaunchpadInfo | undefined>;
   log?: (m: string) => void;
 }
@@ -408,6 +410,8 @@ export function createLaunchpadClassifier(p: LaunchpadProbes): (address: string,
     if (chain !== 'evm') return undefined;
     for (const [name, probe] of [
       ['long', p.long],
+      ['argus', p.argus],
+      ['warp', p.warp],
       ['bankr', p.bankr],
       ['stonks', p.stonks],
       ['pons', p.pons],
@@ -426,4 +430,162 @@ export function createLaunchpadClassifier(p: LaunchpadProbes): (address: string,
     }
     return undefined;
   };
+}
+
+
+// ---------- Argus (Arc): on-chain Portals, no API ----------
+
+const ARC_RPC = 'https://rpc.blockdaemon.mainnet.arc.io';
+/** Every Argus Portal (arguspad.io/argus-v4.json); a token launched through any of them answers launches(token) with its creator. */
+export const ARGUS_PORTALS: { address: string; v4: boolean }[] = [
+  { address: '0xB021Be536808f551b31789422Fd28a6c9c6e97Da', v4: true },
+  { address: '0xA5628A11c412596E1f63b75a2C0284F843C549d6', v4: true },
+  { address: '0x07a688a001f416cC433c68Ff56Aa26bC5131Cc6E', v4: true },
+  { address: '0xa36c443A797771Df82533B8B4A86F0AFfd970862', v4: true },
+  { address: '0x7A17Ab0106C46C0be30623F3EB7F299CC0058338', v4: true },
+  { address: '0xBed9880A0ba12722ba4b8791c0B6F8c74338246C', v4: false },
+  { address: '0x0F1C7Cb26D6cD36BD4189E41947658b39437587A', v4: false },
+];
+const ARGUS_SEL = { launches: '0x1f2d8550', bonded: '0xe88dc357' } as const; // keccak of launches(address), bonded()
+/** v4 TokenCreated(address indexed token, address indexed creator, string name, string symbol, bytes32 poolId, string imageURI, string website, string twitter, string telegram) */
+const ARGUS_TOKEN_CREATED = '0x1d8917231579f8ce39407f0d616f36f357b07329b0ce5164d0754ac15145ce0a';
+/** how far back the launch event is looked for; Arc RPCs prune older logs and the busy Portal emits thousands a day */
+const ARGUS_LOG_SPAN = 200_000;
+
+async function rpcBatch(rpc: string, calls: { method: string; params: unknown[] }[], fetchImpl: typeof fetch): Promise<any[]> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetchImpl(rpc, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(calls.map((c, id) => ({ jsonrpc: '2.0', id, ...c }))), signal: ctl.signal });
+    const json = await res.json();
+    if (!Array.isArray(json)) return [];
+    return calls.map((_, id) => json.find((r: any) => Number(r?.id) === id));
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** The word at index i of an ABI-encoded return, as hex without 0x. */
+const word = (hex: string, i: number): string | undefined => (hex.length >= 2 + (i + 1) * 64 ? hex.slice(2 + i * 64, 2 + (i + 1) * 64) : undefined);
+const wordAddr = (hex: string, i: number): string | undefined => {
+  const w = word(hex, i);
+  return w ? '0x' + w.slice(24) : undefined;
+};
+
+/**
+ * Argus: a token is one of theirs when a Portal's launches(token) names a creator. The hook's
+ * bonded() says whether it has left the curve. The launch event (name, symbol, image, socials) is
+ * read from recent logs when the RPC still has them; a pruned range costs nothing but the image.
+ */
+export async function fetchArgus(address: string, fetchImpl: typeof fetch = fetch, rpc = ARC_RPC, portals = ARGUS_PORTALS): Promise<LaunchpadInfo | undefined> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return undefined;
+  const a = address.toLowerCase();
+  const arg = a.slice(2).padStart(64, '0');
+  const rows = await rpcBatch(rpc, portals.map((p) => ({ method: 'eth_call', params: [{ to: p.address, data: ARGUS_SEL.launches + arg }, 'latest'] })), fetchImpl);
+  let hit: { portal: (typeof portals)[number]; result: string } | undefined;
+  rows.forEach((r, i) => {
+    const res = r?.result;
+    if (!hit && typeof res === 'string' && res.length > 66 && !/^0x0{64}/.test(res)) hit = { portal: portals[i], result: res };
+  });
+  if (!hit) return undefined;
+  const out: LaunchpadInfo = { launchpad: 'argus', launchpadUrl: `https://argus.world/token/${a}`, network: 'arc' };
+  const hook = hit.portal.v4 ? wordAddr(hit.result, 4) : undefined;
+  const buyTax = hit.portal.v4 ? parseInt(word(hit.result, 6) ?? '0', 16) : NaN;
+  const sellTax = hit.portal.v4 ? parseInt(word(hit.result, 7) ?? '0', 16) : NaN;
+  const calls: { method: string; params: unknown[] }[] = [];
+  if (hook && !/^0x0{40}$/.test(hook)) calls.push({ method: 'eth_call', params: [{ to: hook, data: ARGUS_SEL.bonded }, 'latest'] });
+  calls.push({ method: 'eth_blockNumber', params: [] });
+  const extra = await rpcBatch(rpc, calls, fetchImpl).catch(() => []);
+  const bonded = calls.length === 2 ? /1$/.test(String(extra[0]?.result ?? '')) : undefined;
+  const latest = parseInt(String(extra[calls.length - 1]?.result ?? '0x0'), 16);
+  const notes: string[] = [];
+  if (bonded !== undefined) notes.push(bonded ? 'graduated' : 'bonding');
+  if (Number.isFinite(buyTax) && Number.isFinite(sellTax) && (buyTax || sellTax)) notes.push(`${buyTax / 100}% / ${sellTax / 100}% tax`);
+  if (notes.length) out.launchpadNote = notes.join(' · ');
+  if (hit.portal.v4 && latest > 0) {
+    // the launch event carries what the chain sites lack; Arc RPCs prune old logs, so a miss here is not an error
+    try {
+      const [lg] = await rpcBatch(rpc, [{ method: 'eth_getLogs', params: [{ address: hit.portal.address, fromBlock: '0x' + Math.max(0, latest - ARGUS_LOG_SPAN).toString(16), toBlock: 'latest', topics: [ARGUS_TOKEN_CREATED, '0x' + arg] }] }], fetchImpl);
+      const log = Array.isArray(lg?.result) ? lg.result[0] : undefined;
+      if (log?.data) {
+        // data: (string name, string symbol, bytes32 poolId, string imageURI, string website, string twitter, string telegram)
+        const strings = decodeDynamicStrings(String(log.data), [0, 1, 3, 4, 5, 6]);
+        if (strings) {
+          const [name, symbol, image, website, twitter, telegram] = strings;
+          if (name) out.name = name;
+          if (symbol) out.symbol = symbol;
+          const img = ipfsToHttp(image);
+          if (img) out.imageUrl = img;
+          if (website?.trim()) out.website = website.trim();
+          const x = xUrl(twitter);
+          if (x) out.twitter = x;
+          const tg = tgUrl(telegram);
+          if (tg) out.telegram = tg;
+        }
+      }
+    } catch {
+      /* pruned or slow: badge and status still stand */
+    }
+  }
+  return out;
+}
+
+/** The string members of an ABI-encoded tuple, by head-word index (other members skipped). */
+export function decodeDynamicStrings(hex: string, stringSlots: number[]): string[] | undefined {
+  try {
+    const body = hex.replace(/^0x/, '');
+    const out: string[] = [];
+    for (const slot of stringSlots) {
+      const off = parseInt(body.slice(slot * 64, slot * 64 + 64), 16) * 2;
+      const len = parseInt(body.slice(off, off + 64), 16) * 2;
+      if (!Number.isFinite(off) || !Number.isFinite(len) || off + 64 + len > body.length) return undefined;
+      out.push(Buffer.from(body.slice(off + 64, off + 64 + len), 'hex').toString('utf8'));
+    }
+    return out;
+  } catch {
+    return undefined;
+  }
+}
+
+
+// ---------- Warp (Arc): public read API over its own factory ----------
+
+const WARP_API = 'https://warp-arc-production.up.railway.app';
+
+export function mapWarp(d: any, address: string): LaunchpadInfo | undefined {
+  if (!d || typeof d !== 'object' || d.error) return undefined;
+  const a = address.toLowerCase();
+  if (String(d.address ?? d.id ?? '').toLowerCase() !== a) return undefined;
+  const out: LaunchpadInfo = { launchpad: 'warp', launchpadUrl: `https://circlewarp.fun/trade/${a}`, network: 'arc' };
+  if (d.name) out.name = String(d.name);
+  if (d.ticker) out.symbol = String(d.ticker);
+  const img = ipfsToHttp(d.image ? String(d.image) : undefined);
+  if (img) out.imageUrl = img;
+  const x = xUrl(d.twitter ? String(d.twitter) : undefined);
+  if (x) out.twitter = x;
+  const num = (v: unknown): number | undefined => {
+    if (v === null || v === undefined || v === '') return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const price = num(d.price), mcap = num(d.mcap), liq = num(d.liquidity), chg = num(d.change24h), vol = num(d.volume);
+  if (price !== undefined && price > 0) out.priceUsd = price;
+  if (mcap !== undefined) out.marketCap = mcap;
+  if (liq !== undefined) out.liquidity = liq;
+  if (chg !== undefined) out.change24h = chg;
+  if (vol !== undefined) out.volume24h = vol;
+  if (d.pairAddress && /^0x[0-9a-fA-F]{40}$/.test(String(d.pairAddress))) out.pairAddress = String(d.pairAddress).toLowerCase();
+  const created = num(d.createdAt);
+  if (created) out.pairCreatedAt = created;
+  const migrated = d.migrated === true || d.migrated === 'true' || d.status === 'migrated';
+  const progress = num(d.progress);
+  out.launchpadNote = migrated ? 'graduated to WarpDex' : progress !== undefined ? `bonding · ${Math.round(progress)}% to $69K` : 'bonding';
+  return out;
+}
+
+/** Warp: its read API answers 404 for anything it did not launch. */
+export async function fetchWarp(address: string, fetchImpl: typeof fetch = fetch, api = WARP_API): Promise<LaunchpadInfo | undefined> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return undefined;
+  const json = await getJson(`${api}/api/tokens/${address.toLowerCase()}`, fetchImpl);
+  return json ? mapWarp(json, address) : undefined;
 }

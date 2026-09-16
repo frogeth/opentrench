@@ -1,19 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import {
-  __resetStonksCache,
-  classifyBySuffix,
-  createLaunchpadClassifier,
-  decodeStrings,
-  fetchPons,
-  fetchStonks,
-  ipfsToHttp,
-  mapBankrLaunch,
-  mapClanker,
-  mapFlap,
-  mapPumpfun,
-  mapStonksCoin,
-  mapVirtuals,
-} from './launchpads.js';
+import { __resetStonksCache, classifyBySuffix, createLaunchpadClassifier, decodeStrings, fetchPons, fetchStonks, ipfsToHttp, mapBankrLaunch, mapClanker, mapFlap, mapPumpfun, mapStonksCoin, mapVirtuals, fetchArgus, fetchWarp, mapWarp, decodeDynamicStrings } from './launchpads.js';
 
 const A = '0xa419Bb493ed5059f28dfd84348A2F93D70ECf003';
 
@@ -209,5 +195,87 @@ describe('launchpads', () => {
       log: () => {},
     });
     expect((await classify(A, 'evm'))?.launchpad).toBe('pons');
+  });
+});
+
+
+describe('Argus (Arc)', () => {
+  const TOKEN = '0xc518663010994da18bbb1ecf2bba6f49e326342c';
+  const w = (hex: string) => hex.replace(/^0x/, '').padStart(64, '0');
+  const str = (s: string) => Buffer.from(s, 'utf8').toString('hex');
+  /** ABI data for (string name, string symbol, bytes32 poolId, string image, string website, string twitter, string telegram) */
+  const eventData = (fields: string[]) => {
+    const heads: string[] = [];
+    let tail = '';
+    let off = 7 * 32;
+    fields.forEach((f, i) => {
+      if (i === 2) {
+        heads.push(w('ab'));
+        return;
+      }
+      heads.push(w(off.toString(16)));
+      const hex = str(f);
+      const padded = hex.padEnd(Math.ceil(hex.length / 64) * 64 || 64, '0');
+      tail += w(f.length.toString(16)) + padded;
+      off += 32 + padded.length / 2;
+    });
+    return '0x' + heads.join('') + tail;
+  };
+  const rpc = (over: { creatorOn?: number; bonded?: boolean; logs?: boolean }) =>
+    (async (_url: string, init: any) => {
+      const calls: any[] = JSON.parse(init.body);
+      return new Response(
+        JSON.stringify(
+          calls.map((c) => {
+            if (c.method === 'eth_call' && String(c.params[0].data).startsWith('0x1f2d8550')) {
+              const i = ['0xb021be536808f551b31789422fd28a6c9c6e97da', '0xa5628a11c412596e1f63b75a2c0284f843c549d6', '0x07a688a001f416cc433c68ff56aa26bc5131cc6e', '0xa36c443a797771df82533b8b4a86f0affd970862', '0x7a17ab0106c46c0be30623f3eb7f299cc0058338', '0xbed9880a0ba12722ba4b8791c0b6f8c74338246c', '0x0f1c7cb26d6cd36bd4189e41947658b39437587a'].indexOf(String(c.params[0].to).toLowerCase());
+              const creator = i === over.creatorOn ? 'ff9a533f8f2368232f6ef59de2cd81d228243524' : '';
+              // 11 words: creator, tickStart, token0, locker, hook, splitter, buyTax 100, sellTax 100, positionId, tickBond, quote
+              return { id: c.id, result: '0x' + w(creator) + w('0') + w('1') + w('8055') + w('bcb950001a99e05cc0d399b04a102af114ca2044') + w('1') + w('64') + w('64') + w('0') + w('0') + w('3600') };
+            }
+            if (c.method === 'eth_call' && String(c.params[0].data).startsWith('0xe88dc357')) return { id: c.id, result: '0x' + w(over.bonded ? '1' : '0') };
+            if (c.method === 'eth_blockNumber') return { id: c.id, result: '0x1419b53' };
+            if (c.method === 'eth_getLogs') return over.logs ? { id: c.id, result: [{ data: eventData(['1 USDC And A Dream', '1USDC', '', 'ipfs://QmImg', 'https://one.usdc', '@oneusdc', 't.me/oneusdc']) }] } : { id: c.id, error: { code: 4444, message: 'pruned history unavailable' } };
+            return { id: c.id, result: '0x' };
+          }),
+        ),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+  it('a Portal that names a creator makes it an Argus token, bonding, with tax and launch metadata', async () => {
+    const t = await fetchArgus(TOKEN, rpc({ creatorOn: 0, bonded: false, logs: true }));
+    expect(t).toMatchObject({ launchpad: 'argus', launchpadUrl: `https://argus.world/token/${TOKEN}`, network: 'arc', launchpadNote: 'bonding · 1% / 1% tax', name: '1 USDC And A Dream', symbol: '1USDC', website: 'https://one.usdc' });
+    expect(t!.imageUrl).toMatch(/QmImg/);
+    expect(t!.twitter).toMatch(/oneusdc/);
+  });
+  it('graduated when the hook says bonded; pruned logs cost only the metadata', async () => {
+    const t = await fetchArgus(TOKEN, rpc({ creatorOn: 1, bonded: true, logs: false }));
+    expect(t).toMatchObject({ launchpad: 'argus', launchpadNote: 'graduated · 1% / 1% tax' });
+    expect(t!.name).toBeUndefined();
+  });
+  it('no Portal knows it: not Argus', async () => {
+    expect(await fetchArgus(TOKEN, rpc({}))).toBeUndefined();
+    expect(await fetchArgus('not-an-address', rpc({}))).toBeUndefined();
+  });
+  it('decodeDynamicStrings reads the string members of a tuple', () => {
+    expect(decodeDynamicStrings(eventData(['a', 'bb', '', 'ccc', '', '', 'dddd']), [0, 1, 3, 6])).toEqual(['a', 'bb', 'ccc', 'dddd']);
+    expect(decodeDynamicStrings('0x00', [0])).toBeUndefined();
+  });
+});
+
+describe('Warp (Arc)', () => {
+  const live = { id: '0xd68d667fc31b77e41847fe140bf28dae4b85eede', address: '0xd68D667fc31b77E41847Fe140bF28Dae4B85eeDe', name: 'Warp Smoke Test', ticker: 'SMOKE', image: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=Warp', twitter: '', status: 'live', price: '1.16e-05', mcap: '11626.47', progress: '13.34', change24h: '37.68', liquidity: '3117.65', volume: '162243.44', createdAt: '1785368380000', migrated: false, pairAddress: null };
+  it('maps a live curve token and a migrated one', () => {
+    expect(mapWarp(live, live.address)).toMatchObject({ launchpad: 'warp', launchpadUrl: 'https://circlewarp.fun/trade/0xd68d667fc31b77e41847fe140bf28dae4b85eede', network: 'arc', name: 'Warp Smoke Test', symbol: 'SMOKE', priceUsd: 1.16e-5, marketCap: 11626.47, liquidity: 3117.65, change24h: 37.68, pairCreatedAt: 1785368380000, launchpadNote: 'bonding · 13% to $69K' });
+    const done = mapWarp({ ...live, id: '0x384c60f98ecd4c26345499345c03d677e40f115e', address: '0x384c60F98ecd4C26345499345c03d677E40f115e', twitter: '@circlewarp', status: 'migrated', migrated: true, progress: '100', pairAddress: '0x507a494fdE26960cB36d50912cab83c71Ecc7ea7' }, '0x384c60f98ecd4c26345499345c03d677e40f115e');
+    expect(done).toMatchObject({ launchpadNote: 'graduated to WarpDex', pairAddress: '0x507a494fde26960cb36d50912cab83c71ecc7ea7' });
+    expect(done!.twitter).toMatch(/circlewarp/);
+    expect(mapWarp({ error: 'Token not found' }, live.address)).toBeUndefined();
+    expect(mapWarp({ ...live, address: '0x' + '1'.repeat(40) }, live.address)).toBeUndefined();
+  });
+  it('fetchWarp asks the read API and a 404 is not a Warp token', async () => {
+    const fake = (async (url: string) => (url.endsWith('/api/tokens/' + live.id) ? new Response(JSON.stringify(live), { status: 200 }) : new Response(JSON.stringify({ error: 'Token not found' }), { status: 404 }))) as unknown as typeof fetch;
+    expect((await fetchWarp(live.address, fake, 'https://api'))?.launchpad).toBe('warp');
+    expect(await fetchWarp('0x' + '2'.repeat(40), fake, 'https://api')).toBeUndefined();
   });
 });

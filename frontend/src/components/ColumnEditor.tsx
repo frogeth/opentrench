@@ -16,6 +16,7 @@ const CHAINS: [string, string][] = [
 const LAUNCHPADS: [string, string][] = [
   ['pumpfun', 'Pump.fun'], ['letsbonk', 'letsbonk'], ['bankr', 'Bankr'], ['stonks', 'Stonks'], ['pons', 'Pons'],
   ['o1', 'o1'], ['virtuals', 'Virtuals'], ['flap', 'Flap'], ['clanker', 'Clanker'], ['long', 'Long'],
+  ['argus', 'Argus'], ['warp', 'Warp'],
 ];
 const MUST: [string, string][] = [
   ['website', 'Website'], ['twitter', 'Twitter'], ['telegram', 'Telegram'], ['social', '≥1 social'], ['image', 'Image'], ['devSold', 'Dev sold'], ['lpLocked', 'LP locked'],

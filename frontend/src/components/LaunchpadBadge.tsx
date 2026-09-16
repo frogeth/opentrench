@@ -12,6 +12,8 @@ const LOGOS: Record<string, { src: string; label: string; short: string }> = {
   flap: { src: 'https://flap.sh/favicon.ico', label: 'Flap', short: 'F' },
   clanker: { src: '', label: 'Clanker', short: 'CL' },
   long: { src: 'https://app.long.xyz/favicon.ico', label: 'Long', short: 'L' },
+  argus: { src: 'https://argus.world/icon.svg', label: 'Argus', short: 'AG' },
+  warp: { src: 'https://circlewarp.fun/favicon.svg', label: 'Warp', short: 'W' },
 };
 
 export function LaunchpadBadge({ launchpad, url, note, size = 18 }: { launchpad?: string; url?: string; /** one more line for the tooltip (Long: anchored to NVDA) */ note?: string; size?: number }) {
