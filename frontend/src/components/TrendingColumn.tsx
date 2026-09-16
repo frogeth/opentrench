@@ -126,7 +126,7 @@ export function TrendingList({
       {rows.map((r, i) => (
         <VirtualItem key={r.t.address} id={`trend:${r.t.address}`} estimate={38}>
           <HoverCard width={340} card={<TokenCalls r={r} now={now} onJump={onJump} />}>
-            <div className={`trend-row${i < 3 ? ' caller-top' : ''}`} onClick={() => onSelect(r.t.address)}>
+            <div className={`trend-row${i < 3 ? ' caller-top' : ''}`} onClick={() => onSelect(r.t.address)} title="open the token: chart, every call, buy">
               <div className="trend-main">
               <span className="trend-who">
                 <span className="caller-rank">{i + 1}</span>

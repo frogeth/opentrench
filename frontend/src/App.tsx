@@ -1260,7 +1260,7 @@ export default function App() {
           }
           {...actions}
         >
-          <TrendingList tokens={tokens} window={win} inScope={(name) => inScope(name, names)} now={now} onSelect={select} onJump={jumpToMessage} />
+          <TrendingList tokens={tokens} window={win} inScope={(name) => inScope(name, names)} now={now} onSelect={setOpenToken} onJump={jumpToMessage} />
         </Column>
       );
     }
