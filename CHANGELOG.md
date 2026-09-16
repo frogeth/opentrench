@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.9.2 — 2026-09-16
+
 - A chat column whose chats sit outside the server or channel picked in the rail now says so, with a "show all channels" button, instead of a bare "Nothing here yet." (a friend's single-chat column looked broken while a server was selected).
 - Fixed: dragging a column edge or a stack divider could stay stuck in resize mode after letting go (mouse and trackpad) when the release landed over a chart or website frame; the handle now keeps the pointer until it is released. Fixed: a narrow column pushed its × button past the edge; the header toggles give way first.
 - TrenchTogether without the link: a machine with sharing on announces itself on the local network, so friends see it by name under Nearby in the Together tab and press Connect. The other side gets an Allow / Ignore prompt with a four-character code shown on both screens, and Allow does the pairing. The pairing string stays as "pair by link" for people not on the same network, shown once instead of once per address.
