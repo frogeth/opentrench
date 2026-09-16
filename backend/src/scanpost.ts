@@ -1,4 +1,5 @@
 import type { FeedMessage } from './types.js';
+import { detectContracts } from './contracts.js';
 
 /**
  * Scanner bots (Rick, Phanes, TokenScan…) answer a contract in the chat within seconds with the
@@ -42,4 +43,40 @@ export function isScanPost(msg: Pick<FeedMessage, 'isBot' | 'contracts' | 'text'
   if (!msg.isBot || msg.contracts.length === 0) return undefined;
   const f = parseScanFigures(msg.text);
   return f.marketCap !== undefined || f.firstAt !== undefined ? f : undefined;
+}
+
+
+/** a post shaped like a scanner card (Rick, Phanes, TokenScan…): a header market cap or an FDV/MC line */
+export function looksLikeScan(text: string): boolean {
+  const f = parseScanFigures(text);
+  return f.marketCap !== undefined || f.firstAt !== undefined;
+}
+
+const URL_RE = /https?:\/\/[^\s)>\]]+/g;
+const START_RE = /[?&]start(?:app)?=(?:[a-z]{1,3}_)?(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})/g;
+
+/**
+ * The token a scanner card is about. Rick's card also links the pair on Dexscreener, the top
+ * holders on the explorer and a dozen bot deep links, and every one of those addresses would
+ * count as a separate token. The subject is the address the card prints bare (outside any link);
+ * failing that, the one its trade-bot links carry in `start=`. Empty when nothing settles it.
+ */
+export function scanSubjects(text: string): string[] {
+  const bare = detectContracts(text.replace(URL_RE, ' ')).map((c) => c.address);
+  if (bare.length) return [...new Set(bare)];
+  const out = new Set<string>();
+  for (const m of text.matchAll(START_RE)) {
+    const a = m[1];
+    for (const c of detectContracts(a)) out.add(c.address);
+  }
+  return [...out];
+}
+
+/** Contracts a message counts: every one it mentions, or for a scanner card only its subject. */
+export function contractsOf(text: string, isBot: boolean): FeedMessage['contracts'] {
+  const all = detectContracts(text);
+  if (all.length <= 1 || !(isBot || looksLikeScan(text))) return all;
+  const subject = new Set(scanSubjects(text));
+  const kept = all.filter((c) => subject.has(c.address));
+  return kept.length ? kept : all;
 }

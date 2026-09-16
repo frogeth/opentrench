@@ -432,6 +432,28 @@ describe('MessageHub', () => {
     expect(again.getToken(SOL)!.calls.map((c) => c.author)).toEqual(['AlertBot', 'carol']);
   });
 
+  it('a scanner card pushed live counts only its subject, and a snapshot from before is repaired on load', () => {
+    const TOKEN = '0x8bcb94279fc2c984ec34e0c1f2192df8c69ea4f0';
+    const PAIR = '0x9ca00d16ad7fdb673dc8faeb0bfb523a5685e102';
+    const card = `**[Hoodlight](https://dexscreener.com/robinhood/${PAIR}) [40.4K/45.8%] - HDLT/WETH**\n💎 FDV: 40.4K\n\n\`${TOKEN}\``;
+    const shown = { default: 'show', allow: [], calls: 'all', pings: 'none', pingAllow: [] } as any;
+    const hub = new MessageHub(500, undefined, { bots: () => shown });
+    hub.push(msg(1, card, { author: 'Rick', isBot: true }));
+    expect(hub.getToken(TOKEN)).toBeDefined();
+    expect(hub.getToken(PAIR)).toBeUndefined();
+    // an older snapshot where the pair had been counted
+    const snap = hub.snapshot();
+    snap.scanFix = 0;
+    snap.messages[0].contracts = [{ chain: 'evm', address: TOKEN }, { chain: 'evm', address: PAIR }];
+    snap.tokens.push({ chain: 'evm', address: PAIR, seen: 1, calledIn: ['#c'], calls: [{ author: 'Rick', chatName: '#c', source: 'discord', msgId: 'discord:1', ts: 1 }], firstSeenTs: 1, lastCallTs: 1 } as any);
+    snap.tokenChats[PAIR] = ['c|rick'];
+    const again = new MessageHub(500, undefined, { bots: () => shown });
+    again.load(snap);
+    expect(again.getToken(PAIR)).toBeUndefined();
+    expect(again.getToken(TOKEN)?.calls).toHaveLength(1);
+    expect(again.hello().messages[0].contracts.map((c) => c.address)).toEqual([TOKEN]);
+  });
+
   it('updates market numbers and tracks ATH', () => {
     const hub = new MessageHub(500);
     hub.push(msg(1, EVM));

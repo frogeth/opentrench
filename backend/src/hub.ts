@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { mergeLaunchpad } from './long.js';
 import { repairCandleMarketCaps } from './backfill.js';
-import { isScanPost } from './scanpost.js';
+import { isScanPost, contractsOf } from './scanpost.js';
 import type { LaunchpadInfo } from './launchpads.js';
 import { detectContracts } from './contracts.js';
 import type { TokenFetcher } from './enrich.js';
@@ -84,6 +84,8 @@ export interface Snapshot {
   candleFix?: number;
   /** 1 once bot echoes were dropped from the calls (a bot answering a call in the same chat had counted as a caller) */
   botFix?: number;
+  /** 1 once scanner cards were re-read for their subject only (pairs and holder wallets had counted as tokens) */
+  scanFix?: number;
 }
 
 export interface HubOptions {
@@ -324,7 +326,7 @@ export class MessageHub extends EventEmitter {
 
   push(msg: FeedMessage, meta?: ExtractedMeta): void {
     if (this.buffer.some((m) => m.id === msg.id)) return; // already have it (e.g. our own send echoed twice)
-    msg.contracts = detectContracts(msg.text);
+    msg.contracts = contractsOf(msg.text, msg.isBot);
     this.register(msg, meta, true);
     this.buffer.push(msg);
     this.retain(msg);
@@ -756,6 +758,41 @@ export class MessageHub extends EventEmitter {
     }
     return dropped;
   }
+  /**
+   * One-time repair: scanner cards in the buffer counted every address they link (the pair, the
+   * top holders) as a token. Re-read each for its subject, drop the calls those extra addresses
+   * got from it, and drop tokens left with no calls at all.
+   */
+  private dropScanExtras(): { messages: number; calls: number; tokens: number } {
+    let messages = 0, calls = 0, tokens = 0;
+    for (const m of this.buffer) {
+      const kept = contractsOf(m.text, m.isBot);
+      if (kept.length === m.contracts.length) continue;
+      const keep = new Set(kept.map((c) => c.address));
+      const dropped = m.contracts.filter((c) => !keep.has(c.address));
+      m.contracts = kept;
+      messages++;
+      for (const c of dropped) {
+        const t = this.tokens.get(c.address);
+        if (!t) continue;
+        const before = t.calls.length;
+        t.calls = t.calls.filter((x) => x.msgId !== m.id);
+        calls += before - t.calls.length;
+        const chats = this.tokenChats.get(c.address);
+        chats?.delete(callKey(m.chatId, m.author));
+        if (t.calls.length === 0) {
+          this.tokens.delete(c.address);
+          this.tokenChats.delete(c.address);
+          tokens++;
+        } else {
+          t.seen = chats?.size ?? t.calls.length;
+          t.calledIn = [...new Set(t.calls.map((x) => x.chatName))];
+          if (t.firstCaller?.msgId !== t.calls[0].msgId) t.firstCaller = { ...t.calls[0] };
+        }
+      }
+    }
+    return { messages, calls, tokens };
+  }
   /** the chat id a call was made in, from the buffer (calls carry the chat's name only) */
   private chatIdFor(c: CallRecord): string | undefined {
     return this.buffer.find((m) => m.id === c.msgId)?.chatId ?? this.buffer.find((m) => m.source === c.source && m.chatName === c.chatName)?.chatId;
@@ -768,6 +805,7 @@ export class MessageHub extends EventEmitter {
       version: 1,
       candleFix: 2,
       botFix: 1,
+      scanFix: 1,
       messages: this.buffer,
       tokens: [...this.tokens.values()],
       tokenChats: Object.fromEntries([...this.tokenChats].map(([a, s]) => [a, [...s]])),
@@ -793,6 +831,10 @@ export class MessageHub extends EventEmitter {
     if ((snap.candleFix ?? 0) < 2) {
       const r = repairCandleMarketCaps([...this.tokens.values()]);
       if (r.reset) console.warn(`[backfill] repair: ${r.reset} candle-derived call market cap(s) sent back for re-reading with the right token side, ${r.dropped} dropped as nonsense`);
+    }
+    if ((snap.scanFix ?? 0) < 1) {
+      const r = this.dropScanExtras();
+      if (r.messages) console.warn(`[hub] repair: ${r.messages} scanner card(s) re-read for their subject; ${r.calls} stray call(s) and ${r.tokens} token(s) that were only pairs or holder wallets dropped`);
     }
     if ((snap.botFix ?? 0) < 1) {
       const n = this.dropBotEchoes();

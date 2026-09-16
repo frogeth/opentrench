@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Scanner cards (Rick, Phanes, TokenScan, and mirrors relaying them) count only the token they are about. The pair address and the top-holder wallets a card links had each counted as a separate token, which is why one Rick post could fill a column with strange calls. Existing stray tokens are cleaned up once on update. (Brandzo.)
 - Chat columns: a message that carries a contract always shows its author and time, even right after another message from the same poster, so a run of calls relayed by one account reads as calls rather than a stack of bare token chips. (Brandzo.)
 - Telegram groups: messages from the group's owner and admins carry a gold tag next to the name, owner, admin, or the custom admin title the group gave them, the way Telegram shows it.
 - Arc tokens get an explorer link (A/X Explorer, arcexplorer.org), and Arc mint transactions link there too.
