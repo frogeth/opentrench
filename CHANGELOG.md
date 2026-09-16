@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Trending column: each row now says who found the token (first caller, chat, when; click to see that message) and shows the faces of everyone who scanned it in the window. The hover list of scans opens each message in the app instead of the browser. Entry and current market cap, the multiple and the most-scanned ordering were already there. (Suggested on Discord.)
 - Two more Arc launchpads: Peach (peach.ag, from its launchpad API: name, image, price, market cap, liquidity, progress or graduated) and DYOR Launch (dyorswap.org, from its factory and curve contracts on Arc and Robinhood: bonding progress or graduated). Badges, token-page links and launchpad filters for both.
 - Cove buy buttons on Arbitrum, Stable, X Layer and Avalanche too, now that Cove published its full chain-code table.
 - o1 launches on Arc and Monad are recognised (o1's API added both chains).

@@ -737,10 +737,20 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .gold { color: var(--gold); font-weight: 600; }
 .col-callers .hc-anchor { display: block; }
 /* trending: token, calls in window, entry MC, current MC, multiplier, last call */
-.trend-head, .trend-row { display: grid; grid-template-columns: minmax(0, 1fr) 36px 56px 56px 50px 44px; gap: 6px; align-items: center; padding: 6px 12px; font-size: 12px; }
+.trend-head, .trend-main { display: grid; grid-template-columns: minmax(0, 1fr) 36px 56px 56px 50px 44px; gap: 6px; align-items: center; font-size: 12px; }
+.trend-head { padding: 6px 12px; }
 .trend-head { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 1; }
-.trend-head span:not(:first-child), .trend-row > span:not(:first-child) { text-align: right; white-space: nowrap; }
-.trend-row { border-bottom: 1px solid var(--line); cursor: pointer; transition: filter 0.15s; }
+.trend-head span:not(:first-child), .trend-main > span:not(:first-child) { text-align: right; white-space: nowrap; }
+.trend-row { display: flex; flex-direction: column; gap: 3px; padding: 6px 12px; border-bottom: 1px solid var(--line); cursor: pointer; transition: filter 0.15s; }
+/* under the numbers: who found it, and the faces of everyone who scanned it in the window */
+.trend-sub { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; min-width: 0; }
+.trend-found { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.trend-found b { font-weight: 600; }
+.trend-found-jump:hover { color: var(--accent); }
+.trend-scanners { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.trend-pfps { display: inline-flex; align-items: center; }
+.trend-pfps .avatar { border: 1.5px solid var(--bg); margin-left: -5px; }
+.trend-pfps .avatar:first-child { margin-left: 0; }
 .trend-row:hover { filter: brightness(1.15); background: var(--hover); }
 .trend-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .trend-who b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
