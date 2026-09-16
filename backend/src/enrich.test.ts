@@ -87,6 +87,37 @@ describe('explorerUrl', () => {
   });
 });
 
+describe('createEnricher with an RPC probe', () => {
+  it('a contract the RPC places on Arc gets its chain and symbol even when GeckoTerminal is rate-limited, and only Arc is asked of GeckoTerminal', async () => {
+    const asked: (string[] | undefined)[] = [];
+    const enrich = createEnricher({
+      dexscreener: async () => undefined,
+      rpcProbe: async () => ({ network: 'arc', symbol: 'SASHIMI', name: 'Sashimi' }),
+      geckoterminal: async (_a, _c, networks) => {
+        asked.push(networks);
+        throw new Error('geckoterminal 429');
+      },
+      log: () => {},
+    });
+    const t = await enrich('0xc518663010994da18bbb1ecf2bba6f49e326342c', 'evm');
+    expect(t).toMatchObject({ network: 'arc', symbol: 'SASHIMI', name: 'Sashimi' });
+    expect(asked).toEqual([['arc']]);
+    // when GeckoTerminal answers, its market numbers win and the probe fills what it lacked
+    const rich = createEnricher({
+      dexscreener: async () => undefined,
+      rpcProbe: async () => ({ network: 'arc', symbol: 'SASHIMI', name: 'Sashimi' }),
+      geckoterminal: async () => ({ network: 'arc', symbol: 'SASHIMI', priceUsd: 0.5, marketCap: 11_400 }),
+      log: () => {},
+    });
+    expect(await rich('0xc518663010994da18bbb1ecf2bba6f49e326342c', 'evm')).toMatchObject({ network: 'arc', priceUsd: 0.5, marketCap: 11_400, name: 'Sashimi' });
+    // a Solana address never hits the EVM probe
+    let probed = 0;
+    const sol = createEnricher({ dexscreener: async () => undefined, rpcProbe: async () => (probed++, undefined), geckoterminal: async () => undefined, log: () => {} });
+    await sol('So11111111111111111111111111111111111111112', 'sol');
+    expect(probed).toBe(0);
+  });
+});
+
 describe('fetchGeckoTerminal fallback networks', () => {
   it('reaches Arc after the usual networks, and the token comes back on network arc', async () => {
     const asked: string[] = [];

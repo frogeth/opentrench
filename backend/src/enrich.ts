@@ -1,6 +1,7 @@
 import type { Chain, TokenInfo } from './types.js';
 import { fetchDexscreener } from './dexscreener.js';
 import { fetchGeckoTerminal } from './geckoterminal.js';
+import { probeChains } from './rpcprobe.js';
 import {
   createLaunchpadClassifier,
   fetchBankrLaunch,
@@ -42,7 +43,10 @@ export function explorerUrl(network: string | undefined, address: string): strin
 
 export interface EnrichSources {
   dexscreener?: (address: string) => Promise<Partial<TokenInfo> | undefined>;
-  geckoterminal?: (address: string, chain: Chain) => Promise<Partial<TokenInfo> | undefined>;
+  /** `networks`: only these GeckoTerminal networks, when the chain is already known */
+  geckoterminal?: (address: string, chain: Chain, networks?: string[]) => Promise<Partial<TokenInfo> | undefined>;
+  /** chains no chart site indexes: their own RPCs say whether the contract lives there */
+  rpcProbe?: (address: string) => Promise<Partial<TokenInfo> | undefined>;
   /** launchpad classifier: badge + image/socials for fresh launches no chart site knows yet */
   launchpad?: (address: string, chain: Chain) => Promise<LaunchpadInfo | undefined>;
   log?: (msg: string) => void;
@@ -68,13 +72,27 @@ export function createEnricher(src: EnrichSources): TokenFetcher {
         log(`dexscreener failed for ${address}: ${e?.message ?? e}`);
       }
     }
+    // a chain the chart sites do not index (Arc): its RPC places the contract at once, so the
+    // chain, symbol and a chart are there even while the price feed is rate-limited or behind
+    let placed: Partial<TokenInfo> | undefined;
+    if (!info && chain === 'evm' && src.rpcProbe) {
+      try {
+        placed = await src.rpcProbe(address);
+      } catch (e: any) {
+        log(`rpc probe failed for ${address}: ${e?.message ?? e}`);
+      }
+    }
     if (!info && src.geckoterminal) {
       try {
-        info = await src.geckoterminal(address, chain);
-        if (!info) log(`no pair on dexscreener or geckoterminal for ${address}`);
+        info = await src.geckoterminal(address, chain, placed?.network ? [placed.network] : undefined);
+        if (!info && !placed) log(`no pair on dexscreener or geckoterminal for ${address}`);
       } catch (e: any) {
         log(`geckoterminal failed for ${address}: ${e?.message ?? e}`);
       }
+    }
+    if (placed) {
+      info = info ?? {};
+      for (const k of ['network', 'symbol', 'name'] as const) if (!info[k] && placed[k]) (info as any)[k] = placed[k];
     }
     if (src.launchpad) {
       try {
@@ -97,7 +115,8 @@ export function createEnricher(src: EnrichSources): TokenFetcher {
 export function createDefaultEnricher(opts: { o1ApiKey?: () => string | undefined } = {}): TokenFetcher {
   return createEnricher({
     dexscreener: (a) => fetchDexscreener(a),
-    geckoterminal: (a, c) => fetchGeckoTerminal(a, c),
+    geckoterminal: (a, c, networks) => fetchGeckoTerminal(a, c, undefined, networks),
+    rpcProbe: (a) => probeChains(a),
     launchpad: createLaunchpadClassifier({
       bankr: (a) => fetchBankrLaunch(a),
       stonks: (a) => fetchStonks(a),
