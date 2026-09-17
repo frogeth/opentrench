@@ -7,7 +7,11 @@ import assert from 'node:assert/strict';
 
 import shellLink from './shell-link.js';
 
-const { isLocalHost, safeResponseHeaders, requestHeadersFor, nextHop, partitionFor, startShellLink } = shellLink;
+import { EventEmitter } from 'node:events';
+import { createHash } from 'node:crypto';
+
+const { isLocalHost, safeResponseHeaders, requestHeadersFor, nextHop, partitionFor, startShellLink, fetchWithSite } =
+  shellLink;
 
 test('isLocalHost: names and literals that reach this machine or this network', () => {
   const local = [
@@ -168,10 +172,15 @@ test('nextHop: refuses a downgrade, a local address, and a scheme that is not ht
   assert.equal(nextHop('http://example.com/a', 'https://example.com/b', 302, 'GET').url, 'https://example.com/b');
 });
 
-test('partitionFor: one persistent partition per site host', () => {
-  assert.equal(partitionFor('https://example.com'), 'persist:site-example.com');
-  assert.equal(partitionFor('https://a.example.com/some/path'), 'persist:site-a.example.com');
-  assert.equal(partitionFor('https://example.com:8443'), 'persist:site-example.com_8443');
+test('partitionFor: one partition per origin, named by a hash of it', () => {
+  const hashed = (origin) => `persist:site-${createHash('sha256').update(origin).digest('hex').slice(0, 16)}`;
+  assert.equal(partitionFor('https://example.com'), hashed('https://example.com'));
+  assert.equal(partitionFor('https://example.com/some/path?q=1'), hashed('https://example.com'));
+  // Origins that differ only in scheme or port are different logins and must not share a partition.
+  assert.notEqual(partitionFor('https://example.com'), partitionFor('http://example.com'));
+  assert.notEqual(partitionFor('https://example.com'), partitionFor('https://example.com:8443'));
+  assert.notEqual(partitionFor('https://a.example.com'), partitionFor('https://b.example.com'));
+  assert.match(partitionFor('https://example.com'), /^persist:site-[0-9a-f]{16}$/);
 });
 
 test('without Electron the server half says so rather than failing obscurely', async () => {
@@ -248,5 +257,202 @@ test('a route that throws comes back as a message, never a stack', async () => {
     assert.deepEqual(await res.json(), { error: 'nope' });
   } finally {
     link.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The site fetch. `net.request` is stood in for: what is being tested is the hop loop — which hops are
+// followed on the same request, which start a fresh one, and which are refused.
+// ---------------------------------------------------------------------------
+
+/**
+ * A stand-in for Electron's `net.request`. `script` maps a URL to what the server there does:
+ * `{ redirect: { status, location } }` or `{ status, headers, body }`. Every request made is recorded.
+ */
+function fakeNet(script) {
+  const sent = [];
+  const factory = ({ url, method, partition }) => {
+    const req = new EventEmitter();
+    const record = { url, method, partition, headers: {}, body: undefined, followed: 0, aborted: false };
+    sent.push(record);
+    let at = url;
+    let following = null; // where a followRedirect() would go, as Electron reports it: absolute
+    req.setHeader = (k, v) => (record.headers[k] = v);
+    req.write = (b) => (record.body = b);
+    req.abort = () => {
+      record.aborted = true;
+    };
+    const step = () => {
+      const page = script[at];
+      if (!page) throw new Error(`the test script has nothing at ${at}`);
+      if (page.redirect) {
+        // Electron hands the redirect event an absolute url, whatever the header said.
+        following = new URL(page.redirect.location, at).toString();
+        req.emit('redirect', page.redirect.status, record.method, following, {});
+        return;
+      }
+      const res = new EventEmitter();
+      res.statusCode = page.status ?? 200;
+      res.headers = page.headers ?? { 'content-type': 'text/plain' };
+      req.emit('response', res);
+      for (const chunk of page.chunks ?? [Buffer.from(page.body ?? '')]) res.emit('data', chunk);
+      res.emit('end');
+    };
+    req.followRedirect = () => {
+      record.followed++;
+      at = following;
+      queueMicrotask(step);
+    };
+    req.end = () => queueMicrotask(step);
+    return req;
+  };
+  factory.sent = sent;
+  return factory;
+}
+
+test('a redirect chain that ends at a body: same-shape hops ride one request', async () => {
+  const net = fakeNet({
+    'https://example.com/one': { redirect: { status: 302, location: 'https://example.com/two' } },
+    'https://example.com/two': { redirect: { status: 302, location: '/three' } },
+    'https://example.com/three': { status: 200, headers: { 'content-type': 'application/json' }, body: '{"ok":true}' },
+  });
+  const out = await fetchWithSite('https://example.com/one', {}, net);
+  assert.equal(out.status, 200);
+  assert.equal(out.body, '{"ok":true}');
+  assert.equal(out.truncated, false);
+  assert.equal(out.headers['content-type'], 'application/json');
+  assert.equal(out.headers['content-length'], '11');
+  // A GET that keeps its shape never needs a second request: followRedirect() handles both hops.
+  assert.equal(net.sent.length, 1);
+  assert.equal(net.sent[0].followed, 2);
+});
+
+test('a 303 restarts as a fresh GET, because followRedirect cannot change the method', async () => {
+  const net = fakeNet({
+    'https://example.com/post': { redirect: { status: 303, location: '/done' } },
+    'https://example.com/done': { status: 200, body: 'thanks' },
+  });
+  const out = await fetchWithSite(
+    'https://example.com/post',
+    { method: 'POST', body: 'a=1', headers: { 'content-type': 'application/x-www-form-urlencoded' } },
+    net,
+  );
+  assert.equal(out.body, 'thanks');
+  assert.equal(net.sent.length, 2);
+  assert.equal(net.sent[0].method, 'POST');
+  assert.equal(net.sent[0].body, 'a=1');
+  assert.equal(net.sent[0].aborted, true);
+  assert.equal(net.sent[1].method, 'GET');
+  assert.equal(net.sent[1].body, undefined);
+  assert.equal('content-type' in net.sent[1].headers, false); // a bodyless request describes no body
+});
+
+test('a cross-origin 307 keeps the method on a fresh request, without the body', async () => {
+  const net = fakeNet({
+    'https://a.example.com/x': { redirect: { status: 307, location: 'https://b.example.com/y' } },
+    'https://b.example.com/y': { status: 200, body: 'over here' },
+  });
+  const out = await fetchWithSite('https://a.example.com/x', { method: 'POST', body: 'secret' }, net);
+  assert.equal(out.body, 'over here');
+  assert.equal(net.sent.length, 2);
+  assert.equal(net.sent[1].method, 'POST');
+  assert.equal(net.sent[1].body, undefined);
+  // Both requests are made from the first site's partition: the login follows the plugin's site.
+  assert.equal(net.sent[1].partition, net.sent[0].partition);
+});
+
+test('a hop the backend would refuse is refused here, and the request is aborted', async () => {
+  const local = fakeNet({
+    'https://example.com/a': { redirect: { status: 302, location: 'https://127.0.0.1:3210/api/config' } },
+  });
+  await assert.rejects(() => fetchWithSite('https://example.com/a', {}, local), /local address/);
+  assert.equal(local.sent[0].aborted, true);
+
+  const downgrade = fakeNet({
+    'https://example.com/a': { redirect: { status: 302, location: 'http://example.com/a' } },
+  });
+  await assert.rejects(() => fetchWithSite('https://example.com/a', {}, downgrade), /insecure redirect/);
+
+  const scheme = fakeNet({ 'https://example.com/a': { redirect: { status: 302, location: 'file:///etc/passwd' } } });
+  await assert.rejects(() => fetchWithSite('https://example.com/a', {}, scheme), /http and https only/);
+});
+
+const MAX_REDIRECTS_IN_TEST = 5;
+
+test('the hop cap holds across both kinds of hop', async () => {
+  const chain = {};
+  for (let i = 0; i < 9; i++) chain[`https://example.com/${i}`] = { redirect: { status: 302, location: `/${i + 1}` } };
+  chain['https://example.com/9'] = { status: 200, body: 'never reached' };
+  await assert.rejects(() => fetchWithSite('https://example.com/0', {}, fakeNet(chain)), /too many redirects/);
+
+  // 303s restart, so these are six separate requests rather than one with six followRedirects.
+  const restarts = {};
+  for (let i = 0; i < 9; i++) restarts[`https://example.com/${i}`] = { redirect: { status: 303, location: `/${i + 1}` } };
+  const net = fakeNet(restarts);
+  await assert.rejects(() => fetchWithSite('https://example.com/0', {}, net), /too many redirects/);
+  assert.equal(net.sent.length, MAX_REDIRECTS_IN_TEST + 1);
+});
+
+test('a body past the cap is cut, flagged, and the rest is not waited for', async () => {
+  const net = fakeNet({
+    'https://example.com/big': {
+      status: 200,
+      chunks: [Buffer.alloc(3 * 1024 * 1024, 0x61), Buffer.alloc(3 * 1024 * 1024, 0x62)],
+    },
+  });
+  const out = await fetchWithSite('https://example.com/big', {}, net);
+  assert.equal(out.truncated, true);
+  assert.equal(out.body.length, 4 * 1024 * 1024);
+  assert.equal(out.headers['content-length'], String(4 * 1024 * 1024));
+  assert.equal(net.sent[0].aborted, true);
+});
+
+test('what a plugin may ask for: the url, the method and the body are all checked here too', async () => {
+  const net = fakeNet({ 'https://example.com/a': { status: 200, body: 'ok' } });
+  await assert.rejects(() => fetchWithSite('http://127.0.0.1/a', {}, net), /local address/);
+  await assert.rejects(() => fetchWithSite('nonsense', {}, net), /needs a url/);
+  await assert.rejects(() => fetchWithSite('https://example.com/a', { method: 'TRACE' }, net), /does not allow the method/);
+  await assert.rejects(() => fetchWithSite('https://example.com/a', { body: { a: 1 } }, net), /body must be text/);
+  await assert.rejects(
+    () => fetchWithSite('https://example.com/a', { method: 'GET', body: 'x' }, net),
+    /GET does not carry a body/,
+  );
+  assert.equal(net.sent.length, 0); // none of these ever reached the wire
+});
+
+test('the shell path sheds the headers that name an origin, always', async () => {
+  const net = fakeNet({ 'https://example.com/a': { status: 200, body: 'ok' } });
+  await fetchWithSite(
+    'https://example.com/a',
+    { headers: { origin: 'https://example.com', referer: 'https://example.com/b', accept: 'text/html' } },
+    net,
+  );
+  assert.deepEqual(net.sent[0].headers, { accept: 'text/html' });
+});
+
+test('a fetch that fails is a 400, not a 500: a 500 is the backend deciding the shell has died', async () => {
+  const link = await startShellLink({
+    log: () => {},
+    impl: {
+      ...stubImpl,
+      fetchWithSite: (url, init) => fetchWithSite(url, init, fakeNet({})),
+    },
+  });
+  try {
+    const call = (body) =>
+      fetch(`http://127.0.0.1:${link.port}/fetch`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${link.token}` },
+        body: JSON.stringify(body),
+      });
+    const localAddress = await call({ url: 'http://169.254.169.254/latest' });
+    assert.equal(localAddress.status, 400);
+    assert.match((await localAddress.json()).error, /local address/);
+
+    const badMethod = await call({ url: 'https://example.com/a', init: { method: 'CONNECT' } });
+    assert.equal(badMethod.status, 400);
+    assert.match((await badMethod.json()).error, /does not allow the method/);
+  } finally {
+    await link.close();
   }
 });

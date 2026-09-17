@@ -220,6 +220,32 @@ describe('plugins api guards', () => {
       t.close();
     }
   });
+  it('goodbye hands the link back, but only from loopback and only with the right token', async () => {
+    const t = harness();
+    try {
+      expect((await t.j('POST', '/shell/hello', { port: 45678, token: 'right' })).status).toBe(200);
+      expect((await t.j('GET', '/plugins/shell')).body).toEqual({ available: true });
+
+      // Not the LAN, even with the right token.
+      expect((await t.j('POST', '/shell/goodbye', { token: 'right' }, { 'x-test-remote': '192.168.1.5' })).status).toBe(403);
+      // Not a token that is merely the same length, and not one that is not.
+      expect((await t.j('POST', '/shell/goodbye', { token: 'wrong' })).status).toBe(403);
+      expect((await t.j('POST', '/shell/goodbye', { token: 'much longer than the real one' })).status).toBe(403);
+      expect((await t.j('POST', '/shell/goodbye', {})).status).toBe(400);
+      expect((await t.j('GET', '/plugins/shell')).body).toEqual({ available: true });
+
+      expect((await t.j('POST', '/shell/goodbye', { token: 'right' })).status).toBe(200);
+      expect((await t.j('GET', '/plugins/shell')).body).toEqual({ available: false });
+      // And a second goodbye has nothing left to hand back.
+      expect((await t.j('POST', '/shell/goodbye', { token: 'right' })).status).toBe(403);
+
+      // The link is free again, so the next shell to start gets it.
+      expect((await t.j('POST', '/shell/hello', { port: 45679, token: 'another' })).status).toBe(200);
+      expect((await t.j('GET', '/plugins/shell')).body).toEqual({ available: true });
+    } finally {
+      t.close();
+    }
+  });
   it('hello is loopback only: not the LAN, not a name, in every spelling of loopback', async () => {
     expect(isLoopbackCaller('127.0.0.1')).toBe(true);
     expect(isLoopbackCaller('127.0.0.53')).toBe(true);

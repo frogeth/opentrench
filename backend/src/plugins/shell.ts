@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { lookup as dnsLookup } from 'node:dns';
 import { Agent, type Dispatcher, fetch as undiciFetch } from 'undici';
 import { isLocalHost, isLocalIp } from './hosts.js';
@@ -27,10 +28,11 @@ const MAX_HEADER_LENGTH = 8 * 1024;
 const MAX_FAILURES = 3;
 /**
  * The shell answers with the body wrapped in a JSON envelope. Escaping is what makes the envelope big, not the
- * braces: a body of quotes, newlines or non-ASCII can triple in size as `\"`, `\n` and `\uXXXX`, so a body
- * that is legitimately at BODY_MAX must still fit through here.
+ * braces: the shell caps the body at BODY_MAX *bytes*, and JSON escaping is at most 6× that (a byte of
+ * non-ASCII becomes `\uXXXX`), so a body that is legitimately at the cap must still fit through here. The
+ * spare 64 KB is the envelope itself — the status, the headers, the field names.
  */
-const SHELL_REPLY_MAX = BODY_MAX * 3;
+const SHELL_REPLY_MAX = BODY_MAX * 6 + 64 * 1024;
 /** A contested hello should not hang the route; the shell is on loopback and either answers at once or is gone. */
 const HELLO_PROBE_MS = 2_000;
 
@@ -253,6 +255,18 @@ export class ShellLink {
     }
   }
 
+  /**
+   * The shell says it is going away, and proves it is the shell that holds the link. Without this the
+   * backend keeps offering sign-in and sending fetches to a port nobody is listening on until three of
+   * them have failed; with it, a quitting shell hands the link back at once.
+   */
+  goodbyeFrom(token: string): boolean {
+    if (!this.available() || !token || token.length !== this.token.length) return false;
+    if (!timingSafeEqual(Buffer.from(token, 'utf8'), Buffer.from(this.token, 'utf8'))) return false;
+    this.goodbye();
+    return true;
+  }
+
   /** The shell is going away (quit, or handing over). Fetches fall back to plain and sign-in stops being offered. */
   goodbye(): void {
     this.port = null;
@@ -290,7 +304,17 @@ export class ShellLink {
     }
     if (!res.ok) {
       if (res.status >= 500) this.noteFailure(); // the shell is up but broken; treat it like silence
-      throw new Error(`shell ${path} ${res.status}`);
+      // A 4xx carries the shell's own reason ('insecure redirect', 'local address', 'fetch timed out').
+      // Dropping it leaves the plugin — and whoever is reading the log — with a bare status code.
+      const { body } = await readCapped(res, 8 * 1024).catch(() => ({ body: '' }));
+      let reason = '';
+      try {
+        const parsed = JSON.parse(body) as { error?: unknown };
+        if (typeof parsed?.error === 'string') reason = parsed.error;
+      } catch {
+        /* not json: the status is all we have */
+      }
+      throw new Error(reason ? `shell ${path}: ${reason}` : `shell ${path} ${res.status}`);
     }
     // Everything below is one request going wrong, not the shell going away, so the tally stays where it is.
     const { body: text, truncated } = await readCapped(res, opts.limit ?? BODY_MAX);

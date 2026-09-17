@@ -557,7 +557,7 @@ app.whenReady().then(async () => {
     }
     // Whichever way startBackend got us a backend — attached to one already running, or spawned our
     // own — it is now there to be told where the shell's callback is.
-    link = await shellLink.startShellLink({ log: (...a) => console.log(...a) });
+    link = await shellLink.startShellLink({ log: (...a) => console.log(...a), backendUrl: URL });
     void shellLink.hello(URL, link);
     // And told again, because the backend can restart underneath us (the dev setup does exactly that)
     // and a restarted backend has forgotten the link. hello is idempotent on that side.
@@ -584,7 +584,8 @@ function stopBackend() {
     child = null;
   }
   if (link) {
-    link.close();
+    // Says goodbye to the backend first, so it stops offering sign-in the moment the shell goes.
+    void link.close();
     link = null;
   }
 }

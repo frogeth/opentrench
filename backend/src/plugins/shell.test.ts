@@ -186,7 +186,9 @@ describe('ShellLink', () => {
   });
   it('a shell that answers badly keeps the link; only silence takes it away', async () => {
     let dead = false;
-    const oversize = JSON.stringify({ status: 200, headers: {}, body: 'x'.repeat(13 * 1024 * 1024) });
+    // Past SHELL_REPLY_MAX (BODY_MAX * 6 + 64 KB), which is sized so a body the shell capped at
+    // BODY_MAX *bytes* still fits once JSON escaping has had its way with it.
+    const oversize = JSON.stringify({ status: 200, headers: {}, body: 'x'.repeat(25 * 1024 * 1024) });
     const fetchImpl = vi.fn(async () => {
       if (dead) throw new Error('ECONNREFUSED');
       return new Response(oversize, { status: 200 });

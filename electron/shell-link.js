@@ -1,6 +1,6 @@
 // The backend asks the shell for two things it cannot do itself: fetch a site with the user's login,
-// and open that site's sign-in page. Sessions live in one partition per site (`persist:site-<host>`),
-// so a plugin's requests carry cookies the plugin never sees and never gets back.
+// and open that site's sign-in page. Sessions live in one partition per site, so a plugin's requests
+// carry cookies the plugin never sees and never gets back.
 //
 // The link is a small HTTP server on loopback with a random port and a random bearer token, announced
 // to the backend with `hello`. Everything the backend can ask for goes through it: `/status`,
@@ -14,7 +14,7 @@ try {
   const mod = require('electron');
   // Outside the app the `electron` package resolves to a *string* (the path to the binary), so a
   // successful require is not enough — check for the pieces we actually use.
-  if (mod && typeof mod === 'object' && mod.session && mod.BrowserWindow) electron = mod;
+  if (mod && typeof mod === 'object' && mod.session && mod.BrowserWindow && mod.net) electron = mod;
 } catch {
   /* not running inside Electron: the pure helpers below still export */
 }
@@ -40,6 +40,34 @@ const MAX_REQUEST_HEADERS = 40;
  * whole even though the backend would have passed it on. */
 const MAX_REQUEST_HEADER_VALUE = 4000;
 const MAX_RESPONSE_HEADER_VALUE = 8 * 1024;
+
+/** Methods a plugin may use. Anything else is a plugin trying to shape the connection, not the message. */
+const ALLOWED_METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
+
+/**
+ * This request went wrong — a bad URL, a refused hop, a timeout, a site that would not answer. It is
+ * not the shell going wrong, and the difference matters on the wire: the backend counts 5xx replies
+ * towards deciding the shell has died, and three of them deregister a shell that is working fine.
+ */
+class RequestError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/** A body past REQUEST_MAX, so the reply can say 413 instead of looking like a crash. */
+class TooLarge extends RequestError {
+  constructor() {
+    super('request body is too large', 413);
+  }
+}
+
+/** Anything thrown out of a site fetch is that fetch failing, not this process failing. */
+function asRequestError(e) {
+  if (e instanceof RequestError) return e;
+  return new RequestError(e instanceof Error ? e.message : String(e));
+}
 
 function requireElectron() {
   if (!electron) throw new Error('shell-link needs Electron: this half only runs inside the desktop app');
@@ -124,9 +152,18 @@ function carriedIpv4(tail) {
 /** The gate every URL passes, the one the backend asked for and every hop after it. */
 function assertFetchable(at) {
   if (at.protocol !== 'http:' && at.protocol !== 'https:') {
-    throw new Error(`fetch speaks http and https only, not ${at.protocol}`);
+    throw new RequestError(`fetch speaks http and https only, not ${at.protocol}`);
   }
-  if (isLocalHost(at.hostname)) throw new Error('fetch must not point at a local address');
+  if (isLocalHost(at.hostname)) throw new RequestError('fetch must not point at a local address');
+}
+
+/** The url a route was handed, as a URL, or a refusal that reads like one. */
+function parseUrl(url, what) {
+  try {
+    return new URL(String(url));
+  } catch {
+    throw new RequestError(`${what} needs a url, not ${JSON.stringify(String(url)).slice(0, 120)}`);
+  }
 }
 
 /**
@@ -141,15 +178,15 @@ function nextHop(current, location, status, method) {
   try {
     next = new URL(location, current);
   } catch {
-    throw new Error(`redirect to an unreadable location: ${String(location).slice(0, 200)}`);
+    throw new RequestError(`redirect to an unreadable location: ${String(location).slice(0, 200)}`);
   }
   if (next.protocol !== 'http:' && next.protocol !== 'https:') {
-    throw new Error(`redirect speaks http and https only, not ${next.protocol}`);
+    throw new RequestError(`redirect speaks http and https only, not ${next.protocol}`);
   }
   if (at.protocol === 'https:' && next.protocol === 'http:') {
-    throw new Error('insecure redirect: https must not hand off to http');
+    throw new RequestError('insecure redirect: https must not hand off to http');
   }
-  if (isLocalHost(next.hostname)) throw new Error('redirect must not point at a local address');
+  if (isLocalHost(next.hostname)) throw new RequestError('redirect must not point at a local address');
   const verb = String(method ?? 'GET').toUpperCase();
   // 303, and 301/302 on POST, become GET; the body goes, and its content-type goes with it
   if (status === 303 || ((status === 301 || status === 302) && verb === 'POST')) {
@@ -277,9 +314,15 @@ function withoutHeader(headers, name) {
 // The three things the backend asks for
 // ---------------------------------------------------------------------------
 
-/** One persistent session per site host, so a plugin's fetches carry a login it never sees. */
+/**
+ * One persistent session per site, named by a hash of the origin rather than the host. The origin
+ * because two origins can differ only in scheme or port and must not share a login; the hash because a
+ * host can hold characters a partition name cannot, and any substitution scheme that flattens them
+ * (`:` → `_`) lets two different hosts land in the same partition.
+ */
 function partitionFor(site) {
-  return `persist:site-${new URL(site).host.replace(/[^a-z0-9.-]/gi, '_')}`;
+  const origin = new URL(site).origin;
+  return `persist:site-${crypto.createHash('sha256').update(origin).digest('hex').slice(0, 16)}`;
 }
 
 /** Which of `sites` have cookies in their partition right now. */
@@ -307,137 +350,235 @@ function isHttpUrl(url) {
   }
 }
 
+/** One sign-in window per partition: a second Sign in click should raise the first window, not stack another. */
+const signInWindows = new Map();
+
 /**
  * The site's own sign-in page, in the site's own partition. Navigation is deliberately not pinned to
- * the site's origin: an OAuth flow hops to an identity provider and back, and a window that refuses
- * the hop is a window the user cannot sign in with. What is pinned is the scheme (http(s) only) and
- * the window (popups load in place instead of opening a second one), and no preload is injected —
- * nothing of the app's runs in a page the user is typing a password into.
+ * the site's origin: an OAuth flow hops to an identity provider and back, and a window that refuses the
+ * hop is a window the user cannot sign in with. What *is* pinned: the scheme (http(s) only), the window
+ * (popups load in place instead of opening a second one), no preload, no devtools, and every permission
+ * request denied — a page the user is typing a password into has no business with the camera, the
+ * microphone, their location or notifications.
  */
 function openSignIn(site) {
-  const { BrowserWindow } = requireElectron();
-  const at = new URL(site);
+  const { BrowserWindow, session } = requireElectron();
+  const at = parseUrl(site, 'sign-in');
   assertFetchable(at);
+  const partition = partitionFor(at.origin);
+  const already = signInWindows.get(partition);
+  if (already && !already.isDestroyed()) {
+    already.focus();
+    return already;
+  }
+  const ses = session.fromPartition(partition);
+  ses.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
+  ses.setPermissionCheckHandler(() => false);
   const win = new BrowserWindow({
     width: 1000,
     height: 760,
     title: `Sign in — ${at.host}`,
     webPreferences: {
-      partition: partitionFor(site),
+      partition,
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      devTools: false,
     },
   });
+  signInWindows.set(partition, win);
+  win.on('closed', () => {
+    if (signInWindows.get(partition) === win) signInWindows.delete(partition);
+  });
   win.setMenuBarVisibility(false);
-  win.setWindowOpenHandler(({ url }) => {
+  // On webContents, not on the window: BrowserWindow has no setWindowOpenHandler.
+  win.webContents.setWindowOpenHandler(({ url }) => {
     if (isHttpUrl(url)) void win.loadURL(url); // the popup loads in place; there is only ever one window
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (event, url) => {
     if (!isHttpUrl(url)) event.preventDefault();
   });
-  void win.loadURL(site);
+  void win.loadURL(at.toString());
   return win;
 }
 
+// ---------------------------------------------------------------------------
+// The site fetch
+// ---------------------------------------------------------------------------
+
 /**
- * Read a body with a byte budget, cancelling the stream the moment we pass it: `content-length` is a
- * claim, not a limit, and a server that answers with a hundred megabytes should cost us four.
+ * Why `net.request` and not `session.fetch`: Electron 33's `session.fetch` does not implement
+ * `redirect: 'manual'`. Its net-fetch never registers a handler for the underlying request's `redirect`
+ * event, so the redirect is cancelled and the promise rejects with "Redirect was cancelled" on *any*
+ * 3xx — a hand-rolled hop loop built on it never runs, and every redirecting site fetch fails. `net`
+ * emits the event we need and lets us decide, hop by hop, whether to go on.
  */
-async function readCapped(res, limit = BODY_MAX) {
-  if (!res.body) {
-    const text = await res.text();
-    const bytes = new TextEncoder().encode(text);
-    if (bytes.length <= limit) return { body: text, truncated: false, bytes: bytes.length };
-    return { body: new TextDecoder().decode(bytes.subarray(0, limit)), truncated: true, bytes: limit };
-  }
-  const reader = res.body.getReader();
-  const chunks = [];
-  let total = 0;
-  let truncated = false;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value?.length) continue;
-      if (total + value.length > limit) {
-        chunks.push(value.subarray(0, limit - total));
-        total = limit;
-        truncated = true;
-        break;
-      }
-      chunks.push(value);
-      total += value.length;
-    }
-  } finally {
-    await reader.cancel().catch(() => {});
-  }
-  const joined = new Uint8Array(total);
-  let at = 0;
-  for (const chunk of chunks) {
-    joined.set(chunk, at);
-    at += chunk.length;
-  }
-  return { body: new TextDecoder().decode(joined), truncated, bytes: total };
+function electronRequest({ url, method, partition }) {
+  const { net, session } = requireElectron();
+  return net.request({
+    url,
+    method,
+    session: session.fromPartition(partition),
+    // The login is the whole point of this path: without it the shell is an expensive plain fetch.
+    credentials: 'include',
+    redirect: 'manual',
+  });
+}
+
+function validMethod(method) {
+  const verb = String(method ?? 'GET').toUpperCase();
+  if (!ALLOWED_METHODS.has(verb)) throw new RequestError(`fetch does not allow the method ${verb.slice(0, 20)}`);
+  return verb;
+}
+
+function validBody(body, method) {
+  if (body === undefined || body === null) return undefined;
+  if (typeof body !== 'string') throw new RequestError('fetch body must be text');
+  if (method === 'GET' || method === 'HEAD') throw new RequestError(`a ${method} does not carry a body`);
+  return body;
 }
 
 /**
- * The site fetch, made from the site's partition so its cookies go along. Redirects are followed by
- * hand (`redirect: 'manual'`) so every hop is re-checked the way the backend re-checks its own: http(s)
- * only, no downgrade to http, never a local address, and a body that is never replayed at an origin
- * the plugin did not address. One timeout covers the whole chain, not each hop.
+ * One request, and as many redirects as it can follow without changing shape. `followRedirect()` reuses
+ * the request it is called on, which means it cannot change the method or drop the body — so a hop that
+ * needs either (a 303, a POST through a 301/302, a cross-origin 307/308) resolves `restart` and the
+ * caller issues a fresh request for it. Either way the hop is counted.
  */
-async function fetchWithSite(url, init) {
-  const { session } = requireElectron();
-  const start = new URL(url);
-  assertFetchable(start);
-  const ses = session.fromPartition(partitionFor(start.origin));
-  const signal = AbortSignal.timeout(TIMEOUT_MS);
-  let current = start.toString();
-  let method = String(init?.method ?? 'GET').toUpperCase();
-  let headers = init?.headers ?? {};
-  let body = init?.body;
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const at = new URL(current);
-    const res = await ses.fetch(current, {
-      method,
-      headers: requestHeadersFor(headers, { crossOrigin: at.origin !== start.origin }),
-      body,
-      redirect: 'manual',
-      signal,
+function sendOnce({ request, partition, url, method, headers, body }, budget, clock) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      fn(value);
+    };
+    const stop = (req) => {
+      try {
+        req.abort();
+      } catch {
+        /* already gone */
+      }
+    };
+    let at = url;
+    let req;
+    try {
+      req = request({ url, method, partition });
+    } catch (e) {
+      return finish(reject, asRequestError(e));
+    }
+    clock.abort = () => {
+      stop(req);
+      finish(reject, new RequestError('fetch timed out'));
+    };
+    for (const [name, value] of Object.entries(headers)) req.setHeader(name, value);
+
+    req.on('redirect', (statusCode, _redirectMethod, redirectUrl) => {
+      if (settled) return;
+      let hop;
+      try {
+        if (budget.hops >= MAX_REDIRECTS) throw new RequestError('too many redirects');
+        hop = nextHop(at, redirectUrl, statusCode, method);
+      } catch (e) {
+        stop(req);
+        return finish(reject, asRequestError(e));
+      }
+      budget.hops++;
+      if (hop.method !== method || hop.dropBody) {
+        stop(req);
+        return finish(resolve, { type: 'restart', url: hop.url, method: hop.method, dropBody: hop.dropBody });
+      }
+      at = hop.url;
+      req.followRedirect(); // must be synchronous inside this event, or the redirect is cancelled
     });
-    const location = res.headers.get('location');
-    if ([301, 302, 303, 307, 308].includes(res.status) && location) {
-      if (hop === MAX_REDIRECTS) throw new Error('too many redirects');
-      const next = nextHop(current, location, res.status, method);
-      if (next.dropBody) {
+
+    req.on('response', (res) => {
+      const chunks = [];
+      let total = 0;
+      let truncated = false;
+      const deliver = () => {
+        const out = safeResponseHeaders(res.headers);
+        out['content-length'] = String(total); // what we actually hand over, not what the server claimed
+        finish(resolve, {
+          type: 'done',
+          result: {
+            status: res.statusCode,
+            headers: out,
+            body: Buffer.concat(chunks).toString('utf8'),
+            truncated,
+          },
+        });
+      };
+      res.on('data', (chunk) => {
+        if (settled) return;
+        if (total + chunk.length > BODY_MAX) {
+          // `content-length` is a claim, not a limit: stop at the cap however much is still coming.
+          chunks.push(chunk.subarray(0, BODY_MAX - total));
+          total = BODY_MAX;
+          truncated = true;
+          stop(req);
+          return deliver();
+        }
+        chunks.push(chunk);
+        total += chunk.length;
+      });
+      res.on('end', deliver);
+      res.on('error', (e) => finish(reject, asRequestError(e)));
+    });
+
+    const failed = (e) => finish(reject, clock.timedOut ? new RequestError('fetch timed out') : asRequestError(e));
+    req.on('error', failed);
+    req.on('abort', () => failed(new Error('the request was aborted')));
+    try {
+      if (body !== undefined) req.write(body);
+      req.end();
+    } catch (e) {
+      finish(reject, asRequestError(e));
+    }
+  });
+}
+
+/**
+ * The site fetch, made from the site's partition so its cookies go along. Every hop is re-checked the
+ * way the backend re-checks its own: http(s) only, no downgrade to http, never a local address, and a
+ * body that is never replayed at an origin the plugin did not address. One timeout covers the whole
+ * chain, not each hop.
+ */
+async function fetchWithSite(url, init, request = electronRequest) {
+  const start = parseUrl(url, 'fetch');
+  assertFetchable(start);
+  const partition = partitionFor(start.origin);
+  let method = validMethod(init?.method);
+  let body = validBody(init?.body, method);
+  // `origin` and `referer` go unconditionally, not just across origins: a request the shell makes has no
+  // origin of its own to name, and `followRedirect` cannot recompute headers part-way down a chain.
+  let headers = requestHeadersFor(init?.headers, { crossOrigin: true });
+  let current = start.toString();
+  const budget = { hops: 0 };
+  const clock = { timedOut: false, abort: null };
+  const timer = setTimeout(() => {
+    clock.timedOut = true;
+    clock.abort?.();
+  }, TIMEOUT_MS);
+  try {
+    for (;;) {
+      const out = await sendOnce({ request, partition, url: current, method, headers, body }, budget, clock);
+      if (out.type === 'done') return out.result;
+      current = out.url;
+      method = out.method;
+      if (out.dropBody) {
         body = undefined;
         headers = withoutHeader(headers, 'content-type'); // a bodyless request does not describe a body
       }
-      current = next.url;
-      method = next.method;
-      continue;
     }
-    const { body: text, truncated, bytes } = await readCapped(res);
-    const out = safeResponseHeaders(res.headers);
-    out['content-length'] = String(bytes); // what we actually hand over, not what the server claimed
-    return { status: res.status, headers: out, body: text, truncated };
+  } finally {
+    clearTimeout(timer);
   }
-  throw new Error('too many redirects'); // unreachable: the loop returns or throws first
 }
 
 // ---------------------------------------------------------------------------
 // The link itself
 // ---------------------------------------------------------------------------
-
-/** A body past REQUEST_MAX, so the reply can say 413 instead of looking like a crash. */
-class TooLarge extends Error {
-  constructor() {
-    super('request body is too large');
-    this.status = 413;
-  }
-}
 
 /**
  * Past the cap we stop *keeping* the body, but keep reading it. Two failures are being avoided here.
@@ -476,10 +617,13 @@ function readJson(req) {
       try {
         resolve(text ? JSON.parse(text) : {});
       } catch {
-        reject(new Error('body is not json'));
+        reject(new RequestError('body is not json'));
       }
     });
-    req.on('error', reject);
+    req.on('error', (e) => reject(asRequestError(e)));
+    // A caller that goes away mid-body never emits 'end'; without this the handler waits on a promise
+    // that will not settle and the request object is held for as long as the process lives.
+    req.on('close', () => reject(new RequestError('the request closed before its body arrived')));
   });
 }
 
@@ -506,7 +650,7 @@ function electronImpl() {
  * process that can read the backend's config is already past everything this could defend, which is
  * why there is nothing more here.)
  */
-function startShellLink({ log = console.log, impl } = {}) {
+function startShellLink({ log = console.log, impl, backendUrl } = {}) {
   return new Promise((resolve, reject) => {
     let routes;
     try {
@@ -539,22 +683,32 @@ function startShellLink({ log = console.log, impl } = {}) {
         }
         reply(404, { error: 'route' });
       } catch (e) {
-        if (e instanceof TooLarge) return reply(413, { error: why(e) });
-        log('[shell-link]', why(e));
-        reply(500, { error: why(e) }); // the message, never the stack: this crosses a process boundary
+        // A request going wrong is not the shell going wrong, and the backend reads 5xx as the latter:
+        // three in a row and it deregisters a healthy shell. Everything it could have caused — a bad
+        // url, a refused hop, a timeout, a site that would not answer — says 4xx.
+        const status = e instanceof RequestError ? e.status : 500;
+        if (status >= 500) log('[shell-link]', why(e));
+        reply(status, { error: why(e) }); // the message, never the stack: this crosses a process boundary
       }
     });
-    server.on('error', reject);
+    let listening = false;
+    // Before it listens, a server error is the reason startShellLink failed. After, it is one socket
+    // going wrong, and throwing an unhandled 'error' out of an EventEmitter would take the app with it.
+    server.on('error', (e) => (listening ? log('[shell-link] server error:', why(e)) : reject(e)));
     server.listen(0, '127.0.0.1', () => {
+      listening = true;
       const { port } = server.address();
       log('[shell-link] listening on 127.0.0.1:' + port);
+      const shut = () => {
+        server.close();
+        server.closeAllConnections(); // the backend keeps its sockets alive; close() alone would wait for them
+      };
       resolve({
         port,
         token,
-        close: () => {
-          server.close();
-          server.closeAllConnections(); // the backend keeps its sockets alive; close() alone would wait for them
-        },
+        // Say goodbye before going: without it the backend keeps offering sign-in and site fetches
+        // until three of them have failed. Best effort and on a short leash — we are quitting.
+        close: () => (backendUrl ? goodbye(backendUrl, token, log).finally(shut) : Promise.resolve(shut())),
       });
     });
   });
@@ -566,6 +720,8 @@ function startShellLink({ log = console.log, impl } = {}) {
  * backend has forgotten the link. It is idempotent on that side — a hello from the shell already
  * registered leaves things as they are.
  */
+let lastHelloFailed = false;
+
 async function hello(backendUrl, link, log = console.log) {
   for (let i = 0; i < 10; i++) {
     try {
@@ -574,19 +730,41 @@ async function hello(backendUrl, link, log = console.log) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ port: link.port, token: link.token }),
       });
-      if (r.ok) return true;
+      if (r.ok) {
+        // This runs every minute, so it says something only when the answer changes.
+        if (lastHelloFailed) log('[shell-link] the backend is answering hello again');
+        lastHelloFailed = false;
+        return true;
+      }
     } catch {
       /* the backend is not up yet */
     }
     if (i < 9) await new Promise((r) => setTimeout(r, 1000)); // no waiting after the last try
   }
-  log('[shell-link] backend never answered hello; plugin site fetches and sign-in are unavailable');
+  if (!lastHelloFailed) log('[shell-link] backend never answered hello; plugin site fetches and sign-in are unavailable');
+  lastHelloFailed = true;
   return false;
+}
+
+/** Hang up: the backend stops offering sign-in and stops sending us fetches straight away. */
+async function goodbye(backendUrl, token, log = console.log) {
+  try {
+    await fetch(`${backendUrl}/api/shell/goodbye`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token }),
+      signal: AbortSignal.timeout(1000),
+    });
+  } catch (e) {
+    log('[shell-link] goodbye did not reach the backend:', why(e));
+  }
 }
 
 module.exports = {
   startShellLink,
   hello,
+  goodbye,
+  fetchWithSite,
   partitionFor,
   isLocalHost,
   safeResponseHeaders,

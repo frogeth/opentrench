@@ -186,6 +186,15 @@ export function createPluginsApi(
     void refreshSignedIn();
     res.json({ ok: true });
   });
+  r.post('/shell/goodbye', (req, res) => {
+    // Same gate as hello, plus the token: only the shell that holds the link may hand it back.
+    if (!isLoopbackCaller(String(req.socket?.remoteAddress ?? ''))) return fail(res, 403, 'local callers only');
+    const token = String(req.body?.token ?? '');
+    if (!token) return fail(res, 400, 'token');
+    if (!shell.goodbyeFrom(token)) return fail(res, 403, 'not the registered shell');
+    void refreshSignedIn(); // nobody is signed in anywhere the moment the shell is gone
+    res.json({ ok: true });
+  });
   r.post('/plugins/reload', (_req, res) => {
     reg.load();
     res.json(reg.list());
