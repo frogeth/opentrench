@@ -2,7 +2,7 @@ import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import express, { type NextFunction, type Request, type Response } from 'express';
+import express from 'express';
 import { ConfigStore } from './config.js';
 import { SecretBox, readSecretKey } from './secrets.js';
 import { keychainKey } from './keychain.js';
@@ -23,7 +23,7 @@ import { StateStore } from './store.js';
 import { PluginRegistry } from './plugins/registry.js';
 import { PluginState } from './plugins/state.js';
 import { ShellLink } from './plugins/shell.js';
-import { createPluginsApi } from './plugins/api.js';
+import { createPluginsApi, jsonErrors } from './plugins/api.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..'); // backend/ (parent of src/ or dist/)
@@ -198,14 +198,9 @@ if (fs.existsSync(dist)) {
   });
 }
 
-// Last resort: anything a route throws, and any body the parsers refuse, answers as JSON. Express's
-// own handler would render an HTML page with the stack (and this machine's paths) in it.
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  const status = Number(err?.status ?? err?.statusCode) || 500;
-  console.error('[backend]', err?.message ?? err);
-  if (res.headersSent) return;
-  res.status(status).json({ error: err?.message ?? 'server error' });
-});
+// Last resort: anything a route throws, and any body the parsers refuse, answers as JSON rather than
+// Express's HTML page with the stack in it. A response already on the wire goes back to Express.
+app.use(jsonErrors('[backend]'));
 
 const server = http.createServer(app);
 routeUpgrades(server, {

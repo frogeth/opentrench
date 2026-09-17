@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll, vi } from 'vitest';
 import express from 'express';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -8,7 +8,7 @@ import { MessageHub } from '../hub.js';
 import { PluginRegistry } from './registry.js';
 import { PluginState } from './state.js';
 import { ShellLink } from './shell.js';
-import { createPluginsApi, isLoopbackCaller, pluginHeaders, proxyBody } from './api.js';
+import { createPluginsApi, isLoopbackCaller, jsonErrors, pluginHeaders, proxyBody } from './api.js';
 
 const FILE = `export const manifest = {"id":"hello-feed","name":"Hello feed","version":"1.0.0","api":1,"sites":["https://example.com"],"permissions":["feed:write","storage"]};
 export default function main(ot) {}`;
@@ -334,6 +334,47 @@ describe('plugins api guards', () => {
       expect((await bad.json()).error).toMatch(/not valid json/);
     } finally {
       t.close();
+    }
+  });
+  it('a failure after the body has started streaming closes the connection instead of hanging', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const app = express();
+    app.get('/boom', (_req, res, next) => {
+      res.status(200).type('text/plain');
+      res.write('partial');
+      next(new Error('kaboom'));
+    });
+    app.use(jsonErrors('[test]'));
+    const server = app.listen(0);
+    const at = `http://127.0.0.1:${(server.address() as AddressInfo).port}/boom`;
+    try {
+      const r = await fetch(at, { signal: AbortSignal.timeout(1500) });
+      expect(r.status).toBe(200); // the headers were already on the wire; there is no answer to send
+      const err = await r.text().then(() => null, (e: any) => e);
+      expect(err).toBeTruthy(); // the body ended abruptly…
+      expect(err.name).not.toBe('TimeoutError'); // …rather than leaving the client waiting it out
+      expect(err.name).not.toBe('AbortError');
+    } finally {
+      server.close();
+      quiet.mockRestore();
+    }
+  });
+  it('a 500 says nothing about the machine it happened on', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const app = express();
+    app.get('/boom', () => {
+      throw Object.assign(new Error("ENOENT: no such file or directory, open '/Users/someone/secret/config.json'"), { code: 'ENOENT' });
+    });
+    app.use(jsonErrors('[test]'));
+    const server = app.listen(0);
+    try {
+      const r = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/boom`);
+      expect(r.status).toBe(500);
+      expect(await r.json()).toEqual({ error: 'server error' });
+      expect(quiet.mock.calls[0][1]).toMatch(/secret/); // the detail is in the log, not the answer
+    } finally {
+      server.close();
+      quiet.mockRestore();
     }
   });
   it('settings need a plugin that is loaded, enabled to write, and stay under the size cap', async () => {
