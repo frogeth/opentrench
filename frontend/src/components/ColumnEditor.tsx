@@ -32,7 +32,7 @@ const TYPE_CARDS: { t: ColumnDef['type']; icon: import('./Icon').IconName; name:
   { t: 'j7', icon: 'x', name: 'J7', blurb: 'J7Tracker’s tweet stream' },
   { t: 'web', icon: 'globe', name: 'Website', blurb: 'any page, living in a column' },
   { t: 'mints', icon: 'mint', name: 'MintGo', blurb: 'NFT mints as they happen' },
-  { t: 'nftvol', icon: 'sea', name: 'NFT Volume', blurb: 'trending & top collections on OpenSea, 1H or 1D' },
+  { t: 'nftvol', icon: 'sea', name: 'NFT Volume', blurb: 'trending & top collections' },
   { t: 'osmint', icon: 'wallet', name: 'NFT Mint', blurb: 'mint an OpenSea drop with your wallet' },
 ];
 
