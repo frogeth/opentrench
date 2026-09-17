@@ -17,7 +17,12 @@ export const PERMISSIONS: PluginPermission[] = ['feed:write', 'storage', 'action
 /** The API major this build serves. Append-only within a major; bump when anything is renamed or removed. */
 export const PLUGIN_API_VERSION = 1;
 
-export class ManifestError extends Error {}
+export class ManifestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ManifestError';
+  }
+}
 
 /** A plugin id: 1–40 chars of a-z, 0-9 and dashes, starting with a letter or digit. */
 export const PLUGIN_ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -63,7 +68,7 @@ const clean = (v: unknown, max: number): string =>
  * (string-aware brace matching), parses it as JSON, and validates it. Never executes the file.
  */
 export function extractManifest(source: string): PluginManifest {
-  if (source.length > MAX_FILE) throw new ManifestError('plugin file is too large (512 KB max)');
+  if (source.length > MAX_FILE) throw new ManifestError(`plugin file is too large (${MAX_FILE / 1024} KB max)`);
 
   const bodyStart = firstStatementStart(source);
   const rest = source.slice(bodyStart);
@@ -98,8 +103,10 @@ export function extractManifest(source: string): PluginManifest {
   }
   if (end < 0) throw new ManifestError('manifest block never closes');
 
-  if (MANIFEST_RE_ANY.test(source.slice(end + 1))) {
-    throw new ManifestError('more than one manifest block');
+  const second = MANIFEST_RE_ANY.exec(source.slice(end + 1));
+  if (second) {
+    const line = source.slice(0, end + 1 + second.index).split('\n').length;
+    throw new ManifestError(`more than one \`export const manifest\` (second one at line ${line}); only the first is allowed`);
   }
 
   let raw: any;
@@ -117,8 +124,8 @@ export function validateManifest(raw: any): PluginManifest {
   if (!PLUGIN_ID_RE.test(id)) throw new ManifestError('manifest id must be 1–40 chars of a-z, 0-9 and dashes');
   const name = clean(raw.name, 60);
   if (!name) throw new ManifestError('manifest needs a name');
-  const version = String(raw.version ?? '').trim().slice(0, 20);
-  if (!VERSION_RE.test(version)) throw new ManifestError('manifest version must look like 1.2.3');
+  const version = String(raw.version ?? '').trim();
+  if (version.length > 40 || !VERSION_RE.test(version)) throw new ManifestError('manifest version must look like 1.2.3');
   const api = Number(raw.api);
   if (!Number.isInteger(api) || api < 1) throw new ManifestError('manifest api must be a positive integer');
   if (api > PLUGIN_API_VERSION) {
@@ -126,7 +133,7 @@ export function validateManifest(raw: any): PluginManifest {
   }
 
   const rawSites: string[] = Array.isArray(raw.sites) ? raw.sites.map((s: unknown) => String(s)) : [];
-  if (rawSites.length > MAX_SITES) throw new ManifestError('sites: at most 20');
+  if (rawSites.length > MAX_SITES) throw new ManifestError(`sites: at most ${MAX_SITES}`);
   const origins: string[] = [];
   for (const s of rawSites) {
     let u: URL;

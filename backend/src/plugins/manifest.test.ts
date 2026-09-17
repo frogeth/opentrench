@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractManifest, validateManifest, MAX_FILE } from './manifest.js';
+import { extractManifest, validateManifest, ManifestError, MAX_FILE } from './manifest.js';
 
 const GOOD = `export const manifest = {
   "id": "hello-feed",
@@ -52,8 +52,11 @@ describe('extractManifest', () => {
   it('rejects a manifest block that never closes', () => {
     expect(() => extractManifest('export const manifest = { "id": "a"')).toThrow('never closes');
   });
-  it('rejects a second manifest block', () => {
-    expect(() => extractManifest(GOOD + '\nexport const manifest = {};')).toThrow('more than one');
+  it('rejects a second manifest block and says which line it is on', () => {
+    const src = GOOD + '\nexport const manifest = {};';
+    expect(() => extractManifest(src)).toThrow(ManifestError);
+    expect(() => extractManifest(src)).toThrow('more than one');
+    expect(() => extractManifest(src)).toThrow(`line ${GOOD.split('\n').length + 1}`);
   });
   it('allows the manifest to be preceded by a comment', () => {
     expect(() => extractManifest(`// a hello-world plugin\n${GOOD}`)).not.toThrow();
@@ -68,6 +71,10 @@ describe('extractManifest', () => {
     const src = GOOD.replace('"Hello feed"', '"Hello\\u0000feed"');
     expect(extractManifest(src).name).toBe('Hello feed');
   });
+  it('replaces a control character in the description with a space', () => {
+    const src = GOOD.replace('"Posts example items."', '"Posts\\u0000items."');
+    expect(extractManifest(src).description).toBe('Posts items.');
+  });
 });
 
 describe('validateManifest', () => {
@@ -80,6 +87,15 @@ describe('validateManifest', () => {
   });
   it('rejects a bad version', () => {
     expect(() => validateManifest({ ...BASE_MANIFEST, version: '1.2' })).toThrow('version');
+  });
+  it('rejects an over-long version instead of truncating it', () => {
+    expect(() => validateManifest({ ...BASE_MANIFEST, version: `1.2.3-${'x'.repeat(60)}` })).toThrow('manifest version');
+  });
+  it('rejects more than 20 sites', () => {
+    const sites = Array.from({ length: 21 }, (_, i) => `https://s${i}.example.com`);
+    expect(() => validateManifest({ ...BASE_MANIFEST, sites })).toThrow('at most 20');
+    expect(() => validateManifest({ ...BASE_MANIFEST, sites })).toThrow(ManifestError);
+    expect(() => validateManifest({ ...BASE_MANIFEST, sites: sites.slice(0, 20) })).not.toThrow();
   });
   it('rejects a non-integer api', () => {
     expect(() => validateManifest({ ...BASE_MANIFEST, api: 1.5 })).toThrow('api');
