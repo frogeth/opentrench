@@ -269,7 +269,7 @@ test('a route that throws comes back as a message, never a stack', async () => {
  * A stand-in for Electron's `net.request`. `script` maps a URL to what the server there does:
  * `{ redirect: { status, location } }` or `{ status, headers, body }`. Every request made is recorded.
  */
-function fakeNet(script) {
+function fakeNet(script, { abortSync = false } = {}) {
   const sent = [];
   const factory = ({ url, method, partition }) => {
     const req = new EventEmitter();
@@ -281,6 +281,11 @@ function fakeNet(script) {
     req.write = (b) => (record.body = b);
     req.abort = () => {
       record.aborted = true;
+      // Electron emits this, and the handler for it rejects. Everything that aborts a request it has
+      // already decided the answer to must therefore settle the promise before the event lands.
+      // `abortSync` is the harsher version of the same rule — see the test that uses it.
+      if (abortSync) req.emit('abort');
+      else process.nextTick(() => req.emit('abort'));
     };
     const step = () => {
       const page = script[at];
@@ -428,6 +433,40 @@ test('the shell path sheds the headers that name an origin, always', async () =>
     net,
   );
   assert.deepEqual(net.sent[0].headers, { accept: 'text/html' });
+});
+
+test('an answer already decided survives the abort that follows it', async () => {
+  // The two places that abort a request whose outcome is already known — a hop that must restart, and a
+  // body that hit the cap. Here the abort event lands *synchronously* inside abort(), so aborting before
+  // settling loses the answer to the reject on 'abort'. The real emit is a tick later, which forgives
+  // that ordering; this does not.
+  const restart = fakeNet(
+    {
+      'https://example.com/post': { redirect: { status: 303, location: '/done' } },
+      'https://example.com/done': { status: 200, body: 'thanks' },
+    },
+    { abortSync: true },
+  );
+  const out = await fetchWithSite('https://example.com/post', { method: 'POST', body: 'a=1' }, restart);
+  assert.equal(out.body, 'thanks');
+
+  const big = fakeNet(
+    { 'https://example.com/big': { status: 200, chunks: [Buffer.alloc(5 * 1024 * 1024, 0x61)] } },
+    { abortSync: true },
+  );
+  const capped = await fetchWithSite('https://example.com/big', {}, big);
+  assert.equal(capped.truncated, true);
+  assert.equal(capped.body.length, 4 * 1024 * 1024);
+});
+
+test('close() stops a hello that is still retrying', async () => {
+  const link = await startShellLink({ log: () => {}, impl: stubImpl });
+  link.hungUp = true;
+  // Nothing is listening on this port; without the flag this would sit through ten one-second retries.
+  const started = Date.now();
+  assert.equal(await shellLink.hello('http://127.0.0.1:1', link, () => {}), false);
+  assert.ok(Date.now() - started < 500, 'hello should give up at once once the link has hung up');
+  await link.close();
 });
 
 test('a fetch that fails is a 400, not a 500: a 500 is the backend deciding the shell has died', async () => {

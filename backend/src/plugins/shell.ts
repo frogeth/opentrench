@@ -27,10 +27,13 @@ const MAX_HEADER_LENGTH = 8 * 1024;
 /** Consecutive unanswered calls before we treat the registered shell as gone and let a new one in. */
 const MAX_FAILURES = 3;
 /**
- * The shell answers with the body wrapped in a JSON envelope. Escaping is what makes the envelope big, not the
- * braces: the shell caps the body at BODY_MAX *bytes*, and JSON escaping is at most 6× that (a byte of
- * non-ASCII becomes `\uXXXX`), so a body that is legitimately at the cap must still fit through here. The
- * spare 64 KB is the envelope itself — the status, the headers, the field names.
+ * The shell answers with the body wrapped in a JSON envelope, and escaping is what makes the envelope big.
+ * Not non-ASCII: `JSON.stringify` emits that raw, so a page of Japanese costs the same as it did on the wire.
+ * The 6× is control bytes — a single byte under 0x20 becomes `\u00XX`, six bytes — and a body of them is a
+ * legitimate reply from a site serving something we asked to be treated as text. (Bytes the shell could not
+ * decode cost 3×: each becomes U+FFFD, three bytes of UTF-8.) The shell caps the body at BODY_MAX *bytes*, so
+ * the worst case that can legitimately arrive is BODY_MAX × 6, and the spare 64 KB is the envelope itself —
+ * the status, the headers, the field names.
  */
 const SHELL_REPLY_MAX = BODY_MAX * 6 + 64 * 1024;
 /** A contested hello should not hang the route; the shell is on loopback and either answers at once or is gone. */
@@ -261,8 +264,12 @@ export class ShellLink {
    * them have failed; with it, a quitting shell hands the link back at once.
    */
   goodbyeFrom(token: string): boolean {
-    if (!this.available() || !token || token.length !== this.token.length) return false;
-    if (!timingSafeEqual(Buffer.from(token, 'utf8'), Buffer.from(this.token, 'utf8'))) return false;
+    if (!this.available() || !token) return false;
+    // Byte lengths, not character counts: timingSafeEqual throws on buffers of different sizes, and two
+    // 48-character tokens can be 48 and 96 bytes. A token that cannot match must answer false, not throw.
+    const given = Buffer.from(token, 'utf8');
+    const want = Buffer.from(this.token, 'utf8');
+    if (given.length !== want.length || !timingSafeEqual(given, want)) return false;
     this.goodbye();
     return true;
   }

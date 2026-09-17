@@ -246,6 +246,22 @@ describe('plugins api guards', () => {
       t.close();
     }
   });
+  it('a goodbye token of the same length in characters but not in bytes is refused, not thrown at', async () => {
+    const t = harness();
+    try {
+      // The real token is what the shell generates: 48 characters of hex, one byte each.
+      const real = 'a'.repeat(48);
+      expect((await t.j('POST', '/shell/hello', { port: 45678, token: real })).status).toBe(200);
+      // 48 characters too, but 96 bytes. timingSafeEqual throws on buffers of different sizes, so a
+      // length check counting characters lets this through to a 500 instead of answering 403.
+      const r = await t.j('POST', '/shell/goodbye', { token: 'é'.repeat(48) });
+      expect(r.status).toBe(403);
+      expect((await t.j('GET', '/plugins/shell')).body).toEqual({ available: true });
+      expect((await t.j('POST', '/shell/goodbye', { token: real })).status).toBe(200);
+    } finally {
+      t.close();
+    }
+  });
   it('hello is loopback only: not the LAN, not a name, in every spelling of loopback', async () => {
     expect(isLoopbackCaller('127.0.0.1')).toBe(true);
     expect(isLoopbackCaller('127.0.0.53')).toBe(true);

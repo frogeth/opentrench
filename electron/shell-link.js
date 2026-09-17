@@ -368,6 +368,15 @@ function openSignIn(site) {
   const partition = partitionFor(at.origin);
   const already = signInWindows.get(partition);
   if (already && !already.isDestroyed()) {
+    // The window is still open but the user may have wandered off down an OAuth chain, or finished and
+    // left it on some other page. Asked for the site again, it goes back to the site.
+    let there = '';
+    try {
+      there = new URL(already.webContents.getURL()).origin;
+    } catch {
+      /* about:blank, or nothing loaded yet */
+    }
+    if (there !== at.origin) void already.loadURL(at.toString());
     already.focus();
     return already;
   }
@@ -453,6 +462,9 @@ function sendOnce({ request, partition, url, method, headers, body }, budget, cl
       settled = true;
       fn(value);
     };
+    // Always called *after* the promise has been settled. `abort()` makes the net layer emit 'abort',
+    // whose handler rejects; tearing the request down before recording an answer we already have would
+    // lose that answer to the rejection if the event ever arrives synchronously.
     const stop = (req) => {
       try {
         req.abort();
@@ -468,10 +480,17 @@ function sendOnce({ request, partition, url, method, headers, body }, budget, cl
       return finish(reject, asRequestError(e));
     }
     clock.abort = () => {
-      stop(req);
       finish(reject, new RequestError('fetch timed out'));
+      stop(req);
     };
-    for (const [name, value] of Object.entries(headers)) req.setHeader(name, value);
+    try {
+      for (const [name, value] of Object.entries(headers)) req.setHeader(name, value);
+    } catch (e) {
+      // A header the net layer will not take must fail this request, not throw out of startShellLink's
+      // promise executor where nothing is listening for it.
+      finish(reject, asRequestError(e));
+      return stop(req);
+    }
 
     req.on('redirect', (statusCode, _redirectMethod, redirectUrl) => {
       if (settled) return;
@@ -480,13 +499,13 @@ function sendOnce({ request, partition, url, method, headers, body }, budget, cl
         if (budget.hops >= MAX_REDIRECTS) throw new RequestError('too many redirects');
         hop = nextHop(at, redirectUrl, statusCode, method);
       } catch (e) {
-        stop(req);
-        return finish(reject, asRequestError(e));
+        finish(reject, asRequestError(e));
+        return stop(req);
       }
       budget.hops++;
       if (hop.method !== method || hop.dropBody) {
-        stop(req);
-        return finish(resolve, { type: 'restart', url: hop.url, method: hop.method, dropBody: hop.dropBody });
+        finish(resolve, { type: 'restart', url: hop.url, method: hop.method, dropBody: hop.dropBody });
+        return stop(req);
       }
       at = hop.url;
       req.followRedirect(); // must be synchronous inside this event, or the redirect is cancelled
@@ -496,31 +515,42 @@ function sendOnce({ request, partition, url, method, headers, body }, budget, cl
       const chunks = [];
       let total = 0;
       let truncated = false;
+      // Both of these run as event listeners: anything they throw would come out of the emitter with
+      // nobody to catch it, leaving this promise pending forever and taking the app down with it. They
+      // settle the promise instead.
       const deliver = () => {
-        const out = safeResponseHeaders(res.headers);
-        out['content-length'] = String(total); // what we actually hand over, not what the server claimed
-        finish(resolve, {
-          type: 'done',
-          result: {
-            status: res.statusCode,
-            headers: out,
-            body: Buffer.concat(chunks).toString('utf8'),
-            truncated,
-          },
-        });
+        try {
+          const out = safeResponseHeaders(res.headers);
+          out['content-length'] = String(total); // what we actually hand over, not what the server claimed
+          finish(resolve, {
+            type: 'done',
+            result: {
+              status: res.statusCode,
+              headers: out,
+              body: Buffer.concat(chunks).toString('utf8'),
+              truncated,
+            },
+          });
+        } catch (e) {
+          finish(reject, asRequestError(e));
+        }
       };
       res.on('data', (chunk) => {
         if (settled) return;
-        if (total + chunk.length > BODY_MAX) {
-          // `content-length` is a claim, not a limit: stop at the cap however much is still coming.
-          chunks.push(chunk.subarray(0, BODY_MAX - total));
-          total = BODY_MAX;
-          truncated = true;
-          stop(req);
-          return deliver();
+        try {
+          if (total + chunk.length > BODY_MAX) {
+            // `content-length` is a claim, not a limit: stop at the cap however much is still coming.
+            chunks.push(chunk.subarray(0, BODY_MAX - total));
+            total = BODY_MAX;
+            truncated = true;
+            deliver();
+            return stop(req);
+          }
+          chunks.push(chunk);
+          total += chunk.length;
+        } catch (e) {
+          finish(reject, asRequestError(e));
         }
-        chunks.push(chunk);
-        total += chunk.length;
       });
       res.on('end', deliver);
       res.on('error', (e) => finish(reject, asRequestError(e)));
@@ -703,13 +733,19 @@ function startShellLink({ log = console.log, impl, backendUrl } = {}) {
         server.close();
         server.closeAllConnections(); // the backend keeps its sockets alive; close() alone would wait for them
       };
-      resolve({
+      const link = {
         port,
         token,
+        /** Set by close(). A hello already part-way through its retries checks it and gives up. */
+        hungUp: false,
         // Say goodbye before going: without it the backend keeps offering sign-in and site fetches
         // until three of them have failed. Best effort and on a short leash — we are quitting.
-        close: () => (backendUrl ? goodbye(backendUrl, token, log).finally(shut) : Promise.resolve(shut())),
-      });
+        close: () => {
+          link.hungUp = true;
+          return backendUrl ? goodbye(backendUrl, token, log).finally(shut) : Promise.resolve(shut());
+        },
+      };
+      resolve(link);
     });
   });
 }
@@ -724,6 +760,9 @@ let lastHelloFailed = false;
 
 async function hello(backendUrl, link, log = console.log) {
   for (let i = 0; i < 10; i++) {
+    // A shell that has said goodbye must not announce itself again: the retry loop can still be
+    // part-way through its ten seconds when the app quits, and the link it would hand over is closed.
+    if (link.hungUp) return false;
     try {
       const r = await fetch(`${backendUrl}/api/shell/hello`, {
         method: 'POST',
