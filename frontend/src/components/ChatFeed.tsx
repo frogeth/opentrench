@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, useContext } from 'react';
 import { LinkInterceptContext } from './RichText';
-import type { FeedMessage, TokenInfo } from '../types';
+import type { FeedMessage, Source, TokenInfo } from '../types';
 import type { ChartProvider } from '../format';
 import { MessageRow } from './MessageRow';
 import { VirtualItem } from './Virtual';
@@ -72,7 +72,7 @@ export function ChatFeed({
   onReact?: (m: FeedMessage, key: string, name: string, on: boolean) => void;
   mine?: Set<string>;
   /** per-platform: reacting allowed? */
-  canReact?: Record<'discord' | 'telegram', boolean>;
+  canReact?: Record<Source, boolean>;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const canReactTo = (m: FeedMessage) => !m.id.startsWith('preview') && (!canReact || canReact[m.source]);

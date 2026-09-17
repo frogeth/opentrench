@@ -496,7 +496,7 @@ export default function App() {
     return s;
   }, [messages, reactOverride, now]);
   const react = (m: FeedMessage, key: string, name: string, on: boolean) => {
-    if (!canSend[m.source]) return;
+    if (m.source === 'plugin' || !canSend[m.source]) return;
     const msgId = m.id.split(':').pop()!;
     const k = `${m.id}:${key}`;
     setReactOverride((o) => new Map(o).set(k, { on, at: Date.now() }));
@@ -511,7 +511,7 @@ export default function App() {
   // Composing: reply state per column, send targets from each column's chats
   const [replyByCol, setReplyByCol] = useState<Record<string, FeedMessage | undefined>>({});
   // Discord is writable only through the Vencord bridge; a legacy token reads and nothing more
-  const canSend = { discord: !!cfg?.discord.canSend && status.discordMode === 'bridge', telegram: !!cfg?.telegram.canSend } as const;
+  const canSend = { discord: !!cfg?.discord.canSend && status.discordMode === 'bridge', telegram: !!cfg?.telegram.canSend, plugin: false } as const;
   const targetsFor = (names: Set<string> | null): SendTarget[] =>
     watched.filter((w) => (!names || names.has(w.name)) && (!scope || scope.has(w.name))).map((w) => ({ id: w.id, name: w.name, source: w.source }));
   // which chat each column's composer sends to; a plain click on a message picks that message's chat
@@ -917,7 +917,8 @@ export default function App() {
   // Preview: fetch recent history for a chat that isn't in the feed.
   useEffect(() => {
     const p = view.preview;
-    if (!p) {
+    // plugin chats have no history to preview
+    if (!p || p.source === 'plugin') {
       setPreviewMsgs(null);
       setPreviewErr(null);
       return;

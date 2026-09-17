@@ -8,7 +8,8 @@ import { commandIn, signature, useSlashMenu } from './SlashMenu';
 export interface SendTarget {
   id: string;
   name: string;
-  source: Source;
+  /** a chat you can actually post to; plugin chats are read-only */
+  source: 'discord' | 'telegram';
 }
 
 /** Platform message id from our feed id: discord:<id> | telegram:<chat>:<id> */

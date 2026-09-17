@@ -90,7 +90,7 @@ export interface ColumnFilters {
 }
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot';
+  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot' | 'plugin';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
@@ -98,6 +98,8 @@ export interface ColumnDef {
   url?: string;
   /** tgbot columns: the bot's username (no @) */
   bot?: string;
+  /** plugin columns: the plugin id whose UI this column shows */
+  plugin?: string;
   /** nftvol: which OpenSea list, and which rolling window */
   ranking?: 'trending' | 'top';
   timeframe?: '1h' | '1d';
@@ -137,6 +139,8 @@ export interface MaskedConfig {
   hiddenTokens: string[];
   together: { share: boolean; name: string; peers: { host: string; port: number; name: string }[] };
   opensea: { hasWallet: boolean; walletAddress?: string; rpc: Record<string, string>; chains?: { id: string; name: string; defaultRpc: string; symbol: string }[] };
+  plugins: Record<string, { enabled: boolean; approvedHash?: string }>;
+  pluginWatch: string[];
 }
 export interface WatchedChat {
   id: string;

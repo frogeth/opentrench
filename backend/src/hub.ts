@@ -660,8 +660,8 @@ export class MessageHub extends EventEmitter {
 
   setStatus(source: 'discord', state: DiscordState, error?: string): void;
   setStatus(source: 'telegram', state: TelegramState, error?: string): void;
-  setStatus(source: Source, state: DiscordState | TelegramState, error?: string): void {
-    (this.status as Record<Source, string>)[source] = state;
+  setStatus(source: 'discord' | 'telegram', state: DiscordState | TelegramState, error?: string): void {
+    (this.status as Record<'discord' | 'telegram', string>)[source] = state;
     if (error) this.status.error[source] = error;
     else delete this.status.error[source];
     this.emitStatus();

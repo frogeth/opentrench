@@ -6,3 +6,6 @@ backend/config.json
 backend/state.json
 backend/state.json.tmp
 backend/backend.log
+
+# plugins the user installed (code from other people; never part of the repo)
+backend/plugins/

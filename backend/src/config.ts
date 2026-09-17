@@ -6,13 +6,15 @@ import type { BotPolicy } from './types.js';
 /** One column of the terminal. `chats` are `<source>:<id>` keys of watched chats; empty = every watched chat. */
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot';
+  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot' | 'plugin';
   title: string;
   chats: string[];
   /** web columns: the page to embed (http/https only) */
   url?: string;
   /** tgbot columns: the bot's username (no @) whose conversation this column shows */
   bot?: string;
+  /** plugin columns: the plugin id whose UI this column shows */
+  plugin?: string;
   /** nftvol: which OpenSea list, and which rolling window */
   ranking?: 'trending' | 'top';
   timeframe?: '1h' | '1d';
@@ -35,7 +37,7 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
   { id: 'chats', type: 'chat', title: 'All Chats', chats: [] },
 ];
 
-const TYPES = ['calls', 'callers', 'trending', 'cove', 'salpha', 'j7', 'web', 'chat', 'mints', 'nftvol', 'osmint', 'tgbot'] as const;
+const TYPES = ['calls', 'callers', 'trending', 'cove', 'salpha', 'j7', 'web', 'chat', 'mints', 'nftvol', 'osmint', 'tgbot', 'plugin'] as const;
 const DEFAULT_TITLE: Record<ColumnDef['type'], string> = {
   calls: 'Calls',
   callers: 'Top Callers',
@@ -49,6 +51,7 @@ const DEFAULT_TITLE: Record<ColumnDef['type'], string> = {
   nftvol: 'NFT Volume',
   osmint: 'NFT Mint',
   tgbot: 'Telegram bot',
+  plugin: 'Plugin',
 };
 export const MINT_CHAINS = ['ethereum', 'robinhood', 'ink'] as const;
 
@@ -79,6 +82,10 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
   if (type === 'tgbot') {
     const b = String(raw.bot ?? '').trim().replace(/^@/, '');
     if (/^[A-Za-z0-9_]{3,32}$/.test(b)) col.bot = b;
+  }
+  if (type === 'plugin') {
+    const p = String(raw.plugin ?? '').trim();
+    if (/^[a-z0-9][a-z0-9-]{0,39}$/.test(p)) col.plugin = p;
   }
   if (type === 'nftvol') {
     col.ranking = raw.ranking === 'top' ? 'top' : 'trending';
@@ -194,6 +201,10 @@ export interface Config {
   opensea: { walletKey?: string; rpc: Record<string, string> };
   /** TrenchTogether: share my calls on the LAN (token = the pairing secret), and the friends I follow */
   together: { share: boolean; name: string; token: string; peers: { host: string; port: number; token: string; name: string }[] };
+  /** plugins the user has enabled, keyed by manifest id; approvedHash is the SHA-256 of the file the user approved */
+  plugins: Record<string, { enabled: boolean; approvedHash?: string }>;
+  /** plugin chats in the feed: `plugin:<pluginId>:<chat>` keys */
+  pluginWatch: string[];
 }
 
 const DEFAULT: Config = {
@@ -213,6 +224,8 @@ const DEFAULT: Config = {
   j7: { favorites: [] },
   opensea: { rpc: {} },
   together: { share: false, name: '', token: '', peers: [] },
+  plugins: {},
+  pluginWatch: [],
 };
 
 /** The fields that are sealed on disk when a key is available (see secrets.ts). */
@@ -288,6 +301,8 @@ export class ConfigStore {
       hiddenTokens: this.cfg.hiddenTokens,
       opensea: { hasWallet: !!this.cfg.opensea.walletKey, rpc: this.cfg.opensea.rpc },
       together: { share: this.cfg.together.share, name: this.cfg.together.name, peers: this.cfg.together.peers.map((p) => ({ host: p.host, port: p.port, name: p.name })) },
+      plugins: this.cfg.plugins,
+      pluginWatch: this.cfg.pluginWatch,
     };
   }
 
@@ -350,6 +365,12 @@ export class ConfigStore {
             .map((p: any) => ({ host: String(p.host).slice(0, 120), port: Number(p.port), token: String(p.token).slice(0, 100), name: String(p.name ?? '').slice(0, 40) }))
             .slice(0, 20),
         },
+        plugins: Object.fromEntries(
+          Object.entries(raw.plugins ?? {})
+            .filter(([k]) => /^[a-z0-9][a-z0-9-]{0,39}$/.test(k))
+            .map(([k, v]: [string, any]) => [k, { enabled: v?.enabled === true, ...(typeof v?.approvedHash === 'string' ? { approvedHash: v.approvedHash } : {}) }]),
+        ),
+        pluginWatch: Array.isArray(raw.pluginWatch) ? raw.pluginWatch.filter((k: unknown) => typeof k === 'string' && /^plugin:[a-z0-9-]+:[a-z0-9-]+$/.test(k)) : [],
       };
     } catch {
       return structuredClone(DEFAULT);

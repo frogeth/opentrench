@@ -119,7 +119,7 @@ export function PingsPanel({
                   reply
                 </button>
               </div>
-              {replying === p.id && (
+              {replying === p.id && m.source !== 'plugin' && (
                 <div className="ping-reply">
                   <Composer targets={[{ id: m.chatId, name: m.chatName, source: m.source }]} canSend={canSend} reply={m} onCancelReply={() => setReplying(null)} onSent={() => setReplying(null)} />
                 </div>

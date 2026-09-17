@@ -220,3 +220,18 @@ describe('secrets at rest', () => {
     expect(JSON.parse(fs.readFileSync(file, 'utf8')).o1ApiKey).toBe('o1_launch_y');
   });
 });
+
+describe('plugins config', () => {
+  const tmpConfig = (raw: unknown) => {
+    const f = path.join(os.tmpdir(), `ot-cfg-${Date.now()}-${Math.random()}.json`);
+    fs.writeFileSync(f, JSON.stringify(raw));
+    return f;
+  };
+  it('keeps enabled/approvedHash per plugin, the plugin watch list, and a plugin column', () => {
+    const file = tmpConfig({ plugins: { 'hello-feed': { enabled: true, approvedHash: 'abc' }, 'Bad Id': { enabled: true } }, pluginWatch: ['plugin:hello-feed:alerts', 5], columns: [{ id: 'p1', type: 'plugin', title: 'Hello', chats: [], plugin: 'hello-feed' }] });
+    const cfg = new ConfigStore(file).get();
+    expect(cfg.plugins).toEqual({ 'hello-feed': { enabled: true, approvedHash: 'abc' } });
+    expect(cfg.pluginWatch).toEqual(['plugin:hello-feed:alerts']);
+    expect(cfg.columns[0]).toMatchObject({ type: 'plugin', plugin: 'hello-feed', title: 'Hello' });
+  });
+});
