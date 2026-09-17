@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, useContext } from 'react';
 import { LinkInterceptContext } from './RichText';
-import type { FeedMessage, Source, TokenInfo } from '../types';
+import type { FeedMessage, TokenInfo } from '../types';
 import type { ChartProvider } from '../format';
 import { MessageRow } from './MessageRow';
 import { VirtualItem } from './Virtual';
@@ -72,10 +72,10 @@ export function ChatFeed({
   onReact?: (m: FeedMessage, key: string, name: string, on: boolean) => void;
   mine?: Set<string>;
   /** per-platform: reacting allowed? */
-  canReact?: Record<Source, boolean>;
+  canReact?: Record<'discord' | 'telegram', boolean>;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
-  const canReactTo = (m: FeedMessage) => !m.id.startsWith('preview') && (!canReact || canReact[m.source]);
+  const canReactTo = (m: FeedMessage) => !m.id.startsWith('preview') && m.source !== 'plugin' && (!canReact || canReact[m.source]);
   const [atEnd, setAtEnd] = useState(true);
   const shown = useMemo(() => (order === 'bottom' ? [...msgs].reverse() : msgs), [msgs, order]);
   const atEndRef = useRef(true);

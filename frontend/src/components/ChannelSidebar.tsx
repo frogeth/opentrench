@@ -1,6 +1,5 @@
 import { useState, type DragEvent, type ReactNode } from 'react';
 import type { DiscordChannel, MaskedConfig, TelegramDialog, WatchedChat } from '../api';
-import type { Source } from '../types';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 
@@ -8,9 +7,9 @@ export interface View {
   /** rail selection: 'all', 'g:<guildId>' or 't:<chatId>' */
   rail: string;
   /** focused chat (display name as used in messages) */
-  chat?: { name: string; id: string; source: Source };
+  chat?: { name: string; id: string; source: 'discord' | 'telegram' };
   /** previewing a chat that is not in the feed (history fetched on demand) */
-  preview?: { name: string; id: string; source: Source };
+  preview?: { name: string; id: string; source: 'discord' | 'telegram' };
 }
 
 /** The display name messages carry: `#chan (Server)`, or `Name (DM)` for a direct message. */
@@ -32,7 +31,7 @@ export function discordGlyph(c: DiscordChannel, size = 20): ReactNode {
 
 interface RailItem {
   key: string; // g:<id> | t:<id>
-  source: Source;
+  source: 'discord' | 'telegram';
   id: string;
   name: string;
   icon?: string;
@@ -174,7 +173,7 @@ export function ChannelSidebar({
   if (collapsed) return <aside className="sidebar sidebar-collapsed">{rail}</aside>;
 
   // ---- pane ----
-  const row = (key: string, isActive: boolean, onClick: () => void, icon: ReactNode, name: string, n: number, src?: Source) => (
+  const row = (key: string, isActive: boolean, onClick: () => void, icon: ReactNode, name: string, n: number, src?: 'discord' | 'telegram') => (
     <button key={key} className={`chan-row on${isActive ? ' active' : ''}`} onClick={onClick}>
       {icon}
       <span className="chan-row-name">{name}</span>

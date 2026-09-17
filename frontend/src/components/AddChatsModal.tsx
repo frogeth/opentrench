@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DiscordChannel, MaskedConfig, TelegramDialog } from '../api';
-import type { Source } from '../types';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 
@@ -24,17 +23,17 @@ export function AddChatsModal({
   onPreview,
   onClose,
 }: {
-  initialSource: Source;
+  initialSource: 'discord' | 'telegram';
   guildId?: string;
   cfg: MaskedConfig | null;
   channels: DiscordChannel[];
   dialogs: TelegramDialog[];
   busy: boolean;
-  onToggle: (source: Source, id: string, on: boolean) => Promise<void>;
-  onPreview: (source: Source, id: string, name: string, guildId?: string) => void;
+  onToggle: (source: 'discord' | 'telegram', id: string, on: boolean) => Promise<void>;
+  onPreview: (source: 'discord' | 'telegram', id: string, name: string, guildId?: string) => void;
   onClose: () => void;
 }) {
-  const [source, setSource] = useState<Source>(initialSource);
+  const [source, setSource] = useState<'discord' | 'telegram'>(initialSource);
   const [q, setQ] = useState('');
   const [guild, setGuild] = useState<string | undefined>(guildId);
   useEffect(() => {

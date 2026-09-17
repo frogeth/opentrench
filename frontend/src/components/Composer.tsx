@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FeedMessage, Source } from '../types';
+import type { FeedMessage } from '../types';
 import { api } from '../api';
 import { Logo } from './Logo';
 import { Icon } from './Icon';
@@ -33,7 +33,7 @@ export function Composer({
   onTargetChange,
 }: {
   targets: SendTarget[];
-  canSend: Record<Source, boolean>;
+  canSend: Record<'discord' | 'telegram', boolean>;
   reply?: FeedMessage;
   onCancelReply: () => void;
   onSent?: () => void;

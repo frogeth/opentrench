@@ -81,7 +81,7 @@ function TokenCalls({ r, now, onJump }: { r: Row; now: number; onJump?: (msgId: 
             <span className="hc-call-who">
               <b>{c.author}</b>
               <span>
-                <Logo source={c.source} size={9} /> {c.chatName.replace(/\s*\([^)]*\)\s*$/, '')}
+                <Logo source={/* TODO(plugins): own glyph */ c.source === 'plugin' ? 'telegram' : c.source} size={9} /> {c.chatName.replace(/\s*\([^)]*\)\s*$/, '')}
               </span>
             </span>
             <span className="hc-call-mc">{c.marketCap ? money(c.marketCap) : ''}</span>
@@ -156,7 +156,7 @@ export function TrendingList({
                     <span className="muted">found by</span> <b>{r.first.author}</b>
                     <span className="muted">
                       {' '}
-                      · <Logo source={r.first.source} size={9} /> {r.first.chatName.replace(/\s*\([^)]*\)\s*$/, '')} · {timeAgo(r.first.ts, now)}
+                      · <Logo source={/* TODO(plugins): own glyph */ r.first.source === 'plugin' ? 'telegram' : r.first.source} size={9} /> {r.first.chatName.replace(/\s*\([^)]*\)\s*$/, '')} · {timeAgo(r.first.ts, now)}
                     </span>
                   </span>
                 )}

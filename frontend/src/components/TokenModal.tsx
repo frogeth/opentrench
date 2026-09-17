@@ -287,7 +287,7 @@ export function TokenModal({ t, now, favorites, me = [], onClose, onShare, onBuy
                       {c.msgId === firstId && <span className="first-badge">1st</span>}
                     </span>
                     <span className="tcall-where">
-                      <Logo source={c.source} size={9} /> {where.join(' · ')} · {timeAgo(n > 1 ? latest.ts : c.ts, now)}
+                      <Logo source={/* TODO(plugins): own glyph */ c.source === 'plugin' ? 'telegram' : c.source} size={9} /> {where.join(' · ')} · {timeAgo(n > 1 ? latest.ts : c.ts, now)}
                     </span>
                   </span>
                   <span className="tcall-nums">

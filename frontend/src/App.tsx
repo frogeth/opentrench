@@ -46,10 +46,10 @@ import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type Teleg
 import { type ChartProvider } from './format';
 import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, thesisFollowUps, tokenPasses } from './filters';
-import type { BotMessage, FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
+import type { BotMessage, FeedMessage, RankingKey, Status, TokenInfo } from './types';
 
 /** Header status: the platform's logo, coloured by its connection state; the words live in the tooltip. */
-function Pill({ label, state }: { label: Source; state: string }) {
+function Pill({ label, state }: { label: 'discord' | 'telegram'; state: string }) {
   return (
     <span className={`pill pill-icon pill-${state}`} title={`${label}: ${state.replace('_', ' ')}`} role="status" aria-label={`${label} ${state.replace('_', ' ')}`}>
       <Logo source={label} size={14} />
@@ -103,7 +103,7 @@ export default function App() {
     }
   };
   const [layoutsOpen, setLayoutsOpen] = useState(false);
-  const [addOpen, setAddOpen] = useState<Source | null>(null);
+  const [addOpen, setAddOpen] = useState<'discord' | 'telegram' | null>(null);
   const [view, setView] = useState<View>({ rail: 'all' });
   const [query, setQuery] = useState('');
   // Header toggles, remembered. Repeats show by default: they are real messages, just badged 🔁.
@@ -496,7 +496,7 @@ export default function App() {
     return s;
   }, [messages, reactOverride, now]);
   const react = (m: FeedMessage, key: string, name: string, on: boolean) => {
-    if (m.source === 'plugin' || !canSend[m.source]) return;
+    if (m.source === 'plugin' || !canSend[m.source]) return; // plugin chats are read-only
     const msgId = m.id.split(':').pop()!;
     const k = `${m.id}:${key}`;
     setReactOverride((o) => new Map(o).set(k, { on, at: Date.now() }));
@@ -511,7 +511,7 @@ export default function App() {
   // Composing: reply state per column, send targets from each column's chats
   const [replyByCol, setReplyByCol] = useState<Record<string, FeedMessage | undefined>>({});
   // Discord is writable only through the Vencord bridge; a legacy token reads and nothing more
-  const canSend = { discord: !!cfg?.discord.canSend && status.discordMode === 'bridge', telegram: !!cfg?.telegram.canSend, plugin: false } as const;
+  const canSend = { discord: !!cfg?.discord.canSend && status.discordMode === 'bridge', telegram: !!cfg?.telegram.canSend } as const;
   const targetsFor = (names: Set<string> | null): SendTarget[] =>
     watched.filter((w) => (!names || names.has(w.name)) && (!scope || scope.has(w.name))).map((w) => ({ id: w.id, name: w.name, source: w.source }));
   // which chat each column's composer sends to; a plain click on a message picks that message's chat
@@ -803,7 +803,7 @@ export default function App() {
         // nothing on screen shows that chat: open it in the focused view and look again
         focused = true;
         tries = 0;
-        if (view.chat?.name !== m.chatName) openChat(m.chatName, m.source, m.chatId);
+        if (view.chat?.name !== m.chatName) openMessageChat(m);
         return void window.setTimeout(find, 120);
       }
       if (m.link && !openLink(m.link)) window.open(m.link, '_blank', 'noopener');
@@ -811,7 +811,7 @@ export default function App() {
     window.setTimeout(find, 30);
   };
   /** A message link: scroll to the message when the feed has it, else open its chat (focused when watched, a preview otherwise). */
-  const showMessageOrChat = (source: Source, chatId: string, name: string, msgId?: string, guildId?: string) => {
+  const showMessageOrChat = (source: 'discord' | 'telegram', chatId: string, name: string, msgId?: string, guildId?: string) => {
     if (msgId !== undefined) {
       const id = source === 'discord' ? `discord:${msgId}` : `telegram:${chatId}:${msgId}`;
       if (messages.some((x) => x.id === id)) return jumpToMessage(id);
@@ -917,8 +917,7 @@ export default function App() {
   // Preview: fetch recent history for a chat that isn't in the feed.
   useEffect(() => {
     const p = view.preview;
-    // plugin chats have no history to preview
-    if (!p || p.source === 'plugin') {
+    if (!p) {
       setPreviewMsgs(null);
       setPreviewErr(null);
       return;
@@ -951,7 +950,7 @@ export default function App() {
     if (next && typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission().then(setNotify);
   };
 
-  const toggleWatch = async (source: Source, id: string, on: boolean) => {
+  const toggleWatch = async (source: 'discord' | 'telegram', id: string, on: boolean) => {
     if (!cfg) return;
     setBusy(true);
     try {
@@ -993,7 +992,7 @@ export default function App() {
 
   /** Only chats on the watch list exist in the UI; a removed chat disappears with its messages. */
   const chats = useMemo(() => {
-    const m = new Map<string, { count: number; source: Source; avatar?: string; id: string }>();
+    const m = new Map<string, { count: number; source: 'discord' | 'telegram'; avatar?: string; id: string }>();
     for (const w of watched) m.set(w.name, { count: 0, source: w.source, avatar: w.avatar, id: w.id });
     for (const msg of messages) {
       const e = m.get(msg.chatName);
@@ -1082,7 +1081,7 @@ export default function App() {
     setSelected(address);
   };
 
-  const openChat = (name: string, source: Source, id: string) => {
+  const openChat = (name: string, source: 'discord' | 'telegram', id: string) => {
     if (view.chat?.name === name) {
       setView({ rail: view.rail });
       return;
@@ -1091,7 +1090,12 @@ export default function App() {
     setView({ rail: source === 'telegram' ? `t:${id}` : ch ? `g:${ch.guildId}` : 'all', chat: { name, id, source } });
   };
 
-  const openPreview = (source: Source, id: string, name: string, guildId?: string) => {
+  /** focus the chat a message came from; plugin chats get their own view in a later task */
+  const openMessageChat = (m: FeedMessage) => {
+    if (m.source !== 'plugin') openChat(m.chatName, m.source, m.chatId);
+  };
+
+  const openPreview = (source: 'discord' | 'telegram', id: string, name: string, guildId?: string) => {
     setAddOpen(null);
     setView({ rail: source === 'telegram' ? view.rail : guildId ? `g:${guildId}` : view.rail, preview: { name, id, source } });
   };
@@ -1351,7 +1355,7 @@ export default function App() {
         onAuthorChanged={reloadLists}
         onReply={(m) => setReplyByCol((r) => ({ ...r, [col.id]: m }))}
         onForward={forwardMessage}
-        onOpenChat={(m) => openChat(m.chatName, m.source, m.chatId)}
+        onOpenChat={openMessageChat}
         onPick={pickChat(col.id, names)}
         onReveal={revealMessage}
         onReact={canSend.discord || canSend.telegram ? react : undefined}
@@ -1544,7 +1548,7 @@ export default function App() {
                 onAuthorChanged={reloadLists}
                 onReply={(m) => setReplyByCol((r) => ({ ...r, focused: m }))}
                 onForward={forwardMessage}
-                onOpenChat={(m) => openChat(m.chatName, m.source, m.chatId)}
+                onOpenChat={openMessageChat}
                 onPick={pickChat('focused', view.chat ? new Set([view.chat.name]) : null)}
                 onReveal={revealMessage}
                 onReact={canSend.discord || canSend.telegram ? react : undefined}

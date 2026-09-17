@@ -44,7 +44,7 @@ function CallsList({ t, now, onJump }: { t: TokenInfo; now: number; onJump?: (ms
             <span className="hc-call-who">
               <b>{c.author}</b>
               <span>
-                <Logo source={c.source} size={9} /> {chatOf(c)}
+                <Logo source={/* TODO(plugins): own glyph */ c.source === 'plugin' ? 'telegram' : c.source} size={9} /> {chatOf(c)}
               </span>
             </span>
             <span className="hc-call-mc">{money(c.marketCap) ?? '—'}</span>
@@ -195,7 +195,7 @@ export function CallCard({
             </span>
             <span className="call-dot">·</span>
             <span className={`call-chat${onJump ? ' call-chat-jump' : ''}`} title={onJump ? `${c.chatName} · show this call in the chat` : c.chatName} onClick={onJump ? () => onJump(c.msgId, c.link) : undefined}>
-              <Logo source={c.source} size={10} />
+              <Logo source={/* TODO(plugins): own glyph */ c.source === 'plugin' ? 'telegram' : c.source} size={10} />
               {chatOf(c)}
             </span>
             <span className="call-dot">·</span>

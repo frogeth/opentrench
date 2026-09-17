@@ -19,7 +19,8 @@ export const PLUGIN_API_VERSION = 1;
 
 export class ManifestError extends Error {}
 
-const ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+/** A plugin id: 1–40 chars of a-z, 0-9 and dashes, starting with a letter or digit. */
+export const PLUGIN_ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/;
 export const MAX_FILE = 512 * 1024;
 const MAX_SITES = 20;
@@ -113,7 +114,7 @@ export function extractManifest(source: string): PluginManifest {
 export function validateManifest(raw: any): PluginManifest {
   if (!raw || typeof raw !== 'object') throw new ManifestError('manifest must be an object');
   const id = String(raw.id ?? '');
-  if (!ID_RE.test(id)) throw new ManifestError('manifest id must be 1–40 chars of a-z, 0-9 and dashes');
+  if (!PLUGIN_ID_RE.test(id)) throw new ManifestError('manifest id must be 1–40 chars of a-z, 0-9 and dashes');
   const name = clean(raw.name, 60);
   if (!name) throw new ManifestError('manifest needs a name');
   const version = String(raw.version ?? '').trim().slice(0, 20);

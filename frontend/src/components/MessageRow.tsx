@@ -315,7 +315,7 @@ export function MessageRow({
                 onOpenChat?.(m);
               }}
             >
-              {m.chatAvatar ? <Avatar src={m.chatAvatar} name={m.chatName} size={14} /> : <Logo source={m.source} size={11} />}
+              {m.chatAvatar ? <Avatar src={m.chatAvatar} name={m.chatName} size={14} /> : <Logo source={/* TODO(plugins): own glyph */ m.source === 'plugin' ? 'telegram' : m.source} size={11} />}
               <span className="chat-tag-name">{m.chatName}</span>
             </button>
           )}

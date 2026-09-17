@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Source, Status } from '../types';
+import type { Status } from '../types';
 import { desktop, hasBridge } from '../desktop';
 import { Logo } from './Logo';
 
@@ -21,7 +21,7 @@ export function Onboarding({
   /** chats in the feed */
   watched: number;
   onOpenSettings: () => void;
-  onAddChats: (source: Source) => void;
+  onAddChats: (source: 'discord' | 'telegram') => void;
   onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);

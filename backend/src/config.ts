@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { SecretBox, isSealed } from './secrets.js';
 import path from 'node:path';
 import type { BotPolicy } from './types.js';
+import { PLUGIN_ID_RE } from './plugins/manifest.js';
 
 /** One column of the terminal. `chats` are `<source>:<id>` keys of watched chats; empty = every watched chat. */
 export interface ColumnDef {
@@ -63,6 +64,8 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
   const type: ColumnDef['type'] = (TYPES as readonly string[]).includes(raw.type) ? raw.type : 'chat';
   const title = String(raw.title ?? '').trim().slice(0, 40) || DEFAULT_TITLE[type];
   // empty = every watched chat; the 'none' sentinel = nothing selected (a column being set up)
+  // the chat segment is the slug feed.ts makes from the plugin's chat name (lowercase a-z0-9 and
+  // dashes), so this regex mirrors it
   const chats = Array.isArray(raw.chats)
     ? raw.chats
         .map(String)
@@ -90,7 +93,7 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
   }
   if (type === 'plugin') {
     const p = String(raw.plugin ?? '').trim();
-    if (/^[a-z0-9][a-z0-9-]{0,39}$/.test(p)) col.plugin = p;
+    if (PLUGIN_ID_RE.test(p)) col.plugin = p;
   }
   if (type === 'nftvol') {
     col.ranking = raw.ranking === 'top' ? 'top' : 'trending';
@@ -371,11 +374,17 @@ export class ConfigStore {
             .slice(0, 20),
         },
         plugins: Object.fromEntries(
-          Object.entries(raw.plugins ?? {})
-            .filter(([k]) => /^[a-z0-9][a-z0-9-]{0,39}$/.test(k))
-            .map(([k, v]: [string, any]) => [k, { enabled: v?.enabled === true, ...(typeof v?.approvedHash === 'string' ? { approvedHash: v.approvedHash } : {}) }]),
+          Object.entries(raw.plugins && typeof raw.plugins === 'object' && !Array.isArray(raw.plugins) ? raw.plugins : {})
+            .filter(([k]) => PLUGIN_ID_RE.test(k))
+            .slice(0, 100)
+            // approvedHash is a SHA-256 of the approved file: keep it only when it looks like one
+            .map(([k, v]: [string, any]) => [k, { enabled: v?.enabled === true, ...(typeof v?.approvedHash === 'string' && /^[0-9a-f]{64}$/.test(v.approvedHash) ? { approvedHash: v.approvedHash } : {}) }]),
         ),
-        pluginWatch: Array.isArray(raw.pluginWatch) ? raw.pluginWatch.filter((k: unknown) => typeof k === 'string' && /^plugin:[a-z0-9-]+:[a-z0-9-]+$/.test(k)) : [],
+        // the chat segment is the slug feed.ts makes from the plugin's chat name (lowercase a-z0-9
+        // and dashes), so this regex mirrors it
+        pluginWatch: Array.isArray(raw.pluginWatch)
+          ? [...new Set(raw.pluginWatch.filter((k: unknown) => typeof k === 'string' && /^plugin:[a-z0-9-]+:[a-z0-9-]+$/.test(k)) as string[])].slice(0, 500)
+          : [],
       };
     } catch {
       return structuredClone(DEFAULT);
