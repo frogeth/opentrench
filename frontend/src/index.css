@@ -254,6 +254,7 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .time, .time a { color: var(--dim); text-decoration: none; font-size: 11px; white-space: nowrap; flex: none; }
 .time a:hover { text-decoration: underline; }
 .chat-tag-name { overflow: hidden; text-overflow: ellipsis; }
+.chat-tag-via { font-size: 9px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 4px; margin-left: 4px; }
 .chat-tag {
   margin-left: auto; display: inline-flex; align-items: center; gap: 5px; max-width: 45%;
   background: var(--chrome); border: 1px solid transparent; border-radius: 999px; padding: 2px 8px; color: var(--muted);
@@ -303,6 +304,7 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .logo { flex: none; }
 .logo-discord { color: var(--dc); }
 .logo-telegram { color: var(--tg); }
+.logo-plugin { color: var(--accent); }
 
 /* ---------- compact token chip in chat ---------- */
 .chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
@@ -1142,6 +1144,7 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .ping-who .muted { font-size: 11px; display: inline-flex; align-items: center; gap: 4px; }
 .src-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--dc); }
 .src-dot.telegram { background: var(--tg); }
+.src-dot.plugin { background: var(--accent); }
 .ping-kind-call { color: var(--gold, #e0b34a); border-color: rgba(224, 179, 74, 0.45); }
 .ping-kind { font-size: 10px; font-weight: 700; color: var(--accent); border: 1px solid rgba(65, 200, 146, 0.4); border-radius: 999px; padding: 1px 6px; white-space: nowrap; }
 .ping-time { font-size: 11px; white-space: nowrap; }
@@ -1395,3 +1398,48 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 /* the mint feed holds still under the pointer; arrivals queue behind this pill */
 .mint-pending { position: sticky; top: 4px; z-index: 4; display: block; margin: 4px auto; background: var(--panel); border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 3px 10px; font-size: 11px; cursor: pointer; }
 .mint-pending:hover { background: var(--hover); }
+
+/* ---------- plugins ---------- */
+/* Every running plugin's frame lives in this layer, laid over whichever column shows it: columns get
+   reordered, resized and removed, and none of that may reload a plugin. */
+.plugin-layer { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
+/* While a column is being dragged, the frames step out of the way: the drop zones and the highlight
+   belong to the columns underneath, and a plugin column must be as droppable as any other. */
+.app.col-drag .plugin-layer { visibility: hidden; pointer-events: none; }
+.plugin-pane { position: fixed; overflow: hidden; pointer-events: auto; background: var(--bg); }
+.plugin-pane-hidden { left: 0; top: 0; width: 0; height: 0; opacity: 0; pointer-events: none; }
+.plugin-frame { width: 100%; height: 100%; border: none; background: var(--bg); display: block; }
+.col-plugin .col-body { display: flex; }
+.plugin-slot { flex: 1; min-width: 0; display: flex; }
+.plugin-slot .empty { flex: 1; }
+/* a plugin asking for a buy or a research: the user's click, never the plugin's */
+.plugin-prompt { position: fixed; top: 96px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 6px; max-width: min(720px, 92vw); max-height: 40vh; overflow: auto; }
+.plugin-prompt-row { display: flex; align-items: center; gap: 10px; background: var(--panel-2); border: 1px solid rgba(65, 200, 146, 0.5); border-radius: 12px; padding: 8px 12px; font-size: 13px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); }
+.plugin-prompt-row span { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.plugin-prompt-addr { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; color: var(--text); }
+.plugin-toast { bottom: 48px; }
+/* ⚙ → Plugins */
+.plugins-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+.plugins-add .fed-input { flex: 1; min-width: 200px; }
+.plugin-row { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.plugin-row.on { border-color: var(--accent); }
+.plugin-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plugin-meta { font-size: 11px; display: flex; flex-direction: column; gap: 2px; }
+.plugin-site { margin-right: 8px; }
+.plugin-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.plugin-err { font-size: 11px; overflow-wrap: anywhere; }
+.plugin-note { color: var(--accent); }
+.plugin-settings { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 8px; }
+.plugin-field { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.plugin-field > span { min-width: 140px; }
+.plugin-field .fed-input { flex: 1; min-width: 0; }
+.plugin-log { max-height: 200px; overflow: auto; font-size: 11px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; white-space: pre-wrap; }
+/* its own modal: auto height so a short manifest does not float in a tall box, and a body that
+   scrolls under a pinned foot when the file is long */
+.plugin-approve { width: min(560px, 94vw); height: auto; max-height: 90vh; }
+.plugin-approve-body { overflow: auto; padding: 14px 16px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; }
+.plugin-approve-body p { margin: 0; }
+.plugin-approve-body code { font-family: var(--mono); font-size: 11px; }
+.plugin-approve-body .err { border: 1px solid #a33; border-radius: 6px; padding: 8px 10px; }
+/* the file itself, for reading before approving: never edited here, only read */
+.plugin-code { max-height: 260px; overflow: auto; font-family: var(--mono); font-size: 11px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -143,6 +143,17 @@ the sidebar, not in settings.
   SeaDrop drop — the card shows the open stage, allowance, price, gas and
   balance; Mint confirms once more, then sends with the wallet from
   Settings → Trading, one mint in flight per wallet).
+- A **Plugin** column type: the body is a column drawn by a plugin you
+  installed, inside its own sandbox ([docs/plugins.md](docs/plugins.md)).
+- **Plugins.** Drop a single JavaScript file into your `plugins` folder (or
+  ⚙ → Plugins → add a file / paste a link), read the warning, approve it, and
+  it can post a website's feed into opentrench as a chat, fetch that site
+  through your own login without ever seeing the cookies, and draw a column of
+  its own. Each plugin runs in a sandboxed frame with no network of its own and
+  reaches the app only through a versioned `ot` API that stays compatible across
+  updates; approval is bound to the file's hash, so a changed file is off until
+  you approve it again. Write one: [docs/plugins.md](docs/plugins.md), with a
+  commented example in [plugins-examples/](plugins-examples/hello-feed.js).
 - Live charts open automatically under every contract in Chats (only the
   ones on screen actually load; switch it off in Settings → Feed).
 - Replies show the quoted message above the text; reactions show as pills

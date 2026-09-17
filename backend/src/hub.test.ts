@@ -424,6 +424,25 @@ describe('MessageHub', () => {
     expect(listed?.before.map((m) => m.id)).toEqual(['discord:2']);
   });
 
+  it('a plugin cannot ping as a favorite, nor claim a mention, but is still blacklisted by name', () => {
+    const hub = new MessageHub(500, undefined, { favorites: () => ['scanner'] });
+    const pings: any[] = [];
+    hub.on('event', (e) => e.type === 'ping' && pings.push(e));
+    // a plugin writes both the author name and the mention flag, so neither may buy it a ping
+    const forged = { author: 'scanner', mention: 'user' as const };
+    hub.push(msg(1, EVM, { ...forged, id: 'plugin:p:alerts:1', source: 'plugin', chatId: 'plugin:p:alerts', chatName: 'Alerts' }));
+    expect(pings).toEqual([]);
+    expect(hub.mentions()).toEqual([]);
+    // the same message from a platform is a real favorite call and a real ping
+    hub.push(msg(2, SOL, { ...forged, chatId: 'd', chatName: '#d' }));
+    expect(pings.map((p) => p.token.address)).toEqual([SOL]);
+    expect(hub.mentions().map((m) => m.id)).toEqual(['discord:2']);
+    // the blacklist still reads the author name, whatever the source
+    const strict = new MessageHub(500, undefined, { blacklist: () => ['scanner'] });
+    strict.push(msg(3, EVM, { author: 'scanner', id: 'plugin:p:alerts:3', source: 'plugin', chatId: 'plugin:p:alerts', chatName: 'Alerts' }));
+    expect(strict.hello().messages.at(-1)?.hidden).toBe(true);
+  });
+
   it('a bot answering a call in the same chat is an echo, not a caller; a bot posting first is the call', () => {
     const shown = { default: 'show', allow: [], calls: 'all', pings: 'none', pingAllow: [] } as any;
     const hub = new MessageHub(500, undefined, { bots: () => shown });

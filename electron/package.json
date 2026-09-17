@@ -7,6 +7,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "test": "node --test",
     "prepare-backend": "node scripts/prepare-backend.js",
     "prepare-vencord": "scripts/build-vencord.sh",
     "dist": "npm run prepare-vencord && npm run prepare-backend && electron-builder --mac dmg --publish never",
@@ -26,6 +27,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "shell-link.js",
       "discord-setup.js",
       "stale.js",
       "entitlements.mac.plist"

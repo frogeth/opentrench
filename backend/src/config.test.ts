@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { ConfigStore, DEFAULT_COLUMNS, sanitizeColumns, sanitizeLayouts } from './config.js';
 import { SecretBox, isSealed } from './secrets.js';
 
+const tmpFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tf-cfg-')), 'config.json');
+
 describe('columns', () => {
   it('falls back to All Calls + All Chats and drops junk', () => {
     expect(sanitizeColumns(undefined)).toEqual(DEFAULT_COLUMNS);
@@ -136,8 +138,6 @@ describe('tgbot columns', () => {
 describe('secrets at rest', () => {
   const KEY = Buffer.alloc(32, 7);
   const SECRETS = { discord: { token: 'dtok' }, telegram: { apiId: 1, apiHash: 'hash', session: 'sess' }, o1ApiKey: 'o1_launch_x', j7: { token: 'j7' }, opensea: { walletKey: '0x' + 'ab'.repeat(32) } };
-  const tmpFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tf-cfg-')), 'config.json');
-
   it('seals every token on save and opens them on load', () => {
     const file = tmpFile();
     const a = new ConfigStore(file, new SecretBox(KEY));
@@ -218,5 +218,54 @@ describe('secrets at rest', () => {
     expect(store.get().discord.token).toBe('dtok');
     store.update((c) => (c.o1ApiKey = 'o1_launch_y'));
     expect(JSON.parse(fs.readFileSync(file, 'utf8')).o1ApiKey).toBe('o1_launch_y');
+  });
+});
+
+describe('plugins config', () => {
+  const HASH = 'a'.repeat(64);
+  /** a ConfigStore loaded from a file holding exactly this JSON */
+  const loaded = (raw: unknown) => {
+    const f = tmpFile();
+    fs.writeFileSync(f, JSON.stringify(raw));
+    return new ConfigStore(f).get();
+  };
+
+  it('keeps enabled/approvedHash per plugin, the plugin watch list, and a plugin column', () => {
+    const cfg = loaded({
+      plugins: { 'hello-feed': { enabled: true, approvedHash: HASH }, 'Bad Id': { enabled: true } },
+      pluginWatch: ['plugin:hello-feed:alerts', 5],
+      columns: [{ id: 'p1', type: 'plugin', title: 'Hello', chats: ['plugin:hello-feed:alerts', 'plugin:bad key', 'discord:1'], plugin: 'hello-feed' }],
+    });
+    expect(cfg.plugins).toEqual({ 'hello-feed': { enabled: true, approvedHash: HASH } });
+    expect(cfg.pluginWatch).toEqual(['plugin:hello-feed:alerts']);
+    expect(cfg.columns[0]).toMatchObject({ type: 'plugin', plugin: 'hello-feed', title: 'Hello' });
+    expect(cfg.columns[0].chats).toEqual(['plugin:hello-feed:alerts', 'discord:1']);
+  });
+
+  it('defaults to no plugins and an empty watch list', () => {
+    const cfg = loaded({ discord: { watch: [] } });
+    expect(cfg.plugins).toEqual({});
+    expect(cfg.pluginWatch).toEqual([]);
+  });
+
+  it('ignores a plugins block that is not an object', () => {
+    expect(loaded({ plugins: 'abc' }).plugins).toEqual({});
+    expect(loaded({ plugins: [{ enabled: true }] }).plugins).toEqual({});
+  });
+
+  it('drops an approvedHash that is not a sha-256', () => {
+    expect(loaded({ plugins: { 'hello-feed': { enabled: true, approvedHash: 'abc' } } }).plugins).toEqual({ 'hello-feed': { enabled: true } });
+  });
+
+  it('drops a column plugin id that is not a plugin id', () => {
+    const [col] = loaded({ columns: [{ id: 'p1', type: 'plugin', title: 'Hello', chats: [], plugin: 'Bad Id' }] }).columns;
+    expect(col.plugin).toBeUndefined();
+  });
+
+  it('dedupes the watch list', () => {
+    expect(loaded({ pluginWatch: ['plugin:hello-feed:alerts', 'plugin:hello-feed:alerts', 'plugin:hello-feed:news'] }).pluginWatch).toEqual([
+      'plugin:hello-feed:alerts',
+      'plugin:hello-feed:news',
+    ]);
   });
 });

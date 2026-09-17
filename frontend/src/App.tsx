@@ -25,14 +25,12 @@ import { PingsPanel } from './components/PingsPanel';
 import { BridgeNotice } from './components/BridgeNotice';
 import { ONBOARDED_KEY, Onboarding } from './components/Onboarding';
 import { Lightbox } from './components/Lightbox';
+import { PluginHost } from './plugins/PluginHost';
+import { SlotContext, SlotStore, usePluginSlot } from './plugins/slots';
+import type { PluginContext, SettingField } from './plugins/route';
 import type { ShareItem } from './components/ShareModal';
+import { displayChatName, normTg, platformChatNames, watchKeyOf } from './feedKeys';
 
-/** Telegram chat id in one shape: strip '-', then a '100' supergroup marker only when a real (long) channel id follows. */
-const normTg = (id: string) => {
-  let s = id.startsWith('-') ? id.slice(1) : id;
-  if (s.startsWith('100') && s.length >= 12) s = s.slice(3);
-  return s;
-};
 const BOTS = { cove: COVE_BOT, basedbot: 'based_eth_bot', salpha: 'salpha_research_bot' } as const;
 type BotKind = keyof typeof BOTS;
 import { VirtualItem } from './components/Virtual';
@@ -43,17 +41,36 @@ import { Logo } from './components/Logo';
 import { Icon } from './components/Icon';
 import { Avatar } from './components/Avatar';
 import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
-import { type ChartProvider } from './format';
+import { copyText, type ChartProvider } from './format';
 import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, thesisFollowUps, tokenPasses } from './filters';
 import type { BotMessage, FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
 
 /** Header status: the platform's logo, coloured by its connection state; the words live in the tooltip. */
-function Pill({ label, state }: { label: Source; state: string }) {
+function Pill({ label, state }: { label: 'discord' | 'telegram'; state: string }) {
   return (
     <span className={`pill pill-icon pill-${state}`} title={`${label}: ${state.replace('_', ' ')}`} role="status" aria-label={`${label} ${state.replace('_', ' ')}`}>
       <Logo source={label} size={14} />
     </span>
+  );
+}
+
+/** The entries whose plugin is still in `ids`; the same object back when nothing had to go. */
+function keptFor<T>(ids: Set<string>, m: Record<string, T>): Record<string, T> {
+  return Object.keys(m).every((k) => ids.has(k)) ? m : Object.fromEntries(Object.entries(m).filter(([k]) => ids.has(k)));
+}
+
+/**
+ * A plugin column's share of a running plugin: the rectangle its frame is laid over. The frame itself
+ * belongs to `PluginHost` and never moves, so reordering or resizing columns cannot reload a plugin.
+ */
+function PluginSlot({ pluginId, colId }: { pluginId: string; colId: string }) {
+  const { ref, state } = usePluginSlot(pluginId, colId);
+  return (
+    <div className="plugin-slot" data-plugin={pluginId} ref={ref}>
+      {/* nothing until the claim is settled: neither column should flash the other's words */}
+      {state !== 'pending' && <div className="empty">{state === 'holds' ? 'starting the plugin…' : 'This plugin is already open in another column.'}</div>}
+    </div>
   );
 }
 
@@ -89,7 +106,7 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 export type ChatOrder = 'bottom' | 'top';
 
 export default function App() {
-  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs } = useFeed();
+  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs, plugins, setPlugins } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
   // first-run checklist: once, when nothing is connected and the feed is empty; ⚙ → Accounts brings it back
   const [setupOpen, setSetupOpen] = useState(false);
@@ -103,7 +120,8 @@ export default function App() {
     }
   };
   const [layoutsOpen, setLayoutsOpen] = useState(false);
-  const [addOpen, setAddOpen] = useState<Source | null>(null);
+  /** which tab the add-chats picker opens on, and null while it is shut */
+  const [addOpen, setAddOpen] = useState<'discord' | 'telegram' | 'plugin' | null>(null);
   const [view, setView] = useState<View>({ rail: 'all' });
   const [query, setQuery] = useState('');
   // Header toggles, remembered. Repeats show by default: they are real messages, just badged 🔁.
@@ -496,7 +514,7 @@ export default function App() {
     return s;
   }, [messages, reactOverride, now]);
   const react = (m: FeedMessage, key: string, name: string, on: boolean) => {
-    if (!canSend[m.source]) return;
+    if (m.source === 'plugin' || !canSend[m.source]) return; // plugin chats are read-only
     const msgId = m.id.split(':').pop()!;
     const k = `${m.id}:${key}`;
     setReactOverride((o) => new Map(o).set(k, { on, at: Date.now() }));
@@ -512,8 +530,13 @@ export default function App() {
   const [replyByCol, setReplyByCol] = useState<Record<string, FeedMessage | undefined>>({});
   // Discord is writable only through the Vencord bridge; a legacy token reads and nothing more
   const canSend = { discord: !!cfg?.discord.canSend && status.discordMode === 'bridge', telegram: !!cfg?.telegram.canSend } as const;
+  // composing is platform-only: a plugin chat is never a send target
+  const sendableChat = (w: WatchedChat): w is WatchedChat & { source: SendTarget['source'] } => w.source !== 'plugin';
   const targetsFor = (names: Set<string> | null): SendTarget[] =>
-    watched.filter((w) => (!names || names.has(w.name)) && (!scope || scope.has(w.name))).map((w) => ({ id: w.id, name: w.name, source: w.source }));
+    watched
+      .filter(sendableChat)
+      .filter((w) => (!names || names.has(w.name)) && (!scope || scope.has(w.name)))
+      .map((w) => ({ id: w.id, name: w.name, source: w.source }));
   // which chat each column's composer sends to; a plain click on a message picks that message's chat
   const [targetByCol, setTargetByCol] = useState<Record<string, string | undefined>>({});
   const composerFor = (colId: string, names: Set<string> | null) => (
@@ -678,7 +701,124 @@ export default function App() {
     api.watched().then(setWatched).catch(() => {});
     api.config().then(setCfg).catch(() => {});
   };
+  // The plugin list keeps itself current from the `plugins` event; this is the first read, and again
+  // whenever the socket comes back (whatever changed while it was down came with no event). A drop
+  // is not a reason to ask: there is nothing on the other end.
+  const pluginsAsked = useRef(false);
+  useEffect(() => {
+    if (!wsOpen && pluginsAsked.current) return;
+    pluginsAsked.current = true;
+    api.plugins().then(setPlugins).catch(() => {});
+  }, [wsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(reloadLists, [status.discord, status.telegram]);
+  // A plugin's first post into a chat adds a watch key and a watched chat that only the `plugins`
+  // event carries; keyed on the chat set, so the other reasons that event fires (a sign-in, a log)
+  // do not storm the two endpoints.
+  const pluginChatKeys = useMemo(() => plugins.flatMap((p) => Object.keys(p.chats)).sort().join('|'), [plugins]);
+  const lastPluginChatKeys = useRef('');
+  /** plugin id → the name its manifest gives it, for the "via <plugin>" tag */
+  const pluginNames = useMemo(() => Object.fromEntries(plugins.map((p) => [p.id, p.manifest?.name ?? p.id])), [plugins]);
+  useEffect(() => {
+    // the last plugin chat going away changes both lists as much as the first one arriving
+    if (pluginChatKeys || lastPluginChatKeys.current) reloadLists();
+    lastPluginChatKeys.current = pluginChatKeys;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pluginChatKeys]);
+  /** a buy or a research a plugin asked for, waiting for the user's own click; one per plugin, the newest */
+  const [pluginPrompts, setPluginPrompts] = useState<{ plugin: string; kind: 'buy' | 'research'; address: string }[]>([]);
+  /** what a plugin just put on the clipboard, with its name on it */
+  const [pluginToast, setPluginToast] = useState<string | null>(null);
+  /** a plugin's last error, shown beside it in Settings → Plugins */
+  const [pluginErrors, setPluginErrors] = useState<Record<string, string>>({});
+  /** the settings form each plugin declared through `ot.settings.schema` */
+  const [pluginSchemas, setPluginSchemas] = useState<Record<string, SettingField[]>>({});
+  /** a plugin's own title, subtitle and badge — one frame per plugin, so one of each, keyed by plugin */
+  const [pluginTitles, setPluginTitles] = useState<Record<string, string>>({});
+  const [pluginSubs, setPluginSubs] = useState<Record<string, string>>({});
+  const [pluginBadges, setPluginBadges] = useState<Record<string, number | undefined>>({});
+  /** which column each plugin's frame is laid over; the frames live in PluginHost */
+  const slots = useRef(new SlotStore()).current;
+  /** the column layout as one short string: what moves a plugin's frame without resizing it */
+  const pluginLayout = useMemo(() => flatColumns.map((c) => `${c.id}:${c.width ?? ''}:${c.zoom ?? ''}`).join('|'), [flatColumns]);
+  // A plugin that is gone or switched off leaves nothing behind: its error and whatever it had made
+  // of its column header go with it.
+  const livePlugins = useMemo(() => plugins.filter((p) => p.enabled && p.manifest).map((p) => p.id).join('|'), [plugins]);
+  // Its settings form is different: the form is what the user fills in *while* the plugin is off, so
+  // it only goes when the plugin itself is gone from the folder.
+  const knownPlugins = useMemo(() => plugins.map((p) => p.id).join('|'), [plugins]);
+  useEffect(() => {
+    const live = new Set(livePlugins ? livePlugins.split('|') : []);
+    setPluginErrors((m) => keptFor(live, m));
+    setPluginTitles((m) => keptFor(live, m));
+    setPluginSubs((m) => keptFor(live, m));
+    setPluginBadges((m) => keptFor(live, m));
+    setPluginPrompts((l) => (l.every((p) => live.has(p.plugin)) ? l : l.filter((p) => live.has(p.plugin))));
+  }, [livePlugins]);
+  useEffect(() => {
+    const known = new Set(knownPlugins ? knownPlugins.split('|') : []);
+    setPluginSchemas((m) => keptFor(known, m));
+  }, [knownPlugins]);
+  /**
+   * The form a plugin declares is the app's to remember: it is stored server-side so Settings can show
+   * it while the plugin is switched off. Debounced, because a plugin may declare it on every start.
+   */
+  /** the last error each plugin reported, so the same one repeating is not logged again */
+  const lastPluginError = useRef(new Map<string, string>());
+  const schemaSaves = useRef(new Map<string, number>());
+  useEffect(() => () => schemaSaves.current.forEach((t) => window.clearTimeout(t)), []);
+  const rememberSchema = (id: string, schema: SettingField[]) => {
+    setPluginSchemas((m) => ({ ...m, [id]: schema }));
+    window.clearTimeout(schemaSaves.current.get(id));
+    schemaSaves.current.set(
+      id,
+      window.setTimeout(() => {
+        schemaSaves.current.delete(id);
+        void api.pluginSchemaSet(id, schema).catch(() => {});
+      }, 500),
+    );
+  };
+  const pluginToastTimer = useRef<number>();
+  useEffect(() => () => window.clearTimeout(pluginToastTimer.current), []);
+  const showPluginToast = (text: string) => {
+    setPluginToast(text);
+    window.clearTimeout(pluginToastTimer.current);
+    pluginToastTimer.current = window.setTimeout(() => setPluginToast(null), 2500);
+  };
+  /**
+   * What a plugin may do to the app, bound to the plugin that asked for it. `buy` and `research` never
+   * reach a bot on their own: they raise the bar below and wait for the user's click — a buy that fired
+   * by itself would be a plugin spending your money. `copy` writes the clipboard and says who did it.
+   */
+  const pluginActions = (plugin: string): PluginContext['actions'] => ({
+    openToken: setOpenToken,
+    jump: (id) => jumpToMessage(id),
+    buy: (address) => setPluginPrompts((l) => [...l.filter((p) => p.plugin !== plugin), { plugin, kind: 'buy', address }]),
+    research: (address) => setPluginPrompts((l) => [...l.filter((p) => p.plugin !== plugin), { plugin, kind: 'research', address }]),
+    copy: (text) => void copyText(text).then((ok) => showPluginToast(ok ? `copied by ${pluginNames[plugin] ?? plugin}: ${text.slice(0, 24)}` : `copy failed — ${pluginNames[plugin] ?? plugin} could not write the clipboard`)),
+    // the router already put the plugin's name in front of the title; it is not prefixed twice here
+    notify: (title, body) => {
+      if (notify !== 'granted') return;
+      try {
+        new Notification(title, { body });
+      } catch {
+        /* the browser refused it */
+      }
+    },
+  });
+  // Escape is Ignore: the bar asks for something the user did not, so getting rid of it is the easy key
+  useEffect(() => {
+    if (pluginPrompts.length === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPluginPrompts([]);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pluginPrompts.length]);
+  /** Open sends the plugin's address down the normal buy/research path; Ignore drops it. */
+  const answerPluginPrompt = (p: { plugin: string; kind: 'buy' | 'research'; address: string }, open: boolean) => {
+    setPluginPrompts((l) => l.filter((x) => x.plugin !== p.plugin));
+    if (open) sendToBot(p.kind === 'buy' ? buyProvider : 'salpha', p.address);
+  };
   useEffect(() => {
     if (status.discord === 'connected') api.discordChannels().then(setChannels).catch(() => {});
   }, [status.discord]);
@@ -782,6 +922,8 @@ export default function App() {
   const jumpToMessage = (id: string, link?: string) => {
     const m = messages.find((x) => x.id === id);
     if (!m) {
+      // A plugin message lives only in the feed: gone from the buffer, there is nowhere to send you.
+      if (id.startsWith('plugin:')) return;
       // no longer in the feed's buffer: open its chat in-app from the link (the browser only as a last resort)
       if (link && !openLink(link)) window.open(link, '_blank', 'noopener');
       return;
@@ -803,15 +945,16 @@ export default function App() {
         // nothing on screen shows that chat: open it in the focused view and look again
         focused = true;
         tries = 0;
-        if (view.chat?.name !== m.chatName) openChat(m.chatName, m.source, m.chatId);
+        if (view.chat?.name !== m.chatName) openMessageChat(m);
         return void window.setTimeout(find, 120);
       }
-      if (m.link && !openLink(m.link)) window.open(m.link, '_blank', 'noopener');
+      // a plugin message has no platform to open: if no column showed it, that is the end of it
+      if (m.source !== 'plugin' && m.link && !openLink(m.link)) window.open(m.link, '_blank', 'noopener');
     };
     window.setTimeout(find, 30);
   };
   /** A message link: scroll to the message when the feed has it, else open its chat (focused when watched, a preview otherwise). */
-  const showMessageOrChat = (source: Source, chatId: string, name: string, msgId?: string, guildId?: string) => {
+  const showMessageOrChat = (source: 'discord' | 'telegram', chatId: string, name: string, msgId?: string, guildId?: string) => {
     if (msgId !== undefined) {
       const id = source === 'discord' ? `discord:${msgId}` : `telegram:${chatId}:${msgId}`;
       if (messages.some((x) => x.id === id)) return jumpToMessage(id);
@@ -950,7 +1093,19 @@ export default function App() {
     if (next && typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission().then(setNotify);
   };
 
-  const toggleWatch = async (source: Source, id: string, on: boolean) => {
+  /** a plugin chat in or out of the feed; its key is the whole chat id, `plugin:<plugin>:<chat>` */
+  const togglePluginWatch = async (key: string, on: boolean) => {
+    setBusy(true);
+    try {
+      await api.pluginWatch(key, on);
+      if (!on && view.chat?.id === key) setView({ rail: view.rail });
+      reloadLists();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleWatch = async (source: 'discord' | 'telegram', id: string, on: boolean) => {
     if (!cfg) return;
     setBusy(true);
     try {
@@ -992,8 +1147,15 @@ export default function App() {
 
   /** Only chats on the watch list exist in the UI; a removed chat disappears with its messages. */
   const chats = useMemo(() => {
-    const m = new Map<string, { count: number; source: Source; avatar?: string; id: string }>();
-    for (const w of watched) m.set(w.name, { count: 0, source: w.source, avatar: w.avatar, id: w.id });
+    const m = new Map<string, { count: number; source: Source; avatar?: string; id: string; label: string }>();
+    // Keyed by the raw chat name, which is what messages carry and what the views scope by. Two
+    // chats can still share one name: the first one in wins (the backend lists plugin chats last,
+    // so a platform chat keeps its name), and `label` tells a colliding plugin chat apart on screen
+    // without becoming its identity. The proper fix is to key views by chatKey instead.
+    const taken = platformChatNames(watched);
+    for (const w of watched) {
+      if (!m.has(w.name)) m.set(w.name, { count: 0, source: w.source, avatar: w.avatar, id: w.id, label: displayChatName(w, taken) });
+    }
     for (const msg of messages) {
       const e = m.get(msg.chatName);
       if (!e) continue;
@@ -1013,12 +1175,13 @@ export default function App() {
     const s = new Set<string>();
     for (const id of cfg?.discord.watch ?? []) s.add(`discord:${id}`);
     for (const id of cfg?.telegram.watch ?? []) s.add(`telegram:${normTg(id)}`);
+    // a plugin chat's key is its whole chat id, `plugin:<plugin>:<chat>`
+    for (const k of cfg?.pluginWatch ?? []) s.add(k);
     return s;
-  }, [cfg?.discord.watch, cfg?.telegram.watch]);
+  }, [cfg?.discord.watch, cfg?.telegram.watch, cfg?.pluginWatch]);
   const inWatch = (m: FeedMessage) => {
     if (watchedKeys.size === 0) return true;
-    const id = m.source === 'telegram' ? normTg(m.chatId) : m.chatId;
-    return watchedKeys.has(`${m.source}:${id}`);
+    return watchedKeys.has(watchKeyOf(m));
   };
 
   /** Which chat names the current view scopes to (null = everything watched). */
@@ -1026,9 +1189,10 @@ export default function App() {
     if (view.preview) return new Set([view.preview.name]);
     if (view.chat) return new Set([view.chat.name]);
     if (view.rail === 'all') return null;
-    if (view.rail.startsWith('t:')) {
+    if (view.rail.startsWith('t:') || view.rail.startsWith('p:')) {
+      const source = view.rail.startsWith('t:') ? 'telegram' : 'plugin';
       const id = view.rail.slice(2);
-      const name = watched.find((w) => w.source === 'telegram' && w.id === id)?.name;
+      const name = watched.find((w) => w.source === source && w.id === id)?.name;
       return name ? new Set([name]) : new Set<string>();
     }
     const gid = view.rail.slice(2);
@@ -1087,10 +1251,14 @@ export default function App() {
       return;
     }
     const ch = source === 'discord' ? channels.find((c) => c.id === id) : undefined;
-    setView({ rail: source === 'telegram' ? `t:${id}` : ch ? `g:${ch.guildId}` : 'all', chat: { name, id, source } });
+    const rail = source === 'telegram' ? `t:${id}` : source === 'plugin' ? `p:${id}` : ch ? `g:${ch.guildId}` : 'all';
+    setView({ rail, chat: { name, id, source } });
   };
 
-  const openPreview = (source: Source, id: string, name: string, guildId?: string) => {
+  /** focus the chat a message came from (a plugin chat opens the same focused view) */
+  const openMessageChat = (m: FeedMessage) => openChat(m.chatName, m.source, m.chatId);
+
+  const openPreview = (source: 'discord' | 'telegram', id: string, name: string, guildId?: string) => {
     setAddOpen(null);
     setView({ rail: source === 'telegram' ? view.rail : guildId ? `g:${guildId}` : view.rail, preview: { name, id, source } });
   };
@@ -1137,9 +1305,15 @@ export default function App() {
       : {}),
     drag: dragFor(col.id),
     filtered: filtersActive(col.filters),
-    // ctrl/⌘ + wheel over a column scales that column alone; 100% is stored as "unset"
-    zoom: col.zoom,
-    onZoom: (z) => saveColumnsDebounced(updateColumn(col.id, (c) => ({ ...c, zoom: z === 1 ? undefined : z }))),
+    // ctrl/⌘ + wheel over a column scales that column alone; 100% is stored as "unset". A plugin column
+    // is the exception: its frame is laid over the column from a layer of its own, so scaling the column
+    // would leave the plugin behind at its old size. No chip, and the wheel does nothing.
+    ...(col.type === 'plugin'
+      ? {}
+      : {
+          zoom: col.zoom,
+          onZoom: (z: number) => saveColumnsDebounced(updateColumn(col.id, (c) => ({ ...c, zoom: z === 1 ? undefined : z }))),
+        }),
   });
   /** One column of any type. `actions` carries the header buttons plus either the row layout (width/fill/resize) or the stack share. */
   const renderColumn = (col: ColumnDef, actions: ColumnActions) => {
@@ -1248,6 +1422,29 @@ export default function App() {
         </Column>
       );
     }
+    if (col.type === 'plugin') {
+      const p = plugins.find((x) => x.id === col.plugin);
+      const live = p?.enabled && p.manifest ? p : null;
+      return (
+        <Column
+          key={col.id}
+          // `||`, not `??`: setTitle('') is a plugin clearing its title, and what it falls back to is
+          // the column's own — the same for an emptied subtitle below
+          title={(live && pluginTitles[live.id]) || col.title}
+          subtitle={(live && pluginSubs[live.id]) || (p?.manifest ? `${p.manifest.name} · plugin` : 'plugin not installed')}
+          kind="plugin"
+          className="col-plugin"
+          count={live ? pluginBadges[live.id] : undefined}
+          {...actions}
+        >
+          {live ? (
+            <PluginSlot pluginId={live.id} colId={col.id} />
+          ) : (
+            <div className="empty">{p ? 'This plugin is not enabled. Enable it in ⚙ → Plugins.' : 'Plugin not installed. Add it in ⚙ → Plugins.'}</div>
+          )}
+        </Column>
+      );
+    }
     if (col.type === 'trending') {
       const win = trendWindow(col.window);
       const setWin = (w: (typeof TREND_WINDOWS)[number]) => saveColumnsDebounced(updateColumn(col.id, (c) => ({ ...c, window: w })));
@@ -1343,6 +1540,7 @@ export default function App() {
         order={chatOrder}
         tokens={tokens}
         favorites={status.favorites}
+        pluginNames={pluginNames}
         autoChart={autoChart}
         compactEmbeds={compactEmbeds}
         chartProvider={chartProvider}
@@ -1350,7 +1548,7 @@ export default function App() {
         onAuthorChanged={reloadLists}
         onReply={(m) => setReplyByCol((r) => ({ ...r, [col.id]: m }))}
         onForward={forwardMessage}
-        onOpenChat={(m) => openChat(m.chatName, m.source, m.chatId)}
+        onOpenChat={openMessageChat}
         onPick={pickChat(col.id, names)}
         onReveal={revealMessage}
         onReact={canSend.discord || canSend.telegram ? react : undefined}
@@ -1382,6 +1580,7 @@ export default function App() {
     <BuyContext.Provider value={onBuy}>
     <LinkInterceptContext.Provider value={openLink}>
     <CaMenuContext.Provider value={openCaMenu}>
+    <SlotContext.Provider value={slots}>
     <div className={`app${dragCol ? ' col-drag' : ''}`}>
       <header className="top">
         <div className="brand">opentrench</div>
@@ -1465,15 +1664,15 @@ export default function App() {
           if (tabsRef.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) tabsRef.current.scrollLeft += e.deltaY;
         }}
       >
-        {chats.map(([name, { count, source, avatar, id }]) => (
+        {chats.map(([name, { count, source, avatar, id, label }]) => (
           <button
             key={name}
             className={`tab${view.chat?.name === name ? ' active' : ''}`}
             onClick={() => openChat(name, source, id)}
-            title={name}
+            title={label}
           >
             {avatar ? <Avatar src={avatar} name={name} size={16} /> : <Logo source={source} size={11} />}
-            <span className="tab-name">{name}</span>
+            <span className="tab-name">{label}</span>
             {count > 0 && <span className="tab-count">{count}</span>}
           </button>
         ))}
@@ -1511,7 +1710,8 @@ export default function App() {
           counts={chatCounts}
           collapsed={paneHidden}
           onView={setView}
-          onAdd={() => setAddOpen(view.rail.startsWith('t:') ? 'telegram' : 'discord')}
+          // the + opens the picker on the source the rail is already showing
+          onAdd={() => setAddOpen(view.rail.startsWith('p:') ? 'plugin' : view.rail.startsWith('t:') ? 'telegram' : 'discord')}
           onReorder={reorderRail}
           onCollapse={setPane}
         />
@@ -1535,6 +1735,7 @@ export default function App() {
                 order={chatOrder}
                 tokens={tokens}
                 favorites={status.favorites}
+                pluginNames={pluginNames}
                 discord
                 autoChart={autoChart}
                 compactEmbeds={compactEmbeds}
@@ -1543,7 +1744,7 @@ export default function App() {
                 onAuthorChanged={reloadLists}
                 onReply={(m) => setReplyByCol((r) => ({ ...r, focused: m }))}
                 onForward={forwardMessage}
-                onOpenChat={(m) => openChat(m.chatName, m.source, m.chatId)}
+                onOpenChat={openMessageChat}
                 onPick={pickChat('focused', view.chat ? new Set([view.chat.name]) : null)}
                 onReveal={revealMessage}
                 onReact={canSend.discord || canSend.telegram ? react : undefined}
@@ -1589,7 +1790,7 @@ export default function App() {
                     onScroll={onScroll}
                     footer={footer}
                     extra={<FeedToggles />}
-                    composer={view.preview ? undefined : composerFor('focused', view.chat ? new Set([view.chat.name]) : null)}
+                    composer={view.preview || view.chat?.source === 'plugin' ? undefined : composerFor('focused', view.chat ? new Set([view.chat.name]) : null)}
                   >
                     {body}
                   </Column>
@@ -1631,6 +1832,7 @@ export default function App() {
           watched={watched}
           channels={channels}
           callers={knownCallers}
+          plugins={plugins}
           onClose={() => setEditing(null)}
           onSave={(c) => {
             if (c.type === 'osmint' && flatColumns.some((x) => x.type === 'osmint' && x.id !== c.id)) {
@@ -1683,7 +1885,49 @@ export default function App() {
         />
       )}
       <Lightbox />
+      {/* every enabled plugin without a column of its own runs here, out of sight */}
+      <PluginHost
+        plugins={plugins}
+        messages={messages}
+        tokens={tokens}
+        actionsFor={pluginActions}
+        slots={slots}
+        layout={pluginLayout}
+        onTitle={(id, t) => setPluginTitles((m) => ({ ...m, [id]: t }))}
+        onSubtitle={(id, t) => setPluginSubs((m) => ({ ...m, [id]: t }))}
+        onBadge={(id, n) => setPluginBadges((m) => ({ ...m, [id]: n ?? undefined }))}
+        onSchema={rememberSchema}
+        onError={(id, t) => {
+          setPluginErrors((e) => ({ ...e, [id]: t }));
+          // The same line in the plugin's own log, so ⚙ → Plugins shows it in context and it survives
+          // a reload — but a plugin throwing the same thing every tick must not fill the log with it.
+          if (lastPluginError.current.get(id) === t) return;
+          lastPluginError.current.set(id, t);
+          void api.pluginLog(id, 'error', t).catch(() => {});
+        }}
+      />
       {lookingUp && <div className="lookup-toast">looking up {lookingUp.slice(0, 6)}…{lookingUp.slice(-4)}</div>}
+      {pluginToast && <div className="lookup-toast plugin-toast">{pluginToast}</div>}
+      {pluginPrompts.length > 0 && (
+        <div className="plugin-prompt" role="alert">
+          {pluginPrompts.map((p, i) => (
+            <div key={p.plugin} className="plugin-prompt-row">
+              <span>
+                <Icon name="plug" size={12} label="plugin" /> <b>{pluginNames[p.plugin] ?? p.plugin}</b> wants to open {p.kind === 'buy' ? 'a buy' : 'research'} for{' '}
+                {/* the whole address, never shortened: this is the thing the user is being asked to approve */}
+                <code className="plugin-prompt-addr">{p.address}</code>
+              </span>
+              <button className="primary" onClick={() => answerPluginPrompt(p, true)}>
+                Open
+              </button>
+              {/* the safe half of the bar takes the focus: nothing a plugin asks for is one Return away */}
+              <button autoFocus={i === pluginPrompts.length - 1} onClick={() => answerPluginPrompt(p, false)}>
+                Ignore
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {share && <ShareModal item={share} watched={watched} channels={channels} canSend={canSend} onClose={() => setShare(null)} />}
       {caMenu && (
         <div className="ca-menu-backdrop" onMouseDown={() => setCaMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCaMenu(null); }}>
@@ -1769,6 +2013,10 @@ export default function App() {
           onCompactEmbeds={setCompactEmbeds}
           chartProvider={chartProvider}
           onChartProvider={setChartProvider}
+          plugins={plugins}
+          pluginErrors={pluginErrors}
+          pluginSchemas={pluginSchemas}
+          onPluginsChanged={() => void api.plugins().then(setPlugins).catch(() => {})}
         />
       )}
       {addOpen && (
@@ -1778,13 +2026,16 @@ export default function App() {
           cfg={cfg}
           channels={channels}
           dialogs={dialogs}
+          plugins={plugins}
           busy={busy}
           onToggle={toggleWatch}
+          onTogglePlugin={togglePluginWatch}
           onPreview={openPreview}
           onClose={() => setAddOpen(null)}
         />
       )}
     </div>
+    </SlotContext.Provider>
     </CaMenuContext.Provider>
     </LinkInterceptContext.Provider>
     </BuyContext.Provider>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api, type BotSeen, type MaskedConfig, TogetherInfo } from '../api';
-import type { Status } from '../types';
+import type { PluginInfo, Status } from '../types';
+import type { SettingField } from '../plugins/route';
+import { PluginsSection } from './PluginsSection';
 import { Logo } from './Logo';
 import { Avatar } from './Avatar';
 import { DOCS } from '../site';
@@ -17,9 +19,9 @@ const onEnter = (enabled: boolean, fn: () => void) => (e: React.KeyboardEvent<HT
 };
 
 
-type Tab = 'accounts' | 'feed' | 'trading' | 'together';
+type Tab = 'accounts' | 'feed' | 'trading' | 'together' | 'plugins';
 
-/** The one settings place: a modal with three tabs. Channels are managed in the sidebar, not here. */
+/** The one settings place: a modal with a tab each. Channels are managed in the sidebar, not here. */
 export function Settings({
   status,
   onClose,
@@ -32,6 +34,10 @@ export function Settings({
   chartProvider,
   onChartProvider,
   onShowSetup,
+  plugins,
+  pluginErrors,
+  pluginSchemas,
+  onPluginsChanged,
 }: {
   status: Status;
   onClose: () => void;
@@ -45,6 +51,13 @@ export function Settings({
   onChartProvider: (p: ChartProvider) => void;
   /** reopen the first-run checklist */
   onShowSetup?: () => void;
+  plugins: PluginInfo[];
+  /** a plugin's last runtime error, by id */
+  pluginErrors: Record<string, string>;
+  /** the settings form each plugin declared, by id */
+  pluginSchemas: Record<string, SettingField[]>;
+  /** re-read the plugin list after something in the Plugins tab changed it */
+  onPluginsChanged: () => void;
 }) {
   const [cfg, setCfg] = useState<MaskedConfig | null>(null);
   const [tab, setTab] = useState<Tab>('accounts');
@@ -78,6 +91,9 @@ export function Settings({
             </button>
             <button className={tab === 'together' ? 'active' : ''} onClick={() => setTab('together')}>
               Together
+            </button>
+            <button className={tab === 'plugins' ? 'active' : ''} onClick={() => setTab('plugins')}>
+              Plugins
             </button>
           </div>
           <span className="settings-version">
@@ -158,6 +174,7 @@ export function Settings({
             </>
           )}
           {cfg && tab === 'together' && <TogetherSection status={status} />}
+          {cfg && tab === 'plugins' && <PluginsSection plugins={plugins} errors={pluginErrors} schemas={pluginSchemas} onChanged={onPluginsChanged} />}
           {cfg && tab === 'trading' && (
             <>
               <CoveSection cfg={cfg} onChange={reload} />

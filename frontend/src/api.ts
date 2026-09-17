@@ -1,12 +1,52 @@
+import type { PluginInfo, Source } from './types';
+
+/** what a plugin's log lines are tagged with (the backend keeps these three) */
+export type PluginLogLevel = 'info' | 'warn' | 'error';
+
+/**
+ * Marks a request as the app's own. The backend refuses every write under /api/plugins and /api/shell
+ * without it: a custom header forces a CORS preflight, so nothing running in a sandboxed frame or in
+ * some other page can reach those routes, whatever it guesses about the port.
+ */
+const REQUESTED_WITH = { 'x-requested-with': 'opentrench' } as const;
+
+/** A refusal the backend explained: its status and the rest of what it answered, for callers that act on it. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly data: Record<string, unknown> = {},
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method,
-    headers: body ? { 'content-type': 'application/json' } : undefined,
+    headers: body ? { ...REQUESTED_WITH, 'content-type': 'application/json' } : { ...REQUESTED_WITH },
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? res.statusText);
+  if (!res.ok) throw new ApiError(data.error ?? res.statusText, res.status, data);
   return data as T;
+}
+
+/** A route that answers with a file rather than JSON; a refusal is still JSON, so it is unwrapped here. */
+async function text(path: string): Promise<string> {
+  const res = await fetch(`/api${path}`, { headers: { ...REQUESTED_WITH } });
+  const body = await res.text();
+  if (!res.ok) {
+    let error = res.statusText;
+    try {
+      error = JSON.parse(body).error ?? error;
+    } catch {
+      /* not JSON: keep the status */
+    }
+    throw new Error(error);
+  }
+  return body;
 }
 
 export interface BotPolicy {
@@ -90,7 +130,7 @@ export interface ColumnFilters {
 }
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot';
+  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot' | 'plugin';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
@@ -98,6 +138,8 @@ export interface ColumnDef {
   url?: string;
   /** tgbot columns: the bot's username (no @) */
   bot?: string;
+  /** plugin columns: the plugin id whose UI this column shows */
+  plugin?: string;
   /** nftvol: which OpenSea list, and which rolling window */
   ranking?: 'trending' | 'top';
   timeframe?: '1h' | '1d';
@@ -137,11 +179,14 @@ export interface MaskedConfig {
   hiddenTokens: string[];
   together: { share: boolean; name: string; peers: { host: string; port: number; name: string }[] };
   opensea: { hasWallet: boolean; walletAddress?: string; rpc: Record<string, string>; chains?: { id: string; name: string; defaultRpc: string; symbol: string }[] };
+  plugins: Record<string, { enabled: boolean; approvedHash?: string }>;
+  pluginWatch: string[];
 }
 export interface WatchedChat {
+  /** a plugin chat's id is its whole watch key, `plugin:<plugin>:<chat>` */
   id: string;
   name: string;
-  source: 'discord' | 'telegram';
+  source: Source;
   avatar?: string;
 }
 export interface DiscordChannel {
@@ -290,4 +335,43 @@ export const api = {
   osSend: (jobId: string) => req<{ ok: true }>('POST', '/osmint/send', { jobId }),
   osArm: (jobId: string, on: boolean) => req<import('./types').MintJob>('POST', '/osmint/arm', { jobId, on }),
   osDismiss: (jobId: string) => req<{ ok: true }>('DELETE', `/osmint/jobs/${encodeURIComponent(jobId)}`),
+  // ---- plugins (routes in backend/src/plugins/api.ts)
+  plugins: () => req<PluginInfo[]>('GET', '/plugins'),
+  pluginsReload: () => req<PluginInfo[]>('POST', '/plugins/reload'),
+  /** `replaced` says a plugin with that id was already in the folder and has just been overwritten */
+  pluginAdd: (source: string) => req<PluginInfo & { replaced: boolean }>('POST', '/plugins/add', { source }),
+  /**
+   * 409 with `replaces` means a plugin of that id is already installed; ask, then call again passing
+   * that id back as `replaces` — the backend refuses the second download if it no longer carries it.
+   */
+  pluginAddUrl: (url: string, replaces?: string) => req<PluginInfo & { replaced: boolean }>('POST', '/plugins/add-url', replaces ? { url, replace: true, replaces } : { url }),
+  /** read a file's manifest without installing it, to say what is about to be added */
+  pluginInspect: (source: string) => req<NonNullable<PluginInfo['manifest']>>('POST', '/plugins/inspect', { source }),
+  /** the hash is the version the approval dialog showed: the backend refuses a file that changed since */
+  pluginApprove: (id: string, hash?: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/approve`, hash ? { hash } : undefined),
+  pluginEnable: (id: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/enable`),
+  pluginDisable: (id: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/disable`),
+  pluginRemove: (id: string) => req<{ ok: true }>('DELETE', `/plugins/${encodeURIComponent(id)}`),
+  /** the module the sandbox imports: the exact approved bytes, and only while the plugin is enabled */
+  pluginCode: (id: string) => text(`/plugins/${encodeURIComponent(id)}/code`),
+  /** the same file for a person to read — any plugin the folder has, approved or not */
+  pluginSource: (id: string) => text(`/plugins/${encodeURIComponent(id)}/source`),
+  /** is the desktop shell connected? (what site sign-in needs) */
+  pluginsShell: () => req<{ available: boolean }>('GET', '/plugins/shell'),
+  pluginLogs: (id: string) => req<{ ts: number; level: PluginLogLevel; text: string }[]>('GET', `/plugins/${encodeURIComponent(id)}/logs`),
+  pluginLog: (id: string, level: PluginLogLevel, text: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/log`, { level, text }),
+  pluginPost: (id: string, post: unknown) => req<{ ok: true; id: string }>('POST', `/plugins/${encodeURIComponent(id)}/post`, post),
+  pluginPatch: (id: string, msgId: string, patch: unknown) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/patch`, { ...(patch as object), id: msgId }),
+  pluginStorage: (id: string) => req<Record<string, unknown>>('GET', `/plugins/${encodeURIComponent(id)}/storage`),
+  pluginStorageSet: (id: string, key: string, value: unknown) => req<{ ok: true }>('PUT', `/plugins/${encodeURIComponent(id)}/storage/${encodeURIComponent(key)}`, { value }),
+  /** the user's answers and the form the plugin last declared; the form outlives the plugin running */
+  pluginSettings: (id: string) => req<{ values: Record<string, unknown>; schema: import('./plugins/route').SettingField[] }>('GET', `/plugins/${encodeURIComponent(id)}/settings`),
+  pluginSchemaSet: (id: string, schema: import('./plugins/route').SettingField[]) => req<{ ok: true }>('PUT', `/plugins/${encodeURIComponent(id)}/schema`, { schema }),
+  pluginSettingsSet: (id: string, values: Record<string, unknown>) => req<{ ok: true }>('PUT', `/plugins/${encodeURIComponent(id)}/settings`, { values }),
+  pluginFetch: (id: string, url: string, init?: unknown) =>
+    req<{ status: number; headers: Record<string, string>; body: string; truncated: boolean }>('POST', `/plugins/${encodeURIComponent(id)}/fetch`, { url, init }),
+  pluginSites: (id: string) => req<{ sites: string[]; signedIn: string[]; available: boolean }>('GET', `/plugins/${encodeURIComponent(id)}/sites`),
+  pluginSignIn: (id: string, site: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/sites/signin`, { site }),
+  /** switch a plugin chat on or off in the feed's watch list */
+  pluginWatch: (key: string, on: boolean) => req<{ ok: true }>('PUT', '/plugins/watch', { key, on }),
 };

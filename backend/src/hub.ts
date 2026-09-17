@@ -328,6 +328,8 @@ export class MessageHub extends EventEmitter {
 
   push(msg: FeedMessage, meta?: ExtractedMeta): void {
     if (this.buffer.some((m) => m.id === msg.id)) return; // already have it (e.g. our own send echoed twice)
+    // a plugin writes its own messages, so it could claim the user was pinged; only the platforms may say that
+    if (msg.source === 'plugin') msg.mention = undefined;
     msg.contracts = contractsOf(msg.text, msg.isBot);
     this.register(msg, meta, true);
     this.buffer.push(msg);
@@ -547,7 +549,8 @@ export class MessageHub extends EventEmitter {
         }
         if (live) {
           this.enrich(t);
-          if (this.isFavorite(msg.author)) {
+          // …but a plugin picks its own author name, so it must not be able to ping as someone's favorite
+          if (msg.source !== 'plugin' && this.isFavorite(msg.author)) {
             this.emit('event', { type: 'ping', token: { ...t }, msg } satisfies ServerEvent);
             this.trackFavoriteCall(msg, t);
           }
@@ -627,7 +630,12 @@ export class MessageHub extends EventEmitter {
     const m = this.buffer.find((x) => x.id === msgId);
     if (!m) return;
     Object.assign(m, patch);
-    this.emit('event', { type: 'msg', msgId, patch } satisfies ServerEvent);
+    // An edit can add or drop a contract, so text that changes is scanned again and the new list
+    // rides along in the event: a client that already has the message must not keep the old one.
+    // Only the list is refreshed — the message keeps its repeat/hidden judgement, and an edit does
+    // not register a fresh call against a token the way a new message does.
+    const sent = typeof patch.text === 'string' ? { ...patch, contracts: (m.contracts = contractsOf(m.text, m.isBot)) } : patch;
+    this.emit('event', { type: 'msg', msgId, patch: sent } satisfies ServerEvent);
     this.changed();
   }
 
@@ -660,8 +668,8 @@ export class MessageHub extends EventEmitter {
 
   setStatus(source: 'discord', state: DiscordState, error?: string): void;
   setStatus(source: 'telegram', state: TelegramState, error?: string): void;
-  setStatus(source: Source, state: DiscordState | TelegramState, error?: string): void {
-    (this.status as Record<Source, string>)[source] = state;
+  setStatus(source: 'discord' | 'telegram', state: DiscordState | TelegramState, error?: string): void {
+    (this.status as Record<'discord' | 'telegram', string>)[source] = state;
     if (error) this.status.error[source] = error;
     else delete this.status.error[source];
     this.emitStatus();

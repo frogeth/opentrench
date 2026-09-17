@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FeedMessage, Source } from '../types';
+import type { FeedMessage } from '../types';
 import { api } from '../api';
 import { Logo } from './Logo';
 import { Icon } from './Icon';
@@ -8,7 +8,8 @@ import { commandIn, signature, useSlashMenu } from './SlashMenu';
 export interface SendTarget {
   id: string;
   name: string;
-  source: Source;
+  /** a chat you can actually post to; plugin chats are read-only */
+  source: 'discord' | 'telegram';
 }
 
 /** Platform message id from our feed id: discord:<id> | telegram:<chat>:<id> */
@@ -32,7 +33,7 @@ export function Composer({
   onTargetChange,
 }: {
   targets: SendTarget[];
-  canSend: Record<Source, boolean>;
+  canSend: Record<'discord' | 'telegram', boolean>;
   reply?: FeedMessage;
   onCancelReply: () => void;
   onSent?: () => void;
@@ -62,9 +63,16 @@ export function Composer({
       return cur.filter((f) => f.url !== url);
     });
 
-  // a reply pins the target to that message's chat
-  const replyTarget = reply ? targets.find((t) => t.name === reply.chatName) : undefined;
-  const target = replyTarget ?? targets.find((t) => t.id === targetId) ?? targets[0];
+  // a reply pins the target to that message's chat — and a reply to a chat this composer cannot
+  // send to (a plugin chat, or one outside the column) is dropped rather than sent somewhere else
+  const replyTarget = reply
+    ? targets.find((t) => t.source === reply.source && String(t.id) === String(reply.chatId)) ?? targets.find((t) => t.source === reply.source && t.name === reply.chatName)
+    : undefined;
+  const target = reply ? replyTarget : targets.find((t) => t.id === targetId) ?? targets[0];
+  useEffect(() => {
+    if (reply && !replyTarget) onCancelReply();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reply, replyTarget]);
   useEffect(() => {
     if (reply) box.current?.focus();
   }, [reply]);

@@ -8,7 +8,10 @@ import { Icon } from './Icon';
 
 const MAX_TARGETS = 6;
 const GAP_MS = 1300;
-const key = (w: WatchedChat) => `${w.source}:${w.id}`;
+const key = (w: SendableChat) => `${w.source}:${w.id}`;
+
+/** Sharing only ever reaches a platform chat: a plugin chat has nowhere to send to. */
+export type SendableChat = Omit<WatchedChat, 'source'> & { source: 'discord' | 'telegram' };
 
 /**
  * Share a contract address to chats in your feed, on either platform. Sends the
@@ -26,7 +29,7 @@ export interface ShareItem {
   /** called with the chat names each successful send went to */
   onSent?: (names: string[]) => void;
   /** how to deliver to one chat, instead of sending `text` (a forward, say); the note comes separately */
-  send?: (target: WatchedChat, note: string) => Promise<void>;
+  send?: (target: SendableChat, note: string) => Promise<void>;
   /** the button's verb ("Forward") */
   verb?: string;
 }
@@ -45,10 +48,12 @@ export function ShareModal({
   onClose: () => void;
 }) {
   const { text, title, preview, hint, onSent, send, verb = 'Share' } = item;
+  // plugin chats are not somewhere you can post: they never show up as a share target
+  const sendable = useMemo(() => watched.filter((w): w is SendableChat => w.source !== 'plugin'), [watched]);
   const [picked, setPicked] = useState<string[]>(() => {
     try {
       const saved: string[] = JSON.parse(localStorage.getItem('trenchfeed.shareTargets') ?? '[]');
-      return saved.filter((k) => watched.some((w) => key(w) === k && canSend[w.source]));
+      return saved.filter((k) => sendable.some((w) => key(w) === k && canSend[w.source]));
     } catch {
       return [];
     }
@@ -61,8 +66,8 @@ export function ShareModal({
 
   const groups = useMemo(() => {
     const cat = new Map(channels.map((c) => [c.id, c.category]));
-    const m = new Map<string, { source: 'discord' | 'telegram'; avatar?: string; items: { w: WatchedChat; category?: string }[] }>();
-    for (const w of watched) {
+    const m = new Map<string, { source: 'discord' | 'telegram'; avatar?: string; items: { w: SendableChat; category?: string }[] }>();
+    for (const w of sendable) {
       const server = w.source === 'discord' ? (/\(([^)]*)\)\s*$/.exec(w.name)?.[1] ?? 'Discord') : 'Telegram';
       const g = m.get(server) ?? { source: w.source, avatar: undefined, items: [] };
       if (!g.avatar && w.avatar && w.source === 'discord') g.avatar = w.avatar;
@@ -70,12 +75,12 @@ export function ShareModal({
       m.set(server, g);
     }
     return [...m.entries()].sort((a, b) => (a[0] === 'Telegram' ? 1 : b[0] === 'Telegram' ? -1 : a[0].localeCompare(b[0])));
-  }, [watched, channels]);
-  const shortName = (w: WatchedChat) => (w.source === 'discord' ? w.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '') : w.name);
+  }, [sendable, channels]);
+  const shortName = (w: SendableChat) => (w.source === 'discord' ? w.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '') : w.name);
   const toggle = (k: string) => setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : p.length >= MAX_TARGETS ? p : [...p, k]));
 
   const share = async () => {
-    const targets = watched.filter((w) => picked.includes(key(w)) && canSend[w.source]);
+    const targets = sendable.filter((w) => picked.includes(key(w)) && canSend[w.source]);
     if (targets.length === 0) return;
     setBusy(true);
     try {
@@ -97,8 +102,8 @@ export function ShareModal({
     setBusy(false);
   };
   const allDone = picked.length > 0 && picked.every((k) => status[k] === 'sent');
-  const anyDiscord = watched.some((w) => w.source === 'discord');
-  const anyTelegram = watched.some((w) => w.source === 'telegram');
+  const anyDiscord = sendable.some((w) => w.source === 'discord');
+  const anyTelegram = sendable.some((w) => w.source === 'telegram');
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -159,7 +164,7 @@ export function ShareModal({
                 </div>
               );
             })}
-            {watched.length === 0 && <div className="hint">No chats in your feed yet.</div>}
+            {sendable.length === 0 && <div className="hint">No chats in your feed yet.</div>}
           </div>
         </div>
         <div className="fed-foot">

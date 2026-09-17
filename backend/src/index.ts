@@ -20,6 +20,11 @@ import { createApi } from './api.js';
 import { allowLocalOrigin, createFeedWss, isLoopbackHost, routeUpgrades } from './ws.js';
 import { DiscordBridge } from './discord/bridge.js';
 import { StateStore } from './store.js';
+import { PluginRegistry } from './plugins/registry.js';
+import { PluginState } from './plugins/state.js';
+import { ShellLink } from './plugins/shell.js';
+import { createPluginsApi } from './plugins/api.js';
+import { jsonErrors } from './http.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..'); // backend/ (parent of src/ or dist/)
@@ -103,6 +108,14 @@ const svc: Services = new Services(cfg, hub);
 svc.startJ7();
 svc.syncColumnFeeds();
 void svc.syncTogether();
+// Plugins: one-file, sandboxed feeds the user drops in the plugins folder next to config.json.
+const pluginsDir = process.env.TRENCHFEED_PLUGINS ?? path.join(path.dirname(configFile), 'plugins');
+const pluginState = new PluginState(path.join(path.dirname(configFile), 'plugins-state.json'));
+const plugins = new PluginRegistry(pluginsDir, pluginState, cfg);
+plugins.load();
+svc.plugins = plugins;
+// The desktop app registers itself here (`/api/shell/hello`); a bare backend runs without one.
+const shell = new ShellLink();
 const hover = createHoverFetchers();
 const store = new StateStore(process.env.TRENCHFEED_STATE ?? path.join(root, 'state.json'));
 hub.load(store.load());
@@ -121,6 +134,7 @@ if (parentPid > 0) {
     } catch {
       console.log('[backend] parent gone, exiting');
       store.flush();
+      pluginState.flush();
       process.exit(0);
     }
   }, 2000).unref();
@@ -129,6 +143,7 @@ if (parentPid > 0) {
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     store.flush();
+    pluginState.flush();
     process.exit(0);
   });
 }
@@ -168,6 +183,17 @@ const APP_VERSION =
 // `managed`: started by a desktop app (which may replace it on an update); a checkout's own
 // `node dist/index.js` is not, and the app asks before touching it
 app.get('/api/version', (_req, res) => res.json({ version: APP_VERSION, managed: Number.isFinite(parentPid) && parentPid > 0 }));
+// Ahead of createApi: whichever json parser runs first parses the body, and a plugin's file or a
+// proxied request body is bigger than the 64kb createApi allows its own routes. Both halves of that
+// are pinned by 'mounted ahead of a router with a smaller parser' in plugins/api.test.ts.
+app.use(
+  '/api',
+  createPluginsApi(plugins, pluginState, hub, shell, cfg, {
+    // The names already spoken for in the user's feed. Plugin chats are left out: those are the
+    // names this check is protecting, and a plugin must stay free to post to its own chat again.
+    takenChatNames: async () => new Set((await svc.watchedChats()).filter((c) => c.source !== 'plugin').map((c) => c.name)),
+  }),
+);
 app.use('/api', createApi(cfg, hub, svc, hover, (t) => refreshMarket([t])));
 
 const dist = path.resolve(root, '..', 'frontend', 'dist');
@@ -181,6 +207,10 @@ if (fs.existsSync(dist)) {
   });
 }
 
+// Last resort: anything a route throws, and any body the parsers refuse, answers as JSON rather than
+// Express's HTML page with the stack in it. A response already on the wire goes back to Express.
+app.use(jsonErrors('[backend]'));
+
 const server = http.createServer(app);
 routeUpgrades(server, {
   '/ws': { wss: createFeedWss(hub), allow: allowLocalOrigin },
@@ -192,6 +222,7 @@ routeUpgrades(server, {
 server.on('error', (e: NodeJS.ErrnoException) => {
   console.error(`[backend] cannot listen on ${HOST}:${PORT}: ${e.code ?? e.message} — is another opentrench backend running?`);
   store.flush();
+  pluginState.flush();
   process.exit(1);
 });
 server.listen(PORT, HOST, () => {

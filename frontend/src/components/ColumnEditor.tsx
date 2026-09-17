@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import type { ColumnDef, ColumnFilters, DiscordChannel, WatchedChat } from '../api';
+import type { PluginInfo, Source } from '../types';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 import { Icon } from './Icon';
 import { SOUNDS, playSound } from '../sounds';
 import { filtersActive } from '../filters';
 
-export const chatKey = (w: { source: string; id: string }) => `${w.source}:${w.id}`;
+/** a chat's key in a column's list; a plugin chat's id is already the whole `plugin:<plugin>:<chat>` key */
+export const chatKey = (w: { source: string; id: string }) => (w.source === 'plugin' ? w.id : `${w.source}:${w.id}`);
 
 const CHAINS: [string, string][] = [
   ['solana', 'Solana'], ['ethereum', 'Ethereum'], ['base', 'Base'], ['bsc', 'BSC'], ['robinhood', 'Robinhood'],
@@ -34,6 +36,7 @@ const TYPE_CARDS: { t: ColumnDef['type']; icon: import('./Icon').IconName; name:
   { t: 'mints', icon: 'mint', name: 'MintGo', blurb: 'NFT mints as they happen' },
   { t: 'nftvol', icon: 'sea', name: 'NFT Volume', blurb: 'trending & top collections' },
   { t: 'osmint', icon: 'wallet', name: 'NFT Mint', blurb: 'mint an OpenSea drop with your wallet' },
+  { t: 'plugin', icon: 'plug', name: 'Plugin', blurb: 'a custom column from a plugin you installed' },
 ];
 
 /** Ready-made Website columns; "Custom" takes any address. */
@@ -117,6 +120,7 @@ export function ColumnEditor({
   watched,
   channels = [],
   callers = [],
+  plugins = [],
   onSave,
   onClose,
 }: {
@@ -125,6 +129,8 @@ export function ColumnEditor({
   channels?: DiscordChannel[];
   /** names seen in the feed, for the caller pickers */
   callers?: string[];
+  /** every plugin the app knows about; the ones with a column of their own can fill a Plugin column */
+  plugins?: PluginInfo[];
   onSave: (c: ColumnDef) => void;
   onClose: () => void;
 }) {
@@ -166,6 +172,17 @@ export function ColumnEditor({
     if (BOT_PRESETS.some((p) => p.bot === cleanBot)) setBot('');
     if (BOT_PRESETS.some((q) => q.name === title.trim())) setTitle('');
   };
+  // only a plugin that is enabled and draws a column can fill one; the rest post to the feed instead
+  const uiPlugins = useMemo(() => plugins.filter((p) => p.enabled && p.manifest?.ui), [plugins]);
+  const [pluginId, setPluginId] = useState(col?.plugin ?? '');
+  // the picked plugin may have been switched off since the column was made; it is still the column's plugin
+  const pickedPlugin = plugins.find((p) => p.id === pluginId);
+  const pickPlugin = (p: PluginInfo) => {
+    setPluginId(p.id);
+    const name = p.manifest?.name ?? p.id;
+    // a blank title, or another plugin's name, follows the pick; a typed one stays
+    if (!title.trim() || uiPlugins.some((q) => (q.manifest?.name ?? q.id) === title.trim())) setTitle(name);
+  };
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [ranking, setRanking] = useState<NonNullable<ColumnDef['ranking']>>(col?.ranking ?? 'trending');
   const [timeframe, setTimeframe] = useState<NonNullable<ColumnDef['timeframe']>>(col?.timeframe ?? '1h');
@@ -174,6 +191,7 @@ export function ColumnEditor({
   const isBot = type === 'cove' || type === 'salpha' || type === 'j7' || type === 'tgbot';
   const isWeb = type === 'web';
   const isNft = type === 'mints' || type === 'nftvol' || type === 'osmint';
+  const isPlugin = type === 'plugin';
   const all = chats.length === 0;
   const none = chats.includes('none');
   // "All channels" is stored as an empty list and shows as every box ticked; "none" is a
@@ -187,19 +205,22 @@ export function ColumnEditor({
   };
   const toggle = (k: string) => commit(selected.includes(k) ? selected.filter((x) => x !== k) : [...selected, k]);
 
-  // Group by Discord server, channels under their category, Telegram at the end.
+  // Group by Discord server, channels under their category, then Telegram, then the plugins' chats.
   const groups = useMemo(() => {
     const cat = new Map(channels.map((c) => [c.id, c.category]));
-    const m = new Map<string, { source: 'discord' | 'telegram'; avatar?: string; items: { w: WatchedChat; category?: string }[] }>();
+    const m = new Map<string, { source: Source; label: string; avatar?: string; items: { w: WatchedChat; category?: string }[] }>();
     for (const w of watched) {
       const tail = w.source === 'discord' ? /\(([^)]*)\)\s*$/.exec(w.name)?.[1] : undefined;
-      const server = w.source === 'discord' ? (tail === 'DM' ? 'Direct Messages' : tail ?? 'Discord') : 'Telegram';
-      const g = m.get(server) ?? { source: w.source, avatar: undefined, items: [] };
+      const server = w.source === 'discord' ? (tail === 'DM' ? 'Direct Messages' : tail ?? 'Discord') : w.source === 'plugin' ? 'Plugins' : 'Telegram';
+      // keyed by source for the non-Discord groups, so a server actually named "Plugins" stays its own group
+      const key = w.source === 'discord' ? `discord:${server}` : `${w.source}:`;
+      const g = m.get(key) ?? { source: w.source, label: server, avatar: undefined, items: [] };
       if (!g.avatar && w.avatar && w.source === 'discord') g.avatar = w.avatar;
       g.items.push({ w, category: w.source === 'discord' ? cat.get(w.id) : undefined });
-      m.set(server, g);
+      m.set(key, g);
     }
-    return [...m.entries()].sort((a, b) => (a[0] === 'Telegram' ? 1 : b[0] === 'Telegram' ? -1 : a[0].localeCompare(b[0])));
+    const rank = (k: string) => (k === 'plugin:' ? 2 : k === 'telegram:' ? 1 : 0);
+    return [...m.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[1].label.localeCompare(b[1].label));
   }, [watched, channels]);
   const shortName = (w: WatchedChat) => (w.source === 'discord' ? w.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '') : w.name);
   const groupState = (items: { w: WatchedChat }[]) => {
@@ -219,7 +240,7 @@ export function ColumnEditor({
   })();
   const urlOk = /^https?:\/\/[^\s/]+/i.test(cleanUrl);
   const save = () => {
-    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : all ? 'All Chats' : 'Chats');
+    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : type === 'plugin' ? (pickedPlugin?.manifest?.name || pluginId || 'Plugin') : all ? 'All Chats' : 'Chats');
     if (isWeb && !urlOk) {
       window.alert('Paste the address of the page to show (http:// or https://).');
       return;
@@ -228,7 +249,7 @@ export function ColumnEditor({
       window.alert('Enter the bot\'s username (letters, digits and _, like evmtrackerbot).');
       return;
     }
-    if (!isWeb && !isNft && none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
+    if (!isWeb && !isNft && !isPlugin && none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
     const clean: ColumnFilters = {};
     for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== false && !(Array.isArray(v) && v.length === 0) && !(typeof v === 'string' && !v.trim())) (clean as any)[k] = v;
     // filters don't carry across a type change when their vocabulary differs: minQty is mints-only,
@@ -240,8 +261,9 @@ export function ColumnEditor({
       id: col?.id ?? `c${Date.now().toString(36)}`,
       type,
       title: t,
-      chats: isWeb || isNft ? [] : chats,
+      chats: isWeb || isNft || isPlugin ? [] : chats,
       ...(isWeb ? { url: cleanUrl } : {}),
+      ...(isPlugin ? { plugin: pluginId } : {}),
       ...(type === 'tgbot' ? { bot: cleanBot } : {}),
       ...(type === 'callers' ? { window: (['24h', '7d', '30d'] as const).includes(win as any) ? win : '7d' } : type === 'trending' ? { window: (['5m', '1h', '6h', '24h'] as const).includes(win as any) ? win : '1h' } : {}),
       ...(type === 'nftvol' ? { ranking, timeframe } : {}),
@@ -273,7 +295,7 @@ export function ColumnEditor({
               ))}
             </div>
             <div className="fed-label">Feed name</div>
-            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : 'All Chats'} maxLength={40} />
+            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : type === 'plugin' ? (pickedPlugin?.manifest?.name ?? 'Plugin') : 'All Chats'} maxLength={40} />
             {isWeb && (
               <>
                 <div className="fed-label">Site</div>
@@ -327,7 +349,27 @@ export function ColumnEditor({
                 {type === 'mints' ? 'Every mint MintGo sees on Ethereum, Robinhood Chain and Ink. Click a mint for its X, OpenSea and website links, and a Mint button.' : type === 'nftvol' ? "OpenSea's trending or top collections with floor, volume and sales. Switch 1H / 1D in the column header." : 'Paste a collection (slug, OpenSea link or address), see the open stage and price, and mint with the wallet from ⚙ → Trading.'}
               </div>
             )}
-            {!isBot && !isWeb && !isNft && (
+            {isPlugin && (
+              <>
+                <div className="fed-label">Plugin</div>
+                {uiPlugins.length === 0 ? (
+                  <div className="hint">No plugin with a column is enabled. Plugins that only post to the feed show up in the channel picker instead.</div>
+                ) : (
+                  <div className="fchips fed-sites">
+                    {uiPlugins.map((p) => (
+                      <button key={p.id} className={`fchip${pluginId === p.id ? ' on' : ''}`} onClick={() => pickPlugin(p)} title={p.manifest?.description || undefined}>
+                        <Icon name="plug" size={11} /> {p.manifest?.name ?? p.id}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {pluginId && !uiPlugins.some((p) => p.id === pluginId) && (
+                  <div className="hint">{pickedPlugin?.manifest?.name ?? pluginId} is not enabled right now, so this column stays empty until you enable it in ⚙ → Plugins.</div>
+                )}
+                <div className="fed-bot-note hint">The plugin draws this column itself, inside its own sandbox. Add, approve and remove plugins in ⚙ → Plugins.</div>
+              </>
+            )}
+            {!isBot && !isWeb && !isNft && !isPlugin && (
             <>
             <div className="fed-label">
               Channels <span className="muted">({all ? 'all' : none ? 'none' : `${chats.length} of ${allKeys.length}`})</span>
@@ -345,19 +387,20 @@ export function ColumnEditor({
               </span>
             </div>
             <div className="fed-tree">
-              {groups.map(([server, g]) => {
+              {groups.map(([key, g]) => {
+                const server = g.label;
                 const st = groupState(g.items);
-                const isOpen = open[server] ?? false;
+                const isOpen = open[key] ?? false;
                 let lastCat: string | undefined;
                 return (
-                  <div key={server} className="ftree-group">
+                  <div key={key} className="ftree-group">
                     <div className="ftree-head">
-                      <button className="ftree-arrow" onClick={() => setOpen((o) => ({ ...o, [server]: !isOpen }))} aria-label={isOpen ? 'collapse' : 'expand'}>
+                      <button className="ftree-arrow" onClick={() => setOpen((o) => ({ ...o, [key]: !isOpen }))} aria-label={isOpen ? 'collapse' : 'expand'}>
                         {isOpen ? '▾' : '▸'}
                       </button>
                       <input type="checkbox" checked={st === 'all'} ref={(el) => el && (el.indeterminate = st === 'some')} onChange={() => toggleGroup(g.items)} />
                       {g.avatar ? <Avatar src={g.avatar} name={server} size={18} /> : <Logo source={g.source} size={14} />}
-                      <b onClick={() => setOpen((o) => ({ ...o, [server]: !isOpen }))}>{server}</b>
+                      <b onClick={() => setOpen((o) => ({ ...o, [key]: !isOpen }))}>{server}</b>
                       <span className="muted">{g.items.length}</span>
                     </div>
                     {isOpen &&
@@ -388,6 +431,7 @@ export function ColumnEditor({
           <div className="fed-right">
             {isBot && type !== 'j7' && <div className="hint">Nothing to filter here — this column shows one bot conversation.</div>}
             {isWeb && <div className="hint">Nothing to filter here — this column shows a web page.</div>}
+            {isPlugin && <div className="hint">Nothing to filter here — the plugin decides what its own column shows.</div>}
             {type === 'mints' && (
               <>
                 <Chips title="Chains" options={[['ethereum', 'Ethereum'], ['robinhood', 'Robinhood'], ['ink', 'Ink']]} value={f.chains ?? []} onChange={(v) => set('chains', v)} all="all chains" />
@@ -548,7 +592,7 @@ export function ColumnEditor({
             </button>
           )}
           <button onClick={onClose}>Cancel</button>
-          <button className="primary" onClick={save}>
+          <button className="primary" disabled={isPlugin && !pluginId} title={isPlugin && !pluginId ? 'pick a plugin first' : undefined} onClick={save}>
             {col ? 'Update column' : 'Add column'}
           </button>
         </div>

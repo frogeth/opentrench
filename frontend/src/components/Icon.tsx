@@ -1,5 +1,5 @@
 export type IconName = 'chart' | 'live' | 'globe' | 'x' | 'telegram' | 'explorer' | 'copy' | 'search' | 'people' | 'top' | 'dev' | 'insider' | 'sniper' | 'bundle' | 'lock' | 'chat' | 'grip' | 'calls' | 'pencil' | 'close' | 'bell' | 'play' | 'filter' | 'send' | 'reply'
-  | 'forward' | 'trash' | 'mint' | 'sea' | 'wallet' | 'eyeoff' | 'chevron';
+  | 'forward' | 'trash' | 'mint' | 'sea' | 'wallet' | 'eyeoff' | 'chevron' | 'plug';
 
 // Small inline glyphs. X and Telegram from Simple Icons (CC0); the rest hand-drawn.
 const PATHS: Record<IconName, string> = {
@@ -62,13 +62,16 @@ const PATHS: Record<IconName, string> = {
   mint: 'M12 2 3 7v10l9 5 9-5V7l-9-5zm0 2.3L18.6 8 12 11.7 5.4 8 12 4.3zM5 9.7l6 3.4v6.6l-6-3.3V9.7zm8 10V13l6-3.4v6.7l-6 3.4z',
   // wave under an arch = OpenSea
   sea: 'M4 15c1.5 0 1.5-1 3-1s1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1v2c-1.5 0-1.5 1-3 1s-1.5-1-3-1-1.5 1-3 1-1.5-1-3-1-1.5 1-3 1v-2zm8-11a5 5 0 0 1 5 5v2h-2V9a3 3 0 0 0-6 0v2H7V9a5 5 0 0 1 5-5z',
+  // a plug = plugin
+  plug: 'M8 2a1 1 0 0 1 1 1v3h6V3a1 1 0 1 1 2 0v3h1a1 1 0 0 1 1 1v3a6 6 0 0 1-5 5.917V21a1 1 0 1 1-2 0v-5.083A6 6 0 0 1 7 10V7a1 1 0 0 1 1-1h1V3a1 1 0 0 1 1-1z',
   // wallet = OpenSea Mint
   wallet: 'M3 6a2 2 0 0 1 2-2h13v3H5a1 1 0 0 0 0 2h15a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6zm13 8a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z',
 };
 
-export function Icon({ name, size = 14 }: { name: IconName; size?: number }) {
+/** `label` makes the glyph itself the meaning (a screen reader reads it); without one it is decoration. */
+export function Icon({ name, size = 14, label }: { name: IconName; size?: number; label?: string }) {
   return (
-    <svg className={`icon icon-${name}`} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <svg className={`icon icon-${name}`} width={size} height={size} viewBox="0 0 24 24" {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })}>
       <path d={PATHS[name]} fill="currentColor" />
     </svg>
   );

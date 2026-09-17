@@ -18,7 +18,8 @@ import { Minter } from './opensea/minter.js';
 import { CHAINS } from './opensea/chains.js';
 import { createLaunchWatcher } from './deploys.js';
 import { detectContracts } from './contracts.js';
-import type { FeedMessage, Reaction } from './types.js';
+import type { FeedMessage, Reaction, Source } from './types.js';
+import type { PluginRegistry } from './plugins/registry.js';
 
 /** the sharing port: fixed, except a second instance on one machine (a test bench) may pick another */
 const togetherPort = (): number => Number(process.env.TRENCHFEED_TOGETHER_PORT) || TOGETHER_PORT;
@@ -63,6 +64,8 @@ export class Services {
   j7?: J7Client;
   mintgo?: MintGoClient;
   readonly rankings = new RankingsPoller();
+  /** the plugin folder registry; index.ts hands it over once it is built */
+  plugins?: PluginRegistry;
   // ---------- TrenchTogether ----------
   readonly togetherHost: TogetherHost; // built in the constructor: field initializers run before `hub` is assigned
   readonly discovery: TogetherDiscovery;
@@ -697,8 +700,8 @@ export class Services {
     return (Array.isArray(rows) ? rows : []).filter((r) => r?.name).map((r) => ({ name: String(r.name), avatar: r.avatar ? String(r.avatar) : undefined, source: 'discord' as const }));
   }
 
-  async watchedChats(): Promise<{ id: string; name: string; source: 'discord' | 'telegram'; avatar?: string }[]> {
-    const out: { id: string; name: string; source: 'discord' | 'telegram'; avatar?: string }[] = [];
+  async watchedChats(): Promise<{ id: string; name: string; source: Source; avatar?: string }[]> {
+    const out: { id: string; name: string; source: Source; avatar?: string }[] = [];
     const cfg = this.cfg.get();
     for (const id of cfg.discord.watch) {
       const ch = this.discordChannels.get(id);
@@ -709,6 +712,16 @@ export class Services {
       for (const d of dialogs)
         if (isWatched(cfg.telegram.watch, d.id))
           out.push({ id: d.id, name: d.title, source: 'telegram', avatar: `/api/telegram/avatar/${d.id}` });
+    }
+    // Chats of a disabled plugin stay on the list on purpose: its old messages are still in the buffer,
+    // so the columns and pickers that filter by chat need a name for them until the user removes the plugin.
+    const pluginChats = new Map<string, string>();
+    for (const p of this.plugins?.list() ?? []) for (const [chatId, name] of Object.entries(p.chats)) pluginChats.set(chatId, name);
+    for (const chatId of cfg.pluginWatch) {
+      const name = pluginChats.get(chatId);
+      // a watch key with no plugin behind it any more (uninstalled, or the state file lost it) has no name
+      // to show, so it is skipped rather than listed as a blank row; iterating pluginWatch keeps its order
+      if (name !== undefined) out.push({ id: chatId, name, source: 'plugin' });
     }
     return out;
   }

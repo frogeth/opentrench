@@ -1,0 +1,264 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import type { PluginInfo } from '../types.js';
+import { extractManifest, ManifestError, MAX_FILE, MAX_FILE_MESSAGE, RESERVED_IDS, type PluginManifest } from './manifest.js';
+import type { PluginState } from './state.js';
+
+interface Loaded {
+  id: string;
+  file: string;
+  hash: string;
+  manifest?: PluginManifest;
+  error?: string;
+}
+export interface LogLine {
+  ts: number;
+  level: 'info' | 'warn' | 'error';
+  text: string;
+}
+/** The slice of ConfigStore the registry needs (keeps tests free of the real store). */
+export interface PluginConfig {
+  get(): { plugins: Record<string, { enabled: boolean; approvedHash?: string }> };
+  update(fn: (c: { plugins: Record<string, { enabled: boolean; approvedHash?: string }> }) => void): void;
+}
+const LOG_MAX = 200;
+
+/**
+ * Why the registry refused, so callers (the routes) answer by the reason and not by the wording.
+ * 'unknown' is an id the folder does not have; 'broken' is one it does, whose file will not parse —
+ * a different thing to tell the user, and a different thing for the UI to offer to do about it.
+ */
+export type RegistryErrorCode = 'unknown' | 'broken' | 'needs-approval' | 'not-enabled' | 'changed';
+export class RegistryError extends Error {
+  constructor(
+    readonly code: RegistryErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'RegistryError';
+  }
+}
+
+/** Nothing usable under that id: either the folder has no such file, or the one it has will not parse. */
+function notLoaded(p: Loaded | undefined): RegistryError {
+  return p ? new RegistryError('broken', p.error ?? 'the plugin file will not load') : new RegistryError('unknown', 'unknown plugin');
+}
+
+/** An id for a broken file that no other entry holds: its name, else the name plus a slice of its hash, else a counter. */
+function freeId(taken: Map<string, Loaded>, base: string, hash: string): string {
+  if (!taken.has(base)) return base;
+  if (hash) {
+    const withHash = `${base}-${hash.slice(0, 6)}`;
+    if (!taken.has(withHash)) return withHash;
+  }
+  for (let n = 2; ; n++) {
+    const numbered = `${base}-${n}`;
+    if (!taken.has(numbered)) return numbered;
+  }
+}
+
+/** The plugins folder: what is in it, whether each file is approved and enabled, and what each plugin has been doing. */
+export class PluginRegistry {
+  private loaded = new Map<string, Loaded>();
+  private logLines = new Map<string, LogLine[]>();
+  /** sites with a shell session; filled in by the shell link */
+  signedIn: () => string[] = () => [];
+  onChange: () => void = () => {};
+
+  constructor(readonly dir: string, private state: PluginState, private cfg: PluginConfig) {}
+
+  /**
+   * Rescan the folder. Errors are per file: a broken plugin never hides the others.
+   * Two passes, because a broken file's id is guessed from its name and could collide with a real
+   * plugin's: valid plugins claim their manifest id first, then the broken ones take what is left.
+   */
+  load(): void {
+    fs.mkdirSync(this.dir, { recursive: true });
+    const next = new Map<string, Loaded>();
+    const broken: Loaded[] = [];
+    for (const name of fs.readdirSync(this.dir).filter((f) => f.endsWith('.js')).sort()) {
+      const file = path.join(this.dir, name);
+      const stem = name.replace(/\.js$/, '');
+      const fromName = stem.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 40);
+      // A broken file's id comes from its name, so `constructor.js` must not name a plugin either.
+      const fallbackId = !fromName || RESERVED_IDS.has(fromName) ? 'plugin' : fromName;
+      let bytes: Buffer;
+      try {
+        // lstat, not stat: a symlink here would otherwise let the folder reach any file on the box.
+        const st = fs.lstatSync(file);
+        if (!st.isFile()) throw new Error('not a regular file');
+        if (st.size > MAX_FILE) throw new ManifestError(MAX_FILE_MESSAGE);
+        bytes = fs.readFileSync(file);
+      } catch (e: any) {
+        broken.push({ id: fallbackId, file, hash: '', error: e?.message ?? String(e) });
+        continue;
+      }
+      // Hash the bytes, not the decoded text: two different files can decode to the same string.
+      const hash = crypto.createHash('sha256').update(bytes).digest('hex');
+      const source = bytes.toString('utf8');
+      try {
+        const manifest = extractManifest(source);
+        if (manifest.id !== stem) throw new Error(`file name must be ${manifest.id}.js`);
+        next.set(manifest.id, { id: manifest.id, file, hash, manifest });
+      } catch (e: any) {
+        broken.push({ id: fallbackId, file, hash, error: e?.message ?? String(e) });
+      }
+    }
+    for (const bad of broken) {
+      const id = freeId(next, bad.id, bad.hash);
+      next.set(id, { ...bad, id });
+    }
+    this.loaded = next;
+    this.onChange();
+  }
+
+  list(): PluginInfo[] {
+    const cfg = this.cfg.get().plugins;
+    const signed = new Set(this.signedIn());
+    return [...this.loaded.values()].map((p) => {
+      const c = cfg[p.id];
+      const needsApproval = !c?.approvedHash || c.approvedHash !== p.hash;
+      return {
+        id: p.id,
+        file: path.basename(p.file),
+        hash: p.hash,
+        manifest: p.manifest && { ...p.manifest, sites: [...p.manifest.sites], permissions: [...p.manifest.permissions] },
+        error: p.error,
+        enabled: !!c?.enabled && !needsApproval && !p.error,
+        needsApproval,
+        // Only a real plugin gets a state record; a junk file must not add one to plugins-state.json.
+        chats: p.manifest ? { ...this.state.read(p.id).chats } : {},
+        signedIn: (p.manifest?.sites ?? []).filter((s) => signed.has(s)),
+      };
+    });
+  }
+  get(id: string): PluginInfo | undefined {
+    return this.list().find((p) => p.id === id);
+  }
+  manifest(id: string): PluginManifest {
+    const p = this.loaded.get(id);
+    if (!p?.manifest) throw notLoaded(p);
+    return p.manifest;
+  }
+  /**
+   * The file's text, for the iframe to import. Only an enabled plugin's code leaves the folder, and
+   * only the exact bytes the user approved: the file is re-hashed here, because the scan that
+   * approved it may be seconds or days old and the file can have been swapped since.
+   */
+  code(id: string): string {
+    const p = this.get(id);
+    if (!p?.enabled) throw new RegistryError('not-enabled', 'plugin is not enabled');
+    const entry = this.loaded.get(id)!;
+    const bytes = fs.readFileSync(entry.file);
+    if (crypto.createHash('sha256').update(bytes).digest('hex') !== entry.hash) {
+      this.load(); // so the next list() shows it as needing approval again
+      throw new RegistryError('changed', 'the plugin file changed on disk; approve this version first');
+    }
+    return bytes.toString('utf8');
+  }
+  /**
+   * The bytes on disk, for the user to read before they trust them. `code` is the module the sandbox
+   * imports and is rightly fenced off (enabled, and the exact approved bytes); this is the file as a
+   * reader sees it, so it answers for any plugin the folder has — an unapproved one, above all, since
+   * reading it is what the approval dialog asks the user to do.
+   */
+  source(id: string): string {
+    const p = this.loaded.get(id);
+    if (!p) throw new RegistryError('unknown', 'unknown plugin');
+    return fs.readFileSync(p.file, 'utf8');
+  }
+  /**
+   * Approve what the user actually read. The dialog hands back the hash of the version it showed, so
+   * a file swapped while it was open is refused rather than approved on the strength of an old read.
+   */
+  approve(id: string, hash?: string): void {
+    const p = this.loaded.get(id);
+    if (!p?.manifest) throw notLoaded(p);
+    if (hash && hash !== p.hash) throw new RegistryError('changed', 'the file changed since you opened it; review it again');
+    this.cfg.update((c) => {
+      c.plugins[id] = { ...(c.plugins[id] ?? { enabled: false }), approvedHash: p.hash };
+    });
+    this.onChange();
+  }
+  enable(id: string): void {
+    const p = this.loaded.get(id);
+    if (!p?.manifest) throw notLoaded(p);
+    if (this.cfg.get().plugins[id]?.approvedHash !== p.hash) throw new RegistryError('needs-approval', 'approve this version of the plugin first');
+    this.cfg.update((c) => {
+      c.plugins[id] = { ...c.plugins[id], enabled: true };
+    });
+    this.onChange();
+  }
+  disable(id: string): void {
+    this.cfg.update((c) => {
+      if (c.plugins[id]) c.plugins[id].enabled = false;
+    });
+    this.onChange();
+  }
+  /** Validate, then write `<id>.js`. Replacing an existing file drops its approval (the hash changes). */
+  add(source: string): PluginInfo & { replaced: boolean } {
+    const m = extractManifest(source);
+    fs.mkdirSync(this.dir, { recursive: true });
+    const target = path.join(this.dir, `${m.id}.js`);
+    // Whether the user is installing something new or overwriting what they already had — the one
+    // difference that matters to them, since a replacement starts again from unapproved.
+    const replaced = this.loaded.has(m.id);
+    try {
+      // Never write *through* a symlink someone planted in the folder: drop whatever is in the way,
+      // the ordinary file we are meant to replace included.
+      fs.rmSync(target, { force: true, recursive: !fs.lstatSync(target).isFile() });
+    } catch {
+      /* nothing there yet */
+    }
+    // 'wx' rather than a plain write: if a symlink is re-planted in the gap between the check above
+    // and this line, the open fails (EEXIST) instead of following it somewhere it does not belong.
+    let fd: number;
+    try {
+      fd = fs.openSync(target, 'wx', 0o600);
+    } catch (e: any) {
+      throw new Error(e?.code === 'EEXIST' ? `something else is using ${m.id}.js; remove it and try again` : (e?.message ?? String(e)));
+    }
+    try {
+      fs.writeFileSync(fd, source);
+    } finally {
+      fs.closeSync(fd);
+    }
+    this.load();
+    return { ...this.get(m.id)!, replaced };
+  }
+  remove(id: string): void {
+    const p = this.loaded.get(id);
+    if (!p) throw new RegistryError('unknown', 'unknown plugin');
+    fs.rmSync(p.file, { force: true });
+    this.forgetOrphan(id);
+    this.load();
+  }
+  /**
+   * Everything `remove` does apart from the file: for an id that is not in the folder any more
+   * (deleted by hand, or a config entry left behind by a plugin that never loaded).
+   */
+  forgetOrphan(id: string): void {
+    this.cfg.update((c) => {
+      delete c.plugins[id];
+    });
+    this.state.forget(id);
+    this.logLines.delete(id);
+    this.onChange();
+  }
+  noteChat(id: string, chatId: string, name: string): void {
+    if (this.state.read(id).chats[chatId] === name) return;
+    this.state.noteChat(id, chatId, name);
+    this.onChange();
+  }
+  log(id: string, level: LogLine['level'], text: string): void {
+    if (!this.loaded.has(id)) return;
+    const lines = this.logLines.get(id) ?? [];
+    lines.push({ ts: Date.now(), level, text: text.slice(0, 2000) });
+    if (lines.length > LOG_MAX) lines.splice(0, lines.length - LOG_MAX);
+    this.logLines.set(id, lines);
+  }
+  logs(id: string): LogLine[] {
+    return [...(this.logLines.get(id) ?? [])];
+  }
+}

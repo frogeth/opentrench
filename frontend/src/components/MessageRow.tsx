@@ -99,6 +99,7 @@ export function MessageRow({
   onOpenChat,
   onPick,
   mine,
+  pluginNames = {},
 }: {
   m: FeedMessage;
   tokens: Record<string, TokenInfo>;
@@ -119,6 +120,8 @@ export function MessageRow({
   onForward?: (m: FeedMessage) => void;
   /** the chat chip was clicked: focus that chat */
   onOpenChat?: (m: FeedMessage) => void;
+  /** installed plugins, id → name, so a plugin message can say which one posted it */
+  pluginNames?: Record<string, string>;
   /** a plain click on the row (not on a link, button, image or a text selection): "I'm looking at this chat now" */
   onPick?: (m: FeedMessage) => void;
   /** go to the message this one replies to (feed id + a link to open if it is gone) */
@@ -148,7 +151,10 @@ export function MessageRow({
       document.removeEventListener('keydown', onKey);
     };
   }, [pick]);
-  const fav = !m.isBot && isFavorite(favorites, m.author);
+  const fav = !m.isBot && m.source !== 'plugin' && isFavorite(favorites, m.author);
+  // `plugin:<plugin>:<chat>`: the plugin's own name when we have it, else its id
+  const pluginId = m.source === 'plugin' ? m.chatId.split(':')[1] : '';
+  const pluginName = pluginNames[pluginId] ?? pluginId;
   // Right-click anywhere on the row: quick reactions, reply, jump, open chat, copy, the original
   // link, and the token menu for any contract in it. A contract address handles its own right-click.
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -160,7 +166,8 @@ export function MessageRow({
     return () => document.removeEventListener('keydown', onKey);
   }, [menu]);
   const closeMenu = () => setMenu(null);
-  const platform = m.source === 'discord' ? 'Discord' : 'Telegram';
+  // a plugin's link is its own (an article, a dashboard): it opens in the browser, not in a platform
+  const platform = m.source === 'discord' ? 'Discord' : m.source === 'plugin' ? 'the browser' : 'Telegram';
   const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
   const contextMenu =
     menu &&
@@ -179,12 +186,12 @@ export function MessageRow({
               })}
             </div>
           )}
-          {onReply && (
+          {onReply && m.source !== 'plugin' && (
             <button onClick={() => { closeMenu(); onReply(m); }}>
               <Icon name="reply" size={12} /> Reply
             </button>
           )}
-          {onForward && !discord && (
+          {onForward && m.source === 'telegram' && (
             <button onClick={() => { closeMenu(); onForward(m); }}>
               <Icon name="forward" size={12} /> Forward…
             </button>
@@ -265,12 +272,12 @@ export function MessageRow({
           )}
           {m.hidden && <span className="bot-tag hidden-tag">hidden</span>}
           <AuthorMenu author={m.author} link={m.link} favorite={fav} bot={m.isBot} hidden={!!m.hidden} onChanged={onAuthorChanged} />
-          {onReply && (
+          {onReply && m.source !== 'plugin' && (
             <button className="row-reply" onClick={() => onReply(m)} title="reply" aria-label="reply">
               <Icon name="reply" size={12} />
             </button>
           )}
-          {onForward && !discord && (
+          {onForward && m.source === 'telegram' && (
             <button className="row-reply" onClick={() => onForward(m)} title="forward to a chat" aria-label="forward">
               <Icon name="forward" size={12} />
             </button>
@@ -317,6 +324,11 @@ export function MessageRow({
             >
               {m.chatAvatar ? <Avatar src={m.chatAvatar} name={m.chatName} size={14} /> : <Logo source={m.source} size={11} />}
               <span className="chat-tag-name">{m.chatName}</span>
+              {m.source === 'plugin' && (
+                <span className="chat-tag-via" title={`posted by the plugin ${pluginName} you installed`}>
+                  via {pluginName}
+                </span>
+              )}
             </button>
           )}
         </div>

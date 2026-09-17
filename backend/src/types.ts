@@ -1,4 +1,4 @@
-export type Source = 'discord' | 'telegram';
+export type Source = 'discord' | 'telegram' | 'plugin';
 export type Chain = 'sol' | 'evm';
 
 export interface Contract {
@@ -487,5 +487,23 @@ export type ServerEvent =
   | { type: 'mint'; mint: MintEvent }
   | { type: 'nftRankings'; key: RankingKey; rows: NftRanking[]; at: number }
   | { type: 'mintJob'; job: MintJob }
-  | { type: 'mintJobGone'; id: string };
+  | { type: 'mintJobGone'; id: string }
+  | { type: 'plugins'; plugins: PluginInfo[] };
+
+/** A plugin as the app lists it: manifest plus install state. */
+export interface PluginInfo {
+  id: string;
+  file: string;
+  hash: string;
+  manifest?: { id: string; name: string; version: string; api: number; sites: string[]; permissions: string[]; ui: boolean; description: string };
+  /** manifest could not be read: the message */
+  error?: string;
+  enabled: boolean;
+  /** the file changed (or was never approved): needs the approval dialog before it can run */
+  needsApproval: boolean;
+  /** chats this plugin has posted, id → name */
+  chats: Record<string, string>;
+  /** sites with a shell session right now */
+  signedIn: string[];
+}
 

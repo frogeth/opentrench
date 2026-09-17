@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { FeedMessage, Mention, Source } from '../types';
+import type { FeedMessage, Mention } from '../types';
 import { timeAgo } from '../format';
 import { Avatar } from './Avatar';
 import { Composer } from './Composer';
@@ -45,7 +45,7 @@ export function PingsPanel({
   mentions: Mention[];
   now: number;
   open: boolean;
-  canSend: Record<Source, boolean>;
+  canSend: Record<'discord' | 'telegram', boolean>;
   onOpen: (open: boolean) => void;
   onRead: (ids?: string[]) => void;
   onJump: (id: string) => void;
@@ -115,11 +115,14 @@ export function PingsPanel({
                 <button className="hdr-toggle" onClick={() => onJump(m.id)}>
                   jump to chat
                 </button>
-                <button className={`hdr-toggle${replying === p.id ? ' on' : ''}`} onClick={() => setReplying((r) => (r === p.id ? null : p.id))}>
-                  reply
-                </button>
+                {/* plugin chats are read-only: nothing to reply to */}
+                {m.source !== 'plugin' && (
+                  <button className={`hdr-toggle${replying === p.id ? ' on' : ''}`} onClick={() => setReplying((r) => (r === p.id ? null : p.id))}>
+                    reply
+                  </button>
+                )}
               </div>
-              {replying === p.id && (
+              {replying === p.id && m.source !== 'plugin' && (
                 <div className="ping-reply">
                   <Composer targets={[{ id: m.chatId, name: m.chatName, source: m.source }]} canSend={canSend} reply={m} onCancelReply={() => setReplying(null)} onSent={() => setReplying(null)} />
                 </div>

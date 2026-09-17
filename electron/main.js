@@ -1,6 +1,7 @@
 // opentrench desktop: runs the backend with Electron's bundled Node and opens a window on it.
 const { app, BrowserWindow, shell, nativeTheme, dialog, Menu, safeStorage, ipcMain } = require('electron');
 const discordSetup = require('./discord-setup');
+const shellLink = require('./shell-link');
 const stale = require('./stale');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
@@ -13,6 +14,8 @@ const URL = `http://127.0.0.1:${PORT}`;
 const RELEASES_URL = 'https://github.com/frogeth/opentrench/releases/latest';
 let child = null;
 let win = null;
+// The loopback callback the backend uses for a plugin's site-authenticated fetches and sign-in windows.
+let link = null;
 
 // A plain-text log next to the backend's (app.getPath('logs')): what the desktop shell prints,
 // plus every renderer or helper process Chromium loses, with its reason. A Website column that
@@ -552,6 +555,15 @@ app.whenReady().then(async () => {
       app.quit();
       return;
     }
+    // Whichever way startBackend got us a backend — attached to one already running, or spawned our
+    // own — it is now there to be told where the shell's callback is.
+    link = await shellLink.startShellLink({ log: (...a) => console.log(...a), backendUrl: URL });
+    void shellLink.hello(URL, link);
+    // And told again, because the backend can restart underneath us (the dev setup does exactly that)
+    // and a restarted backend has forgotten the link. hello is idempotent on that side.
+    setInterval(() => {
+      if (link) void shellLink.hello(URL, link);
+    }, 60_000).unref();
   } catch (e) {
     console.error('[desktop]', e);
   }
@@ -570,6 +582,11 @@ function stopBackend() {
   if (child) {
     child.kill('SIGTERM');
     child = null;
+  }
+  if (link) {
+    // Says goodbye to the backend first, so it stops offering sign-in the moment the shell goes.
+    void link.close();
+    link = null;
   }
 }
 app.on('before-quit', stopBackend);
