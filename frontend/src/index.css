@@ -1403,6 +1403,9 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 /* Every running plugin's frame lives in this layer, laid over whichever column shows it: columns get
    reordered, resized and removed, and none of that may reload a plugin. */
 .plugin-layer { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
+/* While a column is being dragged, the frames step out of the way: the drop zones and the highlight
+   belong to the columns underneath, and a plugin column must be as droppable as any other. */
+.app.col-drag .plugin-layer { visibility: hidden; pointer-events: none; }
 .plugin-pane { position: fixed; overflow: hidden; pointer-events: auto; background: var(--bg); }
 .plugin-pane-hidden { left: 0; top: 0; width: 0; height: 0; opacity: 0; pointer-events: none; }
 .plugin-frame { width: 100%; height: 100%; border: none; background: var(--bg); display: block; }

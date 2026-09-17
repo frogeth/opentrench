@@ -52,12 +52,23 @@ describe('createHostLoop', () => {
     expect(post).toHaveBeenCalledWith({ ot: 1, kind: 'result', id: 1, error: 'arguments too large' });
   });
 
-  it('refuses arguments it cannot even measure', async () => {
+  it('counts keys as well as values against the cap', async () => {
+    const post = vi.fn();
+    const c = ctx();
+    await createHostLoop({ ctx: c, post }).handle(call({ args: [{ ['k'.repeat(2 * 1024 * 1024)]: 1 }] }));
+    expect(c.ui.setTitle).not.toHaveBeenCalled();
+    expect(post).toHaveBeenCalledWith({ ot: 1, kind: 'result', id: 1, error: 'arguments too large' });
+  });
+
+  it('says so when the arguments are not serializable at all, rather than calling them too large', async () => {
     const post = vi.fn();
     const cycle: Record<string, unknown> = {};
     cycle.self = cycle;
     await createHostLoop({ ctx: ctx(), post }).handle(call({ args: [cycle] }));
-    expect(post).toHaveBeenCalledWith({ ot: 1, kind: 'result', id: 1, error: 'arguments too large' });
+    expect(post).toHaveBeenCalledWith({ ot: 1, kind: 'result', id: 1, error: 'arguments are not serializable' });
+    post.mockClear();
+    await createHostLoop({ ctx: ctx(), post }).handle(call({ id: 2, args: [{ n: 1n }] }));
+    expect(post).toHaveBeenCalledWith({ ot: 1, kind: 'result', id: 2, error: 'arguments are not serializable' });
   });
 
   it('spends a call budget and refills it over time', async () => {

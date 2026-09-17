@@ -25,10 +25,8 @@ const noop = () => {};
 
 /** what App renders for a plugin column: a rectangle, and a note when another column already has the frame */
 function Slot({ pluginId, colId }: { pluginId: string; colId: string }) {
-  const { ref, holds } = usePluginSlot(pluginId, colId);
-  return (
-    <div className="plugin-slot" data-col={colId} data-holds={String(holds)} ref={ref} />
-  );
+  const { ref, state } = usePluginSlot(pluginId, colId);
+  return <div className="plugin-slot" data-col={colId} data-state={state} ref={ref} />;
 }
 
 function Page({ plugins, cols, slots }: { plugins: PluginInfo[]; cols: { colId: string; pluginId: string }[]; slots: SlotStore }) {
@@ -39,7 +37,7 @@ function Page({ plugins, cols, slots }: { plugins: PluginInfo[]; cols: { colId: 
           <Slot key={c.colId} pluginId={c.pluginId} colId={c.colId} />
         ))}
       </div>
-      <PluginHost plugins={plugins} messages={[]} tokens={{}} actionsFor={() => actions} slots={slots} onTitle={noop} onSubtitle={noop} onBadge={noop} onSchema={noop} onError={noop} />
+      <PluginHost plugins={plugins} messages={[]} tokens={{}} actionsFor={() => actions} slots={slots} layout={cols.map((c) => c.colId).join('|')} onTitle={noop} onSubtitle={noop} onBadge={noop} onSchema={noop} onError={noop} />
     </SlotContext.Provider>
   );
 }
@@ -83,12 +81,12 @@ describe('PluginHost', () => {
 
   it('gives the frame to the first column asking for it and tells the second', async () => {
     await render([{ colId: 'c1', pluginId: 'a' }, { colId: 'c2', pluginId: 'a' }]);
-    expect(slot('c1').dataset.holds).toBe('true');
-    expect(slot('c2').dataset.holds).toBe('false');
+    expect(slot('c1').dataset.state).toBe('holds');
+    expect(slot('c2').dataset.state).toBe('taken');
     const live = frames()[0];
     // the first column goes away: the second takes over, and the plugin keeps running
     await render([{ colId: 'c2', pluginId: 'a' }]);
-    expect(slot('c2').dataset.holds).toBe('true');
+    expect(slot('c2').dataset.state).toBe('holds');
     expect(frames()[0]).toBe(live);
     expect(api.pluginCode).toHaveBeenCalledTimes(1);
   });

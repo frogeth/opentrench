@@ -57,23 +57,29 @@ export class SlotStore {
 export const SlotContext = createContext<SlotStore | null>(null);
 
 /**
- * A column's end of it: hand back a ref for the placeholder div, and say whether this column is the
- * one holding the frame (the second column pointing at the same plugin is told, not silently blank).
+ * A column's end of it: hand back a ref for the placeholder div and say where this column stands —
+ * `pending` until the claim is in (nothing to say yet, so the column says nothing), then `holds` for
+ * the column the frame sits over, or `taken` for a second column on the same plugin, which is told
+ * rather than left blank. Starting at `pending` is what keeps either column from flashing the other's
+ * words for a frame.
  */
-export function usePluginSlot(pluginId: string | undefined, colId: string): { ref: (el: HTMLElement | null) => void; holds: boolean } {
+export type SlotState = 'pending' | 'holds' | 'taken';
+
+export function usePluginSlot(pluginId: string | undefined, colId: string): { ref: (el: HTMLElement | null) => void; state: SlotState } {
   const store = useContext(SlotContext);
   const [el, setEl] = useState<HTMLElement | null>(null);
-  const [holds, setHolds] = useState(true);
+  const [state, setState] = useState<SlotState>('pending');
   useEffect(() => {
     if (!store || !pluginId || !el) return;
     store.claim(pluginId, colId, el);
-    const read = () => setHolds(store.holder(pluginId)?.colId === colId);
+    const read = () => setState(store.holder(pluginId)?.colId === colId ? 'holds' : 'taken');
     read();
     const off = store.subscribe(read);
     return () => {
       off();
       store.release(pluginId, colId);
+      setState('pending');
     };
   }, [store, pluginId, colId, el]);
-  return { ref: setEl, holds };
+  return { ref: setEl, state };
 }

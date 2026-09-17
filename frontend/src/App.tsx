@@ -60,10 +60,11 @@ function Pill({ label, state }: { label: 'discord' | 'telegram'; state: string }
  * belongs to `PluginHost` and never moves, so reordering or resizing columns cannot reload a plugin.
  */
 function PluginSlot({ pluginId, colId }: { pluginId: string; colId: string }) {
-  const { ref, holds } = usePluginSlot(pluginId, colId);
+  const { ref, state } = usePluginSlot(pluginId, colId);
   return (
     <div className="plugin-slot" data-plugin={pluginId} ref={ref}>
-      <div className="empty">{holds ? 'starting the plugin…' : 'This plugin is already open in another column.'}</div>
+      {/* nothing until the claim is settled: neither column should flash the other's words */}
+      {state !== 'pending' && <div className="empty">{state === 'holds' ? 'starting the plugin…' : 'This plugin is already open in another column.'}</div>}
     </div>
   );
 }
@@ -731,6 +732,8 @@ export default function App() {
   const [pluginBadges, setPluginBadges] = useState<Record<string, number | undefined>>({});
   /** which column each plugin's frame is laid over; the frames live in PluginHost */
   const slots = useRef(new SlotStore()).current;
+  /** the column layout as one short string: what moves a plugin's frame without resizing it */
+  const pluginLayout = useMemo(() => flatColumns.map((c) => `${c.id}:${c.width ?? ''}:${c.zoom ?? ''}`).join('|'), [flatColumns]);
   // A plugin that is gone or switched off leaves nothing behind: its error, its settings form, and
   // whatever it had made of its column header all go with it.
   const livePlugins = useMemo(() => plugins.filter((p) => p.enabled && p.manifest).map((p) => p.id).join('|'), [plugins]);
@@ -1260,9 +1263,15 @@ export default function App() {
       : {}),
     drag: dragFor(col.id),
     filtered: filtersActive(col.filters),
-    // ctrl/⌘ + wheel over a column scales that column alone; 100% is stored as "unset"
-    zoom: col.zoom,
-    onZoom: (z) => saveColumnsDebounced(updateColumn(col.id, (c) => ({ ...c, zoom: z === 1 ? undefined : z }))),
+    // ctrl/⌘ + wheel over a column scales that column alone; 100% is stored as "unset". A plugin column
+    // is the exception: its frame is laid over the column from a layer of its own, so scaling the column
+    // would leave the plugin behind at its old size. No chip, and the wheel does nothing.
+    ...(col.type === 'plugin'
+      ? {}
+      : {
+          zoom: col.zoom,
+          onZoom: (z: number) => saveColumnsDebounced(updateColumn(col.id, (c) => ({ ...c, zoom: z === 1 ? undefined : z }))),
+        }),
   });
   /** One column of any type. `actions` carries the header buttons plus either the row layout (width/fill/resize) or the stack share. */
   const renderColumn = (col: ColumnDef, actions: ColumnActions) => {
@@ -1837,6 +1846,7 @@ export default function App() {
         tokens={tokens}
         actionsFor={pluginActions}
         slots={slots}
+        layout={pluginLayout}
         onTitle={(id, t) => setPluginTitles((m) => ({ ...m, [id]: t }))}
         onSubtitle={(id, t) => setPluginSubs((m) => ({ ...m, [id]: t }))}
         onBadge={(id, n) => setPluginBadges((m) => ({ ...m, [id]: n ?? undefined }))}
@@ -1854,10 +1864,13 @@ export default function App() {
                 {/* the whole address, never shortened: this is the thing the user is being asked to approve */}
                 <code className="plugin-prompt-addr">{p.address}</code>
               </span>
-              <button className="primary" autoFocus={i === pluginPrompts.length - 1} onClick={() => answerPluginPrompt(p, true)}>
+              <button className="primary" onClick={() => answerPluginPrompt(p, true)}>
                 Open
               </button>
-              <button onClick={() => answerPluginPrompt(p, false)}>Ignore</button>
+              {/* the safe half of the bar takes the focus: nothing a plugin asks for is one Return away */}
+              <button autoFocus={i === pluginPrompts.length - 1} onClick={() => answerPluginPrompt(p, false)}>
+                Ignore
+              </button>
             </div>
           ))}
         </div>

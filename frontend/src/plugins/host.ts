@@ -40,22 +40,23 @@ export interface HostLoop {
 const OVER = Symbol('over');
 
 /**
- * How big this call's arguments are, as JSON, giving up the moment they pass `max`. It bounds what a
- * call may cost to *route* — the structured clone has already spent the memory to get them here — and
- * a value JSON cannot walk at all (a cycle) counts as over the cap rather than as zero.
+ * Whether this call's arguments are within `max` bytes of JSON, giving up the moment they pass it. Keys
+ * count as well as values: a million-character key is a million characters to serialize. It bounds what
+ * a call may cost to *route* — the structured clone has already spent the memory to get them here —
+ * and arguments JSON cannot walk at all (a cycle, a BigInt) are refused in their own words.
  */
-const overCap = (args: unknown[], max: number): boolean => {
+const sizeUp = (args: unknown[], max: number): 'ok' | 'over' | 'unserializable' => {
   let n = 0;
   try {
-    JSON.stringify(args, (_k, v) => {
-      n += typeof v === 'string' ? v.length + 2 : 8;
+    JSON.stringify(args, (k, v) => {
+      n += k.length + (typeof v === 'string' ? v.length + 2 : 8);
       if (n > max) throw OVER;
       return v;
     });
-  } catch {
-    return true;
+  } catch (e) {
+    return e === OVER ? 'over' : 'unserializable';
   }
-  return false;
+  return 'ok';
 };
 
 const isCall = (d: unknown): d is CallEnvelope => {
@@ -120,7 +121,8 @@ export function createHostLoop({ ctx, post, budget = { perSecond: 60, burst: 120
         }
         return reply(id, { error: 'too many calls' });
       }
-      if (overCap(args, argsMax)) return reply(id, { error: 'arguments too large' });
+      const size = sizeUp(args, argsMax);
+      if (size !== 'ok') return reply(id, { error: size === 'over' ? 'arguments too large' : 'arguments are not serializable' });
       try {
         const value = await routeCall(ctx, { method, args });
         reply(id, { value });

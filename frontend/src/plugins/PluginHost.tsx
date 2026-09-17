@@ -19,6 +19,7 @@ export function PluginHost({
   tokens,
   actionsFor,
   slots,
+  layout,
   onTitle,
   onSubtitle,
   onBadge,
@@ -31,6 +32,11 @@ export function PluginHost({
   /** the actions a given plugin gets: buy and copy name the plugin to the user, so each one is bound to its own */
   actionsFor: (id: string) => PluginContext['actions'];
   slots: SlotStore;
+  /**
+   * A cheap stand-in for the column layout — ids, order and widths — from App. Frames are laid out
+   * again when it changes; without it every render of the app would re-measure every frame.
+   */
+  layout: string;
   onTitle: (id: string, title: string) => void;
   onSubtitle: (id: string, subtitle: string) => void;
   onBadge: (id: string, n: number | null) => void;
@@ -61,28 +67,39 @@ export function PluginHost({
       pane.style.height = `${r.height}px`;
     }
   };
-  // a render is how column changes reach us (order, width, removal); the observers below cover the rest
-  useLayoutEffect(() => place.current());
+  /** at most one measuring pass per frame, however many scroll or resize events arrive */
+  const pending = useRef(0);
+  const soon = useRef(() => {});
+  soon.current = () => {
+    if (pending.current || typeof requestAnimationFrame === 'undefined') return place.current();
+    pending.current = requestAnimationFrame(() => {
+      pending.current = 0;
+      place.current();
+    });
+  };
+  /** which column holds which plugin right now */
+  const holders = running.map((p) => `${p.id}:${slots.holder(p.id)?.colId ?? ''}`).join('|');
+  // The column layout is what moves a frame without resizing it (a reorder, a column removed), and it
+  // reaches us as a changed signature — not as "some render happened".
+  useLayoutEffect(() => place.current(), [holders, layout]);
   useEffect(() => {
-    const onMove = () => place.current();
+    const onMove = () => soon.current();
     window.addEventListener('resize', onMove);
     // capture, so the columns row scrolling counts as much as the page
     document.addEventListener('scroll', onMove, true);
     return () => {
       window.removeEventListener('resize', onMove);
       document.removeEventListener('scroll', onMove, true);
+      if (pending.current) cancelAnimationFrame(pending.current);
     };
   }, []);
-  /** which column holds which plugin right now: when that changes, watch the new rectangles */
-  const holders = running.map((p) => `${p.id}:${slots.holder(p.id)?.colId ?? ''}`).join('|');
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => place.current());
+    const ro = new ResizeObserver(() => soon.current());
     for (const p of running) {
       const el = slots.holder(p.id)?.el;
       if (el) ro.observe(el);
     }
-    place.current();
     return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holders]);
