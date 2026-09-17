@@ -7,6 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Windows: the top bar no longer leaves a blank space on the left where the Mac traffic lights would be; the window's minimize / maximize / close buttons now sit on the bar's right edge in its own colours.
+## v0.9.5 — 2026-09-17
+
 - MintGo column: the feed holds still while your pointer is over it, so the mint you are about to click does not slide away. New mints queue behind a "N new mints waiting" pill and flow in when the pointer leaves (or you click the pill). (Suggested by lunchbag.)
 - Clicking a trending row opens the token drilldown (chart, every call, buy buttons) instead of only highlighting it in the calls column. (Suggested by Brandzo.)
 ## v0.9.4 — 2026-09-16
