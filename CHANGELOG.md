@@ -14,6 +14,7 @@ app shows the same text in its update prompt.
 - A contract is identified by the chain the moment it lands: name, ticker, decimals and supply from the token contract (every EVM chain asked at once; the chain that holds it wins) or from the mint and its Metaplex metadata on Solana. Runs beside Dexscreener, so a launch no site has indexed yet still shows its ticker in one round trip.
 - Its pool is found on-chain too: Uniswap v2 `getPair` and v3 `getPool` on each chain's factories against the usual quote assets (the deepest pool wins), the pump.fun curve and the LaunchLab pool derived from the mint. The live pricer can start on a token seconds after launch. v4 pools and PumpSwap / Raydium AMMs still wait for the directory.
 - Market cap at call time is read from the pool at the call's block (Alchemy's archive state; the block is found from the chain's own timestamps), quote priced at the same moment. GeckoTerminal candles remain the fallback, and the only path for Solana, whose nodes keep no old state.
+- Settings redesigned: a sidebar of pages (Accounts, Feed, Market data, Trading, Together, Plugins) with a title and blurb per page, uppercase section labels, card-style options with a check on the picked one, and outlined toggles. Market data has its own page.
 - The feed no longer sends a token event when a refresh changed nothing (it was ~80 events a second with the pricer on, and the UI spent its time re-sorting instead of painting).
 
 ## v0.10.0 — 2026-09-17

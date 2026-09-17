@@ -4,6 +4,7 @@ import type { PluginInfo, Status } from '../types';
 import type { SettingField } from '../plugins/route';
 import { PluginsSection } from './PluginsSection';
 import { Logo } from './Logo';
+import { Icon, type IconName } from './Icon';
 import { Avatar } from './Avatar';
 import { DOCS } from '../site';
 import { PeoplePicker } from './PeoplePicker';
@@ -19,7 +20,15 @@ const onEnter = (enabled: boolean, fn: () => void) => (e: React.KeyboardEvent<HT
 };
 
 
-type Tab = 'accounts' | 'feed' | 'trading' | 'together' | 'plugins';
+type Tab = 'accounts' | 'feed' | 'market' | 'trading' | 'together' | 'plugins';
+const TABS: { id: Tab; label: string; icon: IconName; title: string; blurb: string }[] = [
+  { id: 'accounts', label: 'Accounts', icon: 'people', title: 'Accounts', blurb: 'Discord, Telegram and J7: what the feed reads from' },
+  { id: 'feed', label: 'Feed', icon: 'chat', title: 'Feed', blurb: 'How chats and calls are shown, who pings you, which bots count' },
+  { id: 'market', label: 'Market data', icon: 'live', title: 'Market data', blurb: 'Live on-chain prices: your RPCs and Alchemy key' },
+  { id: 'trading', label: 'Trading', icon: 'wallet', title: 'Trading', blurb: 'Buy buttons, the mint wallet and launchpad keys' },
+  { id: 'together', label: 'Together', icon: 'globe', title: 'TrenchTogether', blurb: 'Share your calls with friends on the same network' },
+  { id: 'plugins', label: 'Plugins', icon: 'plug', title: 'Plugins', blurb: 'Custom feeds and columns from JavaScript files' },
+];
 
 /** The one settings place: a modal with a tab each. Channels are managed in the sidebar, not here. */
 export function Settings({
@@ -78,36 +87,31 @@ export function Settings({
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal modal-settings">
-        <div className="modal-head">
-          <div className="seg">
-            <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>
-              Accounts
+        <nav className="settings-nav">
+          <div className="settings-nav-label">Settings</div>
+          {TABS.map((t) => (
+            <button key={t.id} className={`settings-nav-item${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)}>
+              <Icon name={t.icon} size={15} />
+              {t.label}
             </button>
-            <button className={tab === 'feed' ? 'active' : ''} onClick={() => setTab('feed')}>
-              Feed
-            </button>
-            <button className={tab === 'trading' ? 'active' : ''} onClick={() => setTab('trading')}>
-              Trading
-            </button>
-            <button className={tab === 'together' ? 'active' : ''} onClick={() => setTab('together')}>
-              Together
-            </button>
-            <button className={tab === 'plugins' ? 'active' : ''} onClick={() => setTab('plugins')}>
-              Plugins
-            </button>
-          </div>
-          <span className="settings-version">
-            {version && <span className="muted">v{version}</span>}
+          ))}
+          <div className="settings-nav-foot">
+            {version && <span className="muted">opentrench v{version}</span>}
             {hasBridge('checkForUpdates') && (
               <button className="link" onClick={() => void desktop!.checkForUpdates()} title="ask GitHub for a newer build now">
                 check for updates
               </button>
             )}
-          </span>
-          <button className="close" onClick={onClose}>
-            close
+          </div>
+        </nav>
+        <div className="settings-page">
+          <button className="settings-close" onClick={onClose} aria-label="close settings">
+            <Icon name="close" size={16} />
           </button>
-        </div>
+          <div className="settings-title">
+            <h1>{TABS.find((t) => t.id === tab)?.title}</h1>
+            <div className="hint">{TABS.find((t) => t.id === tab)?.blurb}</div>
+          </div>
         <div className="settings">
           {!cfg && <div className="hint">Loading…</div>}
           {cfg && tab === 'accounts' && (
@@ -130,22 +134,16 @@ export function Settings({
               <section>
                 <h2>Chat order</h2>
                 <div className="hint">Calls always show the newest call on top. This only affects the Chats panel.</div>
-                <div className="seg">
-                  <button className={chatOrder === 'bottom' ? 'active' : ''} onClick={() => onChatOrder('bottom')}>
-                    Newest at bottom (like Discord)
-                  </button>
-                  <button className={chatOrder === 'top' ? 'active' : ''} onClick={() => onChatOrder('top')}>
-                    Newest on top
-                  </button>
+                <div className="choice-grid">
+                  <Choice active={chatOrder === 'bottom'} title="Newest at bottom" sub="like Discord" onClick={() => onChatOrder('bottom')} />
+                  <Choice active={chatOrder === 'top'} title="Newest on top" sub="the latest message first" onClick={() => onChatOrder('top')} />
                 </div>
               </section>
               <section>
                 <h2>Chart provider</h2>
-                <div className="seg">
+                <div className="choice-grid">
                   {CHART_PROVIDERS.map((p) => (
-                    <button key={p.id} className={chartProvider === p.id ? 'active' : ''} onClick={() => onChartProvider(p.id)}>
-                      {p.label}
-                    </button>
+                    <Choice key={p.id} active={chartProvider === p.id} title={p.label} onClick={() => onChartProvider(p.id)} />
                   ))}
                 </div>
                 <div className="hint">
@@ -168,12 +166,12 @@ export function Settings({
                 </label>
                 <div className="hint">The call card under the message already shows the token's numbers and holder data.</div>
               </section>
-              <MarketDataSection onChange={reload} />
               <FavoritesSection cfg={cfg} onChange={reload} />
               <BotsSection cfg={cfg} onChange={reload} />
               <BlacklistSection cfg={cfg} onChange={reload} />
             </>
           )}
+          {cfg && tab === 'market' && <MarketDataSection onChange={reload} />}
           {cfg && tab === 'together' && <TogetherSection status={status} />}
           {cfg && tab === 'plugins' && <PluginsSection plugins={plugins} errors={pluginErrors} schemas={pluginSchemas} onChanged={onPluginsChanged} />}
           {cfg && tab === 'trading' && (
@@ -183,9 +181,21 @@ export function Settings({
               <LaunchpadSection cfg={cfg} onChange={reload} />
             </>
           )}
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+/** one option in a grid of cards, the picked one outlined in the accent with a check */
+function Choice({ active, title, sub, onClick }: { active: boolean; title: string; sub?: string; onClick: () => void }) {
+  return (
+    <button className={`choice${active ? ' active' : ''}`} onClick={onClick} aria-pressed={active}>
+      <span className="choice-title">{title}</span>
+      {sub && <span className="choice-sub">{sub}</span>}
+      {active && <span className="choice-check" aria-hidden />}
+    </button>
   );
 }
 
@@ -663,7 +673,7 @@ function MarketDataSection({ onChange }: { onChange: () => void }) {
   const liveNow = st.chains.reduce((n, c) => n + (c.live ?? 0), 0);
   return (
     <section>
-      <h2>Market data</h2>
+      <h2>Endpoints</h2>
       <div className="hint">
         Every token on your screen is priced straight from its pool every 3 seconds: Uniswap v2, v3 and v4 and Pons curves on EVM chains; pump.fun, PumpSwap, Raydium, Meteora and Orca on Solana. What a pool is quoted in is read on-chain too: stables count as a dollar, ETH, SOL and BNB come from their reference pools, and anything else (a tokenized stock, WHYPE) is priced through its own pool. Cards with a green dot are live. Off-screen tokens, liquidity, volume and 24h change still come from Dexscreener and GeckoTerminal.
         {st.visible > 0 && <> <b>{st.visible}</b> on screen, <b>{liveNow}</b> live right now.</>}
