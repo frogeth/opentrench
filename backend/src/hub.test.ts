@@ -499,6 +499,21 @@ describe('MessageHub', () => {
     expect(hub.activeTokens(60_000, 10_000_000)).toHaveLength(0);
   });
 
+  it('a market update that changes nothing (or only priceAt) sends no token event', () => {
+    const hub = new MessageHub(500);
+    hub.push(msg(1, EVM));
+    const events: string[] = [];
+    hub.on('event', (e: any) => events.push(e.type));
+    hub.updateMarket(EVM, { priceUsd: 1, marketCap: 100, priceSource: 'api', priceAt: 1 });
+    expect(events).toEqual(['token']);
+    hub.updateMarket(EVM, { priceUsd: 1, marketCap: 100, priceSource: 'api', priceAt: 2 });
+    hub.updateMarket(EVM, { liquidity: undefined });
+    expect(events).toEqual(['token']);
+    expect(hub.getToken(EVM)?.priceAt).toBe(2);
+    hub.updateMarket(EVM, { priceUsd: 1.1, priceSource: 'chain', priceAt: 3 });
+    expect(events).toEqual(['token', 'token']);
+  });
+
   it('survives a failing fetcher', async () => {
     const hub = new MessageHub(500, async () => {
       throw new Error('boom');

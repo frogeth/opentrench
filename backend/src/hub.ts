@@ -188,9 +188,20 @@ export class MessageHub extends EventEmitter {
   updateMarket(address: string, info: Partial<TokenInfo>): void {
     const t = this.tokens.get(address);
     if (!t) return;
-    for (const k of DATA_KEYS) if (info[k] !== undefined) (t as any)[k] = info[k];
-    if (t.marketCap !== undefined) t.athMarketCap = Math.max(t.athMarketCap ?? 0, t.marketCap);
+    // Only a number that moved is worth an event: the refresh loops answer for every token every
+    // cycle, and a thousand no-op events a minute drown the UI. A fresher priceAt alone is not news.
+    let changed = false;
+    for (const k of DATA_KEYS) {
+      if (info[k] === undefined) continue;
+      if (k !== 'priceAt' && (t as any)[k] !== info[k]) changed = true;
+      (t as any)[k] = info[k];
+    }
+    if (t.marketCap !== undefined && t.marketCap > (t.athMarketCap ?? 0)) {
+      t.athMarketCap = t.marketCap;
+      changed = true;
+    }
     this.noteFirstCallMc(t);
+    if (!changed) return;
     this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
     this.changed();
   }
