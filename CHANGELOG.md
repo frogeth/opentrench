@@ -16,6 +16,7 @@ app shows the same text in its update prompt.
 - Market cap at call time is read from the pool at the call's block (Alchemy's archive state; the block is found from the chain's own timestamps), quote priced at the same moment. GeckoTerminal candles remain the fallback, and the only path for Solana, whose nodes keep no old state.
 - Settings redesigned: a sidebar of pages (Accounts, Feed, Market data, Trading, Together, Plugins) with a title and blurb per page, uppercase section labels, card-style options with a check on the picked one, and outlined toggles. Market data has its own page.
 - The legacy Discord user-token card is gone from Settings → Accounts: the Vencord plugin is the one way in. A token already saved keeps being read until the plugin connects.
+- Pings you have read stay read across a restart. They were rebuilt from the message buffer as unread every time the backend came back, so the @ badge kept returning.
 - The feed no longer sends a token event when a refresh changed nothing (it was ~80 events a second with the pricer on, and the UI spent its time re-sorting instead of painting).
 
 ## v0.10.0 — 2026-09-17

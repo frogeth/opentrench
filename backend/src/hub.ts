@@ -91,6 +91,8 @@ export interface Snapshot {
   botFix?: number;
   /** 1 once scanner cards were re-read for their subject only (pairs and holder wallets had counted as tokens) */
   scanFix?: number;
+  /** pings the user has read (message ids), so a restart does not bring them back unread */
+  readMentions?: string[];
 }
 
 export interface HubOptions {
@@ -397,16 +399,19 @@ export class MessageHub extends EventEmitter {
     return [...this.mentionList];
   }
 
-  /** Mark pings read; no ids = all of them. */
+  /** Mark pings read; no ids = all of them. Read ids are saved, so a restart keeps them read. */
   markMentionsRead(ids?: string[]): number {
     let n = 0;
     for (const m of this.mentionList) {
       if (m.read || (ids && !ids.includes(m.id))) continue;
       m.read = true;
+      this.readMentionIds.add(m.id);
       n++;
     }
+    if (n) this.changed();
     return n;
   }
+  private readMentionIds = new Set<string>();
 
   isBlacklisted(author: string): boolean {
     const name = normName(author);
@@ -840,6 +845,8 @@ export class MessageHub extends EventEmitter {
       botFix: 1,
       scanFix: 1,
       messages: this.buffer,
+      // only ids that still have a ping behind them; the rest are long gone from the buffer
+      readMentions: this.mentionList.filter((m) => m.read).map((m) => m.id),
       tokens: [...this.tokens.values()],
       tokenChats: Object.fromEntries([...this.tokenChats].map(([a, s]) => [a, [...s]])),
       // Only jobs with a transaction hash are worth keeping: a `pending` one is still watched after
@@ -859,6 +866,8 @@ export class MessageHub extends EventEmitter {
     for (const m of this.buffer) m.hidden = this.isHidden(m); // policy may have changed since the snapshot
     this.mentionList = [];
     for (const m of [...this.buffer].sort((a, b) => a.ts - b.ts)) if (m.mention) this.trackMention(m, false);
+    this.readMentionIds = new Set((snap.readMentions ?? []).map(String));
+    for (const m of this.mentionList) if (this.readMentionIds.has(m.id)) m.read = true;
     this.tokens = new Map((snap.tokens ?? []).map((t) => [t.address, t]));
     this.tokenChats = new Map(Object.entries(snap.tokenChats ?? {}).map(([a, ids]) => [a, new Set(ids)]));
     if ((snap.candleFix ?? 0) < 2) {

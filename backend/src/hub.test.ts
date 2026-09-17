@@ -315,6 +315,14 @@ describe('MessageHub', () => {
     expect(hub.markMentionsRead()).toBe(1);
     expect(hub.mentions()[0].read).toBe(true);
     expect(hub.hello().mentions).toHaveLength(1);
+    // a restart rebuilds pings from the messages; the ones read stay read
+    const again = new MessageHub(500);
+    again.load(hub.snapshot());
+    expect(again.mentions()).toHaveLength(1);
+    expect(again.mentions()[0].read).toBe(true);
+    again.push(msg(16, 'again @me', { chatId: 'a', ts: 16, mention: 'user' }));
+    expect(again.mentions().map((m) => m.read)).toEqual([true, false]);
+    expect(again.snapshot().readMentions).toEqual([hub.mentions()[0].id]);
   });
 
   it('pings from bots are muted unless the policy allows that bot (or every bot)', () => {
