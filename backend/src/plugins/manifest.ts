@@ -16,26 +16,76 @@ export type PluginPermission = 'feed:write' | 'storage' | 'actions';
 export const PERMISSIONS: PluginPermission[] = ['feed:write', 'storage', 'actions'];
 /** The API major this build serves. Append-only within a major; bump when anything is renamed or removed. */
 export const PLUGIN_API_VERSION = 1;
-const ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
-const MAX_FILE = 512 * 1024;
 
-/** Finds `export const manifest =`, takes the `{…}` that follows (string-aware brace matching), parses it as JSON, validates. */
+export class ManifestError extends Error {}
+
+const ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/;
+export const MAX_FILE = 512 * 1024;
+const MAX_SITES = 20;
+
+/** Matches the manifest block only when it is the very first thing in the (comment-stripped) source. */
+const MANIFEST_RE_ANCHORED = /^export\s+const\s+manifest\s*=\s*\{/;
+/** Same pattern, unanchored, used to detect a manifest block anywhere in the file. */
+const MANIFEST_RE_ANY = /export\s+const\s+manifest\s*=\s*\{/;
+
+/** Strips leading whitespace and `//` / `/* … *\/` comments, returning the index of the first real statement. */
+function firstStatementStart(source: string): number {
+  let i = 0;
+  for (;;) {
+    while (i < source.length && /\s/.test(source[i])) i++;
+    if (source.startsWith('//', i)) {
+      const nl = source.indexOf('\n', i);
+      i = nl < 0 ? source.length : nl + 1;
+      continue;
+    }
+    if (source.startsWith('/*', i)) {
+      const close = source.indexOf('*/', i + 2);
+      i = close < 0 ? source.length : close + 2;
+      continue;
+    }
+    break;
+  }
+  return i;
+}
+
+/** Removes control (Cc) and format (Cf) characters, collapses whitespace, and trims/truncates. */
+const clean = (v: unknown, max: number): string =>
+  String(v ?? '')
+    .replace(/[\p{Cc}\p{Cf}]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max);
+
+/**
+ * Finds `export const manifest =` as the first statement of the file, takes the `{…}` that follows
+ * (string-aware brace matching), parses it as JSON, and validates it. Never executes the file.
+ */
 export function extractManifest(source: string): PluginManifest {
-  if (source.length > MAX_FILE) throw new Error('plugin file is too large (512 KB max)');
-  const at = source.search(/export\s+const\s+manifest\s*=\s*\{/);
-  if (at < 0) throw new Error('no manifest: the file must start with `export const manifest = { … };`');
-  const start = source.indexOf('{', at);
+  if (source.length > MAX_FILE) throw new ManifestError('plugin file is too large (512 KB max)');
+
+  const bodyStart = firstStatementStart(source);
+  const rest = source.slice(bodyStart);
+  const head = MANIFEST_RE_ANCHORED.exec(rest);
+  if (!head) {
+    if (MANIFEST_RE_ANY.test(source)) {
+      throw new ManifestError('the manifest must be the first statement in the file');
+    }
+    throw new ManifestError('no manifest: the file must start with `export const manifest = { … };`');
+  }
+
+  const start = bodyStart + head[0].length - 1; // index of the opening '{'
   let depth = 0;
-  let inStr: string | null = null;
+  let inStr = false;
   let end = -1;
   for (let i = start; i < source.length; i++) {
     const ch = source[i];
     if (inStr) {
       if (ch === '\\') i++;
-      else if (ch === inStr) inStr = null;
+      else if (ch === '"') inStr = false;
       continue;
     }
-    if (ch === '"' || ch === "'") inStr = ch;
+    if (ch === '"') inStr = true;
     else if (ch === '{') depth++;
     else if (ch === '}') {
       depth--;
@@ -45,38 +95,66 @@ export function extractManifest(source: string): PluginManifest {
       }
     }
   }
-  if (end < 0) throw new Error('manifest block never closes');
+  if (end < 0) throw new ManifestError('manifest block never closes');
+
+  if (MANIFEST_RE_ANY.test(source.slice(end + 1))) {
+    throw new ManifestError('more than one manifest block');
+  }
+
   let raw: any;
   try {
     raw = JSON.parse(source.slice(start, end + 1));
   } catch {
-    throw new Error('manifest is not valid JSON (quoted keys, no comments, no trailing commas)');
+    throw new ManifestError('manifest is not valid JSON (quoted keys, no comments, no trailing commas)');
   }
   return validateManifest(raw);
 }
 
 export function validateManifest(raw: any): PluginManifest {
-  if (!raw || typeof raw !== 'object') throw new Error('manifest must be an object');
+  if (!raw || typeof raw !== 'object') throw new ManifestError('manifest must be an object');
   const id = String(raw.id ?? '');
-  if (!ID_RE.test(id)) throw new Error('manifest id must be 1–40 chars of a-z, 0-9 and dashes');
-  const name = String(raw.name ?? '').trim().slice(0, 60);
-  if (!name) throw new Error('manifest needs a name');
+  if (!ID_RE.test(id)) throw new ManifestError('manifest id must be 1–40 chars of a-z, 0-9 and dashes');
+  const name = clean(raw.name, 60);
+  if (!name) throw new ManifestError('manifest needs a name');
   const version = String(raw.version ?? '').trim().slice(0, 20);
-  if (!/^\d+\.\d+\.\d+/.test(version)) throw new Error('manifest version must look like 1.2.3');
+  if (!VERSION_RE.test(version)) throw new ManifestError('manifest version must look like 1.2.3');
   const api = Number(raw.api);
-  if (!Number.isInteger(api) || api < 1) throw new Error('manifest api must be a positive integer');
-  if (api > PLUGIN_API_VERSION) throw new Error(`this plugin needs plugin api ${api}; this build serves ${PLUGIN_API_VERSION} — update opentrench`);
-  const sites: string[] = Array.isArray(raw.sites) ? raw.sites.map((s: unknown) => String(s)) : [];
-  for (const s of sites) {
+  if (!Number.isInteger(api) || api < 1) throw new ManifestError('manifest api must be a positive integer');
+  if (api > PLUGIN_API_VERSION) {
+    throw new ManifestError(`this plugin needs plugin api ${api}; this build serves ${PLUGIN_API_VERSION} — update opentrench`);
+  }
+
+  const rawSites: string[] = Array.isArray(raw.sites) ? raw.sites.map((s: unknown) => String(s)) : [];
+  if (rawSites.length > MAX_SITES) throw new ManifestError('sites: at most 20');
+  const origins: string[] = [];
+  for (const s of rawSites) {
     let u: URL;
     try {
       u = new URL(s);
     } catch {
-      throw new Error(`sites: ${s} is not a URL`);
+      throw new ManifestError(`sites: ${s} is not a URL`);
     }
-    if (u.protocol !== 'https:' || u.pathname !== '/' || u.search || u.hash) throw new Error(`sites: ${s} must be an https origin like https://example.com`);
+    if (u.protocol !== 'https:' || u.pathname !== '/' || u.search || u.hash) {
+      throw new ManifestError(`sites: ${s} must be an https origin like https://example.com`);
+    }
+    origins.push(u.origin);
   }
+
   const permissions: string[] = Array.isArray(raw.permissions) ? raw.permissions.map((p: unknown) => String(p)) : [];
-  for (const p of permissions) if (!PERMISSIONS.includes(p as PluginPermission)) throw new Error(`unknown permission "${p}" (allowed: ${PERMISSIONS.join(', ')})`);
-  return { id, name, version, api, sites: [...new Set(sites.map((s: string) => new URL(s).origin))], permissions: [...new Set(permissions)] as PluginPermission[], ui: raw.ui === true, description: String(raw.description ?? '').slice(0, 300) };
+  for (const p of permissions) {
+    if (!PERMISSIONS.includes(p as PluginPermission)) {
+      throw new ManifestError(`unknown permission "${p}" (allowed: ${PERMISSIONS.join(', ')})`);
+    }
+  }
+
+  return {
+    id,
+    name,
+    version,
+    api,
+    sites: [...new Set(origins)],
+    permissions: [...new Set(permissions)] as PluginPermission[],
+    ui: raw.ui === true,
+    description: clean(raw.description, 300),
+  };
 }
