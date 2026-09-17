@@ -1,0 +1,132 @@
+# Plugins — design
+
+Date: 2026-09-16. Status: approved in conversation, awaiting spec review.
+
+## Goal
+
+Let people extend opentrench with code they write and share: pull a website's feed into the app as a chat, transform feed data, or draw a custom column. Plugins must keep working across app updates, and installing one must never silently hand over the user's sessions or keys.
+
+## Decisions made
+
+1. **Sandboxed plugins with an API**, not raw script injection. Each plugin runs in its own sandboxed iframe on a separate origin and talks to the app only through a versioned postMessage bridge (`ot`). It cannot reach the app page, cookies, the backend API, or the keychain.
+2. **Frontend-only plugin code.** No plugin code runs inside the Node backend. Network access goes through a backend fetch proxy.
+3. **Site sign-in handled by the app.** A plugin's manifest lists the sites it wants to use with the user's login. The app opens the site's own sign-in page in an app window and keeps that session in a partition per site. Proxy requests to those hosts carry that partition's cookies; the plugin never sees them.
+4. **One JS file per plugin**, manifest at the top, code below. Easy to post, easy to read before trusting.
+5. **Plugin output becomes real feed items** (messages with source `plugin`), so contracts, calls, trending, pings, filters and forwarding all apply. A plugin may also draw its own column; that is the fallback for things that are not messages.
+
+## The plugin file
+
+```js
+export const manifest = {
+  "id": "example-feed",
+  "name": "Example feed",
+  "version": "1.0.0",
+  "api": 1,
+  "sites": ["https://example.com"],
+  "permissions": ["feed:write", "storage", "actions"],
+  "ui": false,
+  "description": "Posts example.com alerts into the feed as a chat."
+};
+export default function main(ot) {
+  // runs once per enable / app start; may return a stop() for cleanup
+}
+```
+
+Fields: `id` `[a-z0-9-]`, unique, the folder-safe key; `api` the opentrench plugin API major version; `sites` the hosts the plugin may fetch through the user's login; `ui` true when the plugin draws a column.
+
+The manifest block must be valid JSON (quoted keys, no comments, no trailing commas). The app extracts it from the file as text with a bounded search for `export const manifest =` up to the matching `};` and parses it with `JSON.parse`, so nothing in the file runs before the user has seen the manifest.
+
+## Where plugins live
+
+A `plugins` folder next to the config file:
+
+- built app: `~/Library/Application Support/opentrench/plugins` (and the platform equivalents);
+- a checkout running the backend on its own: `backend/plugins`, listed in `.gitignore`.
+
+Adding or removing a file in the folder is enough; Settings has a Reload button. Installed plugins are also addable from the app (file picker or URL) and are copied into the folder.
+
+## Trust model
+
+- A plugin is off until the user enables it. Before the first enable a dialog shows the manifest in plain words (what it can post, which sites it will use your login on, which permissions) and the warning: this is code from someone else; it can post anything into your feed and use your logins on the sites listed; read the file before you trust it; opentrench cannot check it for you.
+- Approval is bound to the file's SHA-256. A changed file is disabled until re-approved.
+- Every plugin column header tooltip carries "runs code you installed".
+- Permissions are enforced on the app side of the bridge, never inside the iframe.
+- Rate and size caps on `feed.post` (per plugin per minute, per message) so a runaway plugin cannot flood the feed.
+- A plugin that throws is stopped and shown as errored; the app stays up.
+
+## The `ot` API (major version 1)
+
+All calls are async and return promises. Objects are the same shapes the app uses (`FeedMessage`, `TokenInfo`).
+
+Feed, read (enabled plugins):
+- `ot.feed.onMessage(fn)`, `ot.feed.onToken(fn)` — subscriptions; return an unsubscribe.
+- `ot.feed.messages({ chat?, limit? })`, `ot.feed.tokens()`, `ot.feed.token(address)`.
+
+Feed, write (`feed:write`):
+- `ot.feed.post({ id, chat, author, text, ts?, avatar?, link?, attachments? })` — a message from chat `chat` (the plugin's own chat name; the app keys it as `plugin:<pluginId>:<chat>`). `id` is the plugin's own stable id for de-duplication. Landing in the hub means contract detection, enrichment, calls, trending, favourite pings, filters, forwarding.
+- `ot.feed.patch(id, { text?, attachments? })`.
+
+Network:
+- `ot.fetch(url, init?)` — backend proxy. Hosts in `sites` are fetched with that site's session partition (cookies attached by the shell); other hosts plain. Returns `{ status, headers, text(), json() }`. Bodies capped.
+- `ot.sites.status(site)` → `{ signedIn: boolean }`; `ot.sites.signIn(site)` opens the sign-in window.
+
+UI (`ui: true`):
+- `ot.ui.root` — the iframe body, with the app's theme variables and base styles injected.
+- `ot.ui.setTitle(text)`, `ot.ui.setSubtitle(text)`, `ot.ui.badge(count | null)`.
+
+Actions (`actions`):
+- `ot.actions.openToken(address)`, `jump(messageId)`, `buy(address)`, `research(address)`, `copy(text)`, `notify(title, body)`.
+
+Storage (`storage`):
+- `ot.storage.get(key)`, `set(key, value)`, `remove(key)` — per plugin, in the backend state file.
+- `ot.settings.schema([{ key, label, type: 'text' | 'number' | 'toggle' | 'secret', default? }])` and `ot.settings.get()` — a small settings form rendered in the Plugins tab. Secrets are stored sealed like other config secrets.
+
+Lifecycle and logging:
+- `main(ot)` runs at enable and at app start; an optional returned `stop()` runs on disable, reload, or app close.
+- `ot.log(...args)` — the plugin's log panel in Settings.
+
+## Compatibility promise
+
+- The `ot` API is append-only within a major. Renaming or removing anything means `api: 2`, and the app keeps serving `api: 1` plugins.
+- The app refuses a plugin whose `api` major is higher than it knows, with a clear message.
+- The message and token shapes seen by plugins are the app's public types; changing them in a plugin-visible way requires a version bump. This rule goes into the repo's contributor notes so future work respects it.
+
+## Where plugins show in the app
+
+- **Column editor**: a **Plugin** type card. Picking it lists enabled plugins with `ui: true`; the column body is that plugin's iframe. Standard header controls apply.
+- **Add-channels picker**: chats created by plugins appear under a **Plugins** group with the plugin's icon; adding one works like adding a Telegram group.
+- **Messages** from plugins show a small "via <plugin name>" tag by the chat name.
+- **Layouts** that reference a plugin chat the user lacks show "plugin not installed" instead of breaking.
+- **Settings → Plugins**: installed list (name, version, permissions, sites, enabled, error), approve dialog, enable/disable/remove, Add plugin (file or URL), Reload, per-site sign-in status and Sign in button, each plugin's settings form and log panel.
+
+## Internals
+
+Backend (`backend/src/plugins.ts`, routes under `/api/plugins`):
+- Load folder, extract manifests, hash files. `GET /api/plugins`; `POST /api/plugins/:id/enable|disable|approve`; `POST /api/plugins/add` (file body or URL); `DELETE /api/plugins/:id`; `POST /api/plugins/reload`; `GET /api/plugins/:id/code` (served with a `Content-Type` of `text/javascript` for the iframe to import).
+- Feed input: `POST /api/plugins/:id/post` and `/patch`, validated and capped, pushed into the hub with `source: 'plugin'`, `chatId: plugin:<id>:<chat>`, `chatName: <chat>`.
+- `FeedMessage.source` gains `'plugin'`. Spots that switch on source (avatar route, link building, forwarding, the rail) get a plugin branch.
+- Storage: `GET/PUT /api/plugins/:id/storage` in the state file; settings schema and values alongside.
+- Proxy: `POST /api/plugins/:id/fetch` checks the host against the manifest's `sites`, then asks the shell (IPC) to fetch with that site's partition when a session exists; otherwise fetches plain. Without the shell (backend run on its own) the proxy fetches plain and reports that sign-in needs the desktop app.
+- Config: `plugins: { [id]: { enabled, approvedHash, settings } }`.
+
+Shell (`electron/main.js`):
+- One `persist:site-<host>` partition per site. `openSignIn(site)` opens a BrowserWindow on that partition at the site's URL. IPC `plugin-fetch` performs `session.fetch` on the partition and returns status, headers, body (capped).
+- The backend reaches the shell over a local HTTP callback: on start or attach the shell tells the backend its callback port (`POST /api/shell/hello { port, token }`), and the backend sends proxy fetches and sign-in requests to `127.0.0.1:<port>` with that token. A backend running without a shell has no callback and reports sign-in as unavailable.
+
+Frontend:
+- `PluginHost` mounts one sandboxed iframe per enabled plugin (`sandbox="allow-scripts"`, `srcdoc` bootstrap that imports `/api/plugins/:id/code` as a module and calls `main(ot)`), injects the bridge script, routes postMessage calls to the API with permission checks, and restarts on reload.
+- `PluginColumn` renders a plugin's iframe as a column body. Column editor card, picker group, the message "via" tag, and the Settings tab as above.
+
+## Testing
+
+- Backend: manifest extraction (valid, malformed, oversize), hash and approval flow, post validation and caps, proxy host checks, source `plugin` flowing through contract detection and calls.
+- Frontend: a bridge test running a tiny plugin in jsdom, checking permission denials and the append-only surface.
+- Example plugin `plugins-examples/hello-feed.js` posting fake messages from a public JSON endpoint; used in the docs walkthrough and as a smoke test.
+
+## Docs
+
+`docs/plugins.md`: the manifest, the full `ot` reference, the security warning, the sign-in flow, the compatibility promise, the walkthrough with the example plugin. Linked from README. No site-specific plugin lives in the repo; the user's own plugins stay in the git-ignored folder.
+
+## Out of scope for v1
+
+Backend-side plugin code, a plugin gallery or registry, plugin-to-plugin communication, zip packaging, auto-update of plugins.
