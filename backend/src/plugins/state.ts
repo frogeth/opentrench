@@ -1,13 +1,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+/** One field of the settings form a plugin declares at runtime; the app renders these, the state file keeps them. */
+export interface SettingField {
+  key: string;
+  label: string;
+  type: 'text' | 'number' | 'toggle' | 'secret';
+  default?: unknown;
+}
 export interface PluginRecord {
   storage: Record<string, unknown>;
   settings: Record<string, unknown>;
   chats: Record<string, string>;
+  /** the last form the plugin declared, so the user can fill it in while the plugin is switched off */
+  schema: SettingField[];
 }
 // The storage bag is keyed by whatever a plugin asks for, so it gets no prototype to walk into.
-const EMPTY = (): PluginRecord => ({ storage: Object.create(null), settings: {}, chats: {} });
+const EMPTY = (): PluginRecord => ({ storage: Object.create(null), settings: {}, chats: {}, schema: [] });
 const MAX_STORAGE_BYTES = 256 * 1024;
 /** distinct chats one plugin may name; each one becomes a watch key and a row in the pickers */
 const CHATS_MAX = 32;
@@ -28,7 +37,7 @@ export class PluginState {
     try {
       const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
       for (const [id, r] of Object.entries<any>(raw ?? {})) {
-        this.data[id] = { storage: Object.assign(Object.create(null), r?.storage ?? {}), settings: r?.settings ?? {}, chats: r?.chats ?? {} };
+        this.data[id] = { storage: Object.assign(Object.create(null), r?.storage ?? {}), settings: r?.settings ?? {}, chats: r?.chats ?? {}, schema: Array.isArray(r?.schema) ? r.schema : [] };
       }
     } catch {
       /* first run */
@@ -52,6 +61,10 @@ export class PluginState {
       else delete r.storage[key];
       throw new Error(`plugin storage is full (${MAX_STORAGE_BYTES / 1024} KB)`);
     }
+    this.save();
+  }
+  setSchema(id: string, schema: SettingField[]): void {
+    this.ensure(id).schema = schema;
     this.save();
   }
   setSettings(id: string, values: Record<string, unknown>): void {

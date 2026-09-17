@@ -198,13 +198,13 @@ describe('PluginRegistry', () => {
     expect(s1.read('p').storage).toEqual({ k: { a: 1 } });
     s1.flush();
     const s2 = new PluginState(file);
-    expect(s2.read('p')).toEqual({ storage: { k: { a: 1 } }, settings: { limit: 5 }, chats: { 'plugin:p:c': 'C' } });
+    expect(s2.read('p')).toEqual({ storage: { k: { a: 1 } }, settings: { limit: 5 }, chats: { 'plugin:p:c': 'C' }, schema: [] });
   });
   it('reading an unknown plugin does not add a record to the file', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ot-plugins-'));
     const file = path.join(dir, 'plugins-state.json');
     const s = new PluginState(file);
-    expect(s.read('ghost')).toEqual({ storage: {}, settings: {}, chats: {} });
+    expect(s.read('ghost')).toEqual({ storage: {}, settings: {}, chats: {}, schema: [] });
     s.noteChat('real', 'plugin:real:c', 'C');
     s.flush();
     expect(Object.keys(JSON.parse(fs.readFileSync(file, 'utf8')))).toEqual(['real']);

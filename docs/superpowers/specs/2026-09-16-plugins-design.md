@@ -86,7 +86,7 @@ Actions (`actions`):
 
 Storage (`storage`):
 - `ot.storage.get(key)`, `set(key, value)`, `remove(key)` — per plugin, in the backend state file. `get` is an own-property lookup, so a key like `constructor` reads back as null rather than reaching through the object.
-- `ot.settings.schema([{ key, label, type: 'text' | 'number' | 'toggle' | 'secret', default? }])` and `ot.settings.get()` — a small settings form rendered in the Plugins tab. At most 20 fields; a key is 1–40 of `[a-z0-9_-]`, must not be `__proto__`, `constructor` or `prototype`, and must not repeat; a label is at most 60 characters. Anything else is refused whole, so a half-valid form is never shown. Secrets are stored sealed like other config secrets.
+- `ot.settings.schema([{ key, label, type: 'text' | 'number' | 'toggle' | 'secret', default? }])` and `ot.settings.get()` — a small settings form rendered in the Plugins tab. At most 20 fields; a key is 1–40 of `[a-z0-9_-]`, must not be `__proto__`, `constructor` or `prototype`, and must not repeat; a label is at most 60 characters. Anything else is refused whole, so a half-valid form is never shown. The form a plugin declares is kept in the plugins state file, so the Plugins tab can show it while the plugin is switched off or waiting to be approved. Secrets are **not** sealed yet: they sit in that state file in plain text like the rest of a plugin's data, and the form says so under it. Sealing them the way the app's own config secrets are sealed is deferred.
 
 Lifecycle and logging:
 - `main(ot)` runs at enable and at app start; an optional returned `stop()` runs on disable, reload, or app close.

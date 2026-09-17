@@ -55,6 +55,11 @@ function Pill({ label, state }: { label: 'discord' | 'telegram'; state: string }
   );
 }
 
+/** The entries whose plugin is still in `ids`; the same object back when nothing had to go. */
+function keptFor<T>(ids: Set<string>, m: Record<string, T>): Record<string, T> {
+  return Object.keys(m).every((k) => ids.has(k)) ? m : Object.fromEntries(Object.entries(m).filter(([k]) => ids.has(k)));
+}
+
 /**
  * A plugin column's share of a running plugin: the rectangle its frame is laid over. The frame itself
  * belongs to `PluginHost` and never moves, so reordering or resizing columns cannot reload a plugin.
@@ -734,19 +739,41 @@ export default function App() {
   const slots = useRef(new SlotStore()).current;
   /** the column layout as one short string: what moves a plugin's frame without resizing it */
   const pluginLayout = useMemo(() => flatColumns.map((c) => `${c.id}:${c.width ?? ''}:${c.zoom ?? ''}`).join('|'), [flatColumns]);
-  // A plugin that is gone or switched off leaves nothing behind: its error, its settings form, and
-  // whatever it had made of its column header all go with it.
+  // A plugin that is gone or switched off leaves nothing behind: its error and whatever it had made
+  // of its column header go with it.
   const livePlugins = useMemo(() => plugins.filter((p) => p.enabled && p.manifest).map((p) => p.id).join('|'), [plugins]);
+  // Its settings form is different: the form is what the user fills in *while* the plugin is off, so
+  // it only goes when the plugin itself is gone from the folder.
+  const knownPlugins = useMemo(() => plugins.map((p) => p.id).join('|'), [plugins]);
   useEffect(() => {
     const live = new Set(livePlugins ? livePlugins.split('|') : []);
-    const prune = <T,>(m: Record<string, T>): Record<string, T> => (Object.keys(m).every((k) => live.has(k)) ? m : Object.fromEntries(Object.entries(m).filter(([k]) => live.has(k))));
-    setPluginErrors(prune);
-    setPluginSchemas(prune);
-    setPluginTitles(prune);
-    setPluginSubs(prune);
-    setPluginBadges(prune);
+    setPluginErrors((m) => keptFor(live, m));
+    setPluginTitles((m) => keptFor(live, m));
+    setPluginSubs((m) => keptFor(live, m));
+    setPluginBadges((m) => keptFor(live, m));
     setPluginPrompts((l) => (l.every((p) => live.has(p.plugin)) ? l : l.filter((p) => live.has(p.plugin))));
   }, [livePlugins]);
+  useEffect(() => {
+    const known = new Set(knownPlugins ? knownPlugins.split('|') : []);
+    setPluginSchemas((m) => keptFor(known, m));
+  }, [knownPlugins]);
+  /**
+   * The form a plugin declares is the app's to remember: it is stored server-side so Settings can show
+   * it while the plugin is switched off. Debounced, because a plugin may declare it on every start.
+   */
+  const schemaSaves = useRef(new Map<string, number>());
+  useEffect(() => () => schemaSaves.current.forEach((t) => window.clearTimeout(t)), []);
+  const rememberSchema = (id: string, schema: SettingField[]) => {
+    setPluginSchemas((m) => ({ ...m, [id]: schema }));
+    window.clearTimeout(schemaSaves.current.get(id));
+    schemaSaves.current.set(
+      id,
+      window.setTimeout(() => {
+        schemaSaves.current.delete(id);
+        void api.pluginSchemaSet(id, schema).catch(() => {});
+      }, 500),
+    );
+  };
   const pluginToastTimer = useRef<number>();
   useEffect(() => () => window.clearTimeout(pluginToastTimer.current), []);
   const showPluginToast = (text: string) => {
@@ -1863,8 +1890,12 @@ export default function App() {
         onTitle={(id, t) => setPluginTitles((m) => ({ ...m, [id]: t }))}
         onSubtitle={(id, t) => setPluginSubs((m) => ({ ...m, [id]: t }))}
         onBadge={(id, n) => setPluginBadges((m) => ({ ...m, [id]: n ?? undefined }))}
-        onSchema={(id, schema) => setPluginSchemas((m) => ({ ...m, [id]: schema }))}
-        onError={(id, t) => setPluginErrors((e) => ({ ...e, [id]: t }))}
+        onSchema={rememberSchema}
+        onError={(id, t) => {
+          setPluginErrors((e) => ({ ...e, [id]: t }));
+          // the same line in the plugin's own log, so ⚙ → Plugins shows it in context and it survives a reload
+          void api.pluginLog(id, 'error', t).catch(() => {});
+        }}
       />
       {lookingUp && <div className="lookup-toast">looking up {lookingUp.slice(0, 6)}…{lookingUp.slice(-4)}</div>}
       {pluginToast && <div className="lookup-toast plugin-toast">{pluginToast}</div>}

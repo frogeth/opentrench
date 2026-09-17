@@ -14,7 +14,7 @@ function ctx(over: Partial<PluginContext> = {}): PluginContext {
       pluginPatch: vi.fn(async () => ({})),
       pluginStorage: vi.fn(async () => ({ a: 1 })),
       pluginStorageSet: vi.fn(async () => ({})),
-      pluginSettings: vi.fn(async () => ({ limit: 3 })),
+      pluginSettings: vi.fn(async () => ({ values: { limit: 3 }, schema: [{ key: 'limit', label: 'Limit', type: 'number' }] })),
       pluginFetch: vi.fn(async () => ({ status: 200, headers: {}, body: '{"ok":true}' })),
       pluginSites: vi.fn(async () => ({ sites: ['https://example.com'], signedIn: [], available: true })),
       pluginSignIn: vi.fn(async () => ({})),
@@ -72,6 +72,9 @@ describe('routeCall', () => {
     expect(c.actions.copy).not.toHaveBeenCalled();
   });
 
+  it('settings.get hands the plugin its own answers, not the form the app renders', async () => {
+    expect(await routeCall(ctx(), { method: 'settings.get', args: [] })).toEqual({ limit: 3 });
+  });
   it('settings.schema takes a valid schema and refuses a bad key', async () => {
     const setSchema = vi.fn();
     const c = ctx({ ui: { setTitle: vi.fn(), setSubtitle: vi.fn(), badge: vi.fn(), setSchema } });

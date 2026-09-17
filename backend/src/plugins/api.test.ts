@@ -148,7 +148,7 @@ describe('plugins api', () => {
     expect((await j('PUT', '/plugins/hello-feed/storage/k', { value: { a: 1 } })).status).toBe(200);
     expect((await j('GET', '/plugins/hello-feed/storage')).body).toEqual({ k: { a: 1 } });
     expect((await j('PUT', '/plugins/hello-feed/settings', { values: { limit: 5 } })).status).toBe(200);
-    expect((await j('GET', '/plugins/hello-feed/settings')).body).toEqual({ limit: 5 });
+    expect((await j('GET', '/plugins/hello-feed/settings')).body).toEqual({ values: { limit: 5 }, schema: [] });
   });
   it("fetch goes out plain off the plugin's sites; javascript: and local addresses are refused", async () => {
     const ok = await j('POST', '/plugins/hello-feed/fetch', { url: 'https://plain.example.com/api' });
@@ -320,6 +320,62 @@ describe('plugins api guards', () => {
       const gone = await t.j('GET', '/plugins/hello-feed/code');
       expect(gone.status).toBe(404);
       expect(gone.body.error).toMatch(/gone/);
+    } finally {
+      t.close();
+    }
+  });
+  it('approve takes the hash the user reviewed and refuses one from a file that changed under them', async () => {
+    const t = harness();
+    try {
+      const shown = (await t.j('GET', '/plugins')).body[0];
+      // the bytes moved while the dialog was open: the approval would be for something nobody read
+      const stale = await t.j('POST', '/plugins/hello-feed/approve', { hash: 'f'.repeat(64) });
+      expect(stale.status).toBe(409);
+      expect(stale.body.error).toMatch(/changed since you opened it/);
+      expect((await t.j('GET', '/plugins')).body[0].needsApproval).toBe(true);
+      // the hash the list handed the dialog is the one that goes through
+      expect((await t.j('POST', '/plugins/hello-feed/approve', { hash: shown.hash })).status).toBe(200);
+      expect((await t.j('GET', '/plugins')).body[0].needsApproval).toBe(false);
+    } finally {
+      t.close();
+    }
+  });
+  it('add says whether it replaced a plugin that was already there, and inspect reads a manifest without writing', async () => {
+    const t = harness();
+    try {
+      const other = FILE.replace(/hello-feed/g, 'other-feed');
+      const fresh = await t.j('POST', '/plugins/add', { source: other });
+      expect(fresh.body).toMatchObject({ id: 'other-feed', replaced: false });
+      await t.j('POST', '/plugins/other-feed/approve');
+      const again = await t.j('POST', '/plugins/add', { source: `${other}\n// v2` });
+      expect(again.body).toMatchObject({ id: 'other-feed', replaced: true, needsApproval: true });
+      // inspect only parses: it never writes a file, and it refuses what add would refuse
+      const seen = await t.j('POST', '/plugins/inspect', { source: FILE });
+      expect(seen.body).toMatchObject({ id: 'hello-feed', name: 'Hello feed', version: '1.0.0' });
+      expect((await t.j('POST', '/plugins/inspect', { source: 'export default function main(ot) {}' })).status).toBe(400);
+      expect(fs.readdirSync(t.dir).filter((f) => f.endsWith('.js')).sort()).toEqual(['hello-feed.js', 'other-feed.js']);
+    } finally {
+      t.close();
+    }
+  });
+  it('a plugin\'s settings form is kept, so it can be filled in before the plugin is enabled again', async () => {
+    const t = harness();
+    try {
+      const schema = [{ key: 'greeting', label: 'Greeting', type: 'text', default: 'hi' }];
+      // only a running plugin declares its form
+      expect((await t.j('PUT', '/plugins/hello-feed/schema', { schema })).status).toBe(403);
+      await approved(t);
+      expect((await t.j('PUT', '/plugins/hello-feed/schema', { schema })).status).toBe(200);
+      expect((await t.j('GET', '/plugins/hello-feed/settings')).body).toEqual({ values: {}, schema });
+      // and it survives being switched off, which is when the user fills the form in
+      await t.j('POST', '/plugins/hello-feed/disable');
+      expect((await t.j('GET', '/plugins/hello-feed/settings')).body.schema).toEqual(schema);
+      await t.j('POST', '/plugins/hello-feed/enable');
+      expect((await t.j('PUT', '/plugins/hello-feed/schema', { schema: [{ key: 'bad key!', label: 'x', type: 'text' }] })).status).toBe(400);
+      expect((await t.j('PUT', '/plugins/hello-feed/schema', { schema: [{ key: 'a', label: 'x', type: 'colour' }] })).status).toBe(400);
+      expect((await t.j('PUT', '/plugins/hello-feed/schema', { schema: new Array(21).fill({ key: 'a', label: 'x', type: 'text' }) })).status).toBe(400);
+      // a refused schema never replaces the one that works
+      expect((await t.j('GET', '/plugins/hello-feed/settings')).body.schema).toEqual(schema);
     } finally {
       t.close();
     }
@@ -503,7 +559,7 @@ describe('plugins api guards', () => {
       expect(over.status).toBe(400);
       expect(over.body.error).toMatch(/too large/);
       expect((await t.j('PUT', '/plugins/hello-feed/settings', { values: { limit: 5 } })).status).toBe(200);
-      expect((await t.j('GET', '/plugins/hello-feed/settings')).body).toEqual({ limit: 5 });
+      expect((await t.j('GET', '/plugins/hello-feed/settings')).body).toEqual({ values: { limit: 5 }, schema: [] });
     } finally {
       t.close();
     }

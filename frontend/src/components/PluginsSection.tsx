@@ -1,25 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { SettingField } from '../plugins/route';
 import { DOCS } from '../site';
 import type { PluginInfo } from '../types';
 import { Icon } from './Icon';
+import { PluginApproveDialog } from './PluginApproveDialog';
 
-/** The last word before a plugin runs. Written to be read, not skimmed; it never softens. */
-const WARNING =
-  'This is code written by someone else. Once enabled it can post anything into your feed, and it can use your logins on the sites listed above through this app. opentrench cannot check it for you. Open the file and read it before you trust it.';
-
-/**
- * What each permission means in the user's own words. Nothing here promises less than the permission
- * allows: `actions` says "open buys for you to confirm", never "buy" — a buy is always the user's own
- * click on the confirmation bar.
- */
-const PERMISSION_WORDS: Record<string, string> = {
-  'feed:write': 'post messages into your feed',
-  storage: 'keep its own settings and data',
-  actions: 'write your clipboard, and open buys for you to confirm',
-};
-const permissionWords = (permissions: string[]): string[] => permissions.map((p) => PERMISSION_WORDS[p] ?? p);
+const why = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const host = (site: string): string => {
   try {
     return new URL(site).host;
@@ -28,23 +15,37 @@ const host = (site: string): string => {
   }
 };
 
-/** The settings a plugin asked the user for, as the form its `ot.settings.schema` describes. */
-function SettingsForm({ id, fields }: { id: string; fields: SettingField[] }) {
+/**
+ * The settings a plugin asked the user for, as the form its `ot.settings.schema` describes. The form
+ * comes from the running plugin when there is one and from the backend's copy otherwise, so a plugin
+ * that is switched off — or waiting to be approved — can still have its key filled in.
+ */
+function SettingsForm({ id, fields }: { id: string; fields?: SettingField[] }) {
+  const [schema, setSchema] = useState<SettingField[]>(fields ?? []);
   const [values, setValues] = useState<Record<string, unknown> | null>(null);
   const [state, setState] = useState<'clean' | 'dirty' | 'saved'>('clean');
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     setValues(null);
-    // A plugin with no settings yet reads as an empty form, not as an error.
     api.pluginSettings(id).then(
-      (v) => live && setValues(v),
+      (r) => {
+        if (!live) return;
+        // the running plugin's form wins; the stored one fills in for a plugin that is not running
+        const form = fields?.length ? fields : r.schema;
+        setSchema(form);
+        // a field the user has never touched shows the plugin's default, and saves as one
+        const seeded: Record<string, unknown> = { ...r.values };
+        for (const f of form) if (!(f.key in seeded) && f.default !== undefined) seeded[f.key] = f.default;
+        setValues(seeded);
+      },
       () => live && setValues({}),
     );
     return () => {
       live = false;
     };
-  }, [id]);
+  }, [id, fields]);
+  if (schema.length === 0) return null;
   if (!values) return <div className="hint">Loading settings…</div>;
   const set = (key: string, v: unknown) => {
     setValues((s) => ({ ...s, [key]: v }));
@@ -54,12 +55,12 @@ function SettingsForm({ id, fields }: { id: string; fields: SettingField[] }) {
   const save = () =>
     api.pluginSettingsSet(id, values).then(
       () => setState('saved'),
-      (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
+      (e: unknown) => setErr(why(e)),
     );
   return (
     <div className="plugin-settings">
-      {fields.map((f) => {
-        const v = values[f.key] ?? f.default;
+      {schema.map((f) => {
+        const v = values[f.key];
         return (
           <label key={f.key} className="plugin-field">
             <span>{f.label}</span>
@@ -68,7 +69,7 @@ function SettingsForm({ id, fields }: { id: string; fields: SettingField[] }) {
             ) : (
               <input
                 className="fed-input"
-                // a secret is still stored beside the plugin's other settings; the field only keeps it off the screen
+                // a secret is stored beside the plugin's other settings; the field only keeps it off the screen
                 type={f.type === 'secret' ? 'password' : f.type === 'number' ? 'number' : 'text'}
                 value={v === undefined || v === null ? '' : String(v)}
                 onChange={(e) => set(f.key, f.type === 'number' ? (e.target.value === '' ? undefined : Number(e.target.value)) : e.target.value)}
@@ -83,6 +84,8 @@ function SettingsForm({ id, fields }: { id: string; fields: SettingField[] }) {
         </button>
         {err && <span className="err">{err}</span>}
       </div>
+      {/* until plugin secrets are sealed the way the app's own are, say plainly where they end up */}
+      <div className="hint">stored in plain text in your plugins state file</div>
     </div>
   );
 }
@@ -100,18 +103,19 @@ export function PluginsSection({
   plugins: PluginInfo[];
   /** a plugin's last runtime error, by id (the frames report these) */
   errors: Record<string, string>;
-  /** the settings form each plugin declared, by id */
+  /** the settings form each running plugin declared, by id */
   schemas: Record<string, SettingField[]>;
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const [approving, setApproving] = useState<PluginInfo | null>(null);
+  const [approving, setApproving] = useState<string | null>(null);
   const [url, setUrl] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [logsFor, setLogsFor] = useState<string | null>(null);
   const [logs, setLogs] = useState<{ ts: number; level: string; text: string }[]>([]);
-  const [code, setCode] = useState<string | null>(null);
   const [shell, setShell] = useState(true);
+  const fileInput = useRef<HTMLInputElement>(null);
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setErr(null);
@@ -119,18 +123,23 @@ export function PluginsSection({
       await fn();
       onChanged();
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(why(e));
     } finally {
       setBusy(false);
     }
   };
   useEffect(() => {
+    setLogs([]); // the panel must never show one plugin's lines under another's name
     if (!logsFor) return;
     const load = () => api.pluginLogs(logsFor).then(setLogs, () => {});
     load();
     const t = window.setInterval(load, 3000);
     return () => window.clearInterval(t);
   }, [logsFor]);
+  // a plugin removed (or gone from the folder) takes its open log panel with it
+  useEffect(() => {
+    if (logsFor && !plugins.some((p) => p.id === logsFor)) setLogsFor(null);
+  }, [plugins, logsFor]);
   // Only worth saying when a plugin actually wants a site: without the desktop app its sign-in button
   // has nothing to open. Asked again whenever the list changes, so plugging the app in clears the hint.
   const wantsSites = plugins.some((p) => (p.manifest?.sites.length ?? 0) > 0);
@@ -141,8 +150,59 @@ export function PluginsSection({
       () => {},
     );
   }, [wantsSites, plugins]);
-  const addFile = (f: File) => f.text().then((source) => run(() => api.pluginAdd(source)));
-  const viewCode = (p: PluginInfo) => (code === null ? api.pluginSource(p.id).then(setCode, (e: unknown) => setCode(e instanceof Error ? e.message : String(e))) : setCode(null));
+
+  /**
+   * Installing says what landed, because a replacement is the case that matters: the file the user
+   * approved before is gone, and the new one starts unapproved. A local file's manifest is read first
+   * (nothing is written by that) so the question can name the plugin being replaced.
+   */
+  const add = async (source: string, link?: string) => {
+    setBusy(true);
+    setErr(null);
+    setNote(null);
+    try {
+      const info = link ? await api.pluginAddUrl(link) : await api.pluginAdd(source);
+      const name = info.manifest?.name ?? info.id;
+      setNote(info.replaced ? `replaced ${name}; it needs approval again` : `added ${name} ${info.manifest?.version ?? ''} — review & approve`.trim());
+      onChanged();
+    } catch (e: unknown) {
+      setErr(why(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  /** the plugin this source would overwrite, if the user already has one under that id */
+  const installed = (id: string | undefined) => (id ? plugins.find((p) => p.id === id) : undefined);
+  const okToReplace = (p: PluginInfo | undefined) => !p || window.confirm(`Replace the installed ${p.manifest?.name ?? p.id}? Its approval is reset.`);
+  const addFile = async (f: File) => {
+    // the same file picked twice in a row must still fire a change event
+    if (fileInput.current) fileInput.current.value = '';
+    let had: PluginInfo | undefined;
+    let source: string;
+    try {
+      source = await f.text();
+      had = installed((await api.pluginInspect(source)).id);
+    } catch (e: unknown) {
+      // unreadable, or no usable manifest: say so here rather than letting `add` repeat it
+      setErr(why(e));
+      return;
+    }
+    if (okToReplace(had)) await add(source);
+  };
+  const addUrl = async () => {
+    const link = url.trim();
+    // the id a `<id>.js` link would install under; the backend has the last word either way
+    let id: string | undefined;
+    try {
+      id = /([a-z0-9-]+)\.js$/i.exec(new URL(link).pathname)?.[1];
+    } catch {
+      /* not a URL we can read an id from */
+    }
+    if (!okToReplace(installed(id))) return;
+    await add('', link);
+    setUrl('');
+  };
+  const pending = approving ? plugins.find((p) => p.id === approving) : undefined;
   return (
     <div className="plugins">
       <div className="hint">
@@ -152,12 +212,13 @@ export function PluginsSection({
         </a>
       </div>
       <div className="plugins-add">
-        <label className="seen-all">
+        {/* a real button, so the control is reachable by keyboard; the input itself stays hidden */}
+        <button className="seen-all" disabled={busy} onClick={() => fileInput.current?.click()}>
           add a file
-          <input type="file" accept=".js" hidden onChange={(e) => e.target.files?.[0] && addFile(e.target.files[0])} />
-        </label>
+        </button>
+        <input ref={fileInput} type="file" accept=".js" hidden onChange={(e) => e.target.files?.[0] && void addFile(e.target.files[0])} />
         <input className="fed-input" placeholder="or paste an https link to a .js file" value={url} onChange={(e) => setUrl(e.target.value)} spellCheck={false} />
-        <button className="seen-all" disabled={busy || !/^https:\/\//.test(url.trim())} onClick={() => run(() => api.pluginAddUrl(url.trim()).then(() => setUrl('')))}>
+        <button className="seen-all" disabled={busy || !/^https:\/\//.test(url.trim())} onClick={() => void addUrl()}>
           add from link
         </button>
         <button className="seen-all" disabled={busy} onClick={() => run(() => api.pluginsReload())}>
@@ -165,6 +226,7 @@ export function PluginsSection({
         </button>
       </div>
       {err && <div className="empty err">{err}</div>}
+      {note && <div className="hint plugin-note">{note}</div>}
       {wantsSites && !shell && <div className="hint">Signing in to sites needs the desktop app.</div>}
       {plugins.length === 0 && <div className="empty">No plugins yet.</div>}
       {plugins.map((p) => (
@@ -177,13 +239,10 @@ export function PluginsSection({
                 v{p.manifest.version} · api {p.manifest.api}
               </span>
             )}
-            {p.error && <span className="err">{p.error}</span>}
-            {errors[p.id] && (
-              <span className="err" title={errors[p.id]}>
-                error — see log
-              </span>
-            )}
           </div>
+          {/* what the file is wrong about, and what it did wrong while running: both said in full */}
+          {p.error && <div className="err plugin-err">{p.error}</div>}
+          {errors[p.id] && <div className="err plugin-err">{errors[p.id]}</div>}
           {p.manifest && (
             <div className="plugin-meta muted">
               {p.manifest.description && <div>{p.manifest.description}</div>}
@@ -210,13 +269,7 @@ export function PluginsSection({
           )}
           <div className="plugin-actions">
             {p.manifest && p.needsApproval && (
-              <button
-                className="seen-all"
-                onClick={() => {
-                  setCode(null);
-                  setApproving(p);
-                }}
-              >
+              <button className="seen-all" onClick={() => setApproving(p.id)}>
                 review &amp; approve
               </button>
             )}
@@ -237,53 +290,19 @@ export function PluginsSection({
               remove
             </button>
           </div>
-          {schemas[p.id]?.length > 0 && <SettingsForm id={p.id} fields={schemas[p.id]} />}
+          {p.manifest && <SettingsForm id={p.id} fields={schemas[p.id]} />}
           {logsFor === p.id && <pre className="plugin-log">{logs.length === 0 ? 'nothing logged yet' : logs.map((l) => `${new Date(l.ts).toLocaleTimeString()} ${l.level} ${l.text}`).join('\n')}</pre>}
         </div>
       ))}
-      {approving?.manifest && (
-        <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setApproving(null)}>
-          <div className="modal plugin-approve">
-            <h3>Approve {approving.manifest.name}?</h3>
-            <p>
-              <b>Version</b> {approving.manifest.version} · <b>file</b> {approving.file}{' '}
-              <button className="link" onClick={() => viewCode(approving)}>
-                {code === null ? 'view code' : 'hide code'}
-              </button>
-            </p>
-            {code !== null && <pre className="plugin-code">{code}</pre>}
-            <p>
-              <b>Every plugin can</b> read every message in your feed (never the ones the feed hides) and fetch any host.
-            </p>
-            <p>
-              <b>It also asks to:</b> {permissionWords(approving.manifest.permissions).join('; ') || 'nothing more'}.
-            </p>
-            {approving.manifest.sites.length > 0 && (
-              <p>
-                <b>It will use your login on:</b> {approving.manifest.sites.map(host).join(', ')}
-              </p>
-            )}
-            <p className="err">{WARNING}</p>
-            <div className="modal-actions">
-              <button className="seen-all" onClick={() => setApproving(null)}>
-                cancel
-              </button>
-              <button
-                className="seen-all on"
-                disabled={busy}
-                onClick={() =>
-                  run(async () => {
-                    await api.pluginApprove(approving.id);
-                    await api.pluginEnable(approving.id);
-                    setApproving(null);
-                  })
-                }
-              >
-                I read it — approve and enable
-              </button>
-            </div>
-          </div>
-        </div>
+      {pending?.manifest && pending.needsApproval && (
+        <PluginApproveDialog
+          plugin={pending}
+          onClose={() => setApproving(null)}
+          onApproved={() => {
+            setApproving(null);
+            onChanged();
+          }}
+        />
       )}
     </div>
   );

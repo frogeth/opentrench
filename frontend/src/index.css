@@ -1427,12 +1427,19 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 .plugin-meta { font-size: 11px; display: flex; flex-direction: column; gap: 2px; }
 .plugin-site { margin-right: 8px; }
 .plugin-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.plugin-err { font-size: 11px; overflow-wrap: anywhere; }
+.plugin-note { color: var(--accent); }
 .plugin-settings { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 8px; }
 .plugin-field { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .plugin-field > span { min-width: 140px; }
 .plugin-field .fed-input { flex: 1; min-width: 0; }
 .plugin-log { max-height: 200px; overflow: auto; font-size: 11px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; white-space: pre-wrap; }
-.plugin-approve { max-width: 520px; padding: 18px; }
-.plugin-approve .err { border: 1px solid #a33; border-radius: 6px; padding: 8px 10px; }
+/* its own modal: auto height so a short manifest does not float in a tall box, and a body that
+   scrolls under a pinned foot when the file is long */
+.plugin-approve { width: min(560px, 94vw); height: auto; max-height: 90vh; }
+.plugin-approve-body { overflow: auto; padding: 14px 16px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; }
+.plugin-approve-body p { margin: 0; }
+.plugin-approve-body code { font-family: var(--mono); font-size: 11px; }
+.plugin-approve-body .err { border: 1px solid #a33; border-radius: 6px; padding: 8px 10px; }
 /* the file itself, for reading before approving: never edited here, only read */
 .plugin-code { max-height: 260px; overflow: auto; font-family: var(--mono); font-size: 11px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }

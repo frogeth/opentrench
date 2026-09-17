@@ -6,10 +6,10 @@ import type { FeedMessage, ServerEvent } from '../types.js';
 import { cleanText, POSTS_PER_WINDOW, POST_WINDOW_MS, PostLimiter, toFeedMessage, toMedia, type PluginPost } from './feed.js';
 import { isLocalHost, isLoopbackIp } from './hosts.js';
 import { CREDENTIAL_HEADERS, HEADER_NAME_RE, REDIRECT_STATUS, REQUEST_HEADER_STRIP } from './http.js';
-import { MAX_FILE, MAX_FILE_MESSAGE } from './manifest.js';
+import { extractManifest, MAX_FILE, MAX_FILE_MESSAGE } from './manifest.js';
 import { RegistryError, type PluginRegistry } from './registry.js';
 import { safeDispatcher, type ShellLink } from './shell.js';
-import type { PluginState } from './state.js';
+import type { PluginState, SettingField } from './state.js';
 
 /** The slice of ConfigStore these routes need (keeps tests free of the real store). */
 export interface WatchConfig {
@@ -36,6 +36,34 @@ const SETTINGS_MAX = 64 * 1024;
 /** Key names that mean something to an object rather than to the plugin storing them. */
 const PROTOTYPE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const ADD_URL_TIMEOUT_MS = 15_000;
+/** the settings form a plugin may declare: small, flat, and every field named once */
+const SCHEMA_FIELDS_MAX = 20;
+const SCHEMA_KEY_RE = /^[a-z0-9_-]{1,40}$/i;
+const SCHEMA_LABEL_MAX = 60;
+const SCHEMA_TYPES = ['text', 'number', 'toggle', 'secret'];
+
+/**
+ * The app validates a schema before it ever gets here (see the router), but this route is reachable
+ * on its own, so it checks the same things rather than trusting the caller: what is stored is what
+ * the settings form will render.
+ */
+export function settingFields(raw: unknown): SettingField[] {
+  if (!Array.isArray(raw) || raw.length > SCHEMA_FIELDS_MAX) throw new Error(`the settings schema must be an array of at most ${SCHEMA_FIELDS_MAX} fields`);
+  const seen = new Set<string>();
+  return raw.map((entry) => {
+    const f = (entry ?? {}) as Record<string, unknown>;
+    const key = String(f.key ?? '');
+    if (!SCHEMA_KEY_RE.test(key)) throw new Error(`settings field key ${JSON.stringify(f.key)} must be 1-40 letters, digits, _ or -`);
+    if (PROTOTYPE_KEYS.has(key.toLowerCase())) throw new Error(`settings field key ${key} is reserved`);
+    if (seen.has(key)) throw new Error(`settings field key ${key} appears twice`);
+    seen.add(key);
+    if (typeof f.label !== 'string' || !f.label || f.label.length > SCHEMA_LABEL_MAX) throw new Error(`settings field ${key} needs a label of at most ${SCHEMA_LABEL_MAX} characters`);
+    if (typeof f.type !== 'string' || !SCHEMA_TYPES.includes(f.type)) throw new Error(`settings field ${key} has an unknown type; use ${SCHEMA_TYPES.join(', ')}`);
+    const field: SettingField = { key, label: f.label, type: f.type as SettingField['type'] };
+    if ('default' in f) field.default = f.default;
+    return field;
+  });
+}
 
 /**
  * Is the peer on this machine? `/shell/hello` hands out the socket a plugin's site-authenticated
@@ -240,9 +268,23 @@ export function createPluginsApi(
       fail(res, 400, why(e));
     }
   });
+  r.post('/plugins/inspect', (req, res) => {
+    // Read a file's manifest without installing it, so the app can say *what* is about to be added —
+    // and warn when it would replace a plugin already in the folder. Nothing is written here.
+    try {
+      const source = typeof req.body?.source === 'string' ? req.body.source : '';
+      if (!source) return fail(res, 400, 'source');
+      res.json(extractManifest(source));
+    } catch (e) {
+      fail(res, 400, why(e));
+    }
+  });
   r.post('/plugins/:id/approve', (req, res) => {
     try {
-      reg.approve(String(req.params.id));
+      // The hash is what the approval dialog displayed; without one this is the plain "approve what is
+      // in the folder" call the API has always had.
+      const hash = req.body?.hash === undefined ? undefined : String(req.body.hash);
+      reg.approve(String(req.params.id), hash);
       res.json({ ok: true });
     } catch (e) {
       fail(res, statusFor(e, 400), why(e));
@@ -414,7 +456,23 @@ export function createPluginsApi(
   r.get('/plugins/:id/settings', (req, res) => {
     const id = loaded(req, res);
     if (!id) return;
-    res.json(state.read(id).settings);
+    const rec = state.read(id);
+    // The form and the answers together: the app can render the settings of a plugin that is not
+    // running (switched off, or waiting to be approved), which is often when they get filled in.
+    res.json({ values: rec.settings, schema: rec.schema });
+  });
+  r.put('/plugins/:id/schema', (req, res) => {
+    // Only a running plugin declares its form; the app forwards what the plugin asked for.
+    const id = enabled(req, res);
+    if (!id) return;
+    let schema: SettingField[];
+    try {
+      schema = settingFields(req.body?.schema);
+    } catch (e) {
+      return fail(res, 400, why(e));
+    }
+    state.setSchema(id, schema);
+    res.json({ ok: true });
   });
   r.put('/plugins/:id/settings', (req, res) => {
     // Settings are the user's answers to the plugin's schema, and filling in a key is often what one

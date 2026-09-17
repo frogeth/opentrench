@@ -166,9 +166,14 @@ export class PluginRegistry {
     if (!p) throw new RegistryError('unknown', 'unknown plugin');
     return fs.readFileSync(p.file, 'utf8');
   }
-  approve(id: string): void {
+  /**
+   * Approve what the user actually read. The dialog hands back the hash of the version it showed, so
+   * a file swapped while it was open is refused rather than approved on the strength of an old read.
+   */
+  approve(id: string, hash?: string): void {
     const p = this.loaded.get(id);
     if (!p?.manifest) throw notLoaded(p);
+    if (hash && hash !== p.hash) throw new RegistryError('changed', 'the file changed since you opened it; review it again');
     this.cfg.update((c) => {
       c.plugins[id] = { ...(c.plugins[id] ?? { enabled: false }), approvedHash: p.hash };
     });
@@ -190,10 +195,13 @@ export class PluginRegistry {
     this.onChange();
   }
   /** Validate, then write `<id>.js`. Replacing an existing file drops its approval (the hash changes). */
-  add(source: string): PluginInfo {
+  add(source: string): PluginInfo & { replaced: boolean } {
     const m = extractManifest(source);
     fs.mkdirSync(this.dir, { recursive: true });
     const target = path.join(this.dir, `${m.id}.js`);
+    // Whether the user is installing something new or overwriting what they already had — the one
+    // difference that matters to them, since a replacement starts again from unapproved.
+    const replaced = this.loaded.has(m.id);
     try {
       // Never write *through* a symlink someone planted in the folder: drop whatever is in the way,
       // the ordinary file we are meant to replace included.
@@ -215,7 +223,7 @@ export class PluginRegistry {
       fs.closeSync(fd);
     }
     this.load();
-    return this.get(m.id)!;
+    return { ...this.get(m.id)!, replaced };
   }
   remove(id: string): void {
     const p = this.loaded.get(id);

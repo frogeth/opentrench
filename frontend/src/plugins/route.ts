@@ -150,7 +150,8 @@ export async function routeCall(ctx: PluginContext, call: PluginCall): Promise<u
       ctx.ui.setSchema(settingsSchema(a0));
       return null;
     case 'settings.get':
-      return ctx.api.pluginSettings(ctx.id);
+      // the plugin asked for its own answers; the form it declared is the app's business, not its
+      return ctx.api.pluginSettings(ctx.id).then((r) => r.values);
     case 'ui.setTitle':
       ctx.ui.setTitle(strOrEmpty(a0, 'title', 60));
       return null;

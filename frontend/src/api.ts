@@ -326,9 +326,13 @@ export const api = {
   // ---- plugins (routes in backend/src/plugins/api.ts)
   plugins: () => req<PluginInfo[]>('GET', '/plugins'),
   pluginsReload: () => req<PluginInfo[]>('POST', '/plugins/reload'),
-  pluginAdd: (source: string) => req<PluginInfo>('POST', '/plugins/add', { source }),
-  pluginAddUrl: (url: string) => req<PluginInfo>('POST', '/plugins/add-url', { url }),
-  pluginApprove: (id: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/approve`),
+  /** `replaced` says a plugin with that id was already in the folder and has just been overwritten */
+  pluginAdd: (source: string) => req<PluginInfo & { replaced: boolean }>('POST', '/plugins/add', { source }),
+  pluginAddUrl: (url: string) => req<PluginInfo & { replaced: boolean }>('POST', '/plugins/add-url', { url }),
+  /** read a file's manifest without installing it, to say what is about to be added */
+  pluginInspect: (source: string) => req<NonNullable<PluginInfo['manifest']>>('POST', '/plugins/inspect', { source }),
+  /** the hash is the version the approval dialog showed: the backend refuses a file that changed since */
+  pluginApprove: (id: string, hash?: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/approve`, hash ? { hash } : undefined),
   pluginEnable: (id: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/enable`),
   pluginDisable: (id: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/disable`),
   pluginRemove: (id: string) => req<{ ok: true }>('DELETE', `/plugins/${encodeURIComponent(id)}`),
@@ -344,7 +348,9 @@ export const api = {
   pluginPatch: (id: string, msgId: string, patch: unknown) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/patch`, { ...(patch as object), id: msgId }),
   pluginStorage: (id: string) => req<Record<string, unknown>>('GET', `/plugins/${encodeURIComponent(id)}/storage`),
   pluginStorageSet: (id: string, key: string, value: unknown) => req<{ ok: true }>('PUT', `/plugins/${encodeURIComponent(id)}/storage/${encodeURIComponent(key)}`, { value }),
-  pluginSettings: (id: string) => req<Record<string, unknown>>('GET', `/plugins/${encodeURIComponent(id)}/settings`),
+  /** the user's answers and the form the plugin last declared; the form outlives the plugin running */
+  pluginSettings: (id: string) => req<{ values: Record<string, unknown>; schema: import('./plugins/route').SettingField[] }>('GET', `/plugins/${encodeURIComponent(id)}/settings`),
+  pluginSchemaSet: (id: string, schema: import('./plugins/route').SettingField[]) => req<{ ok: true }>('PUT', `/plugins/${encodeURIComponent(id)}/schema`, { schema }),
   pluginSettingsSet: (id: string, values: Record<string, unknown>) => req<{ ok: true }>('PUT', `/plugins/${encodeURIComponent(id)}/settings`, { values }),
   pluginFetch: (id: string, url: string, init?: unknown) =>
     req<{ status: number; headers: Record<string, string>; body: string; truncated: boolean }>('POST', `/plugins/${encodeURIComponent(id)}/fetch`, { url, init }),
