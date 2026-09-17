@@ -6,7 +6,8 @@ import type { Endpoints } from './endpoints.js';
 import type { LivePricer } from './live.js';
 
 /**
- * Settings → Feed → Market data: the Alchemy key, custom RPCs, and what each chain is using.
+ * Settings → Feed → Market data: the Alchemy key, custom RPCs (the one table every on-chain read and
+ * the minter use), and what each chain is using.
  * Mutations need the app's own header (the same rule as the plugin routes): a page in a browser
  * cannot point the pricer at an RPC of its choosing.
  */
@@ -19,12 +20,11 @@ export function createMarketApi(cfg: ConfigStore, endpoints: Endpoints, pricer: 
   const r = Router();
   r.use(json({ limit: '8kb' }));
   const status = () => {
-    const c = cfg.get().marketData;
     const sources = endpoints.sources();
     const live = pricer.status();
     return {
       alchemy: endpoints.alchemy(),
-      rpc: c.rpc,
+      rpc: cfg.get().rpc,
       chains: Object.values(CHAINS).map((ch) => ({
         network: ch.network,
         name: ch.name,
@@ -94,8 +94,8 @@ export function createMarketApi(cfg: ConfigStore, endpoints: Endpoints, pricer: 
         }
       }
       cfg.update((c) => {
-        if (url) c.marketData.rpc[chain] = url;
-        else delete c.marketData.rpc[chain];
+        if (url) c.rpc[chain] = url;
+        else delete c.rpc[chain];
       });
       res.json(status());
     } catch (e) {

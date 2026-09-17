@@ -178,10 +178,12 @@ export interface MaskedConfig {
   seenTokens: string[];
   hiddenTokens: string[];
   together: { share: boolean; name: string; peers: { host: string; port: number; name: string }[] };
-  opensea: { hasWallet: boolean; walletAddress?: string; rpc: Record<string, string>; chains?: { id: string; name: string; defaultRpc: string; symbol: string }[] };
+  opensea: { hasWallet: boolean; walletAddress?: string };
   plugins: Record<string, { enabled: boolean; approvedHash?: string }>;
   pluginWatch: string[];
-  marketData: { hasAlchemyKey: boolean; rpc: Record<string, string> };
+  /** the one RPC table for everything on-chain, by network */
+  rpc: Record<string, string>;
+  marketData: { hasAlchemyKey: boolean };
 }
 /** Settings → Feed → Market data: what the live pricer is using per chain */
 export interface MarketStatus {
@@ -351,7 +353,6 @@ export const api = {
     req<import('./types').FeedMessage[]>('GET', `/preview/${source}/${encodeURIComponent(id)}`),
   opensea: () => req<MaskedConfig['opensea']>('GET', '/opensea'),
   setOpenSeaWallet: (key: string) => req<MaskedConfig['opensea']>('PUT', '/opensea/wallet', { key }),
-  setOpenSeaRpc: (chain: string, url: string) => req<MaskedConfig['opensea']>('PUT', '/opensea/rpc', { chain, url }),
   market: () => req<MarketStatus>('GET', '/market'),
   setAlchemyKey: (key: string) => req<MarketStatus>('PUT', '/market/alchemy', { key }),
   setMarketRpc: (chain: string, url: string) => req<MarketStatus>('PUT', '/market/rpc', { chain, url }),

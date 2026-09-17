@@ -10,7 +10,6 @@ import type { MessageHub } from './hub.js';
 import type { Services } from './services.js';
 import { IpfsCache } from './ipfs.js';
 import { createDeployFinder } from './deploys.js';
-import { CHAINS } from './opensea/chains.js';
 
 const ohlcvCache = new Map<string, { at: number; v: unknown }>();
 const lastSend = new Map<string, number>();
@@ -684,32 +683,6 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       if (key && !/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error('a private key is 0x followed by 64 hex characters');
       cfg.update((c) => {
         c.opensea.walletKey = key || undefined;
-      });
-      return svc.openseaMasked();
-    }),
-  );
-  r.put(
-    '/opensea/rpc',
-    wrap((req) => {
-      const chain = String(req.body?.chain ?? '');
-      const url = String(req.body?.url ?? '').trim().slice(0, 500);
-      // An override for a chain we cannot mint on is dead config at best, and at worst an RPC URL
-      // parked under a name that looks like a chain; only chains in our table can have one.
-      if (!/^[a-z0-9_]{1,30}$/.test(chain) || !Object.hasOwn(CHAINS, chain)) throw new Error('unknown chain');
-      if (url && !/^https:\/\//i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(url)) throw new Error('RPC must be https:// (or a local http endpoint)');
-      // the regex above only checks the scheme; make sure the rest parses into a real URL with a host
-      if (url) {
-        let hostname = '';
-        try {
-          hostname = new URL(url).hostname;
-        } catch {
-          throw new Error('RPC URL is invalid');
-        }
-        if (!hostname) throw new Error('RPC URL is invalid');
-      }
-      cfg.update((c) => {
-        if (url) c.opensea.rpc[chain] = url;
-        else delete c.opensea.rpc[chain];
       });
       return svc.openseaMasked();
     }),

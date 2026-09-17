@@ -575,13 +575,12 @@ function OpenSeaSection({ onChange }: { onChange: () => void }) {
   const [os, setOs] = useState<MaskedConfig['opensea'] | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [key, setKey] = useState('');
-  const [rpc, setRpc] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState(false);
   const { busy, err, run } = useAsync();
   const load = () =>
     api
       .opensea()
-      .then((o) => { setOs(o); setRpc(o.rpc); setLoadErr(null); })
+      .then((o) => { setOs(o); setLoadErr(null); })
       .catch((e: any) => setLoadErr(e?.message ?? String(e)));
   useEffect(() => { void load(); }, []);
   if (!os) {
@@ -633,16 +632,7 @@ function OpenSeaSection({ onChange }: { onChange: () => void }) {
           </button>
         )}
       </div>
-      <div className="hint" style={{ marginTop: 8 }}>RPC endpoints. Blank uses the public default.</div>
-      {(os.chains ?? []).map((c) => (
-        <div className="row-inline" key={c.id}>
-          <span className="muted" style={{ width: 120, fontSize: 12 }}>{c.name}</span>
-          <input placeholder={c.defaultRpc} value={rpc[c.id] ?? ''} onChange={(e) => setRpc((r) => ({ ...r, [c.id]: e.target.value }))} spellCheck={false} />
-          <button disabled={busy} onClick={() => void run(async () => { const o = await api.setOpenSeaRpc(c.id, rpc[c.id] ?? ''); setOs(o); setRpc(o.rpc); onChange(); })}>
-            Save
-          </button>
-        </div>
-      ))}
+      <div className="hint" style={{ marginTop: 8 }}>Mints go through the same RPCs as live prices: your custom RPC for the chain, else Alchemy, else the public endpoint. Set them under Feed → Market data.</div>
       {err && <div className="err">{err}</div>}
     </section>
   );
@@ -679,7 +669,7 @@ function MarketDataSection({ onChange }: { onChange: () => void }) {
         {liveNow > 0 && <> <b>{liveNow}</b> token{liveNow === 1 ? '' : 's'} live right now.</>}
       </div>
       <div className="hint" style={{ marginTop: 8 }}>
-        Public RPCs work but rate-limit. An <b>Alchemy API key</b> is used for every chain Alchemy serves; a <b>custom RPC</b> per chain beats both.
+        Public RPCs work but rate-limit. An <b>Alchemy API key</b> is used for every chain Alchemy serves; a <b>custom RPC</b> per chain beats both. These are the RPCs for everything on-chain, NFT mints included.
       </div>
       <div className="row-inline">
         <input type="password" placeholder={st.alchemy.hasKey ? 'replace the Alchemy API key' : 'Alchemy API key'} value={key} onChange={(e) => setKey(e.target.value)} autoComplete="new-password" spellCheck={false} />

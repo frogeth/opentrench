@@ -28,7 +28,7 @@ describe('endpoints', () => {
     expect(ep.urlFor('base')).toEqual({ url: 'https://base-mainnet.g.alchemy.com/v2/k', source: 'alchemy' });
     expect(ep.urlFor('solana')!.source).toBe('alchemy');
     expect(ep.urlFor('ethereum')!.source).toBe('public');
-    expect(ep.urlFor('robinhood')!.source).toBe('public'); // Alchemy does not serve it
+    expect(ep.urlFor('robinhood')!.source).toBe('public'); // served by Alchemy, but this key did not answer for it
 
     cfg = { alchemyKey: 'k', rpc: { base: 'https://my.base' } };
     expect(ep.urlFor('base')).toEqual({ url: 'https://my.base', source: 'custom' });

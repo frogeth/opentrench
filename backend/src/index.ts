@@ -26,6 +26,7 @@ import { ShellLink } from './plugins/shell.js';
 import { createPluginsApi } from './plugins/api.js';
 import { jsonErrors } from './http.js';
 import { createEndpoints } from './onchain/endpoints.js';
+import { CHAINS } from './onchain/chains.js';
 import { createQuoteSource } from './onchain/quotes.js';
 import { createLivePricer } from './onchain/live.js';
 import { createMarketApi } from './onchain/api.js';
@@ -69,7 +70,7 @@ const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
 // Alchemy key > public endpoint (see onchain/endpoints.ts).
 const LIVE_HOT_MS = 5_000;
 const LIVE_REST_MS = 30_000;
-const endpoints = createEndpoints(() => cfg.get().marketData, fetch as any, (m) => console.warn('[market]', m));
+const endpoints = createEndpoints(() => ({ alchemyKey: cfg.get().marketData.alchemyKey, rpc: cfg.get().rpc }), fetch as any, (m) => console.warn('[market]', m));
 const quotes = createQuoteSource(fetch, (m) => console.warn('[market]', m));
 const pricer = createLivePricer({ endpoints, quotes, apply: (addr, info) => hub.updateMarket(addr, info), log: (m) => console.warn('[market]', m) });
 void quotes.refresh();
@@ -139,6 +140,8 @@ setInterval(() => {
   if (due.length) void hub.refreshSecurity(due);
 }, 60 * 1000).unref();
 const svc: Services = new Services(cfg, hub);
+// the minter signs against the same RPCs the live pricer reads from (custom > Alchemy > public)
+svc.rpcOverrides = () => Object.fromEntries(Object.keys(CHAINS).map((n) => [n, endpoints.urlFor(n)?.url]).filter((e): e is [string, string] => !!e[1]));
 svc.startJ7();
 svc.syncColumnFeeds();
 void svc.syncTogether();

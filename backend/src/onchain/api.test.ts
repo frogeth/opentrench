@@ -12,7 +12,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'market-api-'));
 const cfg = new ConfigStore(path.join(tmp, 'config.json'));
 // an Alchemy that serves Base only, and only for the one good key
 const alchemy = vi.fn(async (url: string) => (url === 'https://base-mainnet.g.alchemy.com/v2/goodkey_1234' ? { ok: true, status: 200, json: async () => ({ result: '0x2105' }) } : { ok: false, status: 401, json: async () => ({}) }));
-const endpoints = createEndpoints(() => cfg.get().marketData, alchemy as any);
+const endpoints = createEndpoints(() => ({ alchemyKey: cfg.get().marketData.alchemyKey, rpc: cfg.get().rpc }), alchemy as any);
 const pricer = { status: () => ({ base: { live: 3, skipped: 1, lastOkAt: 1 } }), isLive: () => false, reason: () => undefined, refresh: async () => {} };
 const app = express();
 app.use('/api', createMarketApi(cfg, endpoints, pricer as any));
@@ -37,7 +37,7 @@ describe('market api', () => {
     expect(r.body.alchemy.hasKey).toBe(false);
     const b = r.body.chains.find((c: any) => c.network === 'base');
     expect(b).toMatchObject({ name: 'Base', source: 'public', live: 3, skipped: 1, alchemy: true });
-    expect(r.body.chains.find((c: any) => c.network === 'robinhood').alchemy).toBe(false);
+    expect(r.body.chains.find((c: any) => c.network === 'ethereum').alchemy).toBe(true);
   });
   it('writes need the app header', async () => {
     expect((await j('PUT', '/market/alchemy', { key: 'abcdefgh12345' }, {})).status).toBe(403);
@@ -55,7 +55,7 @@ describe('market api', () => {
     expect(ok.body.chains.find((c: any) => c.network === 'base').source).toBe('alchemy');
     expect(ok.body.chains.find((c: any) => c.network === 'ethereum').source).toBe('public');
     expect(cfg.get().marketData.alchemyKey).toBe('goodkey_1234');
-    expect(cfg.masked().marketData).toEqual({ hasAlchemyKey: true, rpc: {} });
+    expect(cfg.masked().marketData).toEqual({ hasAlchemyKey: true });
     expect(JSON.stringify(cfg.masked())).not.toContain('goodkey');
     const off = await j('PUT', '/market/alchemy', { key: '' });
     expect(off.body.alchemy.hasKey).toBe(false);

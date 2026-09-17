@@ -70,23 +70,33 @@ describe('ConfigStore opensea block', () => {
     fs.writeFileSync(f, JSON.stringify({ opensea: { walletKey: '0x' + 'a'.repeat(64), rpc: { ethereum: 'https://e.io', b3: 'https://b3.io', bad: 'ftp://x', 'Bad Key': 'https://y' } } }));
     const s = new ConfigStore(f);
     expect(s.get().opensea.walletKey).toBe('0x' + 'a'.repeat(64));
-    expect(s.get().opensea.rpc).toEqual({ ethereum: 'https://e.io', b3: 'https://b3.io' });
+    // an old config's opensea.rpc folds into the one rpc table
+    expect(s.get().rpc).toEqual({ ethereum: 'https://e.io', b3: 'https://b3.io' });
     expect(JSON.stringify(s.masked())).not.toContain('aaaa');
-    expect((s.masked() as any).opensea).toEqual({ hasWallet: true, rpc: { ethereum: 'https://e.io', b3: 'https://b3.io' } });
+    expect((s.masked() as any).opensea).toEqual({ hasWallet: true });
+    expect((s.masked() as any).rpc).toEqual({ ethereum: 'https://e.io', b3: 'https://b3.io' });
+    fs.unlinkSync(f);
+  });
+  it('the one rpc table wins over the legacy opensea.rpc and marketData.rpc entries', () => {
+    const f = tmp();
+    fs.writeFileSync(f, JSON.stringify({ opensea: { rpc: { ethereum: 'https://old.io', ink: 'https://ink.io' } }, marketData: { rpc: { base: 'https://md.io', ethereum: 'https://mid.io' } }, rpc: { ethereum: 'https://new.io' } }));
+    const s = new ConfigStore(f);
+    expect(s.get().rpc).toEqual({ ethereum: 'https://new.io', ink: 'https://ink.io', base: 'https://md.io' });
     fs.unlinkSync(f);
   });
   it('keeps an http override only for localhost/loopback, drops it for anything else', () => {
     const f = tmp();
     fs.writeFileSync(f, JSON.stringify({ opensea: { rpc: { evil: 'http://evil.example/rpc', local: 'http://127.0.0.1:8545', secure: 'https://e.io' } } }));
     const s = new ConfigStore(f);
-    expect(s.get().opensea.rpc).toEqual({ local: 'http://127.0.0.1:8545', secure: 'https://e.io' });
+    expect(s.get().rpc).toEqual({ local: 'http://127.0.0.1:8545', secure: 'https://e.io' });
     fs.unlinkSync(f);
   });
   it('drops an invalid wallet key and loads an old config without opensea', () => {
     const f = tmp();
     fs.writeFileSync(f, JSON.stringify({ discord: { watch: [] }, telegram: { watch: [] }, columns: [{ id: 'calls', type: 'calls', title: 'All Calls', chats: [] }] }));
     const s = new ConfigStore(f);
-    expect(s.get().opensea).toEqual({ rpc: {} });
+    expect(s.get().opensea).toEqual({});
+    expect(s.get().rpc).toEqual({});
     expect(s.get().columns[0].type).toBe('calls');
     fs.writeFileSync(f, JSON.stringify({ opensea: { walletKey: '0Xdeadbeef', rpc: {} } }));
     expect(new ConfigStore(f).get().opensea.walletKey).toBeUndefined();

@@ -202,15 +202,15 @@ export interface Config {
   hiddenTokens: string[];
   /** J7Tracker: the account's session id (from its web app), read-only tweet stream */
   j7: { token?: string; /** X handles (no @) whose tweets ping you */ favorites: string[] };
-  /** OpenSea mint window: one wallet key (0x + 64 hex) and RPC overrides by OpenSea chain identifier.
-   * RPC overrides must be https (or http to localhost/127.0.0.1/[::1]): a plaintext RPC over the
-   * network can be tampered with in transit — a quoted balance/fee can be lied about, and a
-   * broadcast transaction can be silently dropped. */
-  opensea: { walletKey?: string; rpc: Record<string, string> };
-  /** Live on-chain prices: an Alchemy key (used for every chain Alchemy serves) and/or custom RPC
-   * URLs by network (dexscreener chain ids); a custom URL beats Alchemy, which beats the public RPC.
-   * Same https-or-localhost rule as opensea.rpc. */
-  marketData: { alchemyKey?: string; rpc: Record<string, string> };
+  /** OpenSea mint window: one wallet key (0x + 64 hex). */
+  opensea: { walletKey?: string };
+  /** The one RPC table for everything on-chain (live prices, minting, launchpad reads), by network
+   * (dexscreener chain ids). A custom URL beats Alchemy, which beats the public RPC. URLs must be
+   * https (or http to localhost/127.0.0.1/[::1]): a plaintext RPC over the network can be tampered
+   * with in transit — a quoted balance/fee can be lied about, a broadcast transaction silently dropped. */
+  rpc: Record<string, string>;
+  /** an Alchemy key, used for every chain Alchemy serves (probed at boot and when set) */
+  marketData: { alchemyKey?: string };
   /** TrenchTogether: share my calls on the LAN (token = the pairing secret), and the friends I follow */
   together: { share: boolean; name: string; token: string; peers: { host: string; port: number; token: string; name: string }[] };
   /** plugins the user has enabled, keyed by manifest id; approvedHash is the SHA-256 of the file the user approved */
@@ -234,8 +234,9 @@ const DEFAULT: Config = {
   seenTokens: [],
   hiddenTokens: [],
   j7: { favorites: [] },
-  opensea: { rpc: {} },
-  marketData: { rpc: {} },
+  opensea: {},
+  rpc: {},
+  marketData: {},
   together: { share: false, name: '', token: '', peers: [] },
   plugins: {},
   pluginWatch: [],
@@ -312,8 +313,9 @@ export class ConfigStore {
       j7: { hasToken: !!this.cfg.j7.token, favorites: this.cfg.j7.favorites },
       seenTokens: this.cfg.seenTokens,
       hiddenTokens: this.cfg.hiddenTokens,
-      opensea: { hasWallet: !!this.cfg.opensea.walletKey, rpc: this.cfg.opensea.rpc },
-      marketData: { hasAlchemyKey: !!this.cfg.marketData.alchemyKey, rpc: this.cfg.marketData.rpc },
+      opensea: { hasWallet: !!this.cfg.opensea.walletKey },
+      rpc: this.cfg.rpc,
+      marketData: { hasAlchemyKey: !!this.cfg.marketData.alchemyKey },
       together: { share: this.cfg.together.share, name: this.cfg.together.name, peers: this.cfg.together.peers.map((p) => ({ host: p.host, port: p.port, name: p.name })) },
       plugins: this.cfg.plugins,
       pluginWatch: this.cfg.pluginWatch,
@@ -361,26 +363,21 @@ export class ConfigStore {
             console.warn('[config] ignoring invalid opensea.walletKey');
             return undefined;
           })(),
-          // https only (or http to localhost/loopback): a plaintext RPC can be tampered with in
-          // transit — a lied-about balance/fee, or a broadcast silently dropped.
-          rpc: Object.fromEntries(
-            Object.entries(raw.opensea?.rpc ?? {})
-              .filter(([k, v]) => /^[a-z0-9_]{1,30}$/.test(k) && (/^https:\/\//i.test(String(v)) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(String(v))))
-              .slice(0, 40)
-              .map(([k, v]) => [k, String(v).slice(0, 500)]),
-          ),
         },
+        // https only (or http to localhost/loopback): a plaintext RPC can be tampered with in
+        // transit — a lied-about balance/fee, or a broadcast silently dropped. Older configs kept
+        // RPCs under opensea.rpc and marketData.rpc; they fold into the one table (rpc wins).
+        rpc: Object.fromEntries(
+          Object.entries({ ...(raw.opensea?.rpc ?? {}), ...(raw.marketData?.rpc ?? {}), ...(raw.rpc ?? {}) })
+            .filter(([k, v]) => /^[a-z0-9_]{1,30}$/.test(k) && (/^https:\/\//i.test(String(v)) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(String(v))))
+            .slice(0, 40)
+            .map(([k, v]) => [k, String(v).slice(0, 500)]),
+        ),
         marketData: {
           alchemyKey: (() => {
             const k = this.secret(raw.marketData?.alchemyKey, 'marketData.alchemyKey');
             return typeof k === 'string' && /^[A-Za-z0-9_-]{8,200}$/.test(k) ? k : undefined;
           })(),
-          rpc: Object.fromEntries(
-            Object.entries(raw.marketData?.rpc ?? {})
-              .filter(([k, v]) => /^[a-z0-9_]{1,30}$/.test(k) && (/^https:\/\//i.test(String(v)) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(String(v))))
-              .slice(0, 40)
-              .map(([k, v]) => [k, String(v).slice(0, 500)]),
-          ),
         },
         together: {
           share: raw.together?.share === true,

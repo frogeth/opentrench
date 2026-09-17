@@ -15,7 +15,6 @@ import os from 'node:os';
 import { RankingsPoller, keyFor } from './opensea/rankings.js';
 import { TOGETHER_PORT, TogetherDiscovery, TogetherGuest, TogetherHost, encodePairing, lanAddresses, newCode, newToken, pollPairing, requestPairing } from './together.js';
 import { Minter } from './opensea/minter.js';
-import { CHAINS } from './opensea/chains.js';
 import { createLaunchWatcher } from './deploys.js';
 import { detectContracts } from './contracts.js';
 import type { FeedMessage, Reaction, Source } from './types.js';
@@ -197,7 +196,9 @@ export class Services {
     };
     this.togetherStatus();
   }
-  readonly minter = new Minter(() => this.cfg.get().opensea.walletKey, () => this.cfg.get().opensea.rpc);
+  /** RPC per chain for minting: index.ts swaps in the resolver that also knows the Alchemy key (custom > Alchemy > public). */
+  rpcOverrides: () => Record<string, string> = () => this.cfg.get().rpc;
+  readonly minter = new Minter(() => this.cfg.get().opensea.walletKey, () => this.rpcOverrides());
   private discordSelf?: DiscordSelf;
   private guildRoles = new Map<string, Map<string, string>>();
   /** names for mention markup in one guild */
@@ -417,7 +418,7 @@ export class Services {
     return this.mintgo?.recent ?? [];
   }
 
-  /** OpenSea mint window settings, masked for the UI: wallet presence/address and the RPC overrides + known chains. */
+  /** OpenSea mint window settings, masked for the UI: wallet presence/address (RPCs live in Settings → Feed → Market data). */
   openseaMasked() {
     const o = this.cfg.get().opensea;
     let walletAddress: string | undefined;
@@ -429,8 +430,6 @@ export class Services {
     return {
       hasWallet: !!o.walletKey,
       walletAddress,
-      rpc: o.rpc,
-      chains: Object.values(CHAINS).map((c) => ({ id: c.id, name: c.name, defaultRpc: c.defaultRpc, symbol: c.symbol })),
     };
   }
 

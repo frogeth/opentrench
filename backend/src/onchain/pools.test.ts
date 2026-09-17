@@ -71,6 +71,6 @@ describe('chain registry', () => {
     expect(coingeckoIdFor('SOL')).toBe('solana');
     expect(coingeckoIdFor('NVDA')).toBeUndefined();
     expect(alchemyUrl(CHAINS.base, 'k')).toBe('https://base-mainnet.g.alchemy.com/v2/k');
-    expect(alchemyUrl(CHAINS.robinhood, 'k')).toBeUndefined();
+    expect(alchemyUrl(CHAINS.robinhood, 'k')).toBe('https://robinhood-mainnet.g.alchemy.com/v2/k');
   });
 });

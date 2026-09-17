@@ -127,43 +127,10 @@ describe('osmint + opensea settings API', () => {
     expect(cfg.get().opensea.walletKey).toBeUndefined();
   });
 
-  it('rejects a plaintext http RPC but accepts https', async () => {
-    const evil = await fetch(`${base}/opensea/rpc`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chain: 'ethereum', url: 'http://evil.example.com' }),
-    });
-    expect(evil.status).toBe(500);
-    expect(cfg.get().opensea.rpc.ethereum).toBeUndefined();
-
-    const ok = await fetch(`${base}/opensea/rpc`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chain: 'ethereum', url: 'https://x.example.com' }),
-    });
-    expect(ok.status).toBe(200);
-    expect(cfg.get().opensea.rpc.ethereum).toBe('https://x.example.com');
-  });
-
-  it('rejects a bad chain identifier for RPC overrides', async () => {
-    const res = await fetch(`${base}/opensea/rpc`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chain: 'Not Valid!', url: 'https://x.example.com' }),
-    });
-    expect(res.status).toBe(500);
-  });
-
-  it('rejects an RPC override for a chain that is not in our table', async () => {
-    const res = await fetch(`${base}/opensea/rpc`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chain: 'zora', url: 'https://zora.example.com' }),
-    });
-    expect(res.status).toBe(500);
-    const body = await res.json();
-    expect(body.error).toMatch(/unknown chain/);
-    expect(cfg.get().opensea.rpc.zora).toBeUndefined();
+  it('the OpenSea RPC route is gone: RPCs are one table under /market/rpc', async () => {
+    const res = await fetch(`${base}/opensea/rpc`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chain: 'ethereum', url: 'https://x.example.com' }) });
+    expect(res.status).toBe(404);
+    expect(cfg.get().rpc.ethereum).toBeUndefined();
   });
 
   it('rejects a quote with quantity 0', async () => {
