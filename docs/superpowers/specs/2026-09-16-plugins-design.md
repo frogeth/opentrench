@@ -51,6 +51,11 @@ Adding or removing a file in the folder is enough; Settings has a Reload button.
 - Approval is bound to the file's SHA-256. A changed file is disabled until re-approved.
 - Every plugin column header tooltip carries "runs code you installed".
 - Permissions are enforced on the app side of the bridge, never inside the iframe.
+- **Nothing a plugin asks for moves money on its own.** `actions.buy` and `actions.research` are "ask the user" hooks: the host raises a confirmation bar naming the plugin and the address — "<Plugin name> wants to open a buy for 0xabc… [Open] [Ignore]" — and only the user's click sends anything to a bot. A plugin can put a buy in front of you; it cannot take one.
+- `actions.copy` is allowed but never silent: the host toasts "copied by <plugin name>: <first 24 characters>", because an unannounced clipboard write is how a pasted address gets swapped.
+- `actions.notify` titles are prefixed with `[<plugin name>]` by the router, so a plugin's notification cannot pass for the app's own.
+- `ot.sites.signIn` stays available — the sign-in window is visible and the user drives it — and the host loop rate-limits every plugin call (a per-plugin budget, args capped at 256 KB serialized).
+- The approval dialog says it plainly: a plugin can read every message you see, including the ones the feed hides, fetch any host, and with `actions` write your clipboard and open buys for you to confirm.
 - Rate and size caps on `feed.post` (per plugin per minute, per message) so a runaway plugin cannot flood the feed.
 - A plugin that throws is stopped and shown as errored; the app stays up.
 
@@ -60,7 +65,7 @@ All calls are async and return promises. Objects are the same shapes the app use
 
 Feed, read (enabled plugins):
 - `ot.feed.onMessage(fn)`, `ot.feed.onToken(fn)` — subscriptions; return an unsubscribe.
-- `ot.feed.messages({ chat?, limit? })`, `ot.feed.tokens()`, `ot.feed.token(address)`.
+- `ot.feed.messages({ chat?, limit? })`, `ot.feed.tokens()`, `ot.feed.token(address)`. Messages come back **newest first**, as the feed itself is ordered; `chat` matches a chat name or a chat id; `limit` defaults to 100 and caps at 500. Messages the feed hides (blacklisted authors, bots the bot policy refuses) are never returned. `token(address)` is an own-property lookup: `constructor` and the like are misses, not inherited members.
 
 Feed, write (`feed:write`):
 - `ot.feed.post({ id, chat, author, text, ts?, avatar?, link?, attachments? })` — a message from chat `chat` (the plugin's own chat name; the app keys it as `plugin:<pluginId>:<chat>`). `id` is the plugin's own stable id for de-duplication. Landing in the hub means contract detection, enrichment, calls, trending, favourite pings, filters, forwarding.
@@ -72,14 +77,15 @@ Network:
 
 UI (`ui: true`):
 - `ot.ui.root` — the iframe body, with the app's theme variables and base styles injected.
-- `ot.ui.setTitle(text)`, `ot.ui.setSubtitle(text)`, `ot.ui.badge(count | null)`.
+- `ot.ui.setTitle(text)`, `ot.ui.setSubtitle(text)`, `ot.ui.badge(count | null)`. An empty title or subtitle clears it; a badge is clamped to a whole number 0–9999, and `null` (or nothing at all) clears it.
 
 Actions (`actions`):
 - `ot.actions.openToken(address)`, `jump(messageId)`, `buy(address)`, `research(address)`, `copy(text)`, `notify(title, body)`.
+- `buy` and `research` do not act: they ask. Each raises the host's confirmation bar, and the user's click is what reaches a bot. `copy` writes the clipboard and the host toasts who did it. `notify` gets `[<plugin name>]` in front of its title. See the trust model.
 
 Storage (`storage`):
-- `ot.storage.get(key)`, `set(key, value)`, `remove(key)` — per plugin, in the backend state file.
-- `ot.settings.schema([{ key, label, type: 'text' | 'number' | 'toggle' | 'secret', default? }])` and `ot.settings.get()` — a small settings form rendered in the Plugins tab. Secrets are stored sealed like other config secrets.
+- `ot.storage.get(key)`, `set(key, value)`, `remove(key)` — per plugin, in the backend state file. `get` is an own-property lookup, so a key like `constructor` reads back as null rather than reaching through the object.
+- `ot.settings.schema([{ key, label, type: 'text' | 'number' | 'toggle' | 'secret', default? }])` and `ot.settings.get()` — a small settings form rendered in the Plugins tab. At most 20 fields; a key is 1–40 of `[a-z0-9_-]`, must not be `__proto__`, `constructor` or `prototype`, and must not repeat; a label is at most 60 characters. Anything else is refused whole, so a half-valid form is never shown. Secrets are stored sealed like other config secrets.
 
 Lifecycle and logging:
 - `main(ot)` runs at enable and at app start; an optional returned `stop()` runs on disable, reload, or app close.

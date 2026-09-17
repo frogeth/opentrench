@@ -6,7 +6,10 @@ let sent: any[] = [];
 (window as any).postMessage = (d: any) => sent.push(d);
 (0, eval)(BRIDGE_SRC);
 const ot = (window as any).ot;
-const reply = (d: unknown) => window.dispatchEvent(new MessageEvent('message', { data: d }));
+/** the host is `parent`, and in jsdom the top window is its own parent — so a reply says it came from there */
+const reply = (d: unknown) => window.dispatchEvent(new MessageEvent('message', { data: d, source: window as unknown as Window & typeof globalThis }));
+/** the same message with no sender the bridge recognises */
+const fromElsewhere = (d: unknown) => window.dispatchEvent(new MessageEvent('message', { data: d }));
 const settled = (p: Promise<unknown>) => {
   let done = false;
   p.then(() => (done = true), () => (done = true));
@@ -42,15 +45,26 @@ describe('the ot bridge', () => {
     await expect(p).rejects.toThrow('actions');
   });
 
-  it('ignores messages that are not ours and results for ids it never sent', async () => {
+  it('ignores messages that are not ours, results for ids it never sent, and senders that are not the host', async () => {
     const p = ot.feed.tokens();
     const isSettled = settled(p);
     reply({ ot: 2, kind: 'result', id: sent[0].id, value: 'from somewhere else' });
     reply({ kind: 'result', id: sent[0].id, value: 'unmarked' });
     reply({ ot: 1, kind: 'result', id: sent[0].id + 1000, value: 'never asked' });
+    fromElsewhere({ ot: 1, kind: 'result', id: sent[0].id, value: 'another frame' });
     expect(await isSettled()).toBe(false);
     reply({ ot: 1, kind: 'result', id: sent[0].id, value: [] });
     expect(await p).toEqual([]);
+  });
+
+  it('freezes the leaves, so a script in the frame cannot re-point the actions', () => {
+    for (const leaf of ['feed', 'sites', 'storage', 'settings', 'ui', 'actions']) {
+      expect(Object.isFrozen(ot[leaf])).toBe(true);
+      expect(() => {
+        'use strict';
+        ot[leaf].nope = 1;
+      }).toThrow();
+    }
   });
 
   it('delivers events to subscribers until they unsubscribe, and shrugs off unknown event names', () => {

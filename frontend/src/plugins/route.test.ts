@@ -18,7 +18,7 @@ function ctx(over: Partial<PluginContext> = {}): PluginContext {
     } as any,
     actions: { openToken: vi.fn(), jump: vi.fn(), buy: vi.fn(), research: vi.fn(), copy: vi.fn(), notify: vi.fn() },
     snapshot: { messages: () => [{ id: 'm1', chatName: 'A' } as any], tokens: () => ({ '0xabc': { address: '0xabc' } as any }) },
-    ui: { setTitle: vi.fn(), setSubtitle: vi.fn(), badge: vi.fn() },
+    ui: { setTitle: vi.fn(), setSubtitle: vi.fn(), badge: vi.fn(), setSchema: vi.fn() },
     ...over,
   };
 }
@@ -66,6 +66,11 @@ describe('routeCall', () => {
     await expect(routeCall(c, { method: 'settings.schema', args: [[{ key: 'no spaces', label: 'x', type: 'text' }]] })).rejects.toThrow('key');
     await expect(routeCall(c, { method: 'settings.schema', args: [[{ key: 'k', label: 'x', type: 'colour' }]] })).rejects.toThrow('type');
     await expect(routeCall(c, { method: 'settings.schema', args: ['nope'] })).rejects.toThrow('schema');
+    for (const key of ['__proto__', 'constructor', 'prototype', 'ConStructor'])
+      await expect(routeCall(c, { method: 'settings.schema', args: [[{ key, label: 'x', type: 'text' }]] })).rejects.toThrow('reserved');
+    await expect(
+      routeCall(c, { method: 'settings.schema', args: [[{ key: 'k', label: 'one', type: 'text' }, { key: 'k', label: 'two', type: 'text' }]] }),
+    ).rejects.toThrow('twice');
     expect(setSchema).toHaveBeenCalledTimes(1);
   });
 
@@ -92,5 +97,55 @@ describe('routeCall', () => {
 
   it('feed.token for an address nobody called is null, not undefined', async () => {
     expect(await routeCall(ctx(), { method: 'feed.token', args: ['0xdead'] })).toBe(null);
+  });
+
+  it('looks tokens and storage up as data, so inherited members are misses', async () => {
+    const c = ctx({ manifest: { ...ctx().manifest, permissions: ['storage'] } });
+    for (const key of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+      expect(await routeCall(c, { method: 'feed.token', args: [key] })).toBe(null);
+      expect(await routeCall(c, { method: 'storage.get', args: [key] })).toBe(null);
+    }
+  });
+
+  it('feed.messages leaves out the messages the feed hides', async () => {
+    const c = ctx({
+      snapshot: {
+        messages: () => [{ id: 'm1', chatName: 'A' }, { id: 'm2', chatName: 'A', hidden: true }, { id: 'm3', chatName: 'A' }] as any,
+        tokens: () => ({}),
+      },
+    });
+    const got = (await routeCall(c, { method: 'feed.messages', args: [{}] })) as { id: string }[];
+    expect(got.map((m) => m.id)).toEqual(['m1', 'm3']);
+  });
+
+  it('ui.badge is a whole number 0..9999 and clears on null or nothing at all', async () => {
+    const c = ctx();
+    const badge = c.ui.badge as any;
+    for (const [given, want] of [[3.7, 3], [-5, 0], [50_000, 9999], ['12', 12], [NaN, 0], [null, null], [undefined, null]] as const) {
+      await routeCall(c, { method: 'ui.badge', args: [given] });
+      expect(badge).toHaveBeenLastCalledWith(want);
+    }
+  });
+
+  it('an empty title clears it rather than failing, a non-string still fails', async () => {
+    const c = ctx();
+    await routeCall(c, { method: 'ui.setTitle', args: [''] });
+    expect(c.ui.setTitle).toHaveBeenCalledWith('');
+    await expect(routeCall(c, { method: 'ui.setTitle', args: [7] })).rejects.toThrow('title');
+  });
+
+  it('a notification carries the plugin name, so it cannot pass for the app', async () => {
+    const c = ctx({ manifest: { ...ctx().manifest, permissions: ['actions'] } });
+    await routeCall(c, { method: 'actions.notify', args: ['Whale in', 'body'] });
+    expect(c.actions.notify).toHaveBeenCalledWith('[Hello feed] Whale in', 'body');
+  });
+
+  it('a log the backend refuses never becomes an unhandled rejection', async () => {
+    const c = ctx();
+    (c.api as any).pluginLog = vi.fn(async () => {
+      throw new Error('backend down');
+    });
+    expect(await routeCall(c, { method: 'log', args: ['info', 'hello', { a: 1 }] })).toBe(null);
+    expect(c.api.pluginLog).toHaveBeenCalledWith('hello-feed', 'info', 'hello {"a":1}');
   });
 });
