@@ -87,3 +87,24 @@ function carriedIpv4(tail: string): string | null {
   }
   return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(tail) ? tail : null;
 }
+
+/**
+ * Is this the address of a peer on this very machine? Loopback and nothing else — narrower than
+ * `isLocalIp`, which also clears the LAN. `/api/shell/hello` hands out the socket a plugin's
+ * site-authenticated fetches go out on, so "somewhere on the network" is not close enough.
+ */
+export function isLoopbackIp(ip: string): boolean {
+  const s = String(ip ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/%.*$/, ''); // a zone id rides along on some addresses: ::1%lo0
+  const inner = s.startsWith('[') && s.endsWith(']') ? s.slice(1, -1) : s;
+  if (!inner) return false;
+  if (inner === '::1' || /^(0{1,4}:){7}0{0,3}1$/.test(inner)) return true;
+  // A v4 loopback seen through a v6 listener arrives mapped, as a dotted quad or as two hex groups.
+  const mapped = /^::ffff:(.+)$/.exec(inner);
+  const v4 = mapped ? carriedIpv4(mapped[1]) : inner.includes(':') ? null : inner;
+  if (!v4) return false;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(v4);
+  return !!m && Number(m[1]) === 127 && m.slice(2).every((p) => Number(p) <= 255);
+}

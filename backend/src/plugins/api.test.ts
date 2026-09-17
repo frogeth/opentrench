@@ -8,7 +8,7 @@ import { MessageHub } from '../hub.js';
 import { PluginRegistry } from './registry.js';
 import { PluginState } from './state.js';
 import { ShellLink } from './shell.js';
-import { createPluginsApi, isLoopbackCaller } from './api.js';
+import { createPluginsApi, isLoopbackCaller, pluginHeaders, proxyBody } from './api.js';
 
 const FILE = `export const manifest = {"id":"hello-feed","name":"Hello feed","version":"1.0.0","api":1,"sites":["https://example.com"],"permissions":["feed:write","storage"]};
 export default function main(ot) {}`;
@@ -25,12 +25,14 @@ interface Harness {
   reg: PluginRegistry;
   state: PluginState;
   shellCalls: ShellCall[];
+  /** how many plain outbound fetches the fake shell has started */
+  outbound: { started: number };
   j: (method: string, path: string, body?: unknown, headers?: Record<string, string>) => Promise<{ status: number; body: any }>;
   close: () => void;
 }
 
 /** One backend's worth of plugin routes on a random port, with a fake shell and a fake downloader. */
-function harness(opts: { blacklist?: string[]; download?: (url: string) => Response | Promise<Response> } = {}): Harness {
+function harness(opts: { blacklist?: string[]; download?: (url: string) => Response | Promise<Response>; hold?: () => Promise<void> } = {}): Harness {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ot-plugins-api-'));
   fs.writeFileSync(path.join(dir, 'hello-feed.js'), FILE);
   const cfg: any = { plugins: {}, pluginWatch: [] };
@@ -40,10 +42,15 @@ function harness(opts: { blacklist?: string[]; download?: (url: string) => Respo
   reg.load();
   const hub = new MessageHub(500, undefined, opts.blacklist ? { blacklist: () => opts.blacklist! } : {});
   const shellCalls: ShellCall[] = [];
+  const outbound = { started: 0 };
   const shell = new ShellLink(async (url: any, init: any) => {
     const at = String(url);
     // Anything not addressed to the shell's own callback is a plain outbound fetch.
-    if (!at.startsWith('http://127.0.0.1:')) return new Response('plain', { status: 200, headers: { 'content-type': 'text/plain' } });
+    if (!at.startsWith('http://127.0.0.1:')) {
+      outbound.started++;
+      if (opts.hold) await opts.hold();
+      return new Response('plain', { status: 200, headers: { 'content-type': 'text/plain' } });
+    }
     shellCalls.push({ url: at, body: init?.body ? JSON.parse(String(init.body)) : undefined });
     if (at.endsWith('/status')) return new Response(JSON.stringify({ signedIn: [] }), { status: 200 });
     if (at.endsWith('/signin')) return new Response('{}', { status: 200 });
@@ -66,7 +73,7 @@ function harness(opts: { blacklist?: string[]; download?: (url: string) => Respo
       headers: { 'content-type': 'application/json', ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
-  return { base, dir, cfg, hub, reg, state, shellCalls, j, close: () => server.close() };
+  return { base, dir, cfg, hub, reg, state, shellCalls, outbound, j, close: () => server.close() };
 }
 
 let h: Harness;
@@ -192,14 +199,21 @@ describe('plugins api guards', () => {
       t.close();
     }
   });
-  it('hello is loopback only', async () => {
+  it('hello is loopback only: not the LAN, not a name, in every spelling of loopback', async () => {
     expect(isLoopbackCaller('127.0.0.1')).toBe(true);
+    expect(isLoopbackCaller('127.0.0.53')).toBe(true);
     expect(isLoopbackCaller('::1')).toBe(true);
+    expect(isLoopbackCaller('::1%lo0')).toBe(true);
     expect(isLoopbackCaller('::ffff:127.0.0.1')).toBe(true);
+    expect(isLoopbackCaller('[::ffff:7f00:1]')).toBe(true);
+    expect(isLoopbackCaller('192.168.1.5')).toBe(false); // the LAN is not this machine
+    expect(isLoopbackCaller('10.0.0.4')).toBe(false);
+    expect(isLoopbackCaller('::ffff:192.168.1.5')).toBe(false);
     expect(isLoopbackCaller('203.0.113.5')).toBe(false);
     expect(isLoopbackCaller('')).toBe(false);
     const t = harness();
     try {
+      expect((await t.j('POST', '/shell/hello', { port: 45678, token: 't' }, { 'x-test-remote': '192.168.1.5' })).status).toBe(403);
       const r = await t.j('POST', '/shell/hello', { port: 45678, token: 't' }, { 'x-test-remote': '203.0.113.5' });
       expect(r.status).toBe(403);
       expect((await t.j('GET', '/plugins/shell')).body).toEqual({ available: false });
@@ -251,6 +265,90 @@ describe('plugins api guards', () => {
       expect(added.status).toBe(200);
       expect(added.body).toMatchObject({ id: 'other-feed', needsApproval: true });
       expect(fs.readFileSync(path.join(t.dir, 'other-feed.js'), 'utf8')).toBe(other);
+    } finally {
+      t.close();
+    }
+  });
+  it('the fetch header and body caps', () => {
+    const many = Object.fromEntries([...Array(60)].map((_, n) => [`x-h${n}`, 'v']));
+    expect(Object.keys(pluginHeaders(many, false))).toHaveLength(40);
+    expect(pluginHeaders({ 'x-long': 'y'.repeat(9000) }, false)['x-long']).toHaveLength(4000);
+    // the fetch layer's own headers never come from the plugin, and a value carrying a line break
+    // would be a second header
+    expect(pluginHeaders({ cookie: 'a=1', host: 'elsewhere.example.com', 'x-ok': 'v\r\nx-evil: 1', 'bad name': 'v' }, false)).toEqual({});
+    expect(pluginHeaders({ authorization: 'Bearer own' }, false)).toEqual({ authorization: 'Bearer own' });
+    expect(pluginHeaders({ authorization: 'Bearer own' }, true)).toEqual({}); // the shell attaches the login
+    expect(proxyBody('z'.repeat(2 * 1024 * 1024))).toHaveLength(1024 * 1024);
+    expect(proxyBody({ not: 'a string' })).toBeUndefined();
+  });
+  it('a plugin may have four fetches out at once, and the fifth waits its turn', async () => {
+    let release = () => {};
+    const held = new Promise<void>((r) => (release = () => r()));
+    const t = harness({ hold: () => held });
+    try {
+      await approved(t);
+      const four = [...Array(4)].map(() => t.j('POST', '/plugins/hello-feed/fetch', { url: 'https://plain.example.com/api' }));
+      while (t.outbound.started < 4) await new Promise((r) => setTimeout(r, 5));
+      const fifth = await t.j('POST', '/plugins/hello-feed/fetch', { url: 'https://plain.example.com/api' });
+      expect(fifth.status).toBe(429);
+      expect(fifth.body.error).toMatch(/at once/);
+      release();
+      expect((await Promise.all(four)).map((r) => r.status)).toEqual([200, 200, 200, 200]);
+      // and the slot is free again once they land
+      expect((await t.j('POST', '/plugins/hello-feed/fetch', { url: 'https://plain.example.com/api' })).status).toBe(200);
+    } finally {
+      release();
+      t.close();
+    }
+  });
+  it('the header caps hold over the wire too', async () => {
+    const t = harness();
+    try {
+      await approved(t);
+      await t.j('POST', '/shell/hello', { port: 45678, token: 't' });
+      t.shellCalls.length = 0;
+      const headers: Record<string, string> = { 'x-long': 'y'.repeat(9000) };
+      for (let n = 0; n < 60; n++) headers[`x-h${n}`] = 'v';
+      expect((await t.j('POST', '/plugins/hello-feed/fetch', { url: 'https://example.com/api', init: { headers } })).status).toBe(200);
+      const sent = t.shellCalls.find((c) => c.url.endsWith('/fetch'))!.body.init.headers;
+      expect(Object.keys(sent)).toHaveLength(40);
+      expect(sent['x-long']).toHaveLength(4000);
+    } finally {
+      t.close();
+    }
+  });
+  it('a body the parser refuses answers as json, not an html stack page', async () => {
+    const t = harness();
+    try {
+      const big = await fetch(`${t.base}/plugins/add`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ source: 'x'.repeat(2 * 1024 * 1024) }),
+      });
+      expect(big.status).toBe(413);
+      expect(big.headers.get('content-type')).toMatch(/json/);
+      expect((await big.json()).error).toMatch(/too large/);
+      const bad = await fetch(`${t.base}/plugins/add`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{oops' });
+      expect(bad.status).toBe(400);
+      expect(bad.headers.get('content-type')).toMatch(/json/);
+      expect((await bad.json()).error).toMatch(/not valid json/);
+    } finally {
+      t.close();
+    }
+  });
+  it('settings need a plugin that is loaded, enabled to write, and stay under the size cap', async () => {
+    const t = harness();
+    try {
+      expect((await t.j('GET', '/plugins/nope/settings')).status).toBe(404);
+      expect((await t.j('PUT', '/plugins/nope/settings', { values: { a: 1 } })).status).toBe(404);
+      expect((await t.j('PUT', '/plugins/hello-feed/settings', { values: { a: 1 } })).status).toBe(403); // not enabled yet
+      await approved(t);
+      expect((await t.j('PUT', '/plugins/hello-feed/settings', { values: [1, 2] })).status).toBe(400);
+      const over = await t.j('PUT', '/plugins/hello-feed/settings', { values: { blob: 'x'.repeat(80 * 1024) } });
+      expect(over.status).toBe(400);
+      expect(over.body.error).toMatch(/too large/);
+      expect((await t.j('PUT', '/plugins/hello-feed/settings', { values: { limit: 5 } })).status).toBe(200);
+      expect((await t.j('GET', '/plugins/hello-feed/settings')).body).toEqual({ limit: 5 });
     } finally {
       t.close();
     }

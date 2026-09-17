@@ -2,7 +2,7 @@ import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import { ConfigStore } from './config.js';
 import { SecretBox, readSecretKey } from './secrets.js';
 import { keychainKey } from './keychain.js';
@@ -197,6 +197,15 @@ if (fs.existsSync(dist)) {
     res.sendFile(path.join(dist, 'index.html'));
   });
 }
+
+// Last resort: anything a route throws, and any body the parsers refuse, answers as JSON. Express's
+// own handler would render an HTML page with the stack (and this machine's paths) in it.
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  const status = Number(err?.status ?? err?.statusCode) || 500;
+  console.error('[backend]', err?.message ?? err);
+  if (res.headersSent) return;
+  res.status(status).json({ error: err?.message ?? 'server error' });
+});
 
 const server = http.createServer(app);
 routeUpgrades(server, {
