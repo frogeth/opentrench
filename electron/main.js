@@ -261,8 +261,14 @@ function createWindow() {
     backgroundColor: '#0a0c0f',
     title: 'opentrench',
     ...(app.isPackaged ? {} : { icon: path.join(__dirname, 'build', 'icon.png') }),
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 14 },
+    // macOS: the traffic lights sit inside the app's own top bar (the page pads for them);
+    // Windows: the native minimize / maximize / close overlay the top bar's right edge, drawn in
+    // the bar's colours; Linux keeps the system frame.
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 } }
+      : process.platform === 'win32'
+        ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#0a0c0f', symbolColor: '#e6e8ee', height: 40 } }
+        : {}),
     webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.js') },
   });
   // Website columns embed pages in iframes, and two things break sites there. Many refuse
