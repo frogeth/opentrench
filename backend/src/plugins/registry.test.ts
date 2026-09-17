@@ -139,6 +139,19 @@ describe('PluginRegistry', () => {
     reg.load();
     expect(() => reg.remove('nope')).toThrow('unknown plugin');
   });
+  it('forgetOrphan() clears what is left of a plugin whose file is already gone', () => {
+    const { dir, reg, state, cfg } = fresh();
+    fs.writeFileSync(path.join(dir, 'hello-feed.js'), FILE);
+    reg.load();
+    reg.approve('hello-feed');
+    reg.enable('hello-feed');
+    reg.noteChat('hello-feed', 'plugin:hello-feed:alerts', 'Alerts');
+    fs.rmSync(path.join(dir, 'hello-feed.js'));
+    reg.load();
+    reg.forgetOrphan('hello-feed');
+    expect(cfg().plugins).toEqual({});
+    expect(state.read('hello-feed').chats).toEqual({});
+  });
   it('list() hands out a copy of the manifest', () => {
     const { dir, reg } = fresh();
     fs.writeFileSync(path.join(dir, 'hello-feed.js'), FILE);

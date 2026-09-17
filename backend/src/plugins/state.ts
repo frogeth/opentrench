@@ -14,6 +14,8 @@ const CHATS_MAX = 32;
 const DEBOUNCE_MS = 200;
 /** …but never let a steady stream of them hold the file back longer than this. */
 const MAX_DEBOUNCE_MS = 2000;
+/** How long to wait before trying again after a write that failed. */
+const RETRY_MS = 2000;
 
 /** `plugins-state.json` next to the config: per-plugin storage, settings values and the chats it has posted. Debounced writes. */
 export class PluginState {
@@ -84,6 +86,11 @@ export class PluginState {
       }
     } catch (e: any) {
       console.warn('[plugins] state save failed', e?.message ?? e);
+      // The change is still only in memory: a full disk or a passing EPERM must not turn into a
+      // silent loss, so the file stays dirty and another write is queued.
+      this.firstDirtyAt = Date.now();
+      this.timer = setTimeout(() => this.flush(), RETRY_MS);
+      this.timer.unref?.();
     }
   }
   private save(): void {

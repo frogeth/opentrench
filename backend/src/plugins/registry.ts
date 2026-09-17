@@ -163,13 +163,25 @@ export class PluginRegistry {
     fs.mkdirSync(this.dir, { recursive: true });
     const target = path.join(this.dir, `${m.id}.js`);
     try {
-      // Never write *through* a symlink someone planted in the folder: drop whatever is in the way
-      // unless it is an ordinary file we are meant to replace.
-      if (!fs.lstatSync(target).isFile()) fs.rmSync(target, { force: true, recursive: true });
+      // Never write *through* a symlink someone planted in the folder: drop whatever is in the way,
+      // the ordinary file we are meant to replace included.
+      fs.rmSync(target, { force: true, recursive: !fs.lstatSync(target).isFile() });
     } catch {
       /* nothing there yet */
     }
-    fs.writeFileSync(target, source, { mode: 0o600 });
+    // 'wx' rather than a plain write: if a symlink is re-planted in the gap between the check above
+    // and this line, the open fails (EEXIST) instead of following it somewhere it does not belong.
+    let fd: number;
+    try {
+      fd = fs.openSync(target, 'wx', 0o600);
+    } catch (e: any) {
+      throw new Error(e?.code === 'EEXIST' ? `something else is using ${m.id}.js; remove it and try again` : (e?.message ?? String(e)));
+    }
+    try {
+      fs.writeFileSync(fd, source);
+    } finally {
+      fs.closeSync(fd);
+    }
     this.load();
     return this.get(m.id)!;
   }
@@ -177,12 +189,20 @@ export class PluginRegistry {
     const p = this.loaded.get(id);
     if (!p) throw new Error('unknown plugin');
     fs.rmSync(p.file, { force: true });
+    this.forgetOrphan(id);
+    this.load();
+  }
+  /**
+   * Everything `remove` does apart from the file: for an id that is not in the folder any more
+   * (deleted by hand, or a config entry left behind by a plugin that never loaded).
+   */
+  forgetOrphan(id: string): void {
     this.cfg.update((c) => {
       delete c.plugins[id];
     });
     this.state.forget(id);
     this.logLines.delete(id);
-    this.load();
+    this.onChange();
   }
   noteChat(id: string, chatId: string, name: string): void {
     if (this.state.read(id).chats[chatId] === name) return;
