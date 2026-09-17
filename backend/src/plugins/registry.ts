@@ -24,6 +24,19 @@ export interface PluginConfig {
 }
 const LOG_MAX = 200;
 
+/** An id for a broken file that no other entry holds: its name, else the name plus a slice of its hash, else a counter. */
+function freeId(taken: Map<string, Loaded>, base: string, hash: string): string {
+  if (!taken.has(base)) return base;
+  if (hash) {
+    const withHash = `${base}-${hash.slice(0, 6)}`;
+    if (!taken.has(withHash)) return withHash;
+  }
+  for (let n = 2; ; n++) {
+    const numbered = `${base}-${n}`;
+    if (!taken.has(numbered)) return numbered;
+  }
+}
+
 /** The plugins folder: what is in it, whether each file is approved and enabled, and what each plugin has been doing. */
 export class PluginRegistry {
   private loaded = new Map<string, Loaded>();
@@ -34,29 +47,39 @@ export class PluginRegistry {
 
   constructor(readonly dir: string, private state: PluginState, private cfg: PluginConfig) {}
 
-  /** Rescan the folder. Errors are per file: a broken plugin never hides the others. */
+  /**
+   * Rescan the folder. Errors are per file: a broken plugin never hides the others.
+   * Two passes, because a broken file's id is guessed from its name and could collide with a real
+   * plugin's: valid plugins claim their manifest id first, then the broken ones take what is left.
+   */
   load(): void {
     fs.mkdirSync(this.dir, { recursive: true });
     const next = new Map<string, Loaded>();
+    const broken: Loaded[] = [];
     for (const name of fs.readdirSync(this.dir).filter((f) => f.endsWith('.js')).sort()) {
       const file = path.join(this.dir, name);
-      const fallbackId = name.replace(/\.js$/, '').toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 40) || 'plugin';
+      const stem = name.replace(/\.js$/, '');
+      const fallbackId = stem.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 40) || 'plugin';
       let source = '';
       try {
         if (fs.statSync(file).size > MAX_FILE) throw new Error(`plugin file is too large (${MAX_FILE / 1024} KB max)`);
         source = fs.readFileSync(file, 'utf8');
       } catch (e: any) {
-        next.set(fallbackId, { id: fallbackId, file, hash: '', error: e?.message ?? String(e) });
+        broken.push({ id: fallbackId, file, hash: '', error: e?.message ?? String(e) });
         continue;
       }
       const hash = crypto.createHash('sha256').update(source).digest('hex');
       try {
         const manifest = extractManifest(source);
-        if (manifest.id !== name.replace(/\.js$/, '')) throw new Error(`file name must be ${manifest.id}.js`);
+        if (manifest.id !== stem) throw new Error(`file name must be ${manifest.id}.js`);
         next.set(manifest.id, { id: manifest.id, file, hash, manifest });
       } catch (e: any) {
-        next.set(fallbackId, { id: fallbackId, file, hash, error: e?.message ?? String(e) });
+        broken.push({ id: fallbackId, file, hash, error: e?.message ?? String(e) });
       }
+    }
+    for (const bad of broken) {
+      const id = freeId(next, bad.id, bad.hash);
+      next.set(id, { ...bad, id });
     }
     this.loaded = next;
     this.onChange();
@@ -76,7 +99,8 @@ export class PluginRegistry {
         error: p.error,
         enabled: !!c?.enabled && !needsApproval && !p.error,
         needsApproval,
-        chats: { ...this.state.read(p.id).chats },
+        // Only a real plugin gets a state record; a junk file must not add one to plugins-state.json.
+        chats: p.manifest ? { ...this.state.read(p.id).chats } : {},
         signedIn: (p.manifest?.sites ?? []).filter((s) => signed.has(s)),
       };
     });

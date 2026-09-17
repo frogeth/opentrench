@@ -63,6 +63,40 @@ describe('PluginRegistry', () => {
     expect(reg.list()[0]).toMatchObject({ id: 'other', enabled: false });
     expect(reg.list()[0].error).toMatch(/hello-feed\.js/);
   });
+  it('a broken file never evicts a valid plugin whose id its name would claim', () => {
+    const { dir, reg, state } = fresh();
+    fs.writeFileSync(path.join(dir, 'hello-feed.js'), FILE);
+    fs.writeFileSync(path.join(dir, 'hello_feed.js'), 'export default 1;');
+    reg.load();
+    reg.approve('hello-feed');
+    reg.enable('hello-feed');
+    const list = reg.list();
+    expect(list.length).toBe(2);
+    const ok = list.find((p) => p.id === 'hello-feed')!;
+    expect(ok.error).toBeUndefined();
+    expect(ok.enabled).toBe(true);
+    expect(ok.file).toBe('hello-feed.js');
+    expect(reg.code('hello-feed')).toBe(FILE);
+    const junk = list.find((p) => p.id !== 'hello-feed')!;
+    expect(junk.id).toMatch(/^hello-feed-[0-9a-f]{6}$/);
+    expect(junk.file).toBe('hello_feed.js');
+    expect(junk.error).toMatch(/no manifest/);
+    expect(junk.chats).toEqual({});
+    state.flush();
+    const saved = JSON.parse(fs.readFileSync(path.join(dir, 'plugins-state.json'), 'utf8'));
+    expect(saved[junk.id]).toBeUndefined();
+  });
+  it('two broken files whose names sanitize to the same id both show up', () => {
+    const { dir, reg } = fresh();
+    fs.writeFileSync(path.join(dir, 'bad one.js'), 'export default 1;');
+    fs.writeFileSync(path.join(dir, 'bad-one.js'), 'export default 2;');
+    reg.load();
+    const list = reg.list();
+    expect(list.length).toBe(2);
+    expect(list.every((p) => !!p.error)).toBe(true);
+    expect(new Set(list.map((p) => p.id)).size).toBe(2);
+    expect(list.map((p) => p.file).sort()).toEqual(['bad one.js', 'bad-one.js']);
+  });
   it('remembers chats a plugin posted and keeps a bounded log', () => {
     const { dir, reg, state } = fresh();
     fs.writeFileSync(path.join(dir, 'hello-feed.js'), FILE);
