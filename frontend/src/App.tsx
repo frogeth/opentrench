@@ -44,6 +44,7 @@ import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type Teleg
 import { copyText, type ChartProvider } from './format';
 import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, thesisFollowUps, tokenPasses } from './filters';
+import { ALERT_WINDOW_MS, alertSound } from './alerts';
 import type { BotMessage, FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
 
 /** Header status: the platform's logo, coloured by its connection state; the words live in the tooltip. */
@@ -997,38 +998,41 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [j7]);
 
-  // Per-column alerts: a new call (message with a contract, not a repeat) in a column's channels plays its sound.
-  const alerted = useRef<{ lastId: string | null; lastPlay: number }>({ lastId: null, lastPlay: 0 });
+  // Per-column alerts: a new call (message with a contract, not a repeat) plays the sound of the
+  // first bell-on chat/calls column that would show it: its channels and its filters both count.
+  // A call whose token does not pass yet waits (up to a minute) and is re-checked as token data arrives.
+  const alerted = useRef<{ lastId: string | null; lastPlay: number; pending: Map<string, FeedMessage> }>({ lastId: null, lastPlay: 0, pending: new Map() });
   useEffect(() => {
     const newest = messages[0];
     if (!newest) return;
-    const first = alerted.current.lastId === null;
-    const prevId = alerted.current.lastId;
-    alerted.current.lastId = newest.id;
+    const st = alerted.current;
+    const first = st.lastId === null;
+    const prevId = st.lastId;
+    st.lastId = newest.id;
     if (first) return; // initial load: nothing to announce
-    // walk the messages that arrived since the last one we saw (newest first)
-    const fresh: FeedMessage[] = [];
+    // queue the messages that arrived since the last one we saw (newest first)
+    let walked = 0;
     for (const m of messages) {
-      if (m.id === prevId) break;
-      fresh.push(m);
-      if (fresh.length > 20) break;
+      if (m.id === prevId || walked++ > 20) break;
+      if (!m.hidden && !m.repeat && m.contracts.length > 0) st.pending.set(m.id, m);
     }
     const now = Date.now();
-    let played = false;
-    for (const m of fresh) {
-      if (m.hidden || m.repeat || m.contracts.length === 0 || now - m.ts > 60_000) continue;
-      for (const col of flatColumns) {
-        // only chat/calls columns announce calls; a J7 or bot pane's bell is not a call alert
-        if (!col.alert?.on || (col.type !== 'chat' && col.type !== 'calls') || !inScope(m.chatName, namesFor(col))) continue;
-        if (!played && now - alerted.current.lastPlay > 1200) {
-          playSound(col.alert.sound);
-          alerted.current.lastPlay = now;
-          played = true;
-        }
+    const cols = flatColumns.map((c) => ({ type: c.type, alert: c.alert, filters: c.filters, names: namesFor(c) }));
+    for (const m of st.pending.values()) {
+      if (now - m.ts > ALERT_WINDOW_MS) {
+        st.pending.delete(m.id);
+        continue;
+      }
+      const snd = alertSound(m, tokens, cols, { inScope, hidden, now });
+      if (!snd) continue;
+      st.pending.delete(m.id);
+      if (now - st.lastPlay > 1200) {
+        playSound(snd);
+        st.lastPlay = now;
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages]);
+  }, [messages, tokens]);
 
   // a queued mint whose stage opened: a coin when it is ready (or already sent, when armed), a chirp when it failed
   const mintStates = useRef<Map<string, string> | null>(null);
