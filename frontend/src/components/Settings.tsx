@@ -222,15 +222,6 @@ function StatePill({ state }: { state: string }) {
 
 function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: Status; onChange: () => void }) {
   const bridge = status.discordMode === 'bridge';
-  const [token, setToken] = useState('');
-  const [edit, setEdit] = useState(false);
-  const saveToken = () =>
-    run(async () => {
-      await api.setDiscordToken(token);
-      setToken('');
-      setEdit(false);
-      onChange();
-    });
   const { busy, err, run } = useAsync();
   const [setupMsg, setSetupMsg] = useState<string | null>(null);
   const setupDiscord = () =>
@@ -299,50 +290,7 @@ function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: 
         )}
       </div>
 
-      <div className={`acct-card${!bridge && cfg.discord.hasToken ? ' acct-card-on' : ''}`}>
-        <div className="acct-card-title">
-          <b>User token</b> <span className="muted">legacy · read only · self-bot risk</span>
-        </div>
-        {cfg.discord.hasToken && !edit ? (
-          <div className="row-inline">
-            <span className="hint">{bridge ? 'Saved, unused while the plugin is connected.' : `Reading ${cfg.discord.watch.length} channel(s). Sending is off on this path.`}</span>
-            <button onClick={() => setEdit(true)}>Change</button>
-            <button
-              disabled={busy}
-              onClick={() =>
-                run(async () => {
-                  await api.setDiscordToken('');
-                  onChange();
-                })
-              }
-            >
-              Remove token
-            </button>
-          </div>
-        ) : edit || !cfg.discord.hasToken ? (
-          <>
-            <div className="hint">
-              Only if you can't run the plugin. Discord's terms forbid this and accounts have been banned for it; reading is quieter than sending, which is why sending was
-              removed here. Token: DevTools → Network → any request → Authorization header.
-            </div>
-            <div className="row-inline">
-              <input
-                type="password"
-                placeholder="user token"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                onKeyDown={onEnter(!busy && !!token, () => saveToken())}
-              />
-              <button disabled={busy || !token} onClick={() => saveToken()}>
-                Save
-              </button>
-              {cfg.discord.hasToken && <button onClick={() => setEdit(false)}>Cancel</button>}
-            </div>
-          </>
-        ) : null}
-      </div>
-
-      {bridge ? <DiscordSendToggle cfg={cfg} onChange={onChange} /> : <div className="hint">Sending on Discord needs the plugin. With a token, chat columns are read-only.</div>}
+      {bridge ? <DiscordSendToggle cfg={cfg} onChange={onChange} /> : <div className="hint">Sending on Discord needs the plugin.</div>}
       {err && <div className="err">{err}</div>}
     </section>
   );
