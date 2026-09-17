@@ -630,7 +630,12 @@ export class MessageHub extends EventEmitter {
     const m = this.buffer.find((x) => x.id === msgId);
     if (!m) return;
     Object.assign(m, patch);
-    this.emit('event', { type: 'msg', msgId, patch } satisfies ServerEvent);
+    // An edit can add or drop a contract, so text that changes is scanned again and the new list
+    // rides along in the event: a client that already has the message must not keep the old one.
+    // Only the list is refreshed — the message keeps its repeat/hidden judgement, and an edit does
+    // not register a fresh call against a token the way a new message does.
+    const sent = typeof patch.text === 'string' ? { ...patch, contracts: (m.contracts = contractsOf(m.text, m.isBot)) } : patch;
+    this.emit('event', { type: 'msg', msgId, patch: sent } satisfies ServerEvent);
     this.changed();
   }
 

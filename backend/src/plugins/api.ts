@@ -1,11 +1,13 @@
-import { Router, json, type NextFunction, type Request, type Response } from 'express';
+import { Router, json, type Request, type Response } from 'express';
 import { fetch as undiciFetch } from 'undici';
+import { jsonErrors } from '../http.js';
 import type { MessageHub } from '../hub.js';
-import type { ServerEvent } from '../types.js';
-import { POSTS_PER_WINDOW, POST_WINDOW_MS, PostLimiter, toFeedMessage, type PluginPost } from './feed.js';
+import type { FeedMessage, ServerEvent } from '../types.js';
+import { cleanText, POSTS_PER_WINDOW, POST_WINDOW_MS, PostLimiter, toFeedMessage, toMedia, type PluginPost } from './feed.js';
 import { isLocalHost, isLoopbackIp } from './hosts.js';
+import { CREDENTIAL_HEADERS, HEADER_NAME_RE, REDIRECT_STATUS, REQUEST_HEADER_STRIP } from './http.js';
 import { MAX_FILE, MAX_FILE_MESSAGE } from './manifest.js';
-import type { PluginRegistry } from './registry.js';
+import { RegistryError, type PluginRegistry } from './registry.js';
 import { safeDispatcher, type ShellLink } from './shell.js';
 import type { PluginState } from './state.js';
 
@@ -26,17 +28,14 @@ const FETCH_WINDOW_MS = 60_000;
 /** …and only this many at once, so one plugin cannot hold every socket (and every shell round trip) open. */
 const FETCH_IN_FLIGHT_MAX = 4;
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD'];
-/** RFC 9110 token characters: anything else is not a header name, it is an attempt at one. */
-const HEADER_NAME_RE = /^[a-z0-9!#$%&'*+.^_`|~-]+$/i;
 const HEADER_VALUE_MAX = 4000;
 const HEADERS_MAX = 40;
 const FETCH_BODY_MAX = 1024 * 1024;
 /** A plugin's settings live in the config the user reads and the state file; they are values, not a database. */
 const SETTINGS_MAX = 64 * 1024;
-/** Headers the fetch layer owns; a plugin setting these is either confused or probing. */
-const HEADER_STRIP = new Set(['host', 'cookie', 'content-length', 'transfer-encoding', 'connection']);
+/** Key names that mean something to an object rather than to the plugin storing them. */
+const PROTOTYPE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const ADD_URL_TIMEOUT_MS = 15_000;
-const REDIRECT_STATUS = [301, 302, 303, 307, 308];
 
 /**
  * Is the peer on this machine? `/shell/hello` hands out the socket a plugin's site-authenticated
@@ -55,9 +54,9 @@ export function pluginHeaders(raw: unknown, viaShell: boolean): Record<string, s
     if (Object.keys(out).length >= HEADERS_MAX) break;
     if (rawValue === null || rawValue === undefined) continue;
     const key = String(rawKey).trim().toLowerCase();
-    if (!HEADER_NAME_RE.test(key) || HEADER_STRIP.has(key)) continue;
+    if (!HEADER_NAME_RE.test(key) || REQUEST_HEADER_STRIP.has(key)) continue;
     // Going through the shell, the site's login is the shell's to attach: a plugin must not add its own on top.
-    if (viaShell && key === 'authorization') continue;
+    if (viaShell && CREDENTIAL_HEADERS.has(key)) continue;
     const value = String(rawValue).slice(0, HEADER_VALUE_MAX);
     if (/[\r\n\0]/.test(value)) continue; // a value that carries a line break is a second header
     out[key] = value;
@@ -102,31 +101,6 @@ async function download(url: string, fetchImpl: typeof fetch, dispatcher: unknow
   return Buffer.concat(chunks).toString('utf8');
 }
 
-/**
- * Turn whatever reaches it into `{ error }`: Express's own handler renders an HTML page with the stack
- * (and this machine's paths) in it. A 5xx says only 'server error' — an fs or network failure's message
- * names absolute paths and hosts the caller has no business with, so that detail stays in the log.
- *
- * A response that has already started streaming is past saying anything: it goes back to Express, which
- * destroys the socket. Swallowing it here would leave the client holding a body that never ends.
- */
-export function jsonErrors(tag: string) {
-  return (err: any, _req: Request, res: Response, next: NextFunction): void => {
-    const status = Number(err?.status ?? err?.statusCode) || 500;
-    const message =
-      err?.type === 'entity.too.large'
-        ? 'request body is too large'
-        : err instanceof SyntaxError || err?.type === 'entity.parse.failed'
-          ? 'request body is not valid json'
-          : status >= 500
-            ? 'server error'
-            : (err?.message ?? 'server error');
-    if (status >= 500) console.error(tag, err?.message ?? err);
-    if (res.headersSent) return next(err);
-    res.status(status).json({ error: message });
-  };
-}
-
 /** `/api/plugins/*` and `/api/shell/hello`. Every plugin-facing route checks the plugin is enabled. */
 export function createPluginsApi(
   reg: PluginRegistry,
@@ -152,6 +126,11 @@ export function createPluginsApi(
   const addUrlDispatcher = () => (opts.fetchImpl ? undefined : (addUrlAgent ??= safeDispatcher()));
   const fail = (res: Response, status: number, message: string) => res.status(status).json({ error: message });
   const why = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+  /** The registry says why it refused; the status follows from that, not from the wording. */
+  const statusFor = (e: unknown, fallback: number): number => {
+    const code = e instanceof RegistryError ? e.code : undefined;
+    return code === 'unknown' ? 404 : code === 'not-enabled' ? 403 : code === 'changed' ? 409 : fallback;
+  };
   const enabled = (req: Request, res: Response): string | null => {
     const id = String(req.params.id);
     const p = reg.get(id);
@@ -241,7 +220,7 @@ export function createPluginsApi(
       reg.approve(String(req.params.id));
       res.json({ ok: true });
     } catch (e) {
-      fail(res, 400, why(e));
+      fail(res, statusFor(e, 400), why(e));
     }
   });
   r.post('/plugins/:id/enable', (req, res) => {
@@ -250,7 +229,7 @@ export function createPluginsApi(
       void refreshSignedIn();
       res.json({ ok: true });
     } catch (e) {
-      fail(res, 400, why(e));
+      fail(res, statusFor(e, 400), why(e));
     }
   });
   r.post('/plugins/:id/disable', (req, res) => {
@@ -282,15 +261,18 @@ export function createPluginsApi(
       source = reg.code(id);
     } catch (e) {
       if ((e as NodeJS.ErrnoException)?.code === 'ENOENT') return fail(res, 404, 'the plugin file is gone; reload the plugins folder');
-      // The file is there but no longer the bytes the user approved: the UI asks them to approve again.
-      if (/approve this version/.test(why(e))) return fail(res, 409, why(e));
-      return fail(res, 400, why(e));
+      // 'changed': the file is there but no longer the bytes the user approved, so the UI asks again.
+      return fail(res, statusFor(e, 400), why(e));
     }
     res.setHeader('content-type', 'text/javascript; charset=utf-8');
     res.setHeader('cache-control', 'no-store');
     res.send(source);
   });
-  r.get('/plugins/:id/logs', (req, res) => res.json(reg.logs(String(req.params.id))));
+  r.get('/plugins/:id/logs', (req, res) => {
+    const id = loaded(req, res);
+    if (!id) return;
+    res.json(reg.logs(id));
+  });
   r.post('/plugins/:id/log', (req, res) => {
     const id = enabled(req, res);
     if (!id) return;
@@ -327,18 +309,36 @@ export function createPluginsApi(
     res.json({ ok: true, id: msg.id });
   });
   r.post('/plugins/:id/patch', (req, res) => {
+    // An edit is a post by another name: same permission, same limiter, same cleaning of what it carries.
     const id = enabled(req, res);
     if (!id) return;
+    const manifest = reg.manifest(id);
+    if (!manifest.permissions.includes('feed:write')) return fail(res, 403, 'plugin lacks the feed:write permission');
     const msgId = String(req.body?.id ?? '');
     if (!msgId.startsWith(`plugin:${id}:`)) return fail(res, 400, "not this plugin's message");
-    const patch: Record<string, unknown> = {};
-    if (typeof req.body?.text === 'string') patch.text = req.body.text.slice(0, 4000);
+    if (!posts.take(id)) return fail(res, 429, `too many posts (${POSTS_PER_WINDOW} a minute)`);
+    const patch: Partial<FeedMessage> = {};
+    if (typeof req.body?.text === 'string') patch.text = cleanText(req.body.text);
+    if (req.body?.attachments !== undefined) {
+      try {
+        const media = toMedia(manifest, req.body.attachments);
+        patch.media = media.length ? media : undefined;
+        patch.hasAttachment = media.length > 0;
+      } catch (e) {
+        return fail(res, 400, why(e));
+      }
+    }
+    // The hub re-scans edited text for contracts; it does not register a fresh call for one that
+    // appears in an edit, so a plugin cannot turn an old message into a new call by editing it.
     hub.patch(msgId, patch);
     res.json({ ok: true });
   });
   r.put('/plugins/watch', (req, res) => {
     const key = String(req.body?.key ?? '');
     if (!/^plugin:[a-z0-9-]+:[a-z0-9-]+$/.test(key)) return fail(res, 400, 'key');
+    // Only a chat a plugin has actually posted: the watch list is what the pickers and columns read,
+    // and a key with nothing behind it is a row no one can ever name or clear.
+    if (!reg.list().some((p) => key in p.chats)) return fail(res, 400, 'no plugin has posted that chat');
     cfg.update((c) => {
       c.pluginWatch = c.pluginWatch.filter((k) => k !== key);
       if (req.body?.on) c.pluginWatch.push(key);
@@ -350,14 +350,17 @@ export function createPluginsApi(
   r.get('/plugins/:id/storage', (req, res) => {
     const id = enabled(req, res);
     if (!id) return;
+    if (!reg.manifest(id).permissions.includes('storage')) return fail(res, 403, 'plugin lacks the storage permission');
     res.json(state.read(id).storage);
   });
   r.put('/plugins/:id/storage/:key', (req, res) => {
     const id = enabled(req, res);
     if (!id) return;
     if (!reg.manifest(id).permissions.includes('storage')) return fail(res, 403, 'plugin lacks the storage permission');
+    const key = String(req.params.key).slice(0, 100);
+    if (!key || PROTOTYPE_KEYS.has(key)) return fail(res, 400, 'that key name is not allowed');
     try {
-      state.setStorage(id, String(req.params.key).slice(0, 100), req.body?.value);
+      state.setStorage(id, key, req.body?.value);
       res.json({ ok: true });
     } catch (e) {
       fail(res, 400, why(e));
@@ -369,8 +372,9 @@ export function createPluginsApi(
     res.json(state.read(id).settings);
   });
   r.put('/plugins/:id/settings', (req, res) => {
-    // Settings are the user's answers to the plugin's schema, so the plugin has to be one we have.
-    const id = enabled(req, res);
+    // Settings are the user's answers to the plugin's schema, and filling in a key is often what one
+    // does *before* enabling it — so this needs a plugin we have, not an enabled one.
+    const id = loaded(req, res);
     if (!id) return;
     const values = req.body?.values;
     if (!values || typeof values !== 'object' || Array.isArray(values)) return fail(res, 400, 'values');
@@ -427,14 +431,11 @@ export function createPluginsApi(
     res.json({ sites, signedIn: await shell.signedIn(sites), available: shell.available() });
   });
   r.post('/plugins/:id/sites/signin', async (req, res) => {
-    const id = String(req.params.id);
+    // Opening a sign-in window is the plugin acting on the user's behalf: only an enabled one may.
+    const id = enabled(req, res);
+    if (!id) return;
     const site = String(req.body?.site ?? '');
-    let sites: string[];
-    try {
-      sites = reg.manifest(id).sites;
-    } catch (e) {
-      return fail(res, 404, why(e));
-    }
+    const sites = reg.manifest(id).sites;
     if (!sites.includes(site)) return fail(res, 400, "not one of this plugin's sites");
     try {
       await shell.signIn(site);

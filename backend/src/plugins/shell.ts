@@ -1,6 +1,7 @@
 import { lookup as dnsLookup } from 'node:dns';
 import { Agent, type Dispatcher, fetch as undiciFetch } from 'undici';
 import { isLocalHost, isLocalIp } from './hosts.js';
+import { CREDENTIAL_HEADERS, HEADER_NAME_RE, REDIRECT_STATUS, REQUEST_HEADER_STRIP } from './http.js';
 
 /** A proxied response as plugins see it. Bodies are text; binary sites are out of scope for v1. */
 export interface ProxyResponse {
@@ -32,7 +33,6 @@ const MAX_FAILURES = 3;
 const SHELL_REPLY_MAX = BODY_MAX * 3;
 /** A contested hello should not hang the route; the shell is on loopback and either answers at once or is gone. */
 const HELLO_PROBE_MS = 2_000;
-const REDIRECT_STATUS = [301, 302, 303, 307, 308];
 
 /**
  * What a plugin is allowed to learn from a response. An allow-list rather than a deny-list: a header we
@@ -51,23 +51,6 @@ const RESPONSE_HEADER_ALLOW = new Set([
   'date',
 ]);
 
-/** Hop-by-hop headers and the ones the fetch layer owns; a plugin naming these is either confused or probing. */
-const REQUEST_HEADER_STRIP = new Set([
-  'host',
-  'content-length',
-  'transfer-encoding',
-  'connection',
-  'upgrade',
-  'te',
-  'keep-alive',
-  'cookie',
-]);
-
-/** Sent to the origin that was asked for, and to no other. */
-const CREDENTIAL_HEADERS = new Set(['authorization', 'proxy-authorization']);
-
-/** RFC 9110 token characters. A name outside this set is a plugin trying to shape the request itself. */
-const HEADER_NAME = /^[a-z0-9!#$%&'*+.^_`|~-]+$/i;
 
 function isAllowedResponseHeader(key: string): boolean {
   // set-cookie is named even though the allow-list already excludes it: this is the line that must never move.
@@ -114,7 +97,7 @@ function safeRequestHeaders(headers: Record<string, string> | undefined, keepCre
     if (Object.keys(out).length >= MAX_HEADERS) break;
     if (rawValue === null || rawValue === undefined) continue;
     const key = String(rawKey ?? '').trim().toLowerCase();
-    if (!key || !HEADER_NAME.test(key) || REQUEST_HEADER_STRIP.has(key)) continue;
+    if (!key || !HEADER_NAME_RE.test(key) || REQUEST_HEADER_STRIP.has(key)) continue;
     if (!keepCredentials && CREDENTIAL_HEADERS.has(key)) continue;
     out[key] = clean(rawValue);
   }

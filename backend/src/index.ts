@@ -23,7 +23,8 @@ import { StateStore } from './store.js';
 import { PluginRegistry } from './plugins/registry.js';
 import { PluginState } from './plugins/state.js';
 import { ShellLink } from './plugins/shell.js';
-import { createPluginsApi, jsonErrors } from './plugins/api.js';
+import { createPluginsApi } from './plugins/api.js';
+import { jsonErrors } from './http.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..'); // backend/ (parent of src/ or dist/)
@@ -183,7 +184,8 @@ const APP_VERSION =
 // `node dist/index.js` is not, and the app asks before touching it
 app.get('/api/version', (_req, res) => res.json({ version: APP_VERSION, managed: Number.isFinite(parentPid) && parentPid > 0 }));
 // Ahead of createApi: whichever json parser runs first parses the body, and a plugin's file or a
-// proxied request body is bigger than the 64kb createApi allows its own routes.
+// proxied request body is bigger than the 64kb createApi allows its own routes. Both halves of that
+// are pinned by 'mounted ahead of a router with a smaller parser' in plugins/api.test.ts.
 app.use('/api', createPluginsApi(plugins, pluginState, hub, shell, cfg));
 app.use('/api', createApi(cfg, hub, svc, hover, (t) => refreshMarket([t])));
 

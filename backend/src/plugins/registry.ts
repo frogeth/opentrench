@@ -24,6 +24,18 @@ export interface PluginConfig {
 }
 const LOG_MAX = 200;
 
+/** Why the registry refused, so callers (the routes) answer by the reason and not by the wording. */
+export type RegistryErrorCode = 'unknown' | 'needs-approval' | 'not-enabled' | 'changed';
+export class RegistryError extends Error {
+  constructor(
+    readonly code: RegistryErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'RegistryError';
+  }
+}
+
 /** An id for a broken file that no other entry holds: its name, else the name plus a slice of its hash, else a counter. */
 function freeId(taken: Map<string, Loaded>, base: string, hash: string): string {
   if (!taken.has(base)) return base;
@@ -115,7 +127,7 @@ export class PluginRegistry {
   }
   manifest(id: string): PluginManifest {
     const p = this.loaded.get(id);
-    if (!p?.manifest) throw new Error(p?.error ?? 'unknown plugin');
+    if (!p?.manifest) throw new RegistryError('unknown', p?.error ?? 'unknown plugin');
     return p.manifest;
   }
   /**
@@ -125,18 +137,18 @@ export class PluginRegistry {
    */
   code(id: string): string {
     const p = this.get(id);
-    if (!p?.enabled) throw new Error('plugin is not enabled');
+    if (!p?.enabled) throw new RegistryError('not-enabled', 'plugin is not enabled');
     const entry = this.loaded.get(id)!;
     const bytes = fs.readFileSync(entry.file);
     if (crypto.createHash('sha256').update(bytes).digest('hex') !== entry.hash) {
       this.load(); // so the next list() shows it as needing approval again
-      throw new Error('the plugin file changed on disk; approve this version first');
+      throw new RegistryError('changed', 'the plugin file changed on disk; approve this version first');
     }
     return bytes.toString('utf8');
   }
   approve(id: string): void {
     const p = this.loaded.get(id);
-    if (!p?.manifest) throw new Error(p?.error ?? 'unknown plugin');
+    if (!p?.manifest) throw new RegistryError('unknown', p?.error ?? 'unknown plugin');
     this.cfg.update((c) => {
       c.plugins[id] = { ...(c.plugins[id] ?? { enabled: false }), approvedHash: p.hash };
     });
@@ -144,8 +156,8 @@ export class PluginRegistry {
   }
   enable(id: string): void {
     const p = this.loaded.get(id);
-    if (!p?.manifest) throw new Error(p?.error ?? 'unknown plugin');
-    if (this.cfg.get().plugins[id]?.approvedHash !== p.hash) throw new Error('approve this version of the plugin first');
+    if (!p?.manifest) throw new RegistryError('unknown', p?.error ?? 'unknown plugin');
+    if (this.cfg.get().plugins[id]?.approvedHash !== p.hash) throw new RegistryError('needs-approval', 'approve this version of the plugin first');
     this.cfg.update((c) => {
       c.plugins[id] = { ...c.plugins[id], enabled: true };
     });
@@ -187,7 +199,7 @@ export class PluginRegistry {
   }
   remove(id: string): void {
     const p = this.loaded.get(id);
-    if (!p) throw new Error('unknown plugin');
+    if (!p) throw new RegistryError('unknown', 'unknown plugin');
     fs.rmSync(p.file, { force: true });
     this.forgetOrphan(id);
     this.load();

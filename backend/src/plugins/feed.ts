@@ -47,7 +47,7 @@ const clean = (v: unknown, max: number): string =>
 const cleanId = (v: unknown): string => String(v ?? '').replace(STRIP_RE, '').trim().slice(0, ID_MAX);
 
 /** Text keeps its line breaks and tabs (the UI renders them); the rest of the set above becomes a space. */
-const cleanText = (v: unknown): string =>
+export const cleanText = (v: unknown): string =>
   String(v ?? '')
     .replace(STRIP_RE, (c) => (c === '\n' || c === '\t' ? c : ' '))
     .slice(0, TEXT_MAX);
@@ -117,6 +117,23 @@ const linkUrl = (u: unknown): string | undefined => {
   return s;
 };
 
+/**
+ * The attachments of a post, or of a patch to one: https, on one of the plugin's own sites, at most 8.
+ * The renderer loads these without a click, so the same rule holds wherever they arrive from.
+ */
+export function toMedia(manifest: PluginManifest, attachments: PluginPost['attachments']): MediaItem[] {
+  if (attachments !== undefined && !Array.isArray(attachments)) throw new Error('attachments must be an array');
+  const origins = siteOrigins(manifest);
+  const media: MediaItem[] = [];
+  for (const a of (attachments ?? []).slice(0, ATTACHMENTS_MAX)) {
+    const url = mediaUrl(a?.url, 'attachment url', origins);
+    if (!url) throw new Error("attachment url must be https on one of the plugin's sites");
+    const kind = a?.kind === 'video' ? 'video' : 'image';
+    media.push({ kind, url, mime: kind === 'video' ? 'video/mp4' : 'image/*' });
+  }
+  return media;
+}
+
 /** Turns one `ot.feed.post` call into a feed message, or throws with a message the plugin author can act on. */
 export function toFeedMessage(pluginId: string, manifest: PluginManifest, p: PluginPost): FeedMessage {
   const id = cleanId(p.id);
@@ -130,14 +147,7 @@ export function toFeedMessage(pluginId: string, manifest: PluginManifest, p: Plu
   const avatar = mediaUrl(p.avatar, 'avatar', origins);
   const link = linkUrl(p.link);
 
-  if (p.attachments !== undefined && !Array.isArray(p.attachments)) throw new Error('attachments must be an array');
-  const media: MediaItem[] = [];
-  for (const a of (p.attachments ?? []).slice(0, ATTACHMENTS_MAX)) {
-    const url = mediaUrl(a?.url, 'attachment url', origins);
-    if (!url) throw new Error("attachment url must be https on one of the plugin's sites");
-    const kind = a?.kind === 'video' ? 'video' : 'image';
-    media.push({ kind, url, mime: kind === 'video' ? 'video/mp4' : 'image/*' });
-  }
+  const media = toMedia(manifest, p.attachments);
   if (!text.trim() && !media.length) throw new Error('post needs text or an attachment');
 
   const given = Number(p.ts);

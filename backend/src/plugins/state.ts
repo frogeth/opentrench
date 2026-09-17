@@ -6,7 +6,8 @@ export interface PluginRecord {
   settings: Record<string, unknown>;
   chats: Record<string, string>;
 }
-const EMPTY = (): PluginRecord => ({ storage: {}, settings: {}, chats: {} });
+// The storage bag is keyed by whatever a plugin asks for, so it gets no prototype to walk into.
+const EMPTY = (): PluginRecord => ({ storage: Object.create(null), settings: {}, chats: {} });
 const MAX_STORAGE_BYTES = 256 * 1024;
 /** distinct chats one plugin may name; each one becomes a watch key and a row in the pickers */
 const CHATS_MAX = 32;
@@ -26,7 +27,9 @@ export class PluginState {
   constructor(private file: string) {
     try {
       const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
-      for (const [id, r] of Object.entries<any>(raw ?? {})) this.data[id] = { storage: r?.storage ?? {}, settings: r?.settings ?? {}, chats: r?.chats ?? {} };
+        for (const [id, r] of Object.entries<any>(raw ?? {})) {
+        this.data[id] = { storage: Object.assign(Object.create(null), r?.storage ?? {}), settings: r?.settings ?? {}, chats: r?.chats ?? {} };
+      }
     } catch {
       /* first run */
     }

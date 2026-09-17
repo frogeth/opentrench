@@ -8,7 +8,12 @@ import { MessageHub } from '../hub.js';
 import { PluginRegistry } from './registry.js';
 import { PluginState } from './state.js';
 import { ShellLink } from './shell.js';
-import { createPluginsApi, isLoopbackCaller, jsonErrors, pluginHeaders, proxyBody } from './api.js';
+import { createPluginsApi, isLoopbackCaller, pluginHeaders, proxyBody } from './api.js';
+import { jsonErrors } from '../http.js';
+
+/** a second plugin in the folder with no feed:write, for the refusals that need one */
+const QUIET = `export const manifest = {"id":"quiet-feed","name":"Quiet feed","version":"1.0.0","api":1,"sites":["https://example.com"],"permissions":["storage"]};
+export default function main(ot) {}`;
 
 const FILE = `export const manifest = {"id":"hello-feed","name":"Hello feed","version":"1.0.0","api":1,"sites":["https://example.com"],"permissions":["feed:write","storage"]};
 export default function main(ot) {}`;
@@ -32,9 +37,13 @@ interface Harness {
 }
 
 /** One backend's worth of plugin routes on a random port, with a fake shell and a fake downloader. */
-function harness(opts: { blacklist?: string[]; download?: (url: string) => Response | Promise<Response>; hold?: () => Promise<void> } = {}): Harness {
+const tmpDirs: string[] = [];
+
+function harness(opts: { blacklist?: string[]; download?: (url: string) => Response | Promise<Response>; hold?: () => Promise<void>; quiet?: boolean } = {}): Harness {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ot-plugins-api-'));
+  tmpDirs.push(dir);
   fs.writeFileSync(path.join(dir, 'hello-feed.js'), FILE);
+  if (opts.quiet) fs.writeFileSync(path.join(dir, 'quiet-feed.js'), QUIET);
   const cfg: any = { plugins: {}, pluginWatch: [] };
   const store = { get: () => cfg, update: (fn: (c: any) => void) => fn(cfg) };
   const state = new PluginState(path.join(dir, 'plugins-state.json'));
@@ -80,7 +89,10 @@ let h: Harness;
 beforeAll(() => {
   h = harness();
 });
-afterAll(() => h.close());
+afterAll(() => {
+  h.close();
+  for (const dir of tmpDirs) fs.rmSync(dir, { recursive: true, force: true });
+});
 const j: Harness['j'] = (...args) => h.j(...args);
 
 describe('plugins api', () => {
@@ -275,9 +287,13 @@ describe('plugins api guards', () => {
     expect(pluginHeaders({ 'x-long': 'y'.repeat(9000) }, false)['x-long']).toHaveLength(4000);
     // the fetch layer's own headers never come from the plugin, and a value carrying a line break
     // would be a second header
-    expect(pluginHeaders({ cookie: 'a=1', host: 'elsewhere.example.com', 'x-ok': 'v\r\nx-evil: 1', 'bad name': 'v' }, false)).toEqual({});
+    expect(
+      pluginHeaders({ cookie: 'a=1', host: 'elsewhere.example.com', te: 'trailers', upgrade: 'h2c', 'keep-alive': '1', 'proxy-connection': 'keep-alive', 'x-ok': 'v\r\nx-evil: 1', 'bad name': 'v' }, false),
+    ).toEqual({});
     expect(pluginHeaders({ authorization: 'Bearer own' }, false)).toEqual({ authorization: 'Bearer own' });
-    expect(pluginHeaders({ authorization: 'Bearer own' }, true)).toEqual({}); // the shell attaches the login
+    // going through the shell, the site's login is the shell's to attach and a plugin adds neither kind
+    expect(pluginHeaders({ authorization: 'Bearer own', 'proxy-authorization': 'Basic own' }, true)).toEqual({});
+    expect(pluginHeaders({ 'proxy-authorization': 'Basic own' }, false)).toEqual({ 'proxy-authorization': 'Basic own' });
     expect(proxyBody('z'.repeat(2 * 1024 * 1024))).toHaveLength(1024 * 1024);
     expect(proxyBody({ not: 'a string' })).toBeUndefined();
   });
@@ -288,7 +304,11 @@ describe('plugins api guards', () => {
     try {
       await approved(t);
       const four = [...Array(4)].map(() => t.j('POST', '/plugins/hello-feed/fetch', { url: 'https://plain.example.com/api' }));
-      while (t.outbound.started < 4) await new Promise((r) => setTimeout(r, 5));
+      const deadline = Date.now() + 2000;
+      while (t.outbound.started < 4) {
+        if (Date.now() > deadline) throw new Error(`only ${t.outbound.started} of the four fetches ever reached the shell`);
+        await new Promise((r) => setTimeout(r, 5));
+      }
       const fifth = await t.j('POST', '/plugins/hello-feed/fetch', { url: 'https://plain.example.com/api' });
       expect(fifth.status).toBe(429);
       expect(fifth.body.error).toMatch(/at once/);
@@ -382,7 +402,8 @@ describe('plugins api guards', () => {
     try {
       expect((await t.j('GET', '/plugins/nope/settings')).status).toBe(404);
       expect((await t.j('PUT', '/plugins/nope/settings', { values: { a: 1 } })).status).toBe(404);
-      expect((await t.j('PUT', '/plugins/hello-feed/settings', { values: { a: 1 } })).status).toBe(403); // not enabled yet
+      // filling in a key is what one does before enabling, so a loaded plugin is enough
+      expect((await t.j('PUT', '/plugins/hello-feed/settings', { values: { a: 1 } })).status).toBe(200);
       await approved(t);
       expect((await t.j('PUT', '/plugins/hello-feed/settings', { values: [1, 2] })).status).toBe(400);
       const over = await t.j('PUT', '/plugins/hello-feed/settings', { values: { blob: 'x'.repeat(80 * 1024) } });
@@ -404,6 +425,119 @@ describe('plugins api guards', () => {
       expect(added.body).toMatchObject({ id: 'big-feed' });
       expect((await t.j('POST', '/plugins/add', { source: 'export default 1;' })).status).toBe(400);
     } finally {
+      t.close();
+    }
+  });
+  it('an edit needs the same permission, limiter and cleaning as a post', async () => {
+    const t = harness({ quiet: true });
+    try {
+      await t.j('POST', '/plugins/quiet-feed/approve');
+      await t.j('POST', '/plugins/quiet-feed/enable');
+      const noWrite = await t.j('POST', '/plugins/quiet-feed/patch', { id: 'plugin:quiet-feed:alerts:1', text: 'hi' });
+      expect(noWrite.status).toBe(403);
+      expect(noWrite.body.error).toMatch(/feed:write/);
+      await approved(t);
+      expect((await t.j('POST', '/plugins/hello-feed/patch', { id: 'plugin:other:alerts:1', text: 'hi' })).status).toBe(400);
+      await t.j('POST', '/plugins/hello-feed/post', { id: '1', chat: 'Alerts', text: 'first' });
+      // the right-to-left override would let an edit rewrite how the whole line reads
+      expect((await t.j('POST', '/plugins/hello-feed/patch', { id: 'plugin:hello-feed:alerts:1', text: 'safe \u202Etxt.exe' })).status).toBe(200);
+      const m = t.hub.hello().messages.find((m) => m.id === 'plugin:hello-feed:alerts:1')!;
+      expect(m.text).toBe('safe  txt.exe');
+      // and an edit that adds a contract has it detected, without counting as a fresh call
+      expect((await t.j('POST', '/plugins/hello-feed/patch', { id: 'plugin:hello-feed:alerts:1', text: 'now 0xdac17f958d2ee523a2206206994597c13d831ec7' })).status).toBe(200);
+      expect(t.hub.hello().messages.find((m) => m.id === 'plugin:hello-feed:alerts:1')!.contracts).toEqual([
+        expect.objectContaining({ address: '0xdac17f958d2ee523a2206206994597c13d831ec7' }),
+      ]);
+      const offSite = await t.j('POST', '/plugins/hello-feed/patch', { id: 'plugin:hello-feed:alerts:1', attachments: [{ url: 'https://elsewhere.example.com/a.png' }] });
+      expect(offSite.status).toBe(400);
+      expect(offSite.body.error).toMatch(/sites/);
+    } finally {
+      t.close();
+    }
+  });
+  it('posts and edits share one 60-a-minute allowance', async () => {
+    const t = harness();
+    try {
+      await approved(t);
+      for (let n = 1; n <= 60; n++) {
+        expect((await t.j('POST', '/plugins/hello-feed/post', { id: String(n), chat: 'Alerts', text: 'hi' })).status).toBe(200);
+      }
+      const over = await t.j('POST', '/plugins/hello-feed/post', { id: '61', chat: 'Alerts', text: 'hi' });
+      expect(over.status).toBe(429);
+      expect(over.body.error).toMatch(/too many posts/);
+      // the edit route draws from the same allowance, so it is refused too
+      expect((await t.j('POST', '/plugins/hello-feed/patch', { id: 'plugin:hello-feed:alerts:1', text: 'edit' })).status).toBe(429);
+    } finally {
+      t.close();
+    }
+  });
+  it('log lines are kept per plugin, and an id we do not have is a 404', async () => {
+    const t = harness();
+    try {
+      await approved(t);
+      expect((await t.j('POST', '/plugins/hello-feed/log', { level: 'warn', text: 'careful' })).status).toBe(200);
+      const logs = (await t.j('GET', '/plugins/hello-feed/logs')).body;
+      expect(logs).toHaveLength(1);
+      expect(logs[0]).toMatchObject({ level: 'warn', text: 'careful' });
+      expect((await t.j('GET', '/plugins/nope/logs')).status).toBe(404);
+      expect((await t.j('POST', '/plugins/nope/log', { text: 'x' })).status).toBe(404);
+    } finally {
+      t.close();
+    }
+  });
+  it('storage needs the permission to read as well as write, and refuses a key that names a prototype', async () => {
+    const t = harness({ quiet: true });
+    try {
+      await approved(t);
+      expect((await t.j('PUT', '/plugins/hello-feed/storage/__proto__', { value: { polluted: true } })).status).toBe(400);
+      expect((await t.j('PUT', '/plugins/hello-feed/storage/constructor', { value: 1 })).status).toBe(400);
+      expect((await t.j('PUT', '/plugins/hello-feed/storage/prototype', { value: 1 })).status).toBe(400);
+      expect(({} as any).polluted).toBeUndefined();
+      // quiet-feed has the storage permission; a plugin without it can read nothing
+      await t.j('POST', '/plugins/quiet-feed/approve');
+      await t.j('POST', '/plugins/quiet-feed/enable');
+      expect((await t.j('GET', '/plugins/quiet-feed/storage')).status).toBe(200);
+    } finally {
+      t.close();
+    }
+  });
+  it('a watch key has to name a chat some plugin has posted', async () => {
+    const t = harness();
+    try {
+      await approved(t);
+      expect((await t.j('PUT', '/plugins/watch', { key: 'plugin:hello-feed:alerts', on: true })).status).toBe(400);
+      await t.j('POST', '/plugins/hello-feed/post', { id: '1', chat: 'Alerts', text: 'hi' });
+      expect((await t.j('PUT', '/plugins/watch', { key: 'plugin:hello-feed:alerts', on: false })).status).toBe(200);
+      expect(t.cfg.pluginWatch).toEqual([]);
+      expect((await t.j('PUT', '/plugins/watch', { key: 'plugin:hello-feed:made-up', on: true })).status).toBe(400);
+      expect((await t.j('PUT', '/plugins/watch', { key: 'nonsense', on: true })).status).toBe(400);
+    } finally {
+      t.close();
+    }
+  });
+  it('mounted ahead of a router with a smaller parser, each keeps its own limit', async () => {
+    // What index.ts does: the plugins router first, so a plugin file gets the 1mb parser, and the
+    // rest of /api still refuses anything over its own 64kb.
+    const t = harness();
+    const standIn = express.Router();
+    standIn.use(express.json({ limit: '64kb' }));
+    standIn.put('/cove', (req, res) => res.json({ ok: true, n: req.body?.amounts?.length ?? 0 }));
+    const app = express();
+    app.use('/api', createPluginsApi(t.reg, t.state, t.hub, new ShellLink(async () => new Response('plain'), {}), { get: () => t.cfg, update: (fn: any) => fn(t.cfg) } as any));
+    app.use('/api', standIn);
+    const server = app.listen(0);
+    const at = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
+    const send = (p: string, method: string, body: unknown) =>
+      fetch(at + p, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    try {
+      const cove = await send('/cove', 'PUT', { amounts: [25, 50] });
+      expect(cove.status).toBe(200);
+      expect(await cove.json()).toEqual({ ok: true, n: 2 });
+      expect((await send('/cove', 'PUT', { amounts: 'x'.repeat(100 * 1024) })).status).toBe(413);
+      const big = `${FILE.replace(/hello-feed/g, 'big-feed')}\n// ${'x'.repeat(200 * 1024)}`;
+      expect((await send('/plugins/add', 'POST', { source: big })).status).toBe(200);
+    } finally {
+      server.close();
       t.close();
     }
   });
