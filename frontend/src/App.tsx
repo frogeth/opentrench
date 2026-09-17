@@ -335,10 +335,19 @@ export default function App() {
   // the bot's conversation slides in as a drawer instead, so you never lose your place.
   const [botDrawer, setBotDrawer] = useState<BotKind | null>(null);
   const ensureBotColumn = (kind: BotKind) => {
-    const type = colTypeFor(kind);
-    if (!flatColumns.some((c) => c.type === type)) saveColumns([...columns, { id: type, type, title: type === 'salpha' ? 'Salpha' : buyLabel, chats: [], width: 420 }]);
     const terminalHidden = !!(view.preview ?? view.chat) || !!openToken;
     if (terminalHidden) setBotDrawer(kind);
+    if (kind === 'salpha') {
+      // Salpha is a Telegram bot column running @salpha_research_bot; a 'salpha' column from older configs still counts
+      const legacy = flatColumns.some((c) => c.type === 'salpha');
+      if (legacy) {
+        setCoveFlash('salpha');
+        window.setTimeout(() => setCoveFlash(null), 1500);
+      } else openTgBot(BOTS.salpha, undefined, 'Salpha');
+      return;
+    }
+    const type = colTypeFor(kind);
+    if (!flatColumns.some((c) => c.type === type)) saveColumns([...columns, { id: type, type, title: buyLabel, chats: [], width: 420 }]);
     setCoveFlash(type);
     window.setTimeout(() => setCoveFlash(null), 1500);
   };
@@ -357,7 +366,7 @@ export default function App() {
     const last = lastMintFrom.current;
     if (last && last.locator === target.locator && last.chain === target.chain && at - last.at < 500) return;
     lastMintFrom.current = { ...target, at };
-    if (!flatColumns.some((c) => c.type === 'osmint')) saveColumns([...columns, { id: 'osmint', type: 'osmint', title: 'OpenSea Mint', chats: [], width: 400 }]);
+    if (!flatColumns.some((c) => c.type === 'osmint')) saveColumns([...columns, { id: 'osmint', type: 'osmint', title: 'NFT Mint', chats: [], width: 400 }]);
     setMintPrefill(target);
     setCoveFlash('osmint');
     window.setTimeout(() => setCoveFlash(null), 1500);
@@ -398,9 +407,9 @@ export default function App() {
     api.botStart(BOTS[hit.kind], hit.payload).catch((e) => alert(`${hit.kind === 'salpha' ? 'Salpha' : PROVIDER_LABEL[hit.kind]}: ${e?.message ?? e}`));
   };
   /** Any other bot (a t.me/<x>?start= link, or a @…bot link): its own Telegram bot column, created on first use. */
-  const openTgBot = (bot: string, start?: string) => {
+  const openTgBot = (bot: string, start?: string, title?: string) => {
     const b = bot.toLowerCase();
-    if (!flatColumns.some((c) => c.type === 'tgbot' && c.bot?.toLowerCase() === b)) saveColumns([...columns, { id: `tgbot-${b}`, type: 'tgbot', title: `@${bot}`, chats: [], bot, width: 420 }]);
+    if (!flatColumns.some((c) => c.type === 'tgbot' && c.bot?.toLowerCase() === b)) saveColumns([...columns, { id: `tgbot-${b}`, type: 'tgbot', title: title ?? `@${bot}`, chats: [], bot, width: 420 }]);
     setCoveFlash(`tgbot:${b}`);
     window.setTimeout(() => setCoveFlash(null), 1500);
     if (start && status.telegram === 'connected') api.botStart(bot, start).catch((e) => alert(`@${bot}: ${e?.message ?? e}`));
@@ -1180,7 +1189,7 @@ export default function App() {
       return (
         <Column
           key={col.id}
-          title={col.title}
+          title={col.title === 'OpenSea Volume' ? 'NFT Volume' : col.title}
           subtitle={`${ranking === 'top' ? 'Top' : 'Trending'} · ${timeframe.toUpperCase()}`}
           kind="nftvol"
           className="col-nftvol"
@@ -1234,7 +1243,7 @@ export default function App() {
     }
     if (col.type === 'osmint') {
       return (
-        <Column key={col.id} title={col.title} subtitle={osAddr ? `${osAddr.slice(0, 6)}…${osAddr.slice(-4)} · opensea.io` : 'no wallet yet'} kind="osmint" className={`col-cove col-osmint${coveFlash === 'osmint' ? ' col-flash' : ''}`} {...actions}>
+        <Column key={col.id} title={col.title === 'OpenSea Mint' ? 'NFT Mint' : col.title} subtitle={osAddr ? `${osAddr.slice(0, 6)}…${osAddr.slice(-4)} · opensea.io` : 'no wallet yet'} kind="osmint" className={`col-cove col-osmint${coveFlash === 'osmint' ? ' col-flash' : ''}`} {...actions}>
           <OsMintView jobs={mintJobs} now={now} wallet={osAddr} prefill={mintPrefill} onPrefilled={() => setMintPrefill(null)} />
         </Column>
       );
@@ -1625,7 +1634,7 @@ export default function App() {
           onClose={() => setEditing(null)}
           onSave={(c) => {
             if (c.type === 'osmint' && flatColumns.some((x) => x.type === 'osmint' && x.id !== c.id)) {
-              alert('There is already an OpenSea Mint column.');
+              alert('There is already an NFT Mint column.');
               return;
             }
             const pid = editing.parentId;

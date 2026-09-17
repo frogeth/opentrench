@@ -552,7 +552,7 @@ function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
   );
 }
 
-/** The OpenSea Mint column's signing wallet: a plain-text key on this machine, so keep it dedicated and small. */
+/** The NFT Mint column's signing wallet: a plain-text key on this machine, so keep it dedicated and small. */
 function OpenSeaSection({ onChange }: { onChange: () => void }) {
   const [os, setOs] = useState<MaskedConfig['opensea'] | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -585,7 +585,7 @@ function OpenSeaSection({ onChange }: { onChange: () => void }) {
     <section>
       <h2>OpenSea mint wallet</h2>
       <div className="hint">
-        The OpenSea Mint column signs mints with this key and pays from this wallet. Use a <b>dedicated wallet</b> holding only what you mean to spend: the key is stored in plain text in config.json on this machine, and a mint is irreversible once sent.
+        The NFT Mint column signs mints with this key and pays from this wallet. Use a <b>dedicated wallet</b> holding only what you mean to spend: the key is stored in plain text in config.json on this machine, and a mint is irreversible once sent.
       </div>
       {os.hasWallet && os.walletAddress && (
         <div className="row-inline">

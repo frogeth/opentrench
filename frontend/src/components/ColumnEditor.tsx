@@ -29,12 +29,11 @@ const TYPE_CARDS: { t: ColumnDef['type']; icon: import('./Icon').IconName; name:
   { t: 'trending', icon: 'top', name: 'Trending', blurb: 'most-called tokens, 5m to 24h' },
   { t: 'cove', icon: 'send', name: 'Buy bot', blurb: 'Cove or BasedBot, one pane' },
   { t: 'tgbot', icon: 'telegram', name: 'Telegram bot', blurb: 'Cielo alerts, or any bot you talk to' },
-  { t: 'salpha', icon: 'search', name: 'Salpha', blurb: 'your research bot chat' },
   { t: 'j7', icon: 'x', name: 'J7', blurb: 'J7Tracker’s tweet stream' },
   { t: 'web', icon: 'globe', name: 'Website', blurb: 'any page, living in a column' },
   { t: 'mints', icon: 'mint', name: 'MintGo', blurb: 'NFT mints as they happen' },
-  { t: 'nftvol', icon: 'sea', name: 'OpenSea Volume', blurb: 'trending & top collections, 1H or 1D' },
-  { t: 'osmint', icon: 'wallet', name: 'OpenSea Mint', blurb: 'mint a drop with your wallet' },
+  { t: 'nftvol', icon: 'sea', name: 'NFT Volume', blurb: 'trending & top collections on OpenSea, 1H or 1D' },
+  { t: 'osmint', icon: 'wallet', name: 'NFT Mint', blurb: 'mint an OpenSea drop with your wallet' },
 ];
 
 /** Ready-made Website columns; "Custom" takes any address. */
@@ -43,7 +42,10 @@ const WEB_PRESETS: { name: string; url: string; blurb: string }[] = [
   { name: 'Smart Money', url: 'https://smartmoney.sh', blurb: 'smart-money flows' },
 ];
 /** Ready-made Telegram bot columns; "Custom" takes any bot's username. */
-const BOT_PRESETS: { name: string; bot: string; blurb: string }[] = [{ name: 'Cielo', bot: 'evmtrackerbot', blurb: 'wallet tracker alerts' }];
+const BOT_PRESETS: { name: string; bot: string; blurb: string }[] = [
+  { name: 'Cielo', bot: 'evmtrackerbot', blurb: 'wallet tracker alerts' },
+  { name: 'Salpha', bot: 'salpha_research_bot', blurb: 'research reports; right-click a contract → Research' },
+];
 type NumKey = { [K in keyof ColumnFilters]-?: NonNullable<ColumnFilters[K]> extends number ? K : never }[keyof ColumnFilters];
 const RANGES: { title: string; rows: [string, NumKey, NumKey, string][] }[] = [
   { title: 'Metrics', rows: [['Market cap', 'mcMin', 'mcMax', '$'], ['Liquidity', 'liqMin', 'liqMax', '$'], ['Volume 24h', 'volMin', 'volMax', '$'], ['MC / Liq', 'mcLiqMin', 'mcLiqMax', 'x']] },
@@ -126,7 +128,7 @@ export function ColumnEditor({
   onSave: (c: ColumnDef) => void;
   onClose: () => void;
 }) {
-  const [type, setType] = useState<ColumnDef['type']>(col?.type ?? 'chat');
+  const [type, setType] = useState<ColumnDef['type']>(col?.type === 'salpha' ? 'tgbot' : (col?.type ?? 'chat'));
   const [title, setTitle] = useState(col?.title ?? '');
   const [chats, setChats] = useState<string[]>(col?.chats ?? []);
   const [win, setWin] = useState<NonNullable<ColumnDef['window']>>(col?.window ?? '7d');
@@ -148,7 +150,8 @@ export function ColumnEditor({
     if (WEB_PRESETS.some((p) => p.url === url.trim())) setUrl('');
     if (WEB_PRESETS.some((q) => q.name === title.trim())) setTitle('');
   };
-  const [bot, setBot] = useState(col?.bot ?? BOT_PRESETS[0].bot); // a fresh column starts on the first preset
+  // a fresh column starts on the first preset; a Salpha column from before it became a preset edits as the Salpha bot
+  const [bot, setBot] = useState(col?.bot ?? (col?.type === 'salpha' ? 'salpha_research_bot' : BOT_PRESETS[0].bot));
   const cleanBot = bot.trim().replace(/^@/, '');
   const botOk = /^[A-Za-z0-9_]{3,32}$/.test(cleanBot);
   const [customBot, setCustomBot] = useState(() => !!col?.bot && !BOT_PRESETS.some((p) => p.bot === col.bot));
@@ -216,7 +219,7 @@ export function ColumnEditor({
   })();
   const urlOk = /^https?:\/\/[^\s/]+/i.test(cleanUrl);
   const save = () => {
-    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'OpenSea Volume' : type === 'osmint' ? 'OpenSea Mint' : all ? 'All Chats' : 'Chats');
+    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : all ? 'All Chats' : 'Chats');
     if (isWeb && !urlOk) {
       window.alert('Paste the address of the page to show (http:// or https://).');
       return;
@@ -270,7 +273,7 @@ export function ColumnEditor({
               ))}
             </div>
             <div className="fed-label">Feed name</div>
-            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'OpenSea Volume' : type === 'osmint' ? 'OpenSea Mint' : 'All Chats'} maxLength={40} />
+            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : 'All Chats'} maxLength={40} />
             {isWeb && (
               <>
                 <div className="fed-label">Site</div>

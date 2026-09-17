@@ -136,10 +136,10 @@ the sidebar, not in settings.
 - Three NFT column types, alongside Calls and Chats: **MintGo** (live mints
   on Ethereum, Robinhood Chain and Ink, straight from mintgo.fun — click one
   for its X, OpenSea and website links, the transaction, the deployer's
-  history, and a Mint button), **OpenSea Volume** (Trending or Top
+  history, and a Mint button), **NFT Volume** (Trending or Top
   collections with floor, volume, sales and floor change, and a 1H / 1D
   switch; a collection with an open SeaDrop stage gets a Mint pill), and
-  **OpenSea Mint** (paste a collection or press Mint to quote and mint a
+  **NFT Mint** (paste a collection or press Mint to quote and mint a
   SeaDrop drop — the card shows the open stage, allowance, price, gas and
   balance; Mint confirms once more, then sends with the wallet from
   Settings → Trading, one mint in flight per wallet).

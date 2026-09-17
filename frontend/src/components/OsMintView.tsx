@@ -438,7 +438,7 @@ export function OsMintView({ jobs, now: coarseNow, wallet, prefill, onPrefilled 
                 <span className="muted"> · your mint wallet</span>
               </span>
             </div>
-            <div className="empty">Paste a collection below, or press Mint on a MintGo card or a minting row in OpenSea Volume.</div>
+            <div className="empty">Paste a collection below, or press Mint on a MintGo card or a minting row in NFT Volume.</div>
           </div>
         )}
         {current && (

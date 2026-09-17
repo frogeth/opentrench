@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Salpha is now a preset inside the Telegram bot column type (next to Cielo) instead of its own type; right-click → Research still opens it, and an existing Salpha column keeps working. OpenSea Volume and OpenSea Mint are renamed NFT Volume and NFT Mint.
 - Windows: the top bar no longer leaves a blank space on the left where the Mac traffic lights would be; the window's minimize / maximize / close buttons now sit on the bar's right edge in its own colours.
 ## v0.9.5 — 2026-09-17
 

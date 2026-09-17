@@ -46,8 +46,8 @@ const DEFAULT_TITLE: Record<ColumnDef['type'], string> = {
   web: 'Web',
   chat: 'Chats',
   mints: 'MintGo',
-  nftvol: 'OpenSea Volume',
-  osmint: 'OpenSea Mint',
+  nftvol: 'NFT Volume',
+  osmint: 'NFT Mint',
   tgbot: 'Telegram bot',
 };
 export const MINT_CHAINS = ['ethereum', 'robinhood', 'ink'] as const;
