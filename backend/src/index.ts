@@ -186,7 +186,14 @@ app.get('/api/version', (_req, res) => res.json({ version: APP_VERSION, managed:
 // Ahead of createApi: whichever json parser runs first parses the body, and a plugin's file or a
 // proxied request body is bigger than the 64kb createApi allows its own routes. Both halves of that
 // are pinned by 'mounted ahead of a router with a smaller parser' in plugins/api.test.ts.
-app.use('/api', createPluginsApi(plugins, pluginState, hub, shell, cfg));
+app.use(
+  '/api',
+  createPluginsApi(plugins, pluginState, hub, shell, cfg, {
+    // The names already spoken for in the user's feed. Plugin chats are left out: those are the
+    // names this check is protecting, and a plugin must stay free to post to its own chat again.
+    takenChatNames: async () => new Set((await svc.watchedChats()).filter((c) => c.source !== 'plugin').map((c) => c.name)),
+  }),
+);
 app.use('/api', createApi(cfg, hub, svc, hover, (t) => refreshMarket([t])));
 
 const dist = path.resolve(root, '..', 'frontend', 'dist');

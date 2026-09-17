@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { PluginInfo } from '../types.js';
-import { extractManifest, ManifestError, MAX_FILE, MAX_FILE_MESSAGE, type PluginManifest } from './manifest.js';
+import { extractManifest, ManifestError, MAX_FILE, MAX_FILE_MESSAGE, RESERVED_IDS, type PluginManifest } from './manifest.js';
 import type { PluginState } from './state.js';
 
 interface Loaded {
@@ -80,7 +80,9 @@ export class PluginRegistry {
     for (const name of fs.readdirSync(this.dir).filter((f) => f.endsWith('.js')).sort()) {
       const file = path.join(this.dir, name);
       const stem = name.replace(/\.js$/, '');
-      const fallbackId = stem.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 40) || 'plugin';
+      const fromName = stem.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 40);
+      // A broken file's id comes from its name, so `constructor.js` must not name a plugin either.
+      const fallbackId = !fromName || RESERVED_IDS.has(fromName) ? 'plugin' : fromName;
       let bytes: Buffer;
       try {
         // lstat, not stat: a symlink here would otherwise let the folder reach any file on the box.

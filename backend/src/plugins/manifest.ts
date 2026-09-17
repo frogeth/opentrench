@@ -28,6 +28,13 @@ export class ManifestError extends Error {
 
 /** A plugin id: 1–40 chars of a-z, 0-9 and dashes, starting with a letter or digit. */
 export const PLUGIN_ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+/**
+ * Ids that name something on a plain object rather than something in the folder: the config keeps
+ * its plugins in one, and `plugins.constructor = …` is a write nobody reads back. `__proto__` cannot
+ * pass the pattern above anyway; it is named here so the rule reads as the whole rule, and so the
+ * registry's fallback ids can be held to the same list.
+ */
+export const RESERVED_IDS = new Set(['__proto__', 'constructor', 'prototype']);
 const VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/;
 export const MAX_FILE = 512 * 1024;
 /** Shared so the registry rejects an oversize file with the same words the parser would. */
@@ -126,6 +133,7 @@ export function validateManifest(raw: any): PluginManifest {
   if (!raw || typeof raw !== 'object') throw new ManifestError('manifest must be an object');
   const id = String(raw.id ?? '');
   if (!PLUGIN_ID_RE.test(id)) throw new ManifestError('manifest id must be 1–40 chars of a-z, 0-9 and dashes');
+  if (RESERVED_IDS.has(id)) throw new ManifestError(`manifest id "${id}" is reserved`);
   const name = clean(raw.name, 60);
   if (!name) throw new ManifestError('manifest needs a name');
   const version = String(raw.version ?? '').trim();

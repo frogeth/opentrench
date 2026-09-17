@@ -98,6 +98,16 @@ describe('PluginRegistry', () => {
     expect(new Set(list.map((p) => p.id)).size).toBe(2);
     expect(list.map((p) => p.file).sort()).toEqual(['bad one.js', 'bad-one.js']);
   });
+  it("a broken file named after an object's own keys does not take one of them as its id", () => {
+    const { dir, reg } = fresh();
+    for (const name of ['constructor.js', 'prototype.js']) fs.writeFileSync(path.join(dir, name), 'export default 1;');
+    reg.load();
+    const ids = reg.list().map((p) => p.id);
+    expect(ids.length).toBe(2);
+    // both are listed, each under a name that is only ever a key of its own
+    for (const id of ids) expect(['constructor', 'prototype', '__proto__']).not.toContain(id);
+    expect(reg.get('plugin')).toBeDefined();
+  });
   it('code() serves an enabled plugin, but refuses a disabled one or a file changed since approval', () => {
     const { dir, reg } = fresh();
     fs.writeFileSync(path.join(dir, 'hello-feed.js'), FILE);

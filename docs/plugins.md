@@ -79,9 +79,10 @@ between a file on disk and code running against your feed:
   clipboard, and open buys for you to confirm";
 - the sites it will use your login on, if any;
 - the warning: *This is code written by someone else. Once enabled it can post
-  anything into your feed, and it can use your logins on the sites listed above
-  through this app. opentrench cannot check it for you. Open the file and read
-  it before you trust it.*
+  anything into your feed. opentrench cannot check it for you. Open the file and
+  read it before you trust it.* When the plugin lists sites, the first sentence
+  carries a second clause — *…into your feed, and it can use your logins on the
+  sites listed above through this app.*
 
 **I read it — approve and enable** approves and switches it on.
 
@@ -117,7 +118,7 @@ export default function main(ot) {
 
 | Field | Rule |
 | --- | --- |
-| `id` | 1–40 characters of `a-z`, `0-9` and `-`, starting with a letter or digit. The file must be `<id>.js`, and the id is the folder-safe key everything else is filed under. |
+| `id` | 1–40 characters of `a-z`, `0-9` and `-`, starting with a letter or digit, and not `constructor`, `prototype` or `__proto__` (those name something on an object, not something in your folder). The file must be `<id>.js`, and the id is the folder-safe key everything else is filed under. |
 | `name` | Required, up to 60 characters. Shown in the list, in the approval dialog, as the "via" tag on its messages, and in front of its notifications. |
 | `version` | `1.2.3`, optionally with `-beta` / `+build`. Up to 40 characters. |
 | `api` | The plugin API major version. This build serves **1**. A higher number is refused: *this plugin needs plugin api 2; this build serves 1 — update opentrench*. |
@@ -194,6 +195,15 @@ Events start when the frame starts: what came before is history you ask for with
 
 A post needs text or an attachment; 60 posts a minute per plugin.
 
+**A chat name already in your feed is refused.** If `chat` is the name of a
+Discord channel or Telegram chat you are already watching — the same letters,
+whatever the case or spacing — the post comes back
+`that chat name belongs to a chat already in your feed`, and nothing is
+written. A plugin must not be able to file its own messages under a name you
+read as someone else's chat; the "via" tag says who posted a message, but it
+cannot unsay whose chat it is in. Other plugins' chat names are not reserved:
+each plugin's chats are keyed by its own id.
+
 ```js
 await ot.feed.post({ id: '2026-09-17-1', chat: 'Alerts', author: 'example.com', text: 'ETH pool opened 0x…', link: 'https://example.com/a/1' });
 ```
@@ -238,6 +248,9 @@ helpers over `body`.
   rather than quietly going out signed out, because that would be a different
   request than the one the plugin asked for. Everything else is fetched plain
   by the backend.
+- **`method` is `GET`, `POST`, `PUT`, `PATCH`, `DELETE` or `HEAD`.** Anything
+  else is refused (`unsupported method …`) rather than quietly sent as a GET,
+  and a `GET` or `HEAD` carrying a body is refused too.
 - **Bodies are capped at 4 MB**; `truncated` says whether this one hit the cap.
   Request bodies are capped at 1 MB.
 - **Response headers are an allow-list**: `content-type`, `content-length`,
@@ -245,7 +258,9 @@ helpers over `body`.
   `date` and `x-ratelimit-*`. Everything else is dropped.
 - **Cookies never reach the plugin.** `set-cookie` is dropped on the way back,
   and `cookie` on the way out; on the shell path the site's login is the shell's
-  to attach, so `authorization` from the plugin is dropped too.
+  to attach, so `authorization` from the plugin is dropped too — and so are
+  `origin` and `referer`, which the plugin has no standing to claim: the request
+  is made by the app, from no page at all.
 - Local and LAN addresses are refused, on the first hop and on every redirect.
   Redirects are followed by hand (at most 5), https never hands off to http, and
   credentials are dropped the moment the chain leaves the origin you addressed.
@@ -289,8 +304,9 @@ const { interval } = await ot.settings.get();
 ```
 
 Field rules: at most **20 fields** and 16 KB in all; `key` is 1–40 of
-`[a-z0-9_-]`, never `__proto__`, `constructor` or `prototype`, and never
-repeated; `label` is at most 60 characters; `type` is `text`, `number`,
+`[a-z0-9_-]` in either case (`Interval` is as good a key as `interval`), never
+`__proto__`, `constructor` or `prototype` in any case, and never repeated — two
+keys that differ only in case are two keys; `label` is at most 60 characters; `type` is `text`, `number`,
 `toggle` or `secret`; `default` is text, a number or true/false. Anything else
 is refused whole, so a half-valid form is never shown. The form is stored, so
 the user can fill it in while the plugin is switched off or waiting to be
@@ -531,9 +547,9 @@ opentrench serves api 1, and you will be told clearly if it ever does not.
 ## Walkthrough: `hello-feed`
 
 [`plugins-examples/hello-feed.js`](../plugins-examples/hello-feed.js) is a
-complete plugin in about eighty commented lines. It polls a public endpoint that
-needs no login, posts each new line into a chat called **Zen**, and shows the
-last few in a column with a copy button.
+complete plugin in about a hundred commented lines. It polls a public endpoint
+that needs no login, posts each new line into a chat called **Zen**, and shows
+the last few in a column with a copy button.
 
 1. **Install it.** ⚙ → **Plugins** → **add a file** → pick
    `plugins-examples/hello-feed.js`. (Or copy it into the folder from the table
@@ -547,7 +563,8 @@ last few in a column with a copy button.
    the chat joins your feed by itself: **Zen** shows up under **PLUGINS** in the
    sidebar, and its messages appear in any Chats column with a **via Hello
    feed** tag next to the chat name. Press **+** and choose the **Plugins** tab
-   to see it listed as **Zen — Hello feed**, where you can switch it off again.
+   to see it listed there — **Zen**, with **Hello feed** beside it — where you can
+   switch it off again.
 5. **Give it a column.** **+ column → Plugin → Hello feed**. The column header
    reads *Hello feed / one line at a time* — the title and subtitle the plugin
    set — and its body is the plugin's own frame: the last few lines, each with a
@@ -578,6 +595,8 @@ To take it off again: **remove** deletes the file and forgets its stored data.
 | *too many calls* | The plugin is talking to the app faster than 60 calls a second. Batch, or slow down. |
 | *arguments too large* | One call's arguments came to more than 256 KB. Post in pieces. |
 | *too many posts (60 a minute)* / *too many fetches (120 a minute)* / *too many fetches at once (4 at a time)* | The plugin's rate caps. |
+| *that chat name belongs to a chat already in your feed* | `chat` is the name of a Discord channel or Telegram chat you already watch. Give the plugin's chat a name of its own. |
+| *unsupported method …* / *a GET does not carry a body* | `ot.fetch` proxies GET, POST, PUT, PATCH, DELETE and HEAD, and a GET or HEAD goes out without a body. |
 | *this plugin did not ask for the `storage` permission* | Add it to the manifest's `permissions` — and the plugin will need approving again. |
 | *would replace `<name>`* | A link or file whose manifest id names a plugin you already have; the app asks before overwriting it, and the replacement starts unapproved. |
 | *the link now installs `<name>` (`<id>`), not `<id>`* | The link served something different the second time round. Check the link. |

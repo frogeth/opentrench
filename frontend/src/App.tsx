@@ -120,7 +120,8 @@ export default function App() {
     }
   };
   const [layoutsOpen, setLayoutsOpen] = useState(false);
-  const [addOpen, setAddOpen] = useState<'discord' | 'telegram' | null>(null);
+  /** which tab the add-chats picker opens on, and null while it is shut */
+  const [addOpen, setAddOpen] = useState<'discord' | 'telegram' | 'plugin' | null>(null);
   const [view, setView] = useState<View>({ rail: 'all' });
   const [query, setQuery] = useState('');
   // Header toggles, remembered. Repeats show by default: they are real messages, just badged 🔁.
@@ -1427,8 +1428,10 @@ export default function App() {
       return (
         <Column
           key={col.id}
-          title={(live && pluginTitles[live.id]) ?? col.title}
-          subtitle={(live && pluginSubs[live.id]) ?? (p?.manifest ? `${p.manifest.name} · plugin` : 'plugin not installed')}
+          // `||`, not `??`: setTitle('') is a plugin clearing its title, and what it falls back to is
+          // the column's own — the same for an emptied subtitle below
+          title={(live && pluginTitles[live.id]) || col.title}
+          subtitle={(live && pluginSubs[live.id]) || (p?.manifest ? `${p.manifest.name} · plugin` : 'plugin not installed')}
           kind="plugin"
           className="col-plugin"
           count={live ? pluginBadges[live.id] : undefined}
@@ -1707,7 +1710,8 @@ export default function App() {
           counts={chatCounts}
           collapsed={paneHidden}
           onView={setView}
-          onAdd={() => setAddOpen(view.rail.startsWith('t:') || view.rail.startsWith('p:') ? 'telegram' : 'discord')}
+          // the + opens the picker on the source the rail is already showing
+          onAdd={() => setAddOpen(view.rail.startsWith('p:') ? 'plugin' : view.rail.startsWith('t:') ? 'telegram' : 'discord')}
           onReorder={reorderRail}
           onCollapse={setPane}
         />

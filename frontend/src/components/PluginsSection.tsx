@@ -146,7 +146,8 @@ export function PluginsSection({
     if (logsFor && !plugins.some((p) => p.id === logsFor)) setLogsFor(null);
   }, [plugins, logsFor]);
   // Only worth saying when a plugin actually wants a site: without the desktop app its sign-in button
-  // has nothing to open. Asked again whenever the list changes, so plugging the app in clears the hint.
+  // has nothing to open. Keyed on that one boolean, not on the list: `plugins` is a fresh array on
+  // every server event, and this asked the backend again on each of them.
   const wantsSites = plugins.some((p) => (p.manifest?.sites.length ?? 0) > 0);
   useEffect(() => {
     if (!wantsSites) return;
@@ -154,7 +155,7 @@ export function PluginsSection({
       (s) => setShell(s.available),
       () => {},
     );
-  }, [wantsSites, plugins]);
+  }, [wantsSites]);
 
   /**
    * Installing says what landed, because a replacement is the case that matters: the file the user

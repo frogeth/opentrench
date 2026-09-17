@@ -42,6 +42,14 @@ describe('extractManifest', () => {
     expect(() => extractManifest(GOOD.replace('https://example.com', 'http://example.com'))).toThrow('sites');
     expect(() => extractManifest(GOOD.replace('"api": 1', '"api": 2'))).toThrow('api 2');
   });
+  it('refuses an id that names something on a plain object', () => {
+    // the config keeps its plugins in one, so `constructor` is a key nobody reads back
+    for (const id of ['constructor', 'prototype']) {
+      expect(() => extractManifest(GOOD.replace('"hello-feed"', `"${id}"`))).toThrow(`"${id}" is reserved`);
+    }
+    // `__proto__` never passes the id pattern in the first place; it must still be refused
+    expect(() => extractManifest(GOOD.replace('"hello-feed"', '"__proto__"'))).toThrow('id');
+  });
   it('defaults sites, permissions, ui and description', () => {
     const m = extractManifest('export const manifest = {"id":"a","name":"A","version":"0.1.0","api":1};');
     expect(m).toEqual({ id: 'a', name: 'A', version: '0.1.0', api: 1, sites: [], permissions: [], ui: false, description: '' });

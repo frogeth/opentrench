@@ -82,7 +82,8 @@ function harness(opts: { blacklist?: string[]; download?: (url: string) => Respo
     next();
   });
   const fetchImpl = opts.download ? ((async (u: any) => opts.download!(String(u))) as unknown as typeof fetch) : undefined;
-  app.use('/api', createPluginsApi(reg, state, hub, shell, store as any, { fetchImpl }));
+  // one Telegram chat already in the feed, so a plugin cannot name its own chat after it
+  app.use('/api', createPluginsApi(reg, state, hub, shell, store as any, { fetchImpl, takenChatNames: async () => new Set(['Trenches']) }));
   const server = app.listen(0);
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
   const j = (method: string, p: string, body?: unknown, headers: Record<string, string> = {}) =>
@@ -132,6 +133,7 @@ describe('plugins api', () => {
     expect((await j('POST', '/plugins/hello-feed/enable')).status).toBe(200);
     const code = await fetch(h.base + '/plugins/hello-feed/code');
     expect(code.headers.get('content-type')).toMatch(/javascript/);
+    expect(code.headers.get('x-content-type-options')).toBe('nosniff'); // the type we said, not the one a browser sniffs
     expect(await code.text()).toBe(FILE);
   });
   it('posts land in the hub as plugin messages, the chat is remembered and auto-watched, duplicates are dropped', async () => {
@@ -156,6 +158,16 @@ describe('plugins api', () => {
     expect((await j('POST', '/plugins/hello-feed/fetch', { url: 'javascript:1' })).status).toBe(400);
     expect((await j('POST', '/plugins/hello-feed/fetch', { url: 'http://127.0.0.1:3210/api/config' })).status).toBe(400);
   });
+  it('a method we do not proxy, and a body on a GET, are refused rather than quietly reshaped', async () => {
+    const bad = await j('POST', '/plugins/hello-feed/fetch', { url: 'https://plain.example.com/api', init: { method: 'TRACE' } });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toBe('unsupported method TRACE');
+    const withBody = await j('POST', '/plugins/hello-feed/fetch', { url: 'https://plain.example.com/api', init: { body: 'x=1' } });
+    expect(withBody.status).toBe(400);
+    expect(withBody.body.error).toBe('a GET does not carry a body'); // the shell's own words, one layer up
+    // the shapes that are fine still go out
+    expect((await j('POST', '/plugins/hello-feed/fetch', { url: 'https://plain.example.com/api', init: { method: 'post', body: 'x=1' } })).status).toBe(200);
+  });
   it('a fetch of one of the plugin\'s own sites needs the desktop app and never falls back', async () => {
     const r = await j('POST', '/plugins/hello-feed/fetch', { url: 'https://example.com/api' });
     expect(r.status).toBe(503);
@@ -165,6 +177,40 @@ describe('plugins api', () => {
     expect((await j('GET', '/plugins/shell')).body).toEqual({ available: false });
     expect((await j('POST', '/shell/hello', { port: 45678, token: 't' })).status).toBe(200);
     expect((await j('GET', '/plugins/shell')).body).toEqual({ available: true });
+  });
+  it("refuses a chat named after one the user already has, whatever the case or spacing", async () => {
+    const t = harness();
+    try {
+      await t.j('POST', '/plugins/hello-feed/approve');
+      await t.j('POST', '/plugins/hello-feed/enable');
+      for (const chat of ['Trenches', '  trenches ', 'TRENCHES']) {
+        const r = await t.j('POST', '/plugins/hello-feed/post', { id: '1', chat, text: 'hi' });
+        expect(r.status).toBe(400);
+        expect(r.body.error).toBe('that chat name belongs to a chat already in your feed');
+      }
+      // nothing was written down: no chat, no watch key, no message
+      expect((await t.j('GET', '/plugins')).body[0].chats).toEqual({});
+      expect(t.cfg.pluginWatch).toEqual([]);
+      expect(t.hub.hello().messages.filter((m: any) => m.source === 'plugin')).toEqual([]);
+      // a name of its own still goes through
+      expect((await t.j('POST', '/plugins/hello-feed/post', { id: '1', chat: 'Trenches daily', text: 'hi' })).status).toBe(200);
+    } finally {
+      t.close();
+    }
+  });
+  it('a hello that signs nobody in announces nothing', async () => {
+    // The shell arriving is not news to the plugin list: a `plugins` event is a render in every open
+    // window, and the only thing this route can change there is which sites show as signed in.
+    const t = harness();
+    try {
+      const events: string[] = [];
+      t.hub.on('event', (e: any) => events.push(e?.type));
+      expect((await t.j('POST', '/shell/hello', { port: 45678, token: 't' })).status).toBe(200);
+      await new Promise((r) => setTimeout(r, 20)); // the route starts the refresh and answers
+      expect(events.filter((e) => e === 'plugins')).toEqual([]);
+    } finally {
+      t.close();
+    }
   });
   it('a site fetch goes through the shell with the plugin\'s own credentials stripped', async () => {
     h.shellCalls.length = 0;

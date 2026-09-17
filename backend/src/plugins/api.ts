@@ -20,6 +20,13 @@ export interface WatchConfig {
 export interface PluginsApiOptions {
   /** the downloader `add-url` uses; undici's own fetch by default, so `safeDispatcher()` applies */
   fetchImpl?: typeof fetch;
+  /**
+   * The names of the Discord and Telegram chats already in the user's feed. A plugin naming its chat
+   * after one of them would put its own messages under a name the user reads as someone else's chat,
+   * which is the one thing the "via <plugin>" tag cannot undo. Defaults to none (tests, and a backend
+   * wired without services).
+   */
+  takenChatNames?: () => Promise<Set<string>>;
 }
 
 /** A plugin's own fetches: 120 a minute is generous for polling and cheap to refuse. */
@@ -126,6 +133,9 @@ export function createPluginsApi(
   // An injected fetch (tests, and anything else standing in for the network) never dials a socket,
   // so it gets no dispatcher and undici's Agent is never built.
   const addUrlDispatcher = () => (opts.fetchImpl ? undefined : (addUrlAgent ??= safeDispatcher()));
+  const takenChatNames = opts.takenChatNames ?? (async () => new Set<string>());
+  /** Chat names are compared as the user reads them: the same letters, whatever the case or spacing. */
+  const sameName = (a: string) => a.trim().toLowerCase();
   const fail = (res: Response, status: number, message: string) => res.status(status).json({ error: message });
   /**
    * Every write here must come from the app's own code. A custom header cannot be set by a form, an
@@ -173,7 +183,13 @@ export function createPluginsApi(
   const refreshSignedIn = async (): Promise<void> => {
     try {
       const sites = [...new Set(reg.list().flatMap((p) => p.manifest?.sites ?? []))];
-      signedInCache = await shell.signedIn(sites);
+      const next = await shell.signedIn(sites);
+      // Only when the answer actually differs. A shell saying hello, a sign-in window that came to
+      // nothing, a folder of plugins that want no sites at all: each of those would otherwise push
+      // the whole plugin list at every open window for a change nobody can see.
+      // sorted, because the order follows the folder: two plugins swapping places is not a sign-in
+      if ([...next].sort().join('\0') === [...signedInCache].sort().join('\0')) return;
+      signedInCache = next;
       broadcast();
     } catch (e) {
       console.warn('[plugins] sign-in refresh failed', why(e));
@@ -326,6 +342,9 @@ export function createPluginsApi(
     }
     res.setHeader('content-type', 'text/javascript; charset=utf-8');
     res.setHeader('cache-control', 'no-store');
+    // A plugin file is whatever its author wrote: served as the one type we mean it to be, never as
+    // whatever a browser would rather sniff out of the bytes.
+    res.setHeader('x-content-type-options', 'nosniff');
     res.send(source);
   });
   r.get('/plugins/:id/source', (req, res) => {
@@ -359,7 +378,7 @@ export function createPluginsApi(
   });
 
   // ---- feed
-  r.post('/plugins/:id/post', (req, res) => {
+  r.post('/plugins/:id/post', async (req, res) => {
     // The id is the registry's, from the path; nothing in the body ever names the plugin.
     const id = enabled(req, res);
     if (!id) return;
@@ -372,6 +391,11 @@ export function createPluginsApi(
     } catch (e) {
       return fail(res, 400, why(e));
     }
+    // A plugin naming its chat after one the user already has — their own Discord channel, their own
+    // Telegram group — would file its messages under a name that means someone else in every column
+    // and picker. The "via <plugin>" tag says who posted a message; it cannot unsay whose chat this is.
+    const taken = new Set([...(await takenChatNames())].map(sameName));
+    if (taken.has(sameName(msg.chatName))) return fail(res, 400, 'that chat name belongs to a chat already in your feed');
     // noteChat first, and inside the try: it enforces the 32-chats-per-plugin cap and throws
     // ('too many chats (32 max)'), which must refuse the post with a 400 before anything reaches the hub.
     try {
@@ -495,13 +519,20 @@ export function createPluginsApi(
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return fail(res, 400, 'only http(s) URLs');
     if (isLocalHost(u.hostname)) return fail(res, 400, 'local addresses are off limits'); // the same rule the fetch path enforces
     const init = req.body?.init ?? {};
-    const method = METHODS.includes(String(init.method).toUpperCase()) ? String(init.method).toUpperCase() : 'GET';
+    // Said, not silently rewritten: a plugin that asked for a method we do not proxy meant something,
+    // and answering its DELETE with the result of a GET is the kind of help nobody can debug. The shell
+    // refuses the same set, so a method that gets past here is one both layers will send.
+    const method = init.method === undefined || init.method === null ? 'GET' : String(init.method).toUpperCase();
+    if (!METHODS.includes(method)) return fail(res, 400, `unsupported method ${method.slice(0, 20)}`);
     const viaShell = reg.manifest(id).sites.includes(u.origin);
     // The site's cookies live in the shell, and a fetch the plugin asked to make *as the signed-in
     // user* is a different request without them: never quietly send it plain instead.
     if (viaShell && !shell.available()) return fail(res, 503, 'the desktop app is not connected');
     const headers = pluginHeaders(init.headers, viaShell);
     const body = proxyBody(init.body);
+    // The shell says the same thing in the same words, and a request that would be refused a layer
+    // down is refused here, before it costs the plugin a fetch out of its minute.
+    if (body !== undefined && (method === 'GET' || method === 'HEAD')) return fail(res, 400, `a ${method} does not carry a body`);
     // The concurrency check comes first: a request refused for arriving while four others are still
     // out has not been sent, so it must not spend the plugin's minute either.
     const open = inFlight.get(id) ?? 0;

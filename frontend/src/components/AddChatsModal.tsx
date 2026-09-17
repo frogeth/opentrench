@@ -26,7 +26,8 @@ export function AddChatsModal({
   onPreview,
   onClose,
 }: {
-  initialSource: 'discord' | 'telegram';
+  /** the tab to open on: the source the rail was already showing, plugins included */
+  initialSource: 'discord' | 'telegram' | 'plugin';
   guildId?: string;
   cfg: MaskedConfig | null;
   channels: DiscordChannel[];

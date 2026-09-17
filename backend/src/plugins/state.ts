@@ -66,7 +66,9 @@ const RETRY_MS = 2000;
 
 /** `plugins-state.json` next to the config: per-plugin storage, settings values and the chats it has posted. Debounced writes. */
 export class PluginState {
-  private data: Record<string, PluginRecord> = {};
+  // Keyed by plugin id, which comes out of a file someone else wrote, and by whatever ids a
+  // hand-edited state file holds: no prototype to walk into, like the storage bags inside it.
+  private data: Record<string, PluginRecord> = Object.create(null);
   private timer: NodeJS.Timeout | undefined;
   /** when the oldest unsaved change came in, 0 when everything is on disk */
   private firstDirtyAt = 0;
