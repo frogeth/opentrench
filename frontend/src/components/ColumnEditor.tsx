@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import type { ColumnDef, ColumnFilters, DiscordChannel, WatchedChat } from '../api';
+import type { Source } from '../types';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 import { Icon } from './Icon';
 import { SOUNDS, playSound } from '../sounds';
 import { filtersActive } from '../filters';
 
-export const chatKey = (w: { source: string; id: string }) => `${w.source}:${w.id}`;
+/** a chat's key in a column's list; a plugin chat's id is already the whole `plugin:<plugin>:<chat>` key */
+export const chatKey = (w: { source: string; id: string }) => (w.source === 'plugin' ? w.id : `${w.source}:${w.id}`);
 
 const CHAINS: [string, string][] = [
   ['solana', 'Solana'], ['ethereum', 'Ethereum'], ['base', 'Base'], ['bsc', 'BSC'], ['robinhood', 'Robinhood'],
@@ -187,19 +189,20 @@ export function ColumnEditor({
   };
   const toggle = (k: string) => commit(selected.includes(k) ? selected.filter((x) => x !== k) : [...selected, k]);
 
-  // Group by Discord server, channels under their category, Telegram at the end.
+  // Group by Discord server, channels under their category, then Telegram, then the plugins' chats.
   const groups = useMemo(() => {
     const cat = new Map(channels.map((c) => [c.id, c.category]));
-    const m = new Map<string, { source: 'discord' | 'telegram'; avatar?: string; items: { w: WatchedChat; category?: string }[] }>();
+    const m = new Map<string, { source: Source; avatar?: string; items: { w: WatchedChat; category?: string }[] }>();
     for (const w of watched) {
       const tail = w.source === 'discord' ? /\(([^)]*)\)\s*$/.exec(w.name)?.[1] : undefined;
-      const server = w.source === 'discord' ? (tail === 'DM' ? 'Direct Messages' : tail ?? 'Discord') : 'Telegram';
+      const server = w.source === 'discord' ? (tail === 'DM' ? 'Direct Messages' : tail ?? 'Discord') : w.source === 'plugin' ? 'Plugins' : 'Telegram';
       const g = m.get(server) ?? { source: w.source, avatar: undefined, items: [] };
       if (!g.avatar && w.avatar && w.source === 'discord') g.avatar = w.avatar;
       g.items.push({ w, category: w.source === 'discord' ? cat.get(w.id) : undefined });
       m.set(server, g);
     }
-    return [...m.entries()].sort((a, b) => (a[0] === 'Telegram' ? 1 : b[0] === 'Telegram' ? -1 : a[0].localeCompare(b[0])));
+    const rank = (k: string) => (k === 'Plugins' ? 2 : k === 'Telegram' ? 1 : 0);
+    return [...m.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]));
   }, [watched, channels]);
   const shortName = (w: WatchedChat) => (w.source === 'discord' ? w.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '') : w.name);
   const groupState = (items: { w: WatchedChat }[]) => {

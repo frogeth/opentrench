@@ -1,13 +1,14 @@
 import { useState, type DragEvent, type ReactNode } from 'react';
 import type { DiscordChannel, MaskedConfig, TelegramDialog, WatchedChat } from '../api';
+import type { Source } from '../types';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 
 export interface View {
-  /** rail selection: 'all', 'g:<guildId>' or 't:<chatId>' */
+  /** rail selection: 'all', 'g:<guildId>', 't:<chatId>' or 'p:<pluginChatId>' */
   rail: string;
   /** focused chat (display name as used in messages) */
-  chat?: { name: string; id: string; source: 'discord' | 'telegram' };
+  chat?: { name: string; id: string; source: Source };
   /** previewing a chat that is not in the feed (history fetched on demand) */
   preview?: { name: string; id: string; source: 'discord' | 'telegram' };
 }
@@ -30,8 +31,8 @@ export function discordGlyph(c: DiscordChannel, size = 20): ReactNode {
 }
 
 interface RailItem {
-  key: string; // g:<id> | t:<id>
-  source: 'discord' | 'telegram';
+  key: string; // g:<id> | t:<id> | p:<id>
+  source: Source;
   id: string;
   name: string;
   icon?: string;
@@ -85,7 +86,10 @@ export function ChannelSidebar({
   const tg: RailItem[] = dialogs
     .filter((d) => watchedTg.has(d.id))
     .map((d) => ({ key: `t:${d.id}`, source: 'telegram', id: d.id, name: d.title, icon: `/api/telegram/avatar/${d.id}`, count: counts.get(d.title) ?? 0 }));
-  const unordered = [...guilds.values(), ...tg];
+  const plugs: RailItem[] = watched
+    .filter((w) => w.source === 'plugin')
+    .map((w) => ({ key: `p:${w.id}`, source: 'plugin', id: w.id, name: w.name, count: counts.get(w.name) ?? 0 }));
+  const unordered = [...guilds.values(), ...tg, ...plugs];
   const order = cfg?.railOrder ?? [];
   const items = [
     ...order.map((k) => unordered.find((i) => i.key === k)).filter((i): i is RailItem => !!i),
@@ -146,9 +150,9 @@ export function ChannelSidebar({
             setOverKey(null);
           }}
           onClick={() =>
-            it.source === 'telegram'
-              ? onView({ rail: it.key, chat: { name: it.name, id: it.id, source: 'telegram' } })
-              : onView({ rail: it.key })
+            it.source === 'discord'
+              ? onView({ rail: it.key })
+              : onView({ rail: it.key, chat: { name: it.name, id: it.id, source: it.source } })
           }
         >
           {it.icon ? (
@@ -173,7 +177,7 @@ export function ChannelSidebar({
   if (collapsed) return <aside className="sidebar sidebar-collapsed">{rail}</aside>;
 
   // ---- pane ----
-  const row = (key: string, isActive: boolean, onClick: () => void, icon: ReactNode, name: string, n: number, src?: 'discord' | 'telegram') => (
+  const row = (key: string, isActive: boolean, onClick: () => void, icon: ReactNode, name: string, n: number, src?: Source) => (
     <button key={key} className={`chan-row on${isActive ? ' active' : ''}`} onClick={onClick}>
       {icon}
       <span className="chan-row-name">{name}</span>
@@ -219,6 +223,16 @@ export function ChannelSidebar({
             )}
           </div>
         )}
+        {plugs.length > 0 && (
+          <div>
+            <div className="chan-cat">
+              <Logo source="plugin" size={9} /> Plugins
+            </div>
+            {plugs.map((p) =>
+              row(p.id, view.chat?.id === p.id, () => onView({ rail: 'all', chat: { name: p.name, id: p.id, source: 'plugin' } }), <Logo source="plugin" size={14} />, p.name, p.count),
+            )}
+          </div>
+        )}
         {dc.length === 0 && tg.length === 0 && watched.length === 0 && (
           <div className="empty">
             Nothing in your feed yet.
@@ -230,18 +244,19 @@ export function ChannelSidebar({
         )}
       </>
     );
-  } else if (active?.source === 'telegram') {
+  } else if (active && active.source !== 'discord') {
+    const glyph = active.source === 'plugin' ? <Logo source="plugin" size={16} /> : <Avatar src={active.icon} name={active.name} size={20} />;
     head = (
       <>
-        <Avatar src={active.icon} name={active.name} size={20} /> <b>{active.name}</b>
-        <Logo source="telegram" size={11} />
+        {glyph} <b>{active.name}</b>
+        <Logo source={active.source} size={11} />
       </>
     );
     list = (
       <>
-        {row(active.id, true, () => onView({ rail: active.key, chat: { name: active.name, id: active.id, source: 'telegram' } }), <Avatar src={active.icon} name={active.name} size={20} />, active.name, active.count)}
+        {row(active.id, true, () => onView({ rail: active.key, chat: { name: active.name, id: active.id, source: active.source } }), glyph, active.name, active.count)}
         <div className="hint" style={{ padding: '10px 8px' }}>
-          Telegram chats have no channels. Other chats sit on the rail on the left.
+          {active.source === 'plugin' ? 'A plugin chat has no channels.' : 'Telegram chats have no channels.'} Other chats sit on the rail on the left.
         </div>
       </>
     );

@@ -44,7 +44,7 @@ function CallsList({ t, now, onJump }: { t: TokenInfo; now: number; onJump?: (ms
             <span className="hc-call-who">
               <b>{c.author}</b>
               <span>
-                <Logo source={/* TODO(plugins): own glyph */ c.source === 'plugin' ? 'telegram' : c.source} size={9} /> {chatOf(c)}
+                <Logo source={c.source} size={9} /> {chatOf(c)}
               </span>
             </span>
             <span className="hc-call-mc">{money(c.marketCap) ?? '—'}</span>
@@ -189,13 +189,13 @@ export function CallCard({
         {c ? (
           <>
             <span className="call-who">
-              <Avatar src={c.avatar} name={c.author} size={16} crown={isFavorite(favorites, c.author)} />
+              <Avatar src={c.avatar} name={c.author} size={16} crown={c.source !== 'plugin' && isFavorite(favorites, c.author)} />
               <span className="call-author">{c.author}</span>
               <AuthorMenu author={c.author} link={c.link} favorite={isFavorite(favorites, c.author)} />
             </span>
             <span className="call-dot">·</span>
             <span className={`call-chat${onJump ? ' call-chat-jump' : ''}`} title={onJump ? `${c.chatName} · show this call in the chat` : c.chatName} onClick={onJump ? () => onJump(c.msgId, c.link) : undefined}>
-              <Logo source={/* TODO(plugins): own glyph */ c.source === 'plugin' ? 'telegram' : c.source} size={10} />
+              <Logo source={c.source} size={10} />
               {chatOf(c)}
             </span>
             <span className="call-dot">·</span>

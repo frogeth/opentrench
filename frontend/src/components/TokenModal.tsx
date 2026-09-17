@@ -279,7 +279,7 @@ export function TokenModal({ t, now, favorites, me = [], onClose, onShare, onBuy
               {listed.length === 0 && <div className="hint">no calls yet</div>}
               {listed.map(({ c, latest, where, n, you, x }) => (
                 <a key={c.msgId} className="tcall" href={c.link} target="_blank" rel="noreferrer" title={n > 1 ? `${n} scans: ${where.join(', ')}` : undefined}>
-                  <Avatar src={latest.avatar} name={latest.author} size={28} crown={isFavorite(favorites, c.author)} />
+                  <Avatar src={latest.avatar} name={latest.author} size={28} crown={c.source !== 'plugin' && isFavorite(favorites, c.author)} />
                   <span className="tcall-main">
                     <span className="tcall-who">
                       <b>{you ? 'you' : c.author}</b>
@@ -287,7 +287,7 @@ export function TokenModal({ t, now, favorites, me = [], onClose, onShare, onBuy
                       {c.msgId === firstId && <span className="first-badge">1st</span>}
                     </span>
                     <span className="tcall-where">
-                      <Logo source={/* TODO(plugins): own glyph */ c.source === 'plugin' ? 'telegram' : c.source} size={9} /> {where.join(' · ')} · {timeAgo(n > 1 ? latest.ts : c.ts, now)}
+                      <Logo source={c.source} size={9} /> {where.join(' · ')} · {timeAgo(n > 1 ? latest.ts : c.ts, now)}
                     </span>
                   </span>
                   <span className="tcall-nums">

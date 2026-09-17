@@ -46,7 +46,7 @@ import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type Teleg
 import { type ChartProvider } from './format';
 import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, thesisFollowUps, tokenPasses } from './filters';
-import type { BotMessage, FeedMessage, RankingKey, Status, TokenInfo } from './types';
+import type { BotMessage, FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
 
 /** Header status: the platform's logo, coloured by its connection state; the words live in the tooltip. */
 function Pill({ label, state }: { label: 'discord' | 'telegram'; state: string }) {
@@ -89,7 +89,7 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 export type ChatOrder = 'bottom' | 'top';
 
 export default function App() {
-  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs } = useFeed();
+  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs, setPlugins } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
   // first-run checklist: once, when nothing is connected and the feed is empty; ⚙ → Accounts brings it back
   const [setupOpen, setSetupOpen] = useState(false);
@@ -512,8 +512,11 @@ export default function App() {
   const [replyByCol, setReplyByCol] = useState<Record<string, FeedMessage | undefined>>({});
   // Discord is writable only through the Vencord bridge; a legacy token reads and nothing more
   const canSend = { discord: !!cfg?.discord.canSend && status.discordMode === 'bridge', telegram: !!cfg?.telegram.canSend } as const;
+  // composing is platform-only: a plugin chat is never a send target
   const targetsFor = (names: Set<string> | null): SendTarget[] =>
-    watched.filter((w) => (!names || names.has(w.name)) && (!scope || scope.has(w.name))).map((w) => ({ id: w.id, name: w.name, source: w.source }));
+    watched
+      .filter((w) => w.source !== 'plugin' && (!names || names.has(w.name)) && (!scope || scope.has(w.name)))
+      .map((w) => ({ id: w.id, name: w.name, source: w.source as SendTarget['source'] }));
   // which chat each column's composer sends to; a plain click on a message picks that message's chat
   const [targetByCol, setTargetByCol] = useState<Record<string, string | undefined>>({});
   const composerFor = (colId: string, names: Set<string> | null) => (
@@ -678,6 +681,11 @@ export default function App() {
     api.watched().then(setWatched).catch(() => {});
     api.config().then(setCfg).catch(() => {});
   };
+  // The plugin list keeps itself current from the `plugins` event; this is the first read, and again
+  // whenever the socket comes back (whatever changed while it was down came with no event).
+  useEffect(() => {
+    api.plugins().then(setPlugins).catch(() => {});
+  }, [wsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(reloadLists, [status.discord, status.telegram]);
   useEffect(() => {
     if (status.discord === 'connected') api.discordChannels().then(setChannels).catch(() => {});
@@ -782,6 +790,8 @@ export default function App() {
   const jumpToMessage = (id: string, link?: string) => {
     const m = messages.find((x) => x.id === id);
     if (!m) {
+      // A plugin message lives only in the feed: gone from the buffer, there is nowhere to send you.
+      if (id.startsWith('plugin:')) return;
       // no longer in the feed's buffer: open its chat in-app from the link (the browser only as a last resort)
       if (link && !openLink(link)) window.open(link, '_blank', 'noopener');
       return;
@@ -806,7 +816,8 @@ export default function App() {
         if (view.chat?.name !== m.chatName) openMessageChat(m);
         return void window.setTimeout(find, 120);
       }
-      if (m.link && !openLink(m.link)) window.open(m.link, '_blank', 'noopener');
+      // a plugin message has no platform to open: if no column showed it, that is the end of it
+      if (m.source !== 'plugin' && m.link && !openLink(m.link)) window.open(m.link, '_blank', 'noopener');
     };
     window.setTimeout(find, 30);
   };
@@ -992,7 +1003,7 @@ export default function App() {
 
   /** Only chats on the watch list exist in the UI; a removed chat disappears with its messages. */
   const chats = useMemo(() => {
-    const m = new Map<string, { count: number; source: 'discord' | 'telegram'; avatar?: string; id: string }>();
+    const m = new Map<string, { count: number; source: Source; avatar?: string; id: string }>();
     for (const w of watched) m.set(w.name, { count: 0, source: w.source, avatar: w.avatar, id: w.id });
     for (const msg of messages) {
       const e = m.get(msg.chatName);
@@ -1013,12 +1024,14 @@ export default function App() {
     const s = new Set<string>();
     for (const id of cfg?.discord.watch ?? []) s.add(`discord:${id}`);
     for (const id of cfg?.telegram.watch ?? []) s.add(`telegram:${normTg(id)}`);
+    // a plugin chat's key is its whole chat id, `plugin:<plugin>:<chat>`
+    for (const k of cfg?.pluginWatch ?? []) s.add(k);
     return s;
-  }, [cfg?.discord.watch, cfg?.telegram.watch]);
+  }, [cfg?.discord.watch, cfg?.telegram.watch, cfg?.pluginWatch]);
   const inWatch = (m: FeedMessage) => {
     if (watchedKeys.size === 0) return true;
     const id = m.source === 'telegram' ? normTg(m.chatId) : m.chatId;
-    return watchedKeys.has(`${m.source}:${id}`);
+    return watchedKeys.has(m.source === 'plugin' ? m.chatId : `${m.source}:${id}`);
   };
 
   /** Which chat names the current view scopes to (null = everything watched). */
@@ -1026,9 +1039,10 @@ export default function App() {
     if (view.preview) return new Set([view.preview.name]);
     if (view.chat) return new Set([view.chat.name]);
     if (view.rail === 'all') return null;
-    if (view.rail.startsWith('t:')) {
+    if (view.rail.startsWith('t:') || view.rail.startsWith('p:')) {
+      const source = view.rail.startsWith('t:') ? 'telegram' : 'plugin';
       const id = view.rail.slice(2);
-      const name = watched.find((w) => w.source === 'telegram' && w.id === id)?.name;
+      const name = watched.find((w) => w.source === source && w.id === id)?.name;
       return name ? new Set([name]) : new Set<string>();
     }
     const gid = view.rail.slice(2);
@@ -1081,19 +1095,18 @@ export default function App() {
     setSelected(address);
   };
 
-  const openChat = (name: string, source: 'discord' | 'telegram', id: string) => {
+  const openChat = (name: string, source: Source, id: string) => {
     if (view.chat?.name === name) {
       setView({ rail: view.rail });
       return;
     }
     const ch = source === 'discord' ? channels.find((c) => c.id === id) : undefined;
-    setView({ rail: source === 'telegram' ? `t:${id}` : ch ? `g:${ch.guildId}` : 'all', chat: { name, id, source } });
+    const rail = source === 'telegram' ? `t:${id}` : source === 'plugin' ? `p:${id}` : ch ? `g:${ch.guildId}` : 'all';
+    setView({ rail, chat: { name, id, source } });
   };
 
-  /** focus the chat a message came from; plugin chats get their own view in a later task */
-  const openMessageChat = (m: FeedMessage) => {
-    if (m.source !== 'plugin') openChat(m.chatName, m.source, m.chatId);
-  };
+  /** focus the chat a message came from (a plugin chat opens the same focused view) */
+  const openMessageChat = (m: FeedMessage) => openChat(m.chatName, m.source, m.chatId);
 
   const openPreview = (source: 'discord' | 'telegram', id: string, name: string, guildId?: string) => {
     setAddOpen(null);

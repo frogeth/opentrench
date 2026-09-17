@@ -73,7 +73,7 @@ function CallerCalls({ r, now }: { r: Row; now: number }) {
             <span className="hc-call-who">
               <b>{t.symbol ?? t.address.slice(0, 6)}</b>
               <span>
-                <Logo source={/* TODO(plugins): own glyph */ c.source === 'plugin' ? 'telegram' : c.source} size={9} /> {money(c.marketCap)} → {money(t.marketCap)}
+                <Logo source={c.source} size={9} /> {money(c.marketCap)} → {money(t.marketCap)}
               </span>
             </span>
             <span className={`hc-call-mc ${x >= 1 ? 'up' : 'down'}`} title={`best ${fmtX(best)}`}>

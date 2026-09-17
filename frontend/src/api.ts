@@ -1,3 +1,5 @@
+import type { PluginInfo, Source } from './types';
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method,
@@ -143,9 +145,10 @@ export interface MaskedConfig {
   pluginWatch: string[];
 }
 export interface WatchedChat {
+  /** a plugin chat's id is its whole watch key, `plugin:<plugin>:<chat>` */
   id: string;
   name: string;
-  source: 'discord' | 'telegram';
+  source: Source;
   avatar?: string;
 }
 export interface DiscordChannel {
@@ -294,4 +297,42 @@ export const api = {
   osSend: (jobId: string) => req<{ ok: true }>('POST', '/osmint/send', { jobId }),
   osArm: (jobId: string, on: boolean) => req<import('./types').MintJob>('POST', '/osmint/arm', { jobId, on }),
   osDismiss: (jobId: string) => req<{ ok: true }>('DELETE', `/osmint/jobs/${encodeURIComponent(jobId)}`),
+  // ---- plugins (routes in backend/src/plugins/api.ts)
+  plugins: () => req<PluginInfo[]>('GET', '/plugins'),
+  pluginsReload: () => req<PluginInfo[]>('POST', '/plugins/reload'),
+  pluginAdd: (source: string) => req<PluginInfo>('POST', '/plugins/add', { source }),
+  pluginAddUrl: (url: string) => req<PluginInfo>('POST', '/plugins/add-url', { url }),
+  pluginApprove: (id: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/approve`),
+  pluginEnable: (id: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/enable`),
+  pluginDisable: (id: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/disable`),
+  pluginRemove: (id: string) => req<{ ok: true }>('DELETE', `/plugins/${encodeURIComponent(id)}`),
+  /** the plugin's source as it sits on disk (text, not JSON) */
+  pluginCode: async (id: string) => {
+    const res = await fetch(`/api/plugins/${encodeURIComponent(id)}/code`);
+    const text = await res.text();
+    if (!res.ok) {
+      let error = res.statusText;
+      try {
+        error = JSON.parse(text).error ?? error;
+      } catch {
+        /* not JSON: keep the status */
+      }
+      throw new Error(error);
+    }
+    return text;
+  },
+  pluginLogs: (id: string) => req<{ ts: number; level: string; text: string }[]>('GET', `/plugins/${encodeURIComponent(id)}/logs`),
+  pluginLog: (id: string, level: string, text: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/log`, { level, text }),
+  pluginPost: (id: string, post: unknown) => req<{ ok: true; id: string }>('POST', `/plugins/${encodeURIComponent(id)}/post`, post),
+  pluginPatch: (id: string, msgId: string, patch: unknown) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/patch`, { ...(patch as object), id: msgId }),
+  pluginStorage: (id: string) => req<Record<string, unknown>>('GET', `/plugins/${encodeURIComponent(id)}/storage`),
+  pluginStorageSet: (id: string, key: string, value: unknown) => req<{ ok: true }>('PUT', `/plugins/${encodeURIComponent(id)}/storage/${encodeURIComponent(key)}`, { value }),
+  pluginSettings: (id: string) => req<Record<string, unknown>>('GET', `/plugins/${encodeURIComponent(id)}/settings`),
+  pluginSettingsSet: (id: string, values: Record<string, unknown>) => req<{ ok: true }>('PUT', `/plugins/${encodeURIComponent(id)}/settings`, { values }),
+  pluginFetch: (id: string, url: string, init?: unknown) =>
+    req<{ status: number; headers: Record<string, string>; body: string; truncated: boolean }>('POST', `/plugins/${encodeURIComponent(id)}/fetch`, { url, init }),
+  pluginSites: (id: string) => req<{ sites: string[]; signedIn: string[]; available: boolean }>('GET', `/plugins/${encodeURIComponent(id)}/sites`),
+  pluginSignIn: (id: string, site: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/sites/signin`, { site }),
+  /** switch a plugin chat on or off in the feed's watch list */
+  pluginWatch: (key: string, on: boolean) => req<{ ok: true }>('PUT', '/plugins/watch', { key, on }),
 };

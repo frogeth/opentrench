@@ -32,7 +32,8 @@ export function PeoplePicker({ favorites, onToggle }: { favorites: string[]; onT
   const listed = useRef<string>('');
 
   useEffect(() => {
-    api.watched().then(setChats).catch(() => {});
+    // plugin chats have no member list: they are not a scope you can pick here
+    api.watched().then((w) => setChats(w.filter((c) => c.source !== 'plugin'))).catch(() => {});
   }, []);
 
   // a chat's member list loads once per chat; the search box then filters it locally

@@ -175,7 +175,7 @@ export function Column({
         )}
         {kind && (
           <span className="col-kind" title={`${kind} column`}>
-            <Icon name={kind === 'mints' ? 'mint' : kind === 'nftvol' ? 'sea' : kind === 'osmint' ? 'wallet' : kind === 'calls' ? 'calls' : kind === 'callers' ? 'people' : kind === 'trending' ? 'top' : kind === 'cove' || kind === 'tgbot' ? 'send' : kind === 'salpha' ? 'search' : kind === 'j7' ? 'x' : kind === 'web' ? 'globe' : 'chat'} size={14} />
+            <Icon name={kind === 'mints' ? 'mint' : kind === 'nftvol' ? 'sea' : kind === 'osmint' ? 'wallet' : kind === 'calls' ? 'calls' : kind === 'callers' ? 'people' : kind === 'trending' ? 'top' : kind === 'cove' || kind === 'tgbot' ? 'send' : kind === 'salpha' ? 'search' : kind === 'j7' ? 'x' : kind === 'web' ? 'globe' : kind === 'plugin' ? 'plug' : 'chat'} size={14} />
           </span>
         )}
         <div className="col-title">

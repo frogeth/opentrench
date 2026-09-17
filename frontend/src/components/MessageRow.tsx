@@ -148,7 +148,7 @@ export function MessageRow({
       document.removeEventListener('keydown', onKey);
     };
   }, [pick]);
-  const fav = !m.isBot && isFavorite(favorites, m.author);
+  const fav = !m.isBot && m.source !== 'plugin' && isFavorite(favorites, m.author);
   // Right-click anywhere on the row: quick reactions, reply, jump, open chat, copy, the original
   // link, and the token menu for any contract in it. A contract address handles its own right-click.
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -160,7 +160,8 @@ export function MessageRow({
     return () => document.removeEventListener('keydown', onKey);
   }, [menu]);
   const closeMenu = () => setMenu(null);
-  const platform = m.source === 'discord' ? 'Discord' : 'Telegram';
+  // a plugin's link is its own (an article, a dashboard): it opens in the browser, not in a platform
+  const platform = m.source === 'discord' ? 'Discord' : m.source === 'plugin' ? 'the browser' : 'Telegram';
   const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
   const contextMenu =
     menu &&
@@ -184,7 +185,7 @@ export function MessageRow({
               <Icon name="reply" size={12} /> Reply
             </button>
           )}
-          {onForward && !discord && (
+          {onForward && !discord && m.source !== 'plugin' && (
             <button onClick={() => { closeMenu(); onForward(m); }}>
               <Icon name="forward" size={12} /> Forward…
             </button>
@@ -270,7 +271,7 @@ export function MessageRow({
               <Icon name="reply" size={12} />
             </button>
           )}
-          {onForward && !discord && (
+          {onForward && !discord && m.source !== 'plugin' && (
             <button className="row-reply" onClick={() => onForward(m)} title="forward to a chat" aria-label="forward">
               <Icon name="forward" size={12} />
             </button>
@@ -315,8 +316,13 @@ export function MessageRow({
                 onOpenChat?.(m);
               }}
             >
-              {m.chatAvatar ? <Avatar src={m.chatAvatar} name={m.chatName} size={14} /> : <Logo source={/* TODO(plugins): own glyph */ m.source === 'plugin' ? 'telegram' : m.source} size={11} />}
+              {m.chatAvatar ? <Avatar src={m.chatAvatar} name={m.chatName} size={14} /> : <Logo source={m.source} size={11} />}
               <span className="chat-tag-name">{m.chatName}</span>
+              {m.source === 'plugin' && (
+                <span className="chat-tag-via" title="posted by a plugin you installed">
+                  via plugin
+                </span>
+              )}
             </button>
           )}
         </div>

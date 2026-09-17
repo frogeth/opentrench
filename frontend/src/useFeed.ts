@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BotMessage, FeedMessage, J7Tweet, Mention, MintEvent, MintJob, NftRanking, RankingKey, ServerEvent, Status, TokenInfo } from './types';
+import type { BotMessage, FeedMessage, J7Tweet, Mention, MintEvent, MintJob, NftRanking, PluginInfo, RankingKey, ServerEvent, Status, TokenInfo } from './types';
 
 /** messages kept per chat (matches the backend), and in all: a busy chat never pushes a quiet one's history out */
 const PER_CHAT = 150;
@@ -63,6 +63,8 @@ export function useFeed() {
       return [...byId.values()].sort((a, b) => b.ts - a.ts || b.id.localeCompare(a.id)).slice(0, 300);
     });
   const [rankings, setRankings] = useState<Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>>>({});
+  /** installed plugins; the App fetches the list, the server pushes every change */
+  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [mintJobs, setMintJobs] = useState<MintJob[]>([]);
   const upsertJob = (job: MintJob) => setMintJobs((cur) => (cur.some((j) => j.id === job.id) ? cur.map((j) => (j.id === job.id ? job : j)) : [...cur, job].slice(-100)));
   const boot = useRef<string | null>(null);
@@ -139,6 +141,7 @@ export function useFeed() {
         else if (ev.type === 'nftRankings') setRankings((r) => ({ ...r, [ev.key]: { rows: ev.rows, at: ev.at } }));
         else if (ev.type === 'mintJob') upsertJob(ev.job);
         else if (ev.type === 'mintJobGone') setMintJobs((cur) => cur.filter((j) => j.id !== ev.id));
+        else if (ev.type === 'plugins') setPlugins(ev.plugins);
       };
       ws.onclose = () => {
         setWsOpen(false);
@@ -154,5 +157,5 @@ export function useFeed() {
     };
   }, []);
 
-  return { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs };
+  return { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs, plugins, setPlugins };
 }
