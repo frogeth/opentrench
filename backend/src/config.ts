@@ -63,7 +63,12 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
   const type: ColumnDef['type'] = (TYPES as readonly string[]).includes(raw.type) ? raw.type : 'chat';
   const title = String(raw.title ?? '').trim().slice(0, 40) || DEFAULT_TITLE[type];
   // empty = every watched chat; the 'none' sentinel = nothing selected (a column being set up)
-  const chats = Array.isArray(raw.chats) ? raw.chats.map(String).filter((k: string) => /^(discord|telegram):/.test(k) || k === 'none').slice(0, 200) : [];
+  const chats = Array.isArray(raw.chats)
+    ? raw.chats
+        .map(String)
+        .filter((k: string) => /^(discord|telegram):/.test(k) || /^plugin:[a-z0-9-]+:[a-z0-9-]+$/.test(k) || k === 'none')
+        .slice(0, 200)
+    : [];
   if (!id || seen.has(id)) return undefined;
   seen.add(id);
   const col: ColumnDef = { id, type, title, chats };

@@ -228,10 +228,11 @@ describe('plugins config', () => {
     return f;
   };
   it('keeps enabled/approvedHash per plugin, the plugin watch list, and a plugin column', () => {
-    const file = tmpConfig({ plugins: { 'hello-feed': { enabled: true, approvedHash: 'abc' }, 'Bad Id': { enabled: true } }, pluginWatch: ['plugin:hello-feed:alerts', 5], columns: [{ id: 'p1', type: 'plugin', title: 'Hello', chats: [], plugin: 'hello-feed' }] });
+    const file = tmpConfig({ plugins: { 'hello-feed': { enabled: true, approvedHash: 'abc' }, 'Bad Id': { enabled: true } }, pluginWatch: ['plugin:hello-feed:alerts', 5], columns: [{ id: 'p1', type: 'plugin', title: 'Hello', chats: ['plugin:hello-feed:alerts', 'plugin:bad key', 'discord:1'], plugin: 'hello-feed' }] });
     const cfg = new ConfigStore(file).get();
     expect(cfg.plugins).toEqual({ 'hello-feed': { enabled: true, approvedHash: 'abc' } });
     expect(cfg.pluginWatch).toEqual(['plugin:hello-feed:alerts']);
     expect(cfg.columns[0]).toMatchObject({ type: 'plugin', plugin: 'hello-feed', title: 'Hello' });
+    expect(cfg.columns[0].chats).toEqual(['plugin:hello-feed:alerts', 'discord:1']);
   });
 });
