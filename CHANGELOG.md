@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- A column's bell now respects that column's filters and your hidden tokens: no sound for a call the column would not show.
 - Plugins: drop a one-file JavaScript plugin into your plugins folder (or ⚙ → Plugins → add a file, or paste a link), read what it asks for, approve it, and it can post a site's feed into opentrench as a chat, fetch that site through your own login without ever seeing the cookies, and draw a column of its own. Each plugin runs in a sandbox with no network of its own and reaches the app only through a versioned API that stays compatible across updates. Approval is bound to the file's hash, so a changed file stays off until you approve it again, and nothing a plugin asks for moves money on its own — a buy is a bar you press Open on. Docs: docs/plugins.md, with a commented example plugin in plugins-examples/.
 - Salpha is now a preset inside the Telegram bot column type (next to Cielo) instead of its own type; right-click → Research still opens it, and an existing Salpha column keeps working. OpenSea Volume and OpenSea Mint are renamed NFT Volume and NFT Mint.
 - Windows: the top bar no longer leaves a blank space on the left where the Mac traffic lights would be; the window's minimize / maximize / close buttons now sit on the bar's right edge in its own colours.
