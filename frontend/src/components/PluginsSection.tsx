@@ -194,7 +194,8 @@ export function PluginsSection({
     setNote(null);
     try {
       // What is behind a link is only known once the backend has fetched it: a 409 here means the
-      // file's own id names a plugin already installed, and the same call goes back with `replace`.
+      // file's own id names a plugin already installed, and the same call goes back naming the id the
+      // user confirmed — so a second download that has become something else is refused, not written.
       let info: PluginInfo & { replaced: boolean };
       try {
         info = await api.pluginAddUrl(link);
@@ -202,7 +203,7 @@ export function PluginsSection({
         const clash = e instanceof ApiError && e.status === 409 && typeof e.data.replaces === 'string' ? e.data.replaces : null;
         if (!clash) throw e;
         if (!okToReplace(installed(clash)?.manifest?.name ?? clash)) return;
-        info = await api.pluginAddUrl(link, true);
+        info = await api.pluginAddUrl(link, clash);
       }
       landed(info);
       setUrl(''); // …and a link that did not install stays in the box to be fixed

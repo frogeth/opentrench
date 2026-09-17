@@ -427,9 +427,32 @@ describe('plugins api guards', () => {
       expect(asked.body).toMatchObject({ error: 'would replace Hello feed', replaces: 'hello-feed' });
       // nothing was written: the plugin the user approved is still the one in the folder
       expect((await t.j('GET', '/plugins')).body[0]).toMatchObject({ enabled: true, needsApproval: false });
-      const done = await t.j('POST', '/plugins/add-url', { url: 'https://example.com/hello-feed.js', replace: true });
+      // `replace` alone is not an answer: the id the user confirmed comes with it
+      const bare = await t.j('POST', '/plugins/add-url', { url: 'https://example.com/hello-feed.js', replace: true });
+      expect(bare.status).toBe(409);
+      expect(bare.body.error).toMatch(/the plugin you confirmed/);
+      expect(bare.body.replaces).toBeUndefined(); // nothing here to re-confirm
+      const done = await t.j('POST', '/plugins/add-url', { url: 'https://example.com/hello-feed.js', replace: true, replaces: 'hello-feed' });
       expect(done.status).toBe(200);
       expect(done.body).toMatchObject({ id: 'hello-feed', replaced: true, needsApproval: true });
+    } finally {
+      t.close();
+    }
+  });
+  it('add-url refuses a replacement whose second download is a different plugin', async () => {
+    // the link answers with the plugin the user was asked about, then with another one
+    let served = 0;
+    const t = harness({ download: () => new Response(++served === 1 ? `${FILE}\n// v2` : QUIET, { status: 200 }) });
+    try {
+      await approved(t);
+      const asked = await t.j('POST', '/plugins/add-url', { url: 'https://example.com/hello-feed.js' });
+      expect(asked.body).toMatchObject({ replaces: 'hello-feed' });
+      const swapped = await t.j('POST', '/plugins/add-url', { url: 'https://example.com/hello-feed.js', replace: true, replaces: 'hello-feed' });
+      expect(swapped.status).toBe(409);
+      expect(swapped.body.error).toMatch(/Quiet feed \(quiet-feed\), not hello-feed/);
+      // neither plugin was written: the answer was about hello-feed, and hello-feed is untouched
+      expect(fs.existsSync(path.join(t.dir, 'quiet-feed.js'))).toBe(false);
+      expect((await t.j('GET', '/plugins')).body[0]).toMatchObject({ id: 'hello-feed', enabled: true, needsApproval: false });
     } finally {
       t.close();
     }

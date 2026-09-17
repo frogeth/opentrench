@@ -244,7 +244,16 @@ export function createPluginsApi(
       // the one that decides. Nothing is written until the caller comes back with `replace`.
       const m = extractManifest(source);
       const had = reg.get(m.id);
-      if (had && !req.body?.replace) {
+      if (req.body?.replace) {
+        // The link is fetched again to install it, and what it serves the second time need not be what
+        // it served the first. `replaces` is the id the user was actually asked about, so a download
+        // that now carries a different manifest is refused rather than written under an answer that
+        // was never about it. No `replaces` in this refusal: there is nothing here to re-confirm.
+        const confirmed = String(req.body?.replaces ?? '');
+        if (confirmed !== m.id) {
+          return res.status(409).json({ error: `the link now installs ${m.name} (${m.id}), not ${confirmed || 'the plugin you confirmed'}; check the link and try again` });
+        }
+      } else if (had) {
         return res.status(409).json({ error: `would replace ${had.manifest?.name ?? had.id}`, replaces: had.id });
       }
       res.json(reg.add(source));

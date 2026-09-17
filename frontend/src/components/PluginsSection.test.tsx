@@ -150,7 +150,9 @@ describe('PluginsSection', () => {
     confirm.mockReturnValue(true);
     vi.mocked(api.pluginAddUrl).mockRejectedValueOnce(new ApiError('would replace Hello feed', 409, { replaces: 'hello-feed' }));
     await click(button('add from link'));
-    expect(api.pluginAddUrl).toHaveBeenLastCalledWith('https://example.com/hello-feed.js', true);
+    // the id the user was asked about goes back with the retry, so the backend can refuse a second
+    // download that has since become a different plugin
+    expect(api.pluginAddUrl).toHaveBeenLastCalledWith('https://example.com/hello-feed.js', 'hello-feed');
     expect(text()).toContain('replaced Hello feed; it needs approval again');
     expect(url.value).toBe('');
     confirm.mockRestore();

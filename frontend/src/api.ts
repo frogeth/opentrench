@@ -340,8 +340,11 @@ export const api = {
   pluginsReload: () => req<PluginInfo[]>('POST', '/plugins/reload'),
   /** `replaced` says a plugin with that id was already in the folder and has just been overwritten */
   pluginAdd: (source: string) => req<PluginInfo & { replaced: boolean }>('POST', '/plugins/add', { source }),
-  /** 409 with `replaces` means a plugin of that id is already installed; ask, then call again with `replace` */
-  pluginAddUrl: (url: string, replace?: boolean) => req<PluginInfo & { replaced: boolean }>('POST', '/plugins/add-url', replace ? { url, replace } : { url }),
+  /**
+   * 409 with `replaces` means a plugin of that id is already installed; ask, then call again passing
+   * that id back as `replaces` — the backend refuses the second download if it no longer carries it.
+   */
+  pluginAddUrl: (url: string, replaces?: string) => req<PluginInfo & { replaced: boolean }>('POST', '/plugins/add-url', replaces ? { url, replace: true, replaces } : { url }),
   /** read a file's manifest without installing it, to say what is about to be added */
   pluginInspect: (source: string) => req<NonNullable<PluginInfo['manifest']>>('POST', '/plugins/inspect', { source }),
   /** the hash is the version the approval dialog showed: the backend refuses a file that changed since */
