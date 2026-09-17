@@ -91,6 +91,11 @@ describe('validateManifest', () => {
   it('rejects an over-long version instead of truncating it', () => {
     expect(() => validateManifest({ ...BASE_MANIFEST, version: `1.2.3-${'x'.repeat(60)}` })).toThrow('manifest version');
   });
+  it('rejects a site on the machine or the LAN: the allow-list exists to keep the plugin off them', () => {
+    for (const site of ['https://localhost', 'https://localhost.', 'https://api.localhost', 'https://127.0.0.1', 'https://127.1', 'https://10.0.0.5', 'https://[::1]', 'https://[fe80::1]', 'https://169.254.169.254'])
+      expect(() => validateManifest({ ...BASE_MANIFEST, sites: [site] })).toThrow('sites');
+    expect(validateManifest({ ...BASE_MANIFEST, sites: ['https://example.com'] }).sites).toEqual(['https://example.com']);
+  });
   it('rejects more than 20 sites', () => {
     const sites = Array.from({ length: 21 }, (_, i) => `https://s${i}.example.com`);
     expect(() => validateManifest({ ...BASE_MANIFEST, sites })).toThrow('at most 20');

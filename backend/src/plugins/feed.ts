@@ -1,5 +1,6 @@
 import type { FeedMessage, MediaItem } from '../types.js';
 import type { PluginManifest } from './manifest.js';
+import { isLocalHost } from './hosts.js';
 
 /** What a plugin hands to `ot.feed.post`. */
 export interface PluginPost {
@@ -32,7 +33,7 @@ const FUTURE_MAX = 60_000;
  * isolates, the LRM/RLM marks and the BOM. Deliberately NOT all of `\p{Cf}`: ZWNJ (U+200C) and
  * ZWJ (U+200D) are how Persian names and emoji sequences are written, so they stay.
  */
-const STRIP_RE = /[\p{Cc}‎‏‪-‮⁦-⁩﻿]/gu;
+const STRIP_RE = /[\p{Cc}\u200E\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/gu;
 
 /** Drops the characters above, collapses whitespace, and trims/truncates. For names, not bodies. */
 const clean = (v: unknown, max: number): string =>
@@ -91,10 +92,6 @@ const parsed = (u: string): URL | undefined => {
   }
 };
 
-/** Loopback and private-network hosts: a link there would make the user's browser probe their own machine. */
-const LOCAL_HOST_RE =
-  /^(?:(?:.+\.)?localhost|0\.0\.0\.0|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3}|\[::1?\]|\[::ffff:127\.[^\]]*\])$/i;
-
 /**
  * Media the renderer loads on its own (avatars, attachments): https, and only from an origin the plugin
  * declared in `sites`. Anywhere else the URL itself would be the message — a beacon telling a server of
@@ -116,7 +113,7 @@ const linkUrl = (u: unknown): string | undefined => {
   if (!s) return undefined;
   const url = s.length <= URL_MAX ? parsed(s) : undefined;
   if (!url || (url.protocol !== 'https:' && url.protocol !== 'http:')) throw new Error('link must be an http(s) URL');
-  if (LOCAL_HOST_RE.test(url.hostname)) throw new Error('link must not point at a local address');
+  if (isLocalHost(url.hostname)) throw new Error('link must not point at a local address');
   return s;
 };
 

@@ -33,7 +33,7 @@ describe('toFeedMessage', () => {
     expect(toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', link: 'https://example.com/x', avatar: 'https://example.com/a.png' })).toMatchObject({ link: 'https://example.com/x', avatar: 'https://example.com/a.png' });
     expect(toFeedMessage('p', M, { id: '1', chat: 'c', author: '', text: 'x' }).author).toBe('Hello feed');
     expect(toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a b\n\nc', text: 'x' }).author).toBe('a b c');
-    expect(toFeedMessage('p', M, { id: '1', chat: ' Chat‮name ', author: 'a', text: 'x' }).chatName).toBe('Chat name');
+    expect(toFeedMessage('p', M, { id: '1', chat: ' Chat\u202ename ', author: 'a', text: 'x' }).chatName).toBe('Chat name');
     // ZWJ holds an emoji sequence together, so sanitizing must not break it the way stripping all of \p{Cf} would
     expect(toFeedMessage('p', M, { id: '1', chat: 'c', author: '👩\u200d🚀 astro', text: 'x' }).author).toBe('👩\u200d🚀 astro');
     // an id is a dedupe key: control chars go, inner spacing stays
@@ -63,8 +63,27 @@ describe('media and link URLs', () => {
   it('a link is click-gated, so http is fine, but never at a local or private address', () => {
     expect(toFeedMessage('p', NO_SITES, { id: '1', chat: 'c', author: 'a', text: 'x', link: 'http://news.example.org/x' }).link).toBe('http://news.example.org/x');
     expect(() => toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', link: 'http://127.0.0.1:3210/x' })).toThrow('link must not point at a local address');
-    for (const host of ['localhost:3210', '10.0.0.5', '192.168.1.9', '172.20.0.1', '169.254.169.254', '[::1]:3210'])
-      expect(() => toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', link: `http://${host}/x` })).toThrow('local address');
+    const local = [
+      'localhost:3210',
+      'localhost.', // the root-label spelling resolves the same
+      'a.localhost.',
+      '10.0.0.5',
+      '192.168.1.9',
+      '172.20.0.1',
+      '169.254.169.254', // the cloud metadata address
+      '0.0.0.0',
+      '127.1', // short form: URL folds it to 127.0.0.1
+      '0x7f000001', // hex form: likewise
+      '[::1]:3210',
+      '[::ffff:127.0.0.1]', // IPv4-mapped, which URL re-serializes as [::ffff:7f00:1]
+      '[::ffff:10.0.0.1]',
+      '[fc00::1]', // unique local
+      '[fe80::1]', // link-local
+    ];
+    for (const host of local) expect(() => toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', link: `http://${host}/x` })).toThrow('local address');
+    // a public host that merely looks close to a private range is fine
+    for (const host of ['example.com', '172.15.0.1', '172.32.0.1', '11.0.0.1', '192.169.1.1'])
+      expect(toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', link: `https://${host}/x` }).link).toBe(`https://${host}/x`);
   });
 });
 

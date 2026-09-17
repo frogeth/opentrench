@@ -1,3 +1,5 @@
+import { isLocalHost } from './hosts.js';
+
 /** What a plugin declares at the top of its file. The block must be plain JSON so the app can read it without running anything. */
 export interface PluginManifest {
   id: string;
@@ -147,6 +149,9 @@ export function validateManifest(raw: any): PluginManifest {
     if (u.protocol !== 'https:' || u.pathname !== '/' || u.search || u.hash) {
       throw new ManifestError(`sites: ${s} must be an https origin like https://example.com`);
     }
+    // a site on the machine or the LAN would let the plugin fetch the app's own API, a router page or a
+    // metadata service through the shell's session, which is the one thing the allow-list exists to stop
+    if (isLocalHost(u.hostname)) throw new ManifestError(`sites: ${s} is a local address`);
     origins.push(u.origin);
   }
 
