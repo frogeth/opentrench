@@ -28,6 +28,8 @@ export class ManifestError extends Error {
 export const PLUGIN_ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/;
 export const MAX_FILE = 512 * 1024;
+/** Shared so the registry rejects an oversize file with the same words the parser would. */
+export const MAX_FILE_MESSAGE = `plugin file is too large (${MAX_FILE / 1024} KB max)`;
 const MAX_SITES = 20;
 
 /** Matches the manifest block only when it is the very first thing in the (comment-stripped) source. */
@@ -68,7 +70,7 @@ const clean = (v: unknown, max: number): string =>
  * (string-aware brace matching), parses it as JSON, and validates it. Never executes the file.
  */
 export function extractManifest(source: string): PluginManifest {
-  if (source.length > MAX_FILE) throw new ManifestError(`plugin file is too large (${MAX_FILE / 1024} KB max)`);
+  if (source.length > MAX_FILE) throw new ManifestError(MAX_FILE_MESSAGE);
 
   const bodyStart = firstStatementStart(source);
   const rest = source.slice(bodyStart);

@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { MAX_FILE } from './manifest.js';
 import { PluginRegistry } from './registry.js';
 import { PluginState } from './state.js';
 
@@ -97,6 +98,60 @@ describe('PluginRegistry', () => {
     expect(new Set(list.map((p) => p.id)).size).toBe(2);
     expect(list.map((p) => p.file).sort()).toEqual(['bad one.js', 'bad-one.js']);
   });
+  it('code() serves an enabled plugin, but refuses a disabled one or a file changed since approval', () => {
+    const { dir, reg } = fresh();
+    fs.writeFileSync(path.join(dir, 'hello-feed.js'), FILE);
+    reg.load();
+    expect(() => reg.code('hello-feed')).toThrow('not enabled');
+    reg.approve('hello-feed');
+    reg.enable('hello-feed');
+    expect(reg.code('hello-feed')).toBe(FILE);
+    // Swapped behind the registry's back: the approved hash no longer describes what is on disk.
+    fs.writeFileSync(path.join(dir, 'hello-feed.js'), `${FILE}\n// sneaky`);
+    expect(() => reg.code('hello-feed')).toThrow('changed on disk');
+    expect(reg.list()[0]).toMatchObject({ needsApproval: true, enabled: false });
+  });
+  it('does not read a symlink or an oversize file, and lists each as an error', () => {
+    const { dir, reg } = fresh();
+    fs.writeFileSync(path.join(dir, 'secret.txt'), FILE);
+    fs.symlinkSync(path.join(dir, 'secret.txt'), path.join(dir, 'x.js'));
+    fs.writeFileSync(path.join(dir, 'big.js'), 'x'.repeat(MAX_FILE + 1));
+    reg.load();
+    const link = reg.list().find((p) => p.id === 'x')!;
+    expect(link.error).toBe('not a regular file');
+    expect(link.hash).toBe(''); // never opened
+    expect(link.manifest).toBeUndefined();
+    expect(reg.list().find((p) => p.id === 'big')!.error).toMatch(/too large/);
+  });
+  it('add() replaces a planted symlink with a real file instead of writing through it', () => {
+    const { dir, reg } = fresh();
+    const outside = path.join(dir, 'outside.txt');
+    fs.writeFileSync(outside, 'ORIGINAL');
+    fs.symlinkSync(outside, path.join(dir, 'hello-feed.js'));
+    reg.add(FILE);
+    const written = path.join(dir, 'hello-feed.js');
+    expect(fs.lstatSync(written).isSymbolicLink()).toBe(false);
+    expect(fs.readFileSync(written, 'utf8')).toBe(FILE);
+    expect(fs.readFileSync(outside, 'utf8')).toBe('ORIGINAL');
+  });
+  it('remove() refuses an id that is not in the folder', () => {
+    const { reg } = fresh();
+    reg.load();
+    expect(() => reg.remove('nope')).toThrow('unknown plugin');
+  });
+  it('list() hands out a copy of the manifest', () => {
+    const { dir, reg } = fresh();
+    fs.writeFileSync(path.join(dir, 'hello-feed.js'), FILE);
+    reg.load();
+    reg.list()[0].manifest!.permissions.push('actions');
+    expect(reg.list()[0].manifest!.permissions).toEqual(['feed:write']);
+  });
+  it('ignores a log line for an id that is not loaded', () => {
+    const { reg } = fresh();
+    reg.load();
+    reg.log('ghost', 'info', 'hi');
+    expect(reg.logs('ghost')).toEqual([]);
+  });
   it('remembers chats a plugin posted and keeps a bounded log', () => {
     const { dir, reg, state } = fresh();
     fs.writeFileSync(path.join(dir, 'hello-feed.js'), FILE);
@@ -120,5 +175,36 @@ describe('PluginRegistry', () => {
     s1.flush();
     const s2 = new PluginState(file);
     expect(s2.read('p')).toEqual({ storage: { k: { a: 1 } }, settings: { limit: 5 }, chats: { 'plugin:p:c': 'C' } });
+  });
+  it('reading an unknown plugin does not add a record to the file', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ot-plugins-'));
+    const file = path.join(dir, 'plugins-state.json');
+    const s = new PluginState(file);
+    expect(s.read('ghost')).toEqual({ storage: {}, settings: {}, chats: {} });
+    s.noteChat('real', 'plugin:real:c', 'C');
+    s.flush();
+    expect(Object.keys(JSON.parse(fs.readFileSync(file, 'utf8')))).toEqual(['real']);
+  });
+  it('a steady stream of writes still reaches disk within 2 s', () => {
+    vi.useFakeTimers();
+    try {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ot-plugins-'));
+      const file = path.join(dir, 'plugins-state.json');
+      const s = new PluginState(file);
+      // Each write resets the 200 ms debounce, so on its own the timer would never fire.
+      for (let i = 0; i < 15; i++) {
+        s.setStorage('p', 'k', i);
+        vi.advanceTimersByTime(100);
+      }
+      expect(fs.existsSync(file)).toBe(false);
+      for (let i = 15; i < 25; i++) {
+        s.setStorage('p', 'k', i);
+        vi.advanceTimersByTime(100);
+      }
+      expect(fs.existsSync(file)).toBe(true);
+      expect(JSON.parse(fs.readFileSync(file, 'utf8')).p.storage).toHaveProperty('k');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

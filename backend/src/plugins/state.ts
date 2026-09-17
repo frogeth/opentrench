@@ -8,11 +8,17 @@ export interface PluginRecord {
 }
 const EMPTY = (): PluginRecord => ({ storage: {}, settings: {}, chats: {} });
 const MAX_STORAGE_BYTES = 256 * 1024;
+/** Coalesce a burst of writes… */
+const DEBOUNCE_MS = 200;
+/** …but never let a steady stream of them hold the file back longer than this. */
+const MAX_DEBOUNCE_MS = 2000;
 
 /** `plugins-state.json` next to the config: per-plugin storage, settings values and the chats it has posted. Debounced writes. */
 export class PluginState {
   private data: Record<string, PluginRecord> = {};
   private timer: NodeJS.Timeout | undefined;
+  /** when the oldest unsaved change came in, 0 when everything is on disk */
+  private firstDirtyAt = 0;
   constructor(private file: string) {
     try {
       const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -21,28 +27,32 @@ export class PluginState {
       /* first run */
     }
   }
+  /** Read-only view. An id with nothing stored reads as empty without being written down. */
   read(id: string): PluginRecord {
-    return this.data[id] ?? (this.data[id] = EMPTY());
+    return this.data[id] ?? EMPTY();
+  }
+  private ensure(id: string): PluginRecord {
+    return (this.data[id] ??= EMPTY());
   }
   setStorage(id: string, key: string, value: unknown): void {
-    const r = this.read(id);
+    const r = this.ensure(id);
     const prev = r.storage[key];
     const had = key in r.storage;
     if (value === undefined) delete r.storage[key];
     else r.storage[key] = value;
-    if (JSON.stringify(r.storage).length > MAX_STORAGE_BYTES) {
+    if (Buffer.byteLength(JSON.stringify(r.storage)) > MAX_STORAGE_BYTES) {
       if (had) r.storage[key] = prev;
       else delete r.storage[key];
-      throw new Error('plugin storage is full (256 KB)');
+      throw new Error(`plugin storage is full (${MAX_STORAGE_BYTES / 1024} KB)`);
     }
     this.save();
   }
   setSettings(id: string, values: Record<string, unknown>): void {
-    this.read(id).settings = values;
+    this.ensure(id).settings = values;
     this.save();
   }
   noteChat(id: string, chatId: string, name: string): void {
-    this.read(id).chats[chatId] = name;
+    this.ensure(id).chats[chatId] = name;
     this.save();
   }
   forget(id: string): void {
@@ -53,18 +63,34 @@ export class PluginState {
   flush(): void {
     clearTimeout(this.timer);
     this.timer = undefined;
+    this.firstDirtyAt = 0;
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
       const tmp = `${this.file}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
+      fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2), { mode: 0o600 });
       fs.renameSync(tmp, this.file);
+      try {
+        // The mode above only applies when the tmp file is created; rename carries it over, but a
+        // file left world-readable by an older version keeps its mode, so tighten it explicitly.
+        // Windows has no real POSIX mode bits and can throw here — nothing to tighten there.
+        fs.chmodSync(this.file, 0o600);
+      } catch {
+        /* best-effort */
+      }
     } catch (e: any) {
       console.warn('[plugins] state save failed', e?.message ?? e);
     }
   }
   private save(): void {
+    const now = Date.now();
+    if (!this.firstDirtyAt) this.firstDirtyAt = now;
+    // A plugin writing every tick would reset the debounce forever and lose everything on a crash.
+    if (now - this.firstDirtyAt >= MAX_DEBOUNCE_MS) {
+      this.flush();
+      return;
+    }
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.flush(), 200);
+    this.timer = setTimeout(() => this.flush(), DEBOUNCE_MS);
     this.timer.unref?.();
   }
 }

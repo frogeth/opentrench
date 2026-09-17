@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { PluginInfo } from '../types.js';
-import { extractManifest, MAX_FILE, type PluginManifest } from './manifest.js';
+import { extractManifest, ManifestError, MAX_FILE, MAX_FILE_MESSAGE, type PluginManifest } from './manifest.js';
 import type { PluginState } from './state.js';
 
 interface Loaded {
@@ -60,15 +60,20 @@ export class PluginRegistry {
       const file = path.join(this.dir, name);
       const stem = name.replace(/\.js$/, '');
       const fallbackId = stem.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 40) || 'plugin';
-      let source = '';
+      let bytes: Buffer;
       try {
-        if (fs.statSync(file).size > MAX_FILE) throw new Error(`plugin file is too large (${MAX_FILE / 1024} KB max)`);
-        source = fs.readFileSync(file, 'utf8');
+        // lstat, not stat: a symlink here would otherwise let the folder reach any file on the box.
+        const st = fs.lstatSync(file);
+        if (!st.isFile()) throw new Error('not a regular file');
+        if (st.size > MAX_FILE) throw new ManifestError(MAX_FILE_MESSAGE);
+        bytes = fs.readFileSync(file);
       } catch (e: any) {
         broken.push({ id: fallbackId, file, hash: '', error: e?.message ?? String(e) });
         continue;
       }
-      const hash = crypto.createHash('sha256').update(source).digest('hex');
+      // Hash the bytes, not the decoded text: two different files can decode to the same string.
+      const hash = crypto.createHash('sha256').update(bytes).digest('hex');
+      const source = bytes.toString('utf8');
       try {
         const manifest = extractManifest(source);
         if (manifest.id !== stem) throw new Error(`file name must be ${manifest.id}.js`);
@@ -95,7 +100,7 @@ export class PluginRegistry {
         id: p.id,
         file: path.basename(p.file),
         hash: p.hash,
-        manifest: p.manifest,
+        manifest: p.manifest && { ...p.manifest, sites: [...p.manifest.sites], permissions: [...p.manifest.permissions] },
         error: p.error,
         enabled: !!c?.enabled && !needsApproval && !p.error,
         needsApproval,
@@ -113,11 +118,21 @@ export class PluginRegistry {
     if (!p?.manifest) throw new Error(p?.error ?? 'unknown plugin');
     return p.manifest;
   }
-  /** The file's text, for the iframe to import. Only an enabled plugin's code leaves the folder. */
+  /**
+   * The file's text, for the iframe to import. Only an enabled plugin's code leaves the folder, and
+   * only the exact bytes the user approved: the file is re-hashed here, because the scan that
+   * approved it may be seconds or days old and the file can have been swapped since.
+   */
   code(id: string): string {
     const p = this.get(id);
     if (!p?.enabled) throw new Error('plugin is not enabled');
-    return fs.readFileSync(this.loaded.get(id)!.file, 'utf8');
+    const entry = this.loaded.get(id)!;
+    const bytes = fs.readFileSync(entry.file);
+    if (crypto.createHash('sha256').update(bytes).digest('hex') !== entry.hash) {
+      this.load(); // so the next list() shows it as needing approval again
+      throw new Error('the plugin file changed on disk; approve this version first');
+    }
+    return bytes.toString('utf8');
   }
   approve(id: string): void {
     const p = this.loaded.get(id);
@@ -146,13 +161,22 @@ export class PluginRegistry {
   add(source: string): PluginInfo {
     const m = extractManifest(source);
     fs.mkdirSync(this.dir, { recursive: true });
-    fs.writeFileSync(path.join(this.dir, `${m.id}.js`), source);
+    const target = path.join(this.dir, `${m.id}.js`);
+    try {
+      // Never write *through* a symlink someone planted in the folder: drop whatever is in the way
+      // unless it is an ordinary file we are meant to replace.
+      if (!fs.lstatSync(target).isFile()) fs.rmSync(target, { force: true, recursive: true });
+    } catch {
+      /* nothing there yet */
+    }
+    fs.writeFileSync(target, source, { mode: 0o600 });
     this.load();
     return this.get(m.id)!;
   }
   remove(id: string): void {
     const p = this.loaded.get(id);
-    if (p) fs.rmSync(p.file, { force: true });
+    if (!p) throw new Error('unknown plugin');
+    fs.rmSync(p.file, { force: true });
     this.cfg.update((c) => {
       delete c.plugins[id];
     });
@@ -166,6 +190,7 @@ export class PluginRegistry {
     this.onChange();
   }
   log(id: string, level: LogLine['level'], text: string): void {
+    if (!this.loaded.has(id)) return;
     const lines = this.logLines.get(id) ?? [];
     lines.push({ ts: Date.now(), level, text: text.slice(0, 2000) });
     if (lines.length > LOG_MAX) lines.splice(0, lines.length - LOG_MAX);
