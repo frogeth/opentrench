@@ -41,7 +41,7 @@ describe('nft column types', () => {
       { id: 'c', type: 'osmint', title: '', chats: [] },
     ]);
     expect(cols.map((c) => c.type)).toEqual(['mints', 'nftvol', 'osmint']);
-    expect(cols.map((c) => c.title)).toEqual(['MintGo', 'OpenSea Volume', 'OpenSea Mint']);
+    expect(cols.map((c) => c.title)).toEqual(['MintGo', 'NFT Volume', 'NFT Mint']);
     expect(cols[0].filters).toEqual({ chains: ['ethereum'], minQty: 2 });
     expect(cols[1].ranking).toBe('top');
     expect(cols[1].timeframe).toBe('1d');
