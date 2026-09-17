@@ -71,7 +71,10 @@ export function PluginHost({
   const pending = useRef(0);
   const soon = useRef(() => {});
   soon.current = () => {
-    if (pending.current || typeof requestAnimationFrame === 'undefined') return place.current();
+    // nowhere to defer to (jsdom, or a document that never paints): measure now
+    if (typeof requestAnimationFrame === 'undefined') return place.current();
+    // a pass is already booked for this frame; this event rides along with it
+    if (pending.current) return;
     pending.current = requestAnimationFrame(() => {
       pending.current = 0;
       place.current();
