@@ -3,10 +3,17 @@ import type { PluginInfo, Source } from './types';
 /** what a plugin's log lines are tagged with (the backend keeps these three) */
 export type PluginLogLevel = 'info' | 'warn' | 'error';
 
+/**
+ * Marks a request as the app's own. The backend refuses every write under /api/plugins and /api/shell
+ * without it: a custom header forces a CORS preflight, so nothing running in a sandboxed frame or in
+ * some other page can reach those routes, whatever it guesses about the port.
+ */
+const REQUESTED_WITH = { 'x-requested-with': 'opentrench' } as const;
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method,
-    headers: body ? { 'content-type': 'application/json' } : undefined,
+    headers: body ? { ...REQUESTED_WITH, 'content-type': 'application/json' } : { ...REQUESTED_WITH },
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
@@ -311,7 +318,7 @@ export const api = {
   pluginRemove: (id: string) => req<{ ok: true }>('DELETE', `/plugins/${encodeURIComponent(id)}`),
   /** the plugin's source as it sits on disk (text, not JSON) */
   pluginCode: async (id: string) => {
-    const res = await fetch(`/api/plugins/${encodeURIComponent(id)}/code`);
+    const res = await fetch(`/api/plugins/${encodeURIComponent(id)}/code`, { headers: { ...REQUESTED_WITH } });
     const text = await res.text();
     if (!res.ok) {
       let error = res.statusText;

@@ -68,9 +68,10 @@ const PATHS: Record<IconName, string> = {
   wallet: 'M3 6a2 2 0 0 1 2-2h13v3H5a1 1 0 0 0 0 2h15a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6zm13 8a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z',
 };
 
-export function Icon({ name, size = 14 }: { name: IconName; size?: number }) {
+/** `label` makes the glyph itself the meaning (a screen reader reads it); without one it is decoration. */
+export function Icon({ name, size = 14, label }: { name: IconName; size?: number; label?: string }) {
   return (
-    <svg className={`icon icon-${name}`} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <svg className={`icon icon-${name}`} width={size} height={size} viewBox="0 0 24 24" {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })}>
       <path d={PATHS[name]} fill="currentColor" />
     </svg>
   );

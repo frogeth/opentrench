@@ -1,4 +1,4 @@
-import { Router, json, type Request, type Response } from 'express';
+import { Router, json, type NextFunction, type Request, type Response } from 'express';
 import { fetch as undiciFetch } from 'undici';
 import { jsonErrors } from '../http.js';
 import type { MessageHub } from '../hub.js';
@@ -42,6 +42,9 @@ const ADD_URL_TIMEOUT_MS = 15_000;
  * fetches go out on, so only a process on this box may claim it — not the LAN, and not a machine
  * that merely looks local. Loopback and nothing else, in every spelling a socket reports it.
  */
+/** The header the app puts on every write to these routes; see the guard in `createPluginsApi`. */
+export const REQUESTED_WITH = 'opentrench';
+
 export function isLoopbackCaller(address: string): boolean {
   return isLoopbackIp(String(address ?? ''));
 }
@@ -125,6 +128,18 @@ export function createPluginsApi(
   // so it gets no dispatcher and undici's Agent is never built.
   const addUrlDispatcher = () => (opts.fetchImpl ? undefined : (addUrlAgent ??= safeDispatcher()));
   const fail = (res: Response, status: number, message: string) => res.status(status).json({ error: message });
+  /**
+   * Every write here must come from the app's own code. A custom header cannot be set by a form, an
+   * image, or a `no-cors` fetch, and setting it forces the browser to preflight — so a plugin frame
+   * (opaque origin, and denied the network outright by its CSP) or any page the user happens to have
+   * open cannot reach these routes even by guessing the port. Reads are left alone: they carry no
+   * authority, and `/plugins/:id/code` is fetched as a plain resource.
+   */
+  r.use(['/plugins', '/shell'], (req: Request, res: Response, next: NextFunction) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+    if (req.get('x-requested-with') !== REQUESTED_WITH) return fail(res, 403, 'this request must come from the opentrench app');
+    next();
+  });
   const why = (e: unknown): string => (e instanceof Error ? e.message : String(e));
   /** The registry says why it refused; the status follows from that, not from the wording. */
   const statusFor = (e: unknown, fallback: number): number => {

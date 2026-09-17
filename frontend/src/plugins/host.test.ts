@@ -81,6 +81,28 @@ describe('createHostLoop', () => {
     expect(onError).toHaveBeenCalledTimes(2);
   });
 
+  it('a refused call still costs budget, and the budget is checked before the size', async () => {
+    const post = vi.fn();
+    const c = ctx();
+    const loop = createHostLoop({ ctx: c, post, argsMax: 100, budget: { perSecond: 1, burst: 1 }, now: () => 0 });
+    await loop.handle(call({ id: 1, args: ['x'.repeat(500)] }));
+    await loop.handle(call({ id: 2 }));
+    expect(post.mock.calls.map(([m]) => (m as { error?: string }).error)).toEqual(['arguments too large', 'too many calls']);
+    expect(c.ui.setTitle).not.toHaveBeenCalled();
+  });
+
+  it('answers only the load of the code it was made for, and stamps what it sends', async () => {
+    const post = vi.fn();
+    const c = ctx();
+    const loop = createHostLoop({ ctx: c, post, gen: 2 });
+    await loop.handle(call({ id: 1, gen: 1 }));
+    await loop.handle(call({ id: 2 }));
+    expect(post).not.toHaveBeenCalled();
+    expect(c.ui.setTitle).not.toHaveBeenCalled();
+    await loop.handle(call({ id: 3, gen: 2 }));
+    expect(post).toHaveBeenCalledWith({ ot: 1, kind: 'result', id: 3, gen: 2, value: null });
+  });
+
   it('turns a value the frame cannot receive into an error for that call', async () => {
     const post = vi.fn((msg: unknown) => {
       if (msg && typeof msg === 'object' && 'value' in msg) throw new Error('could not be cloned');

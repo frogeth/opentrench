@@ -55,7 +55,7 @@ Adding or removing a file in the folder is enough; Settings has a Reload button.
 - `actions.copy` is allowed but never silent: the host toasts "copied by <plugin name>: <first 24 characters>", because an unannounced clipboard write is how a pasted address gets swapped.
 - `actions.notify` titles are prefixed with `[<plugin name>]` by the router, so a plugin's notification cannot pass for the app's own.
 - `ot.sites.signIn` stays available — the sign-in window is visible and the user drives it — and the host loop rate-limits every plugin call (a per-plugin budget, args capped at 256 KB serialized).
-- The approval dialog says it plainly: a plugin can read every message you see, including the ones the feed hides, fetch any host, and with `actions` write your clipboard and open buys for you to confirm.
+- The approval dialog says it plainly: a plugin can read every message in your feed, fetch any host, and with `actions` write your clipboard and open buys for you to confirm. **The messages the feed hides are the one thing it never sees** — not through `feed.messages`, not through `onMessage`.
 - Rate and size caps on `feed.post` (per plugin per minute, per message) so a runaway plugin cannot flood the feed.
 - A plugin that throws is stopped and shown as errored; the app stays up.
 
@@ -65,7 +65,7 @@ All calls are async and return promises. Objects are the same shapes the app use
 
 Feed, read (enabled plugins):
 - `ot.feed.onMessage(fn)`, `ot.feed.onToken(fn)` — subscriptions; return an unsubscribe.
-- `ot.feed.messages({ chat?, limit? })`, `ot.feed.tokens()`, `ot.feed.token(address)`. Messages come back **newest first**, as the feed itself is ordered; `chat` matches a chat name or a chat id; `limit` defaults to 100 and caps at 500. Messages the feed hides (blacklisted authors, bots the bot policy refuses) are never returned. `token(address)` is an own-property lookup: `constructor` and the like are misses, not inherited members.
+- `ot.feed.messages({ chat?, limit? })`, `ot.feed.tokens()`, `ot.feed.token(address)`. Messages come back **newest first**, as the feed itself is ordered; `chat` matches a chat name or a chat id; `limit` defaults to 100 and caps at 500. Messages the feed hides (blacklisted authors, bots the bot policy refuses) are never returned, and never pushed to `onMessage` either: what you have told the app you do not want to see is not a plugin's to read. `token(address)` is an own-property lookup: `constructor` and the like are misses, not inherited members.
 
 Feed, write (`feed:write`):
 - `ot.feed.post({ id, chat, author, text, ts?, avatar?, link?, attachments? })` — a message from chat `chat` (the plugin's own chat name; the app keys it as `plugin:<pluginId>:<chat>`). `id` is the plugin's own stable id for de-duplication. Landing in the hub means contract detection, enrichment, calls, trending, favourite pings, filters, forwarding.
@@ -81,6 +81,7 @@ UI (`ui: true`):
 
 Actions (`actions`):
 - `ot.actions.openToken(address)`, `jump(messageId)`, `buy(address)`, `research(address)`, `copy(text)`, `notify(title, body)`.
+- `openToken`, `buy` and `research` take a contract address and nothing else — EVM `0x` + 40 hex, or base58 32-44 — because the confirmation bar shows the user what the plugin passed. A plugin that could pass a sentence could write the bar's text.
 - `buy` and `research` do not act: they ask. Each raises the host's confirmation bar, and the user's click is what reaches a bot. `copy` writes the clipboard and the host toasts who did it. `notify` gets `[<plugin name>]` in front of its title. See the trust model.
 
 Storage (`storage`):
@@ -120,8 +121,11 @@ Shell (`electron/main.js`):
 - The backend reaches the shell over a local HTTP callback: on start or attach the shell tells the backend its callback port (`POST /api/shell/hello { port, token }`), and the backend sends proxy fetches and sign-in requests to `127.0.0.1:<port>` with that token. A backend running without a shell has no callback and reports sign-in as unavailable.
 
 Frontend:
-- `PluginHost` mounts one sandboxed iframe per enabled plugin (`sandbox="allow-scripts"`, `srcdoc` bootstrap that imports `/api/plugins/:id/code` as a module and calls `main(ot)`), injects the bridge script, routes postMessage calls to the API with permission checks, and restarts on reload.
-- `PluginColumn` renders a plugin's iframe as a column body. Column editor card, picker group, the message "via" tag, and the Settings tab as above.
+- `PluginHost` mounts one sandboxed iframe per enabled plugin (`sandbox="allow-scripts"`, `srcdoc` bootstrap that imports the plugin's code as a `data:` module and calls `main(ot)`), injects the bridge script, and restarts a plugin when its file changes. The srcdoc's first element is a CSP meta: `default-src 'none'`, scripts inline and from `data:` (the bridge and the module), styles inline, images from `data:`/`blob:`/`https:`, and no `connect-src` at all — a plugin's only way out is `ot.fetch`, through the app and the backend proxy.
+- **The frames never move.** They live in one fixed layer (`.plugin-layer`); a plugin column renders only a placeholder rectangle (`.plugin-slot`) and the host lays that plugin's frame over it, re-measuring on every render, on `ResizeObserver` of the slot, and on window resize and scroll. Columns are reordered, split, resized and removed constantly, and a frame that lived inside one would reload every time — losing whatever the plugin had in memory. Two columns on the same plugin: the first gets the frame, the second says so. A plugin with no column (`ui: false`, or nobody showing it) runs at 0×0.
+- Each frame gets its own **host loop** (`plugins/host.ts`): it checks the envelope, spends a per-plugin call budget (60/s, burst 120), caps one call's arguments at 256 KB of JSON, routes through `routeCall`, and always answers — a value the structured clone cannot carry comes back as an error rather than leaving the plugin waiting. Every load of a plugin's code has a **generation** number, set in the srcdoc, stamped on every message both ways: a document winding down after a reload cannot be answered under the new code's identity.
+- Writes to `/api/plugins` and `/api/shell` carry `x-requested-with: opentrench`, and the backend refuses them (403) without it. A custom header forces a CORS preflight, so nothing running in a frame or in another page can reach those routes even by guessing the port.
+- Column editor card, picker group, the message "via" tag, and the Settings tab as above.
 
 ## Testing
 

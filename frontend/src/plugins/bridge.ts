@@ -3,16 +3,19 @@ export const BRIDGE_SRC = String.raw`
 (() => {
   const pending = new Map();
   let seq = 0;
+  // Which load of this plugin's code we are: the host stamps every message with the same number and
+  // drops anything wearing an older one, so a document still winding down cannot answer for a new one.
+  const gen = window.__otGen;
   const listeners = { message: new Set(), token: new Set() };
   const call = (method, ...args) => new Promise((resolve, reject) => {
     const id = ++seq;
     pending.set(id, { resolve, reject });
-    parent.postMessage({ ot: 1, kind: 'call', id, method, args }, '*');
+    parent.postMessage({ ot: 1, kind: 'call', id, method, args, gen }, '*');
   });
   window.addEventListener('message', (e) => {
     if (e.source !== parent) return;
     const d = e.data;
-    if (!d || d.ot !== 1) return;
+    if (!d || d.ot !== 1 || d.gen !== gen) return;
     if (d.kind === 'result') {
       const p = pending.get(d.id);
       if (!p) return;

@@ -8,7 +8,7 @@ import { MessageHub } from '../hub.js';
 import { PluginRegistry } from './registry.js';
 import { PluginState } from './state.js';
 import { ShellLink } from './shell.js';
-import { createPluginsApi, isLoopbackCaller, pluginHeaders, proxyBody } from './api.js';
+import { createPluginsApi, isLoopbackCaller, pluginHeaders, proxyBody, REQUESTED_WITH } from './api.js';
 import { jsonErrors } from '../http.js';
 
 /** a plugin that may write the feed but stores nothing, for the refusals that need one */
@@ -88,7 +88,8 @@ function harness(opts: { blacklist?: string[]; download?: (url: string) => Respo
   const j = (method: string, p: string, body?: unknown, headers: Record<string, string> = {}) =>
     fetch(base + p, {
       method,
-      headers: { 'content-type': 'application/json', ...headers },
+      // the app's own header, as the frontend and the shell send it; tests that want it missing pass it empty
+      headers: { 'content-type': 'application/json', 'x-requested-with': REQUESTED_WITH, ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
   return { base, dir, cfg, hub, reg, state, shellCalls, outbound, j, close: () => server.close() };
@@ -105,6 +106,24 @@ afterAll(() => {
 const j: Harness['j'] = (...args) => h.j(...args);
 
 describe('plugins api', () => {
+  it('refuses every write without the app\'s own header, and GETs never need it', async () => {
+    const t = harness();
+    try {
+      // a page or a frame that is not the app can only send what a form or a no-cors fetch can send
+      expect((await t.j('POST', '/plugins/hello-feed/approve', undefined, { 'x-requested-with': '' })).status).toBe(403);
+      expect((await t.j('POST', '/plugins/reload', undefined, { 'x-requested-with': 'something else' })).status).toBe(403);
+      expect((await t.j('PUT', '/plugins/watch', { key: 'plugin:hello-feed:alerts', on: true }, { 'x-requested-with': '' })).status).toBe(403);
+      expect((await t.j('DELETE', '/plugins/hello-feed', undefined, { 'x-requested-with': '' })).status).toBe(403);
+      expect((await t.j('POST', '/shell/hello', { port: 45678, token: 't' }, { 'x-requested-with': '' })).status).toBe(403);
+      // nothing was done: the plugin is still there, still unapproved
+      expect((await t.j('GET', '/plugins')).body[0]).toMatchObject({ id: 'hello-feed', needsApproval: true });
+      // and with the header the same calls go through
+      expect((await t.j('POST', '/plugins/hello-feed/approve')).status).toBe(200);
+      expect((await t.j('POST', '/shell/hello', { port: 45678, token: 't' })).status).toBe(200);
+    } finally {
+      t.close();
+    }
+  });
   it('lists, refuses code and posts before approval, then approve + enable make both work', async () => {
     expect((await j('GET', '/plugins')).body[0]).toMatchObject({ id: 'hello-feed', enabled: false, needsApproval: true });
     expect((await j('GET', '/plugins/hello-feed/code')).status).toBe(403);
@@ -613,7 +632,7 @@ describe('plugins api guards', () => {
     const server = app.listen(0);
     const at = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
     const send = (p: string, method: string, body: unknown) =>
-      fetch(at + p, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      fetch(at + p, { method, headers: { 'content-type': 'application/json', 'x-requested-with': REQUESTED_WITH }, body: JSON.stringify(body) });
     try {
       const cove = await send('/cove', 'PUT', { amounts: [25, 50] });
       expect(cove.status).toBe(200);

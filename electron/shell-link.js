@@ -766,7 +766,8 @@ async function hello(backendUrl, link, log = console.log) {
     try {
       const r = await fetch(`${backendUrl}/api/shell/hello`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        // the backend refuses writes to /api/shell and /api/plugins without it (see plugins/api.ts)
+        headers: { 'content-type': 'application/json', 'x-requested-with': 'opentrench' },
         body: JSON.stringify({ port: link.port, token: link.token }),
       });
       if (r.ok) {
@@ -790,7 +791,7 @@ async function goodbye(backendUrl, token, log = console.log) {
   try {
     await fetch(`${backendUrl}/api/shell/goodbye`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-requested-with': 'opentrench' },
       body: JSON.stringify({ token }),
       signal: AbortSignal.timeout(1000),
     });

@@ -25,8 +25,8 @@ import { PingsPanel } from './components/PingsPanel';
 import { BridgeNotice } from './components/BridgeNotice';
 import { ONBOARDED_KEY, Onboarding } from './components/Onboarding';
 import { Lightbox } from './components/Lightbox';
-import { PluginFrame } from './plugins/PluginFrame';
 import { PluginHost } from './plugins/PluginHost';
+import { SlotContext, SlotStore, usePluginSlot } from './plugins/slots';
 import type { PluginContext, SettingField } from './plugins/route';
 import type { ShareItem } from './components/ShareModal';
 import { displayChatName, normTg, platformChatNames, watchKeyOf } from './feedKeys';
@@ -52,6 +52,19 @@ function Pill({ label, state }: { label: 'discord' | 'telegram'; state: string }
     <span className={`pill pill-icon pill-${state}`} title={`${label}: ${state.replace('_', ' ')}`} role="status" aria-label={`${label} ${state.replace('_', ' ')}`}>
       <Logo source={label} size={14} />
     </span>
+  );
+}
+
+/**
+ * A plugin column's share of a running plugin: the rectangle its frame is laid over. The frame itself
+ * belongs to `PluginHost` and never moves, so reordering or resizing columns cannot reload a plugin.
+ */
+function PluginSlot({ pluginId, colId }: { pluginId: string; colId: string }) {
+  const { ref, holds } = usePluginSlot(pluginId, colId);
+  return (
+    <div className="plugin-slot" data-plugin={pluginId} ref={ref}>
+      <div className="empty">{holds ? 'starting the plugin…' : 'This plugin is already open in another column.'}</div>
+    </div>
   );
 }
 
@@ -712,10 +725,25 @@ export default function App() {
   const [pluginErrors, setPluginErrors] = useState<Record<string, string>>({});
   /** the settings form each plugin declared through `ot.settings.schema` */
   const [pluginSchemas, setPluginSchemas] = useState<Record<string, SettingField[]>>({});
-  /** a plugin column's title, subtitle and badge, as its plugin sets them */
+  /** a plugin's own title, subtitle and badge — one frame per plugin, so one of each, keyed by plugin */
   const [pluginTitles, setPluginTitles] = useState<Record<string, string>>({});
   const [pluginSubs, setPluginSubs] = useState<Record<string, string>>({});
   const [pluginBadges, setPluginBadges] = useState<Record<string, number | undefined>>({});
+  /** which column each plugin's frame is laid over; the frames live in PluginHost */
+  const slots = useRef(new SlotStore()).current;
+  // A plugin that is gone or switched off leaves nothing behind: its error, its settings form, and
+  // whatever it had made of its column header all go with it.
+  const livePlugins = useMemo(() => plugins.filter((p) => p.enabled && p.manifest).map((p) => p.id).join('|'), [plugins]);
+  useEffect(() => {
+    const live = new Set(livePlugins ? livePlugins.split('|') : []);
+    const prune = <T,>(m: Record<string, T>): Record<string, T> => (Object.keys(m).every((k) => live.has(k)) ? m : Object.fromEntries(Object.entries(m).filter(([k]) => live.has(k))));
+    setPluginErrors(prune);
+    setPluginSchemas(prune);
+    setPluginTitles(prune);
+    setPluginSubs(prune);
+    setPluginBadges(prune);
+    setPluginPrompts((l) => (l.every((p) => live.has(p.plugin)) ? l : l.filter((p) => live.has(p.plugin))));
+  }, [livePlugins]);
   const pluginToastTimer = useRef<number>();
   useEffect(() => () => window.clearTimeout(pluginToastTimer.current), []);
   const showPluginToast = (text: string) => {
@@ -733,7 +761,7 @@ export default function App() {
     jump: (id) => jumpToMessage(id),
     buy: (address) => setPluginPrompts((l) => [...l.filter((p) => p.plugin !== plugin), { plugin, kind: 'buy', address }]),
     research: (address) => setPluginPrompts((l) => [...l.filter((p) => p.plugin !== plugin), { plugin, kind: 'research', address }]),
-    copy: (text) => void copyText(text).then((ok) => ok && showPluginToast(`copied by ${pluginNames[plugin] ?? plugin}: ${text.slice(0, 24)}`)),
+    copy: (text) => void copyText(text).then((ok) => showPluginToast(ok ? `copied by ${pluginNames[plugin] ?? plugin}: ${text.slice(0, 24)}` : `copy failed — ${pluginNames[plugin] ?? plugin} could not write the clipboard`)),
     // the router already put the plugin's name in front of the title; it is not prefixed twice here
     notify: (title, body) => {
       if (notify !== 'granted') return;
@@ -744,6 +772,15 @@ export default function App() {
       }
     },
   });
+  // Escape is Ignore: the bar asks for something the user did not, so getting rid of it is the easy key
+  useEffect(() => {
+    if (pluginPrompts.length === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPluginPrompts([]);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pluginPrompts.length]);
   /** Open sends the plugin's address down the normal buy/research path; Ignore drops it. */
   const answerPluginPrompt = (p: { plugin: string; kind: 'buy' | 'research'; address: string }, open: boolean) => {
     setPluginPrompts((l) => l.filter((x) => x.plugin !== p.plugin));
@@ -1336,29 +1373,19 @@ export default function App() {
     }
     if (col.type === 'plugin') {
       const p = plugins.find((x) => x.id === col.plugin);
+      const live = p?.enabled && p.manifest ? p : null;
       return (
         <Column
           key={col.id}
-          title={pluginTitles[col.id] ?? col.title}
-          subtitle={pluginSubs[col.id] ?? (p?.manifest ? `${p.manifest.name} · plugin` : 'plugin not installed')}
+          title={(live && pluginTitles[live.id]) ?? col.title}
+          subtitle={(live && pluginSubs[live.id]) ?? (p?.manifest ? `${p.manifest.name} · plugin` : 'plugin not installed')}
           kind="plugin"
           className="col-plugin"
-          count={pluginBadges[col.id]}
+          count={live ? pluginBadges[live.id] : undefined}
           {...actions}
         >
-          {p?.enabled && p.manifest ? (
-            <PluginFrame
-              plugin={p}
-              messages={messages}
-              tokens={tokens}
-              actions={pluginActions(p.id)}
-              visible
-              onTitle={(t) => setPluginTitles((m) => ({ ...m, [col.id]: t }))}
-              onSubtitle={(t) => setPluginSubs((m) => ({ ...m, [col.id]: t }))}
-              onBadge={(n) => setPluginBadges((m) => ({ ...m, [col.id]: n ?? undefined }))}
-              onSchema={(schema) => setPluginSchemas((m) => ({ ...m, [p.id]: schema }))}
-              onError={(t) => setPluginErrors((e) => ({ ...e, [p.id]: t }))}
-            />
+          {live ? (
+            <PluginSlot pluginId={live.id} colId={col.id} />
           ) : (
             <div className="empty">{p ? 'This plugin is not enabled. Enable it in ⚙ → Plugins.' : 'Plugin not installed. Add it in ⚙ → Plugins.'}</div>
           )}
@@ -1500,6 +1527,7 @@ export default function App() {
     <BuyContext.Provider value={onBuy}>
     <LinkInterceptContext.Provider value={openLink}>
     <CaMenuContext.Provider value={openCaMenu}>
+    <SlotContext.Provider value={slots}>
     <div className={`app${dragCol ? ' col-drag' : ''}`}>
       <header className="top">
         <div className="brand">opentrench</div>
@@ -1808,22 +1836,25 @@ export default function App() {
         messages={messages}
         tokens={tokens}
         actionsFor={pluginActions}
+        slots={slots}
+        onTitle={(id, t) => setPluginTitles((m) => ({ ...m, [id]: t }))}
+        onSubtitle={(id, t) => setPluginSubs((m) => ({ ...m, [id]: t }))}
+        onBadge={(id, n) => setPluginBadges((m) => ({ ...m, [id]: n ?? undefined }))}
         onSchema={(id, schema) => setPluginSchemas((m) => ({ ...m, [id]: schema }))}
         onError={(id, t) => setPluginErrors((e) => ({ ...e, [id]: t }))}
       />
       {lookingUp && <div className="lookup-toast">looking up {lookingUp.slice(0, 6)}…{lookingUp.slice(-4)}</div>}
       {pluginToast && <div className="lookup-toast plugin-toast">{pluginToast}</div>}
       {pluginPrompts.length > 0 && (
-        <div className="plugin-prompt">
-          {pluginPrompts.map((p) => (
+        <div className="plugin-prompt" role="alert">
+          {pluginPrompts.map((p, i) => (
             <div key={p.plugin} className="plugin-prompt-row">
               <span>
-                <Icon name="plug" size={12} /> <b>{pluginNames[p.plugin] ?? p.plugin}</b> wants to open {p.kind === 'buy' ? 'a buy' : 'research'} for{' '}
-                <code className="tg-code">
-                  {p.address.slice(0, 6)}…{p.address.slice(-4)}
-                </code>
+                <Icon name="plug" size={12} label="plugin" /> <b>{pluginNames[p.plugin] ?? p.plugin}</b> wants to open {p.kind === 'buy' ? 'a buy' : 'research'} for{' '}
+                {/* the whole address, never shortened: this is the thing the user is being asked to approve */}
+                <code className="plugin-prompt-addr">{p.address}</code>
               </span>
-              <button className="primary" onClick={() => answerPluginPrompt(p, true)}>
+              <button className="primary" autoFocus={i === pluginPrompts.length - 1} onClick={() => answerPluginPrompt(p, true)}>
                 Open
               </button>
               <button onClick={() => answerPluginPrompt(p, false)}>Ignore</button>
@@ -1932,6 +1963,7 @@ export default function App() {
         />
       )}
     </div>
+    </SlotContext.Provider>
     </CaMenuContext.Provider>
     </LinkInterceptContext.Provider>
     </BuyContext.Provider>

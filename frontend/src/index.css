@@ -1400,11 +1400,18 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 .mint-pending:hover { background: var(--hover); }
 
 /* ---------- plugins ---------- */
+/* Every running plugin's frame lives in this layer, laid over whichever column shows it: columns get
+   reordered, resized and removed, and none of that may reload a plugin. */
+.plugin-layer { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
+.plugin-pane { position: fixed; overflow: hidden; pointer-events: auto; background: var(--bg); }
+.plugin-pane-hidden { left: 0; top: 0; width: 0; height: 0; opacity: 0; pointer-events: none; }
 .plugin-frame { width: 100%; height: 100%; border: none; background: var(--bg); display: block; }
-.plugin-frame-hidden { position: fixed; width: 0; height: 0; opacity: 0; pointer-events: none; }
 .col-plugin .col-body { display: flex; }
+.plugin-slot { flex: 1; min-width: 0; display: flex; }
+.plugin-slot .empty { flex: 1; }
 /* a plugin asking for a buy or a research: the user's click, never the plugin's */
-.plugin-prompt { position: fixed; top: 96px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 6px; }
+.plugin-prompt { position: fixed; top: 96px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 6px; max-width: min(720px, 92vw); max-height: 40vh; overflow: auto; }
 .plugin-prompt-row { display: flex; align-items: center; gap: 10px; background: var(--panel-2); border: 1px solid rgba(65, 200, 146, 0.5); border-radius: 12px; padding: 8px 12px; font-size: 13px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); }
-.plugin-prompt-row span { display: inline-flex; align-items: center; gap: 6px; }
+.plugin-prompt-row span { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.plugin-prompt-addr { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; color: var(--text); }
 .plugin-toast { bottom: 48px; }

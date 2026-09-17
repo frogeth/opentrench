@@ -53,6 +53,19 @@ const strOrEmpty = (v: unknown, what: string, max: number): string => {
   return v.slice(0, max);
 };
 
+/**
+ * A contract address and nothing else, in the two shapes the app handles everywhere: EVM `0x` + 40 hex,
+ * or base58 32-44 (Solana). The confirmation bar shows what a plugin passes, so a plugin must not be
+ * able to pass a sentence — "0xdead… (verified, safe)" is a lie the user would be reading off our bar.
+ */
+const ADDRESS_RE = /^(?:0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/;
+
+const address = (v: unknown): string => {
+  const s = str(v, 'address', 120);
+  if (!ADDRESS_RE.test(s)) throw new Error('address must be a contract address (0x + 40 hex, or base58 32-44)');
+  return s;
+};
+
 /** Look a plugin's key up as data: `constructor` and `__proto__` are misses, not inherited members. */
 const own = <T>(obj: Record<string, T>, key: string): T | null => (Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null);
 
@@ -149,7 +162,7 @@ export async function routeCall(ctx: PluginContext, call: PluginCall): Promise<u
       return null;
     case 'actions.openToken':
       need(ctx, 'actions');
-      ctx.actions.openToken(str(a0, 'address', 120));
+      ctx.actions.openToken(address(a0));
       return null;
     case 'actions.jump':
       need(ctx, 'actions');
@@ -159,11 +172,11 @@ export async function routeCall(ctx: PluginContext, call: PluginCall): Promise<u
     // naming the plugin and the address, and only the user's own click sends anything to a bot.
     case 'actions.buy':
       need(ctx, 'actions');
-      ctx.actions.buy(str(a0, 'address', 120));
+      ctx.actions.buy(address(a0));
       return null;
     case 'actions.research':
       need(ctx, 'actions');
-      ctx.actions.research(str(a0, 'address', 120));
+      ctx.actions.research(address(a0));
       return null;
     // allowed, but the host toasts who did it — a silent clipboard write is how an address gets swapped
     case 'actions.copy':

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { routeCall, type PluginContext } from './route';
 
+/** the two shapes an address may take; the actions that name one to the user accept nothing else */
+const EVM = '0xdac17f958d2ee523a2206206994597c13d831ec7';
+const SOL = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+
 function ctx(over: Partial<PluginContext> = {}): PluginContext {
   return {
     id: 'hello-feed',
@@ -35,8 +39,8 @@ describe('routeCall', () => {
     const c = ctx({ manifest: { ...ctx().manifest, permissions: ['feed:write', 'actions', 'storage'] } });
     await routeCall(c, { method: 'feed.post', args: [{ id: '1', chat: 'c', author: 'a', text: 't' }] });
     expect(c.api.pluginPost).toHaveBeenCalledWith('hello-feed', { id: '1', chat: 'c', author: 'a', text: 't' });
-    await routeCall(c, { method: 'actions.openToken', args: ['0xabc'] });
-    expect(c.actions.openToken).toHaveBeenCalledWith('0xabc');
+    await routeCall(c, { method: 'actions.openToken', args: [EVM] });
+    expect(c.actions.openToken).toHaveBeenCalledWith(EVM);
     expect(await routeCall(c, { method: 'storage.get', args: ['a'] })).toBe(1);
   });
 
@@ -44,6 +48,20 @@ describe('routeCall', () => {
     const r = await routeCall(ctx(), { method: 'fetch', args: ['https://example.com/x', { method: 'GET' }] });
     expect(r).toEqual({ status: 200, headers: {}, body: '{"ok":true}' });
     expect(await routeCall(ctx(), { method: 'sites.status', args: ['https://example.com'] })).toEqual({ signedIn: false, available: true });
+  });
+
+  it('the actions that name an address to the user take a contract address and nothing else', async () => {
+    const c = ctx({ manifest: { ...ctx().manifest, permissions: ['actions'] } });
+    for (const method of ['actions.openToken', 'actions.buy', 'actions.research']) {
+      await routeCall(c, { method, args: [EVM] });
+      await routeCall(c, { method, args: [SOL] });
+      // a plugin must not be able to write the confirmation bar's text: it says only what it was given
+      for (const bad of ['0xdac17f958d2ee523a2206206994597c13d831ec7 (verified)', 'not an address', '0xdead', `${EVM}0`, 'https://example.com', '0'])
+        await expect(routeCall(c, { method, args: [bad] })).rejects.toThrow('contract address');
+    }
+    expect(c.actions.buy).toHaveBeenCalledTimes(2);
+    expect(c.actions.buy).toHaveBeenCalledWith(EVM);
+    expect(c.actions.buy).toHaveBeenLastCalledWith(SOL);
   });
 
   it('unknown methods and bad args are errors, never silent', async () => {

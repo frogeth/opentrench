@@ -7,6 +7,8 @@ interface CallEnvelope {
   id: number;
   method: string;
   args: unknown[];
+  /** which load of the plugin's code sent it; see `gen` below */
+  gen?: number;
 }
 
 export interface HostLoopOptions {
@@ -20,12 +22,41 @@ export interface HostLoopOptions {
   /** errors worth showing the user (a refused permission, an unknown method, a plugin talking too fast) */
   onError?: (text: string) => void;
   now?: () => number;
+  /**
+   * Which load of the plugin's code this loop answers for. The frame stamps every call with the number
+   * the srcdoc gave it, and a call wearing any other one is ignored: a document winding down after a
+   * reload (or after the column switched to another plugin) must never be answered under new code's
+   * identity. Loops made without one answer whatever arrives, which is what the tests want.
+   */
+  gen?: number;
 }
 
 export interface HostLoop {
   handle(data: unknown): Promise<void>;
   dispose(): void;
 }
+
+/** thrown out of the replacer below the moment the count passes the cap */
+const OVER = Symbol('over');
+
+/**
+ * How big this call's arguments are, as JSON, giving up the moment they pass `max`. It bounds what a
+ * call may cost to *route* — the structured clone has already spent the memory to get them here — and
+ * a value JSON cannot walk at all (a cycle) counts as over the cap rather than as zero.
+ */
+const overCap = (args: unknown[], max: number): boolean => {
+  let n = 0;
+  try {
+    JSON.stringify(args, (_k, v) => {
+      n += typeof v === 'string' ? v.length + 2 : 8;
+      if (n > max) throw OVER;
+      return v;
+    });
+  } catch {
+    return true;
+  }
+  return false;
+};
 
 const isCall = (d: unknown): d is CallEnvelope => {
   if (!d || typeof d !== 'object') return false;
@@ -39,7 +70,7 @@ const isCall = (d: unknown): d is CallEnvelope => {
  * that keep a plugin from drowning the app — a call budget, an argument cap, a reply that always
  * arrives — are plain functions to test rather than a component to render.
  */
-export function createHostLoop({ ctx, post, budget = { perSecond: 60, burst: 120 }, argsMax = 256 * 1024, onError, now = Date.now }: HostLoopOptions): HostLoop {
+export function createHostLoop({ ctx, post, budget = { perSecond: 60, burst: 120 }, argsMax = 256 * 1024, onError, now = Date.now, gen }: HostLoopOptions): HostLoop {
   let tokens = budget.burst;
   let filled = now();
   let complained = -Infinity;
@@ -55,14 +86,17 @@ export function createHostLoop({ ctx, post, budget = { perSecond: 60, burst: 120
     return true;
   };
 
+  /** every message out of this loop wears its generation, so the bridge can drop a stale one */
+  const stamp = gen === undefined ? {} : { gen };
+
   const reply = (id: number, out: { value: unknown } | { error: string }) => {
     if (disposed) return;
     try {
-      post({ ot: 1, kind: 'result', id, ...out });
+      post({ ot: 1, kind: 'result', id, ...stamp, ...out });
     } catch {
       // a value the structured clone cannot carry: the plugin's promise rejects instead of hanging forever
       try {
-        post({ ot: 1, kind: 'result', id, error: 'result is not transferable' });
+        post({ ot: 1, kind: 'result', id, ...stamp, error: 'result is not transferable' });
       } catch {
         /* the frame is gone; nothing left to tell */
       }
@@ -72,14 +106,11 @@ export function createHostLoop({ ctx, post, budget = { perSecond: 60, burst: 120
   return {
     async handle(data: unknown) {
       if (disposed || !isCall(data)) return;
+      // a call from an older load of the code is not this loop's to answer
+      if (gen !== undefined && data.gen !== gen) return;
       const { id, method, args } = data;
-      let size = Infinity;
-      try {
-        size = JSON.stringify(args)?.length ?? 0;
-      } catch {
-        // cyclic or otherwise unmeasurable: too big to reason about is too big to route
-      }
-      if (size > argsMax) return reply(id, { error: 'arguments too large' });
+      // The budget is spent first, so a refused call still costs one: measuring is work too, and a
+      // plugin that spams oversized calls would otherwise get it for free.
       if (!spend()) {
         const t = now();
         // a plugin in a loop would otherwise file one complaint per refused call
@@ -89,6 +120,7 @@ export function createHostLoop({ ctx, post, budget = { perSecond: 60, burst: 120
         }
         return reply(id, { error: 'too many calls' });
       }
+      if (overCap(args, argsMax)) return reply(id, { error: 'arguments too large' });
       try {
         const value = await routeCall(ctx, { method, args });
         reply(id, { value });
