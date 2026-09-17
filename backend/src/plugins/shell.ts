@@ -24,8 +24,12 @@ const MAX_HEADERS = 50;
 const MAX_HEADER_LENGTH = 8 * 1024;
 /** Consecutive unanswered calls before we treat the registered shell as gone and let a new one in. */
 const MAX_FAILURES = 3;
-/** The shell answers with the body wrapped in a JSON envelope, which is bigger than the body itself. */
-const SHELL_REPLY_MAX = BODY_MAX * 1.5;
+/**
+ * The shell answers with the body wrapped in a JSON envelope. Escaping is what makes the envelope big, not the
+ * braces: a body of quotes, newlines or non-ASCII can triple in size as `\"`, `\n` and `\uXXXX`, so a body
+ * that is legitimately at BODY_MAX must still fit through here.
+ */
+const SHELL_REPLY_MAX = BODY_MAX * 3;
 /** A contested hello should not hang the route; the shell is on loopback and either answers at once or is gone. */
 const HELLO_PROBE_MS = 2_000;
 const REDIRECT_STATUS = [301, 302, 303, 307, 308];
@@ -79,13 +83,18 @@ function clean(value: unknown): string {
  * The single gate response headers pass through, whether they came off the wire here or out of the
  * shell's reply. Keys are lower-cased, cookies are dropped, everything unlisted is dropped, and the
  * count is capped so a hostile server cannot bury a plugin (or our logs) in headers.
+ *
+ * Headers are duck-typed, never `instanceof`: undici ships its own `Headers` class and Node's global one is a
+ * different class from a different copy of undici, so an identity check here silently drops every real header
+ * and leaves a plugin with nothing but the content-length we write ourselves.
  */
-export function safeResponseHeaders(input: Headers | Record<string, unknown> | unknown): Record<string, string> {
-  const entries: [unknown, unknown][] =
-    input instanceof Headers
-      ? [...input.entries()]
-      : input && typeof input === 'object'
-        ? Object.entries(input as Record<string, unknown>)
+export function safeResponseHeaders(input: unknown): Record<string, string> {
+  const bag = input as { entries?: () => Iterable<[unknown, unknown]> } | null | undefined;
+  const entries: Iterable<[unknown, unknown]> =
+    bag && typeof bag === 'object' && typeof bag.entries === 'function'
+      ? bag.entries()
+      : bag && typeof bag === 'object'
+        ? (Object.entries(bag as Record<string, unknown>) as [unknown, unknown][])
         : [];
   const out: Record<string, string> = {};
   for (const [rawKey, rawValue] of entries) {
@@ -214,6 +223,7 @@ export class ShellLink {
   private port: number | null = null;
   private token = '';
   private failures = 0;
+  private helloInFlight: Promise<void> | null = null;
   private dispatcher: unknown;
 
   // The default fetch must come from the same undici as `safeDispatcher`'s Agent: Node's global fetch is
@@ -235,6 +245,14 @@ export class ShellLink {
   async hello(port: number, token: string): Promise<void> {
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('hello needs a port');
     if (!token) throw new Error('hello needs a token');
+    // Two shells starting at once would otherwise both probe the same dead predecessor and both register, the
+    // later one winning by accident. They queue instead, and each re-checks the link once its turn comes.
+    const queued = (this.helloInFlight ?? Promise.resolve()).then(() => this.register(port, token));
+    this.helloInFlight = queued.catch(() => {});
+    return queued;
+  }
+
+  private async register(port: number, token: string): Promise<void> {
     if (this.available() && !(await this.stillThere())) this.goodbye();
     if (this.available()) return; // the registered shell answered: it keeps the link
     this.port = port;

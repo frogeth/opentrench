@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { makeSafeLookup, safeDispatcher, ShellLink } from './shell.js';
+import { Headers as UndiciHeaders } from 'undici';
+import { makeSafeLookup, safeDispatcher, safeResponseHeaders, ShellLink } from './shell.js';
 
 /** Tests that never reach the network do not need the real dispatcher; this stands in for it. */
 const noAgent = {} as unknown;
@@ -185,7 +186,7 @@ describe('ShellLink', () => {
   });
   it('a shell that answers badly keeps the link; only silence takes it away', async () => {
     let dead = false;
-    const oversize = JSON.stringify({ status: 200, headers: {}, body: 'x'.repeat(7 * 1024 * 1024) });
+    const oversize = JSON.stringify({ status: 200, headers: {}, body: 'x'.repeat(13 * 1024 * 1024) });
     const fetchImpl = vi.fn(async () => {
       if (dead) throw new Error('ECONNREFUSED');
       return new Response(oversize, { status: 200 });
@@ -233,5 +234,41 @@ describe('ShellLink', () => {
       const refused = await new Promise<Error | null>((done) => lookup('sneaky.example', { all: true }, (e) => done(e as Error)));
       expect(refused?.message, address).toContain('local address');
     }
+  });
+
+  it('the header gate reads any headers object, not just the global Headers class', async () => {
+    // undici ships its own Headers, and Node's global one comes from a different copy of undici: an
+    // `instanceof` check here passes in the tests and drops every real header in production.
+    const foreign = new (class {
+      entries() {
+        return [
+          ['Content-Type', 'text/plain'],
+          ['Set-Cookie', 'a=b'],
+          ['X-Internal-Route', 'admin'],
+        ][Symbol.iterator]();
+      }
+    })();
+    expect(foreign).not.toBeInstanceOf(Headers);
+    expect(safeResponseHeaders(foreign)).toEqual({ 'content-type': 'text/plain' });
+
+    const undiciHeaders = new UndiciHeaders({ 'content-type': 'application/json', etag: 'W/"3"', 'x-internal-route': 'admin' });
+    undiciHeaders.append('set-cookie', 'sid=1');
+    expect(safeResponseHeaders(undiciHeaders)).toEqual({ 'content-type': 'application/json', etag: 'W/"3"' });
+
+    expect(safeResponseHeaders({ 'Retry-After': '30', 'set-cookie': 'sid=1' })).toEqual({ 'retry-after': '30' });
+  });
+  it('two shells arriving at once queue behind each other instead of both registering', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.startsWith('http://127.0.0.1:45678/')) throw new Error('ECONNREFUSED'); // the shell that died
+      return new Response(JSON.stringify({ signedIn: [] }), { status: 200 });
+    });
+    const link = new ShellLink(fetchImpl as any, noAgent);
+    await link.hello(45678, 'dead');
+    // both probe the dead one; without the queue the second would overwrite the first's registration
+    await Promise.all([link.hello(45679, 'first-up'), link.hello(45680, 'second-up')]);
+    await link.signedIn(['https://example.com']);
+    const last = fetchImpl.mock.calls.at(-1)!;
+    expect(last[0]).toBe('http://127.0.0.1:45679/status');
+    expect((last[1] as any).headers.authorization).toBe('Bearer first-up');
   });
 });
