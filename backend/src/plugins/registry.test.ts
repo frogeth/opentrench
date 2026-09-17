@@ -163,6 +163,17 @@ describe('PluginRegistry', () => {
     expect(reg.logs('hello-feed').length).toBe(200);
     expect(reg.logs('hello-feed')[0].text).toBe('line 50');
   });
+  it('caps a plugin at 32 distinct chats, but lets it rename the ones it has', () => {
+    const { dir, reg } = fresh();
+    fs.writeFileSync(path.join(dir, 'hello-feed.js'), FILE);
+    reg.load();
+    for (let i = 0; i < 32; i++) reg.noteChat('hello-feed', `plugin:hello-feed:c${i}`, `C${i}`);
+    expect(Object.keys(reg.list()[0].chats).length).toBe(32);
+    expect(() => reg.noteChat('hello-feed', 'plugin:hello-feed:c32', 'C32')).toThrow('too many chats (32 max)');
+    expect(Object.keys(reg.list()[0].chats).length).toBe(32);
+    reg.noteChat('hello-feed', 'plugin:hello-feed:c0', 'Renamed');
+    expect(reg.list()[0].chats['plugin:hello-feed:c0']).toBe('Renamed');
+  });
   it('storage is capped and settings/chats survive a reload of the state file', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ot-plugins-'));
     const file = path.join(dir, 'plugins-state.json');

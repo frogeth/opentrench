@@ -8,6 +8,8 @@ export interface PluginRecord {
 }
 const EMPTY = (): PluginRecord => ({ storage: {}, settings: {}, chats: {} });
 const MAX_STORAGE_BYTES = 256 * 1024;
+/** distinct chats one plugin may name; each one becomes a watch key and a row in the pickers */
+const CHATS_MAX = 32;
 /** Coalesce a burst of writes… */
 const DEBOUNCE_MS = 200;
 /** …but never let a steady stream of them hold the file back longer than this. */
@@ -52,7 +54,10 @@ export class PluginState {
     this.save();
   }
   noteChat(id: string, chatId: string, name: string): void {
-    this.ensure(id).chats[chatId] = name;
+    const p = this.ensure(id);
+    // one plugin naming endless chats would fill the config's watch list and the sidebar; renames are free
+    if (p.chats[chatId] === undefined && Object.keys(p.chats).length >= CHATS_MAX) throw new Error(`too many chats (${CHATS_MAX} max)`);
+    p.chats[chatId] = name;
     this.save();
   }
   forget(id: string): void {

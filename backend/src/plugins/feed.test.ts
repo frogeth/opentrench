@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { PostLimiter, chatIdFor, toFeedMessage } from './feed.js';
 
-const M = { id: 'hello-feed', name: 'Hello feed', version: '1.0.0', api: 1, sites: [], permissions: ['feed:write' as const], ui: false, description: '' };
+const M = { id: 'hello-feed', name: 'Hello feed', version: '1.0.0', api: 1, sites: ['https://example.com'], permissions: ['feed:write' as const], ui: false, description: '' };
+/** the same plugin with nothing declared: every media URL is off-site for it */
+const NO_SITES = { ...M, sites: [] };
 
 describe('chatIdFor', () => {
   it('slugs the chat name to lowercase a-z0-9 and dashes, so the config key regexes accept it', () => {
@@ -26,11 +28,16 @@ describe('toFeedMessage', () => {
     expect(() => toFeedMessage('p', M, { id: '1', chat: '', author: 'a', text: 'x' })).toThrow('chat');
     expect(() => toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: '' })).toThrow('text');
     expect(() => toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', link: 'javascript:alert(1)' })).toThrow('link');
+    expect(() => toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', attachments: 'nope' as any })).toThrow('attachments must be an array');
     expect(() => toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', attachments: [{ url: 'ftp://x' }] })).toThrow('attachment');
     expect(toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', link: 'https://example.com/x', avatar: 'https://example.com/a.png' })).toMatchObject({ link: 'https://example.com/x', avatar: 'https://example.com/a.png' });
     expect(toFeedMessage('p', M, { id: '1', chat: 'c', author: '', text: 'x' }).author).toBe('Hello feed');
     expect(toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a b\n\nc', text: 'x' }).author).toBe('a b c');
     expect(toFeedMessage('p', M, { id: '1', chat: ' Chat‮name ', author: 'a', text: 'x' }).chatName).toBe('Chat name');
+    // ZWJ holds an emoji sequence together, so sanitizing must not break it the way stripping all of \p{Cf} would
+    expect(toFeedMessage('p', M, { id: '1', chat: 'c', author: '👩\u200d🚀 astro', text: 'x' }).author).toBe('👩\u200d🚀 astro');
+    // an id is a dedupe key: control chars go, inner spacing stays
+    expect(toFeedMessage('p', M, { id: ' a\u202e b ', chat: 'c', author: 'a', text: 'x' }).id).toBe('plugin:p:c:a b');
     const a = toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: '', attachments: [{ url: 'https://example.com/i.png' }, { url: 'https://example.com/v.mp4', kind: 'video' }] });
     expect(a.hasAttachment).toBe(true);
     expect(a.media?.map((x) => x.kind)).toEqual(['image', 'video']);
@@ -40,6 +47,24 @@ describe('toFeedMessage', () => {
     expect(toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', ts: now + 3_600_000 })).toMatchObject({ ts: expect.any(Number) });
     expect(toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', ts: now + 3_600_000 }).ts).toBeLessThanOrEqual(Date.now() + 60_000);
     expect(toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', ts: -5 }).ts).toBeGreaterThanOrEqual(now);
+  });
+});
+
+describe('media and link URLs', () => {
+  it('media loads on its own, so it must be https on a declared site; anything else would be a beacon', () => {
+    expect(toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', avatar: 'https://example.com/a.png' }).avatar).toBe('https://example.com/a.png');
+    expect(() => toFeedMessage('p', NO_SITES, { id: '1', chat: 'c', author: 'a', text: 'x', avatar: 'https://example.com/a.png' })).toThrow("avatar must be https on one of the plugin's sites");
+    expect(() => toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', avatar: 'https://tracker.example.org/a.png' })).toThrow('avatar');
+    expect(() => toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', avatar: 'http://example.com/a.png' })).toThrow('avatar');
+    expect(() => toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', attachments: [{ url: 'https://tracker.example.org/i.png' }] })).toThrow("attachment url must be https on one of the plugin's sites");
+    // a declared site with a port or another path is still one origin: the origin is what must match
+    expect(() => toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', avatar: 'https://example.com:8443/a.png' })).toThrow('avatar');
+  });
+  it('a link is click-gated, so http is fine, but never at a local or private address', () => {
+    expect(toFeedMessage('p', NO_SITES, { id: '1', chat: 'c', author: 'a', text: 'x', link: 'http://news.example.org/x' }).link).toBe('http://news.example.org/x');
+    expect(() => toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', link: 'http://127.0.0.1:3210/x' })).toThrow('link must not point at a local address');
+    for (const host of ['localhost:3210', '10.0.0.5', '192.168.1.9', '172.20.0.1', '169.254.169.254', '[::1]:3210'])
+      expect(() => toFeedMessage('p', M, { id: '1', chat: 'c', author: 'a', text: 'x', link: `http://${host}/x` })).toThrow('local address');
   });
 });
 

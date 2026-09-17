@@ -328,6 +328,8 @@ export class MessageHub extends EventEmitter {
 
   push(msg: FeedMessage, meta?: ExtractedMeta): void {
     if (this.buffer.some((m) => m.id === msg.id)) return; // already have it (e.g. our own send echoed twice)
+    // a plugin writes its own messages, so it could claim the user was pinged; only the platforms may say that
+    if (msg.source === 'plugin') msg.mention = undefined;
     msg.contracts = contractsOf(msg.text, msg.isBot);
     this.register(msg, meta, true);
     this.buffer.push(msg);
@@ -547,7 +549,8 @@ export class MessageHub extends EventEmitter {
         }
         if (live) {
           this.enrich(t);
-          if (this.isFavorite(msg.author)) {
+          // …but a plugin picks its own author name, so it must not be able to ping as someone's favorite
+          if (msg.source !== 'plugin' && this.isFavorite(msg.author)) {
             this.emit('event', { type: 'ping', token: { ...t }, msg } satisfies ServerEvent);
             this.trackFavoriteCall(msg, t);
           }
