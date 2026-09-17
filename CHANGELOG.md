@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.11.0 — 2026-09-17
+
 - Live prices straight from the pool for every token on your screen, every 3 seconds: Uniswap v2 (reserves), v3 (slot0), v4 (PoolManager storage) and Pons curves on EVM chains; pump.fun curves, PumpSwap, Raydium (AMM v4, CPMM, CLMM, LaunchLab), Meteora (DLMM, DAMM v2, DBC) and Orca on Solana. One batched RPC per chain. Cards show a green dot when the number is live; the app tells the backend which tokens are on screen, and nothing off-screen is read.
 - What a pool is quoted in is priced on-chain as well: stables are a dollar, ETH / SOL / BNB / POL / AVAX come from a reference pool on their home chain, and anything else (a tokenized stock on Robinhood, WHYPE, a meme used as a quote) is priced through its own main pool, found once through Dexscreener's directory and then read live. No CoinGecko in the pricer.
 - Market caps follow the supply the API sources implied, so the number moves live without jumping when the source switches; the chain's supply is the fallback. Dexscreener and GeckoTerminal keep filling liquidity, volume and 24h change, and still price off-screen tokens.
