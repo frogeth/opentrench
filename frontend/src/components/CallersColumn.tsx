@@ -123,7 +123,7 @@ export function CallersList({
             <div className={`caller-row${i < 3 ? ' caller-top' : ''}`} onClick={() => onSearch(r.name)}>
               <span className="caller-who">
                 <span className="caller-rank">{i + 1}</span>
-                <Avatar src={r.avatar} name={r.name} size={24} crown={isFavorite(favorites, r.name)} />
+                <Avatar src={r.avatar} name={r.name} size={24} crown={r.source !== 'plugin' && isFavorite(favorites, r.name)} />
                 <b>{r.name}</b>
               </span>
               <span>{r.n}</span>

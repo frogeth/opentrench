@@ -682,8 +682,12 @@ export default function App() {
     api.config().then(setCfg).catch(() => {});
   };
   // The plugin list keeps itself current from the `plugins` event; this is the first read, and again
-  // whenever the socket comes back (whatever changed while it was down came with no event).
+  // whenever the socket comes back (whatever changed while it was down came with no event). A drop
+  // is not a reason to ask: there is nothing on the other end.
+  const pluginsAsked = useRef(false);
   useEffect(() => {
+    if (!wsOpen && pluginsAsked.current) return;
+    pluginsAsked.current = true;
     api.plugins().then(setPlugins).catch(() => {});
   }, [wsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(reloadLists, [status.discord, status.telegram]);
@@ -1529,7 +1533,7 @@ export default function App() {
           counts={chatCounts}
           collapsed={paneHidden}
           onView={setView}
-          onAdd={() => setAddOpen(view.rail.startsWith('t:') ? 'telegram' : 'discord')}
+          onAdd={() => setAddOpen(view.rail.startsWith('t:') || view.rail.startsWith('p:') ? 'telegram' : 'discord')}
           onReorder={reorderRail}
           onCollapse={setPane}
         />
@@ -1607,7 +1611,7 @@ export default function App() {
                     onScroll={onScroll}
                     footer={footer}
                     extra={<FeedToggles />}
-                    composer={view.preview ? undefined : composerFor('focused', view.chat ? new Set([view.chat.name]) : null)}
+                    composer={view.preview || view.chat?.source === 'plugin' ? undefined : composerFor('focused', view.chat ? new Set([view.chat.name]) : null)}
                   >
                     {body}
                   </Column>

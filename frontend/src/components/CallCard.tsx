@@ -191,7 +191,7 @@ export function CallCard({
             <span className="call-who">
               <Avatar src={c.avatar} name={c.author} size={16} crown={c.source !== 'plugin' && isFavorite(favorites, c.author)} />
               <span className="call-author">{c.author}</span>
-              <AuthorMenu author={c.author} link={c.link} favorite={isFavorite(favorites, c.author)} />
+              <AuthorMenu author={c.author} link={c.link} favorite={c.source !== 'plugin' && isFavorite(favorites, c.author)} />
             </span>
             <span className="call-dot">·</span>
             <span className={`call-chat${onJump ? ' call-chat-jump' : ''}`} title={onJump ? `${c.chatName} · show this call in the chat` : c.chatName} onClick={onJump ? () => onJump(c.msgId, c.link) : undefined}>

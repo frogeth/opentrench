@@ -1,5 +1,8 @@
 import type { PluginInfo, Source } from './types';
 
+/** what a plugin's log lines are tagged with (the backend keeps these three) */
+export type PluginLogLevel = 'info' | 'warn' | 'error';
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method,
@@ -321,8 +324,8 @@ export const api = {
     }
     return text;
   },
-  pluginLogs: (id: string) => req<{ ts: number; level: string; text: string }[]>('GET', `/plugins/${encodeURIComponent(id)}/logs`),
-  pluginLog: (id: string, level: string, text: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/log`, { level, text }),
+  pluginLogs: (id: string) => req<{ ts: number; level: PluginLogLevel; text: string }[]>('GET', `/plugins/${encodeURIComponent(id)}/logs`),
+  pluginLog: (id: string, level: PluginLogLevel, text: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/log`, { level, text }),
   pluginPost: (id: string, post: unknown) => req<{ ok: true; id: string }>('POST', `/plugins/${encodeURIComponent(id)}/post`, post),
   pluginPatch: (id: string, msgId: string, patch: unknown) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/patch`, { ...(patch as object), id: msgId }),
   pluginStorage: (id: string) => req<Record<string, unknown>>('GET', `/plugins/${encodeURIComponent(id)}/storage`),
