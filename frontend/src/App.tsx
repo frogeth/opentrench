@@ -25,6 +25,9 @@ import { PingsPanel } from './components/PingsPanel';
 import { BridgeNotice } from './components/BridgeNotice';
 import { ONBOARDED_KEY, Onboarding } from './components/Onboarding';
 import { Lightbox } from './components/Lightbox';
+import { PluginFrame } from './plugins/PluginFrame';
+import { PluginHost } from './plugins/PluginHost';
+import type { PluginContext, SettingField } from './plugins/route';
 import type { ShareItem } from './components/ShareModal';
 import { displayChatName, normTg, platformChatNames, watchKeyOf } from './feedKeys';
 
@@ -38,7 +41,7 @@ import { Logo } from './components/Logo';
 import { Icon } from './components/Icon';
 import { Avatar } from './components/Avatar';
 import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
-import { type ChartProvider } from './format';
+import { copyText, type ChartProvider } from './format';
 import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, thesisFollowUps, tokenPasses } from './filters';
 import type { BotMessage, FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
@@ -701,6 +704,51 @@ export default function App() {
     lastPluginChatKeys.current = pluginChatKeys;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pluginChatKeys]);
+  /** a buy or a research a plugin asked for, waiting for the user's own click; one per plugin, the newest */
+  const [pluginPrompts, setPluginPrompts] = useState<{ plugin: string; kind: 'buy' | 'research'; address: string }[]>([]);
+  /** what a plugin just put on the clipboard, with its name on it */
+  const [pluginToast, setPluginToast] = useState<string | null>(null);
+  /** a plugin's last error, shown beside it in Settings → Plugins */
+  const [pluginErrors, setPluginErrors] = useState<Record<string, string>>({});
+  /** the settings form each plugin declared through `ot.settings.schema` */
+  const [pluginSchemas, setPluginSchemas] = useState<Record<string, SettingField[]>>({});
+  /** a plugin column's title, subtitle and badge, as its plugin sets them */
+  const [pluginTitles, setPluginTitles] = useState<Record<string, string>>({});
+  const [pluginSubs, setPluginSubs] = useState<Record<string, string>>({});
+  const [pluginBadges, setPluginBadges] = useState<Record<string, number | undefined>>({});
+  const pluginToastTimer = useRef<number>();
+  useEffect(() => () => window.clearTimeout(pluginToastTimer.current), []);
+  const showPluginToast = (text: string) => {
+    setPluginToast(text);
+    window.clearTimeout(pluginToastTimer.current);
+    pluginToastTimer.current = window.setTimeout(() => setPluginToast(null), 2500);
+  };
+  /**
+   * What a plugin may do to the app, bound to the plugin that asked for it. `buy` and `research` never
+   * reach a bot on their own: they raise the bar below and wait for the user's click — a buy that fired
+   * by itself would be a plugin spending your money. `copy` writes the clipboard and says who did it.
+   */
+  const pluginActions = (plugin: string): PluginContext['actions'] => ({
+    openToken: setOpenToken,
+    jump: (id) => jumpToMessage(id),
+    buy: (address) => setPluginPrompts((l) => [...l.filter((p) => p.plugin !== plugin), { plugin, kind: 'buy', address }]),
+    research: (address) => setPluginPrompts((l) => [...l.filter((p) => p.plugin !== plugin), { plugin, kind: 'research', address }]),
+    copy: (text) => void copyText(text).then((ok) => ok && showPluginToast(`copied by ${pluginNames[plugin] ?? plugin}: ${text.slice(0, 24)}`)),
+    // the router already put the plugin's name in front of the title; it is not prefixed twice here
+    notify: (title, body) => {
+      if (notify !== 'granted') return;
+      try {
+        new Notification(title, { body });
+      } catch {
+        /* the browser refused it */
+      }
+    },
+  });
+  /** Open sends the plugin's address down the normal buy/research path; Ignore drops it. */
+  const answerPluginPrompt = (p: { plugin: string; kind: 'buy' | 'research'; address: string }, open: boolean) => {
+    setPluginPrompts((l) => l.filter((x) => x.plugin !== p.plugin));
+    if (open) sendToBot(p.kind === 'buy' ? buyProvider : 'salpha', p.address);
+  };
   useEffect(() => {
     if (status.discord === 'connected') api.discordChannels().then(setChannels).catch(() => {});
   }, [status.discord]);
@@ -1286,6 +1334,37 @@ export default function App() {
         </Column>
       );
     }
+    if (col.type === 'plugin') {
+      const p = plugins.find((x) => x.id === col.plugin);
+      return (
+        <Column
+          key={col.id}
+          title={pluginTitles[col.id] ?? col.title}
+          subtitle={pluginSubs[col.id] ?? (p?.manifest ? `${p.manifest.name} · plugin` : 'plugin not installed')}
+          kind="plugin"
+          className="col-plugin"
+          count={pluginBadges[col.id]}
+          {...actions}
+        >
+          {p?.enabled && p.manifest ? (
+            <PluginFrame
+              plugin={p}
+              messages={messages}
+              tokens={tokens}
+              actions={pluginActions(p.id)}
+              visible
+              onTitle={(t) => setPluginTitles((m) => ({ ...m, [col.id]: t }))}
+              onSubtitle={(t) => setPluginSubs((m) => ({ ...m, [col.id]: t }))}
+              onBadge={(n) => setPluginBadges((m) => ({ ...m, [col.id]: n ?? undefined }))}
+              onSchema={(schema) => setPluginSchemas((m) => ({ ...m, [p.id]: schema }))}
+              onError={(t) => setPluginErrors((e) => ({ ...e, [p.id]: t }))}
+            />
+          ) : (
+            <div className="empty">{p ? 'This plugin is not enabled. Enable it in ⚙ → Plugins.' : 'Plugin not installed. Add it in ⚙ → Plugins.'}</div>
+          )}
+        </Column>
+      );
+    }
     if (col.type === 'trending') {
       const win = trendWindow(col.window);
       const setWin = (w: (typeof TREND_WINDOWS)[number]) => saveColumnsDebounced(updateColumn(col.id, (c) => ({ ...c, window: w })));
@@ -1723,7 +1802,35 @@ export default function App() {
         />
       )}
       <Lightbox />
+      {/* every enabled plugin without a column of its own runs here, out of sight */}
+      <PluginHost
+        plugins={plugins}
+        messages={messages}
+        tokens={tokens}
+        actionsFor={pluginActions}
+        onSchema={(id, schema) => setPluginSchemas((m) => ({ ...m, [id]: schema }))}
+        onError={(id, t) => setPluginErrors((e) => ({ ...e, [id]: t }))}
+      />
       {lookingUp && <div className="lookup-toast">looking up {lookingUp.slice(0, 6)}…{lookingUp.slice(-4)}</div>}
+      {pluginToast && <div className="lookup-toast plugin-toast">{pluginToast}</div>}
+      {pluginPrompts.length > 0 && (
+        <div className="plugin-prompt">
+          {pluginPrompts.map((p) => (
+            <div key={p.plugin} className="plugin-prompt-row">
+              <span>
+                <Icon name="plug" size={12} /> <b>{pluginNames[p.plugin] ?? p.plugin}</b> wants to open {p.kind === 'buy' ? 'a buy' : 'research'} for{' '}
+                <code className="tg-code">
+                  {p.address.slice(0, 6)}…{p.address.slice(-4)}
+                </code>
+              </span>
+              <button className="primary" onClick={() => answerPluginPrompt(p, true)}>
+                Open
+              </button>
+              <button onClick={() => answerPluginPrompt(p, false)}>Ignore</button>
+            </div>
+          ))}
+        </div>
+      )}
       {share && <ShareModal item={share} watched={watched} channels={channels} canSend={canSend} onClose={() => setShare(null)} />}
       {caMenu && (
         <div className="ca-menu-backdrop" onMouseDown={() => setCaMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCaMenu(null); }}>

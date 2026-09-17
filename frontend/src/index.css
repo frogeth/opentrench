@@ -1398,3 +1398,13 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 /* the mint feed holds still under the pointer; arrivals queue behind this pill */
 .mint-pending { position: sticky; top: 4px; z-index: 4; display: block; margin: 4px auto; background: var(--panel); border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 3px 10px; font-size: 11px; cursor: pointer; }
 .mint-pending:hover { background: var(--hover); }
+
+/* ---------- plugins ---------- */
+.plugin-frame { width: 100%; height: 100%; border: none; background: var(--bg); display: block; }
+.plugin-frame-hidden { position: fixed; width: 0; height: 0; opacity: 0; pointer-events: none; }
+.col-plugin .col-body { display: flex; }
+/* a plugin asking for a buy or a research: the user's click, never the plugin's */
+.plugin-prompt { position: fixed; top: 96px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 6px; }
+.plugin-prompt-row { display: flex; align-items: center; gap: 10px; background: var(--panel-2); border: 1px solid rgba(65, 200, 146, 0.5); border-radius: 12px; padding: 8px 12px; font-size: 13px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); }
+.plugin-prompt-row span { display: inline-flex; align-items: center; gap: 6px; }
+.plugin-toast { bottom: 48px; }

@@ -142,7 +142,7 @@ export async function routeCall(ctx: PluginContext, call: PluginCall): Promise<u
       ctx.ui.setTitle(strOrEmpty(a0, 'title', 60));
       return null;
     case 'ui.setSubtitle':
-      ctx.ui.setSubtitle(typeof a0 === 'string' ? a0.slice(0, 120) : '');
+      ctx.ui.setSubtitle(strOrEmpty(a0, 'subtitle', 120));
       return null;
     case 'ui.badge':
       ctx.ui.badge(a0 === null || a0 === undefined ? null : Math.min(9999, Math.max(0, Math.trunc(Number(a0)) || 0)));
@@ -173,7 +173,7 @@ export async function routeCall(ctx: PluginContext, call: PluginCall): Promise<u
     // the plugin's name leads the title: a notification cannot be dressed up as the app's own
     case 'actions.notify':
       need(ctx, 'actions');
-      ctx.actions.notify(`[${ctx.manifest.name}] ${str(a0, 'title', 120)}`, typeof a1 === 'string' ? a1.slice(0, 400) : '');
+      ctx.actions.notify(`[${ctx.manifest.name}] ${str(a0, 'title', 120)}`.slice(0, 120), typeof a1 === 'string' ? a1.slice(0, 400) : '');
       return null;
     case 'log':
       ctx.api
