@@ -189,6 +189,10 @@ export interface MaskedConfig {
 export interface MarketStatus {
   alchemy: { hasKey: boolean; chains: string[]; probedAt?: number; probing: boolean; error?: string };
   rpc: Record<string, string>;
+  /** dollar prices of the quote assets read on-chain, by `${network}:${address}` */
+  quotes: Record<string, number>;
+  /** tokens some screen is showing right now (what the pricer reads) */
+  visible: number;
   chains: {
     network: string;
     name: string;
@@ -354,6 +358,8 @@ export const api = {
   opensea: () => req<MaskedConfig['opensea']>('GET', '/opensea'),
   setOpenSeaWallet: (key: string) => req<MaskedConfig['opensea']>('PUT', '/opensea/wallet', { key }),
   market: () => req<MarketStatus>('GET', '/market'),
+  /** the tokens on this screen right now: the live pricer reads exactly these pools */
+  setVisible: (client: string, addresses: string[]) => req<{ ok: true }>('PUT', '/market/visible', { client, addresses }),
   setAlchemyKey: (key: string) => req<MarketStatus>('PUT', '/market/alchemy', { key }),
   setMarketRpc: (chain: string, url: string) => req<MarketStatus>('PUT', '/market/rpc', { chain, url }),
   osQuote: (locator: string, quantity: number, chain?: string) => req<import('./types').MintJob>('POST', '/osmint/quote', { locator, quantity, chain }),

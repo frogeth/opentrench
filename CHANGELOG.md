@@ -7,9 +7,11 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
-- Live prices and market caps straight from the pool: Uniswap v2 (reserves), v3 (slot0), v4 (PoolManager storage) and pump.fun bonding curves, one batched RPC per chain, every 5 s for the last hour's calls and every 30 s for the rest of the day. Cards show a green dot when the number is live; Dexscreener and GeckoTerminal keep filling in liquidity, volume and 24h change, and still price whatever the pools cannot (Raydium, PumpSwap, Meteora, pairs quoted in something that is not a native coin or a stable).
-- Settings → Feed → Market data: paste an Alchemy API key (probed once; used for every chain it answers for) and/or a custom RPC per chain (beats Alchemy and the public endpoint). Per-chain status shows what each chain uses, how many tokens are live, and why the rest are skipped.
-- Tokens no API has described yet (Pons launches, fresh pairs) are priced as soon as their pool exists: the quote asset is read from the pair itself.
+- Live prices straight from the pool for every token on your screen, every 3 seconds: Uniswap v2 (reserves), v3 (slot0), v4 (PoolManager storage) and Pons curves on EVM chains; pump.fun curves, PumpSwap, Raydium (AMM v4, CPMM, CLMM, LaunchLab), Meteora (DLMM, DAMM v2, DBC) and Orca on Solana. One batched RPC per chain. Cards show a green dot when the number is live; the app tells the backend which tokens are on screen, and nothing off-screen is read.
+- What a pool is quoted in is priced on-chain as well: stables are a dollar, ETH / SOL / BNB / POL / AVAX come from a reference pool on their home chain, and anything else (a tokenized stock on Robinhood, WHYPE, a meme used as a quote) is priced through its own main pool, found once through Dexscreener's directory and then read live. No CoinGecko in the pricer.
+- Market caps follow the supply the API sources implied, so the number moves live without jumping when the source switches; the chain's supply is the fallback. Dexscreener and GeckoTerminal keep filling liquidity, volume and 24h change, and still price off-screen tokens.
+- One RPC table for everything on-chain, under Settings → Feed → Market data: paste an Alchemy API key (probed once; used for every chain it answers for, Robinhood Chain and HyperEVM included) and/or a custom RPC per chain, which beats Alchemy and the public endpoint. NFT mints use the same table. Per-chain status shows the source in use, how many tokens are live, and why the rest are skipped.
+- The feed no longer sends a token event when a refresh changed nothing (it was ~80 events a second with the pricer on, and the UI spent its time re-sorting instead of painting).
 
 ## v0.10.0 — 2026-09-17
 

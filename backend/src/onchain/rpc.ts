@@ -84,17 +84,22 @@ export async function evmChainId(url: string, fetchImpl: FetchLike = fetch as un
   }
 }
 
+export interface SolanaAccount {
+  owner: string;
+  data: Uint8Array;
+}
 /** Solana getMultipleAccounts (base64); results align with `pubkeys`, undefined for missing accounts. */
-export async function solanaAccounts(url: string, pubkeys: string[], fetchImpl: FetchLike = fetch as unknown as FetchLike): Promise<(Uint8Array | undefined)[]> {
-  const out: (Uint8Array | undefined)[] = new Array(pubkeys.length).fill(undefined);
+export async function solanaAccounts(url: string, pubkeys: string[], fetchImpl: FetchLike = fetch as unknown as FetchLike): Promise<(SolanaAccount | undefined)[]> {
+  const out: (SolanaAccount | undefined)[] = new Array(pubkeys.length).fill(undefined);
   const SOL_CHUNK = 100;
   for (let start = 0; start < pubkeys.length; start += SOL_CHUNK) {
     const slice = pubkeys.slice(start, start + SOL_CHUNK);
     const json: any = await post(fetchImpl, url, { jsonrpc: '2.0', id: 1, method: 'getMultipleAccounts', params: [slice, { encoding: 'base64', commitment: 'processed' }] });
+    if (json?.error) throw new Error(errText(json.error));
     const values: any[] = Array.isArray(json?.result?.value) ? json.result.value : [];
     values.forEach((v, i) => {
       const b64 = v?.data?.[0];
-      if (typeof b64 === 'string') out[start + i] = new Uint8Array(Buffer.from(b64, 'base64'));
+      if (typeof b64 === 'string') out[start + i] = { owner: String(v.owner ?? ''), data: new Uint8Array(Buffer.from(b64, 'base64')) };
     });
   }
   return out;

@@ -1,4 +1,6 @@
+import type React from 'react';
 import { useMemo } from 'react';
+import { useVisibleToken } from '../visible';
 import type { CallRecord, TokenInfo } from '../types';
 import { money, timeAgo } from '../format';
 import { Avatar } from './Avatar';
@@ -94,6 +96,16 @@ function TokenCalls({ r, now, onJump }: { r: Row; now: number; onJump?: (msgId: 
 }
 
 /** The trending body: rank, token, calls in the window, entry MC, current MC, multiplier, last call. */
+/** a trending row is a card with a price: it counts as on screen for the live pricer */
+function TrendRow({ address, children, ...rest }: { address: string; children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
+  const ref = useVisibleToken(address);
+  return (
+    <div ref={ref} {...rest}>
+      {children}
+    </div>
+  );
+}
+
 export function TrendingList({
   tokens,
   window: windowKey,
@@ -126,7 +138,7 @@ export function TrendingList({
       {rows.map((r, i) => (
         <VirtualItem key={r.t.address} id={`trend:${r.t.address}`} estimate={38}>
           <HoverCard width={340} card={<TokenCalls r={r} now={now} onJump={onJump} />}>
-            <div className={`trend-row${i < 3 ? ' caller-top' : ''}`} onClick={() => onSelect(r.t.address)} title="open the token: chart, every call, buy">
+            <TrendRow address={r.t.address} className={`trend-row${i < 3 ? ' caller-top' : ''}`} onClick={() => onSelect(r.t.address)} title="open the token: chart, every call, buy">
               <div className="trend-main">
               <span className="trend-who">
                 <span className="caller-rank">{i + 1}</span>
@@ -169,7 +181,7 @@ export function TrendingList({
                   <span className="muted">{r.callers.length > 5 ? `+${r.callers.length - 5}` : ''}</span>
                 </span>
               </div>
-            </div>
+            </TrendRow>
           </HoverCard>
         </VirtualItem>
       ))}

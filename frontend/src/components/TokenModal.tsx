@@ -1,4 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useAlwaysVisible } from '../visible';
 import { LiveDot } from './LiveDot';
 import { createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import type { CallRecord, TokenInfo } from '../types';
@@ -50,6 +51,7 @@ export function TokenModal({ t, now, favorites, me = [], onClose, onShare, onBuy
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
 
+  useAlwaysVisible(t.address);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);

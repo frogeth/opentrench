@@ -1,4 +1,5 @@
 import { useContext, useState } from 'react';
+import { useVisibleToken } from '../visible';
 import { LiveDot } from './LiveDot';
 import type { CallRecord, TokenInfo } from '../types';
 import { chartEmbedUrl, copyText, isFavorite, money, price, shortAddr, telegramShareUrl, timeAgo, type ChartProvider } from '../format';
@@ -105,6 +106,8 @@ export function CallCard({
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [imgBroken, setImgBroken] = useState(false);
+  const rowRef = useVisibleToken(t.address);
+  const cardRef = useVisibleToken(t.address);
   const hasPrice = t.priceUsd !== undefined || t.marketCap !== undefined;
   const copy = async () => {
     await copyText(t.address);
@@ -138,6 +141,7 @@ export function CallCard({
   if (collapsed && !peek) {
     return (
       <div
+        ref={rowRef}
         id={`call-${t.address}`}
         className={`call call-row${selected ? ' call-selected' : ''}${hidden ? ' call-hidden' : ''}${hot}`}
         title="click to unfold"
@@ -183,7 +187,7 @@ export function CallCard({
   }
 
   return (
-    <div id={`call-${t.address}`} className={`call${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${isNew ? ' call-new' : ''}${onSeen && !seen ? ' call-unseen' : ''}${hidden ? ' call-hidden' : ''}${hot}`}>
+    <div ref={cardRef} id={`call-${t.address}`} className={`call${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${isNew ? ' call-new' : ''}${onSeen && !seen ? ' call-unseen' : ''}${hidden ? ' call-hidden' : ''}${hot}`}>
       {t.seen >= 2 && <span key={t.lastCallTs} className="call-pulse" />}
 
       {/* 1 · caller meta */}

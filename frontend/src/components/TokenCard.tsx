@@ -1,4 +1,5 @@
 import { netLabel } from '../format';
+import { useVisibleToken } from '../visible';
 import { LiveDot } from './LiveDot';
 import { useState } from 'react';
 import type { Contract, TokenInfo } from '../types';
@@ -21,6 +22,7 @@ function price(n?: number): string | null {
 }
 
 export function TokenCard({ c, t }: { c: Contract; t?: TokenInfo }) {
+  const ref = useVisibleToken(t?.address ?? c.address);
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const short = `${c.address.slice(0, 4)}…${c.address.slice(-4)}`;
@@ -46,7 +48,7 @@ export function TokenCard({ c, t }: { c: Contract; t?: TokenInfo }) {
   ];
 
   return (
-    <div className={`token token-${c.chain}${showChart ? ' token-open' : ''}`}>
+    <div ref={ref} className={`token token-${c.chain}${showChart ? ' token-open' : ''}`}>
       <div className="token-row">
         {t?.imageUrl ? (
           <img className="token-img" src={t.imageUrl} alt="" loading="lazy" />

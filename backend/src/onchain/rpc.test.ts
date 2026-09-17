@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import { evmCalls, evmCallsDetailed, evmChainId, isRevert, solanaAccounts, solanaAlive } from './rpc.js';
-import { createQuoteSource } from './quotes.js';
 
 const reply = (body: unknown, ok = true) => vi.fn(async () => ({ ok, status: ok ? 200 : 500, json: async () => body }));
 
@@ -69,9 +68,9 @@ describe('evm batch calls', () => {
 
 describe('solana', () => {
   it('decodes base64 account data and marks missing accounts', async () => {
-    const f = reply({ result: { value: [{ data: [Buffer.from([1, 2, 3]).toString('base64'), 'base64'] }, null] } });
+    const f = reply({ result: { value: [{ owner: 'Prog', data: [Buffer.from([1, 2, 3]).toString('base64'), 'base64'] }, null] } });
     const r = await solanaAccounts('https://sol', ['A', 'B'], f);
-    expect([...r[0]!]).toEqual([1, 2, 3]);
+    expect([...r[0]!.data]).toEqual([1, 2, 3]);
     expect(r[1]).toBeUndefined();
     expect(JSON.parse((f.mock.calls[0] as any)[1].body).params[0]).toEqual(['A', 'B']);
   });
@@ -81,31 +80,3 @@ describe('solana', () => {
   });
 });
 
-describe('quotes', () => {
-  it('stables are a dollar, natives come from one CoinGecko call, unknown symbols are undefined', async () => {
-    const f = vi.fn(async (url: string) => ({ ok: true, status: 200, json: async () => ({ ethereum: { usd: 3000 }, solana: { usd: 150 } }) }));
-    const q = createQuoteSource(f as any);
-    expect(q.usd('USDC')).toBe(1);
-    expect(q.usd('usdt')).toBe(1);
-    await q.refresh();
-    expect(q.usd('WETH')).toBe(3000);
-    expect(q.usd('ETH')).toBe(3000);
-    expect(q.usd('SOL')).toBe(150);
-    expect(q.usd('PEPE')).toBeUndefined();
-    expect(q.usd('BNB')).toBeUndefined(); // not in the reply: no stale invention
-    expect(f).toHaveBeenCalledTimes(1);
-    expect((f.mock.calls[0] as any)[0]).toContain('ids=');
-    expect((f.mock.calls[0] as any)[0]).toContain('binancecoin');
-  });
-  it('keeps the last good prices when CoinGecko fails', async () => {
-    let ok = true;
-    const f = vi.fn(async () => ({ ok, status: ok ? 200 : 429, json: async () => ({ ethereum: { usd: 3000 } }) }));
-    const log = vi.fn();
-    const q = createQuoteSource(f as any, log);
-    await q.refresh();
-    ok = false;
-    await q.refresh();
-    expect(q.usd('ETH')).toBe(3000);
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('429'));
-  });
-});

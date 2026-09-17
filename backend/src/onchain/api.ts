@@ -25,6 +25,8 @@ export function createMarketApi(cfg: ConfigStore, endpoints: Endpoints, pricer: 
     return {
       alchemy: endpoints.alchemy(),
       rpc: cfg.get().rpc,
+      quotes: pricer.quotes(),
+      visible: pricer.visible().size,
       chains: Object.values(CHAINS).map((ch) => ({
         network: ch.network,
         name: ch.name,
@@ -67,6 +69,18 @@ export function createMarketApi(cfg: ConfigStore, endpoints: Endpoints, pricer: 
     } catch (e) {
       next(e);
     }
+  });
+  // a screen reports the tokens it is showing; the pricer reads exactly those pools
+  r.put('/market/visible', (req, res) => {
+    if (!guard(req, res)) return;
+    const client = String(req.body?.client ?? '').slice(0, 64);
+    const addresses = (Array.isArray(req.body?.addresses) ? req.body.addresses : []).filter((a: unknown) => typeof a === 'string' && a.length <= 64).slice(0, 500) as string[];
+    if (!client) {
+      res.status(400).json({ error: 'client id missing' });
+      return;
+    }
+    pricer.setVisible(client, addresses);
+    res.json({ ok: true });
   });
   r.put('/market/rpc', (req, res, next) => {
     try {

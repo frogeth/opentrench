@@ -665,8 +665,8 @@ function MarketDataSection({ onChange }: { onChange: () => void }) {
     <section>
       <h2>Market data</h2>
       <div className="hint">
-        Prices and market caps are read straight from the pool (Uniswap v2, v3, v4 and pump.fun curves) every 5 seconds for the last hour's calls, and every 30 seconds for the rest of the day. Cards with a green dot are live. Everything else on a card (liquidity, volume, 24h change) still comes from Dexscreener and GeckoTerminal, which also price whatever the pools cannot.
-        {liveNow > 0 && <> <b>{liveNow}</b> token{liveNow === 1 ? '' : 's'} live right now.</>}
+        Every token on your screen is priced straight from its pool every 3 seconds: Uniswap v2, v3 and v4 and Pons curves on EVM chains; pump.fun, PumpSwap, Raydium, Meteora and Orca on Solana. What a pool is quoted in is read on-chain too: stables count as a dollar, ETH, SOL and BNB come from their reference pools, and anything else (a tokenized stock, WHYPE) is priced through its own pool. Cards with a green dot are live. Off-screen tokens, liquidity, volume and 24h change still come from Dexscreener and GeckoTerminal.
+        {st.visible > 0 && <> <b>{st.visible}</b> on screen, <b>{liveNow}</b> live right now.</>}
       </div>
       <div className="hint" style={{ marginTop: 8 }}>
         Public RPCs work but rate-limit. An <b>Alchemy API key</b> is used for every chain Alchemy serves; a <b>custom RPC</b> per chain beats both. These are the RPCs for everything on-chain, NFT mints included.

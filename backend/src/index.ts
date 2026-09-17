@@ -13,6 +13,7 @@ import { createDefaultEnricher } from './enrich.js';
 import { createMarketRefresher } from './refresh.js';
 import { createBackfiller } from './backfill.js';
 import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
+import { fetchDexscreenerChain } from './dexscreener.js';
 import type { TokenInfo } from './types.js';
 import { DEFAULT_COVE_AFFILIATE, type CoveOptions } from './cove.js';
 import { Services } from './services.js';
@@ -27,7 +28,6 @@ import { createPluginsApi } from './plugins/api.js';
 import { jsonErrors } from './http.js';
 import { createEndpoints } from './onchain/endpoints.js';
 import { CHAINS } from './onchain/chains.js';
-import { createQuoteSource } from './onchain/quotes.js';
 import { createLivePricer } from './onchain/live.js';
 import { createMarketApi } from './onchain/api.js';
 
@@ -65,26 +65,31 @@ const HOT_REFRESH_MS = 10_000;
 const HOT_WINDOW_MS = 60 * 60 * 1000;
 const REFRESH_MS = 60_000;
 const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
-// Live prices from the pools themselves (Uniswap v2/v3/v4, pump.fun curves): one batched RPC per
-// chain, every 5s for the last hour's tokens and every 30s for the rest of the day. Custom RPC >
-// Alchemy key > public endpoint (see onchain/endpoints.ts).
-const LIVE_HOT_MS = 5_000;
-const LIVE_REST_MS = 30_000;
+// Live prices from the pools themselves (Uniswap v2/v3/v4, Pons curves, every Solana AMM and
+// curve in the feed): one batched RPC per chain every 3s, for exactly the tokens some screen is
+// showing (the app reports them; see onchain/live.ts). Custom RPC > Alchemy key > public endpoint.
+const LIVE_TICK_MS = 3_000;
 const endpoints = createEndpoints(() => ({ alchemyKey: cfg.get().marketData.alchemyKey, rpc: cfg.get().rpc }), fetch as any, (m) => console.warn('[market]', m));
-const quotes = createQuoteSource(fetch, (m) => console.warn('[market]', m));
-const pricer = createLivePricer({ endpoints, quotes, apply: (addr, info) => hub.updateMarket(addr, info), log: (m) => console.warn('[market]', m) });
-void quotes.refresh();
+const pricer = createLivePricer({
+  endpoints,
+  apply: (addr, info) => hub.updateMarket(addr, info),
+  // a quote asset's main pool: Dexscreener as a directory only; the price is then read on-chain
+  discover: async (network, address) => (await fetchDexscreenerChain(network, [address])).get(address) ?? (await fetchDexscreenerChain(network, [address])).get(address.toLowerCase()),
+  log: (m) => console.warn('[market]', m),
+});
 void endpoints.probeAlchemy(cfg.get().marketData.alchemyKey).then((st) => {
   if (st.hasKey) console.log(`[market] alchemy serves ${st.chains.length ? st.chains.join(', ') : 'nothing'}${st.error ? ` (${st.error})` : ''}`);
 });
-const livePool = (t: TokenInfo) => !!t.network && !!t.pairAddress;
-let liveTick = 0;
 setInterval(() => {
-  // every tick the hot hour; every sixth tick the whole day, in one batch so the two never collide
-  liveTick = (liveTick + 1) % (LIVE_REST_MS / LIVE_HOT_MS);
-  const window = liveTick === 0 ? ACTIVE_WINDOW_MS : HOT_WINDOW_MS;
-  void pricer.refresh(byNewest(mine(hub.activeTokens(window).filter(livePool))));
-}, LIVE_HOT_MS).unref();
+  const want = pricer.visible();
+  if (!want.size) return;
+  const list: TokenInfo[] = [];
+  for (const a of want) {
+    const t = hub.getToken(a);
+    if (t && t.network && t.pairAddress) list.push(t);
+  }
+  void pricer.refresh(list);
+}, LIVE_TICK_MS).unref();
 // An API answer with a price marks the price as the API's, so the live pricer knows the market cap
 // it sees next is theirs (it keeps its own caps on that source's supply).
 const applyMarket = (addr: string, info: Partial<TokenInfo>) => {
