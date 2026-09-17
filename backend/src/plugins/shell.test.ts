@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { makeSafeLookup, ShellLink } from './shell.js';
+import { makeSafeLookup, safeDispatcher, ShellLink } from './shell.js';
 
 /** Tests that never reach the network do not need the real dispatcher; this stands in for it. */
 const noAgent = {} as unknown;
@@ -28,7 +28,7 @@ describe('ShellLink', () => {
       );
     });
     const link = new ShellLink(fetchImpl as any, noAgent);
-    link.hello(45678, 'tok');
+    await link.hello(45678, 'tok');
     expect(link.available()).toBe(true);
     expect(await link.signedIn(['https://example.com', 'https://other.example'])).toEqual(['https://example.com']);
     const r = await link.fetch('https://example.com/api', { method: 'POST', body: '{}' }, true);
@@ -65,7 +65,7 @@ describe('ShellLink', () => {
       return new Response('plain', { status: 200 });
     });
     const link = new ShellLink(fetchImpl as any, noAgent);
-    link.hello(45678, 'tok');
+    await link.hello(45678, 'tok');
     expect(await link.signedIn(['https://example.com'])).toEqual([]);
     await expect(link.fetch('https://example.com/api', {}, true)).rejects.toThrow('shell');
   });
@@ -89,7 +89,7 @@ describe('ShellLink', () => {
         ),
     );
     const shell = new ShellLink(shellImpl as any, noAgent);
-    shell.hello(45678, 'tok');
+    await shell.hello(45678, 'tok');
     const viaShell = await shell.fetch('https://example.com/', {}, true);
     expect(viaShell.headers).toEqual({ etag: 'W/"7"', 'content-length': '2' });
   });
@@ -146,7 +146,7 @@ describe('ShellLink', () => {
   it('a shell reply that is not shaped like a response is refused', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ status: 'two hundred', headers: {}, body: 'x' }), { status: 200 }));
     const link = new ShellLink(fetchImpl as any, noAgent);
-    link.hello(45678, 'tok');
+    await link.hello(45678, 'tok');
     await expect(link.fetch('https://example.com/api', {}, true)).rejects.toThrow('bad status');
   });
   it('a second hello is ignored while the first shell answers, and taken once it has stopped', async () => {
@@ -156,8 +156,8 @@ describe('ShellLink', () => {
       return new Response(JSON.stringify({ signedIn: [] }), { status: 200 });
     });
     const link = new ShellLink(fetchImpl as any, noAgent);
-    link.hello(45678, 'first');
-    link.hello(45679, 'second');
+    await link.hello(45678, 'first');
+    await link.hello(45679, 'second'); // probes the first, which answers, so the first keeps the link
     await link.signedIn(['https://example.com']);
     expect(fetchImpl.mock.calls[0][0]).toBe('http://127.0.0.1:45678/status');
 
@@ -166,7 +166,7 @@ describe('ShellLink', () => {
     expect(link.available()).toBe(false);
 
     live = true;
-    link.hello(45679, 'second');
+    await link.hello(45679, 'second');
     expect(link.available()).toBe(true);
     await link.signedIn(['https://example.com']);
     const last = fetchImpl.mock.calls.at(-1)!;
@@ -175,5 +175,63 @@ describe('ShellLink', () => {
 
     link.goodbye();
     expect(link.available()).toBe(false);
+  });
+
+  it('a site fetch with no desktop app says so rather than quietly going out without the login', async () => {
+    const fetchImpl = vi.fn(async () => new Response('plain', { status: 200 }));
+    const link = new ShellLink(fetchImpl as any, noAgent);
+    await expect(link.fetch('https://example.com/api', {}, true)).rejects.toThrow('not connected');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  it('a shell that answers badly keeps the link; only silence takes it away', async () => {
+    let dead = false;
+    const oversize = JSON.stringify({ status: 200, headers: {}, body: 'x'.repeat(7 * 1024 * 1024) });
+    const fetchImpl = vi.fn(async () => {
+      if (dead) throw new Error('ECONNREFUSED');
+      return new Response(oversize, { status: 200 });
+    });
+    const link = new ShellLink(fetchImpl as any, noAgent);
+    await link.hello(45678, 'tok');
+    for (let i = 0; i < 3; i++) await expect(link.fetch('https://example.com/api', {}, true)).rejects.toThrow('size cap');
+    expect(link.available()).toBe(true); // a bad reply is this request going wrong, not the shell going away
+    dead = true;
+    for (let i = 0; i < 3; i++) await expect(link.fetch('https://example.com/api', {}, true)).rejects.toThrow('shell unreachable');
+    expect(link.available()).toBe(false);
+  });
+  it('a hello while the registered shell is silent takes the link over at once', async () => {
+    let live = true;
+    const fetchImpl = vi.fn(async () => {
+      if (!live) throw new Error('ECONNREFUSED');
+      return new Response(JSON.stringify({ signedIn: [] }), { status: 200 });
+    });
+    const link = new ShellLink(fetchImpl as any, noAgent);
+    await link.hello(45678, 'first');
+    live = false;
+    await link.hello(45680, 'restarted'); // the probe goes unanswered: no waiting out three real requests
+    expect(link.available()).toBe(true);
+    live = true;
+    await link.signedIn(['https://example.com']);
+    expect(fetchImpl.mock.calls.at(-1)![0]).toBe('http://127.0.0.1:45680/status');
+  });
+  it('the default fetch and the pinning agent come from the same undici', async () => {
+    // Node's global fetch carries its own bundled undici; handed our Agent it dies with 'invalid
+    // onRequestStart method' before it ever resolves a name. The resolver is injected rather than letting a
+    // real lookup of .invalid decide, because a resolver that hijacks NXDOMAIN would answer with an address.
+    const enotfound = ((host: string, _o: any, cb: any) => cb(Object.assign(new Error(`getaddrinfo ENOTFOUND ${host}`), { code: 'ENOTFOUND' }))) as any;
+    const link = new ShellLink(undefined, safeDispatcher(makeSafeLookup(enotfound)));
+    const err = await link.fetch('https://does-not-exist.invalid/', {}, false).then(
+      () => null,
+      (e) => e as Error & { cause?: { message?: string; code?: string } },
+    );
+    const reported = [err?.message, err?.cause?.message, err?.cause?.code].join(' | ');
+    expect(reported).not.toContain('onRequestStart');
+    expect(reported).toMatch(/ENOTFOUND|EAI_AGAIN|could not resolve/i);
+  });
+  it('an IPv4 smuggled inside an IPv6, and IPv6 multicast, are refused too', async () => {
+    for (const address of ['64:ff9b::7f00:1', '0:0:0:0:0:0:0:1', 'ff02::1', '::ffff:169.254.169.254']) {
+      const lookup = makeSafeLookup(((_h: string, _o: any, cb: any) => cb(null, [{ address, family: 6 }])) as any);
+      const refused = await new Promise<Error | null>((done) => lookup('sneaky.example', { all: true }, (e) => done(e as Error)));
+      expect(refused?.message, address).toContain('local address');
+    }
   });
 });

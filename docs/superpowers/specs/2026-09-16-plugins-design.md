@@ -67,7 +67,7 @@ Feed, write (`feed:write`):
 - `ot.feed.patch(id, { text?, attachments? })`.
 
 Network:
-- `ot.fetch(url, init?)` — backend proxy. Hosts in `sites` are fetched with that site's session partition (cookies attached by the shell); other hosts plain. Returns `{ status, headers, text(), json() }`. Bodies capped.
+- `ot.fetch(url, init?)` — backend proxy. Hosts in `sites` are fetched with that site's session partition (cookies attached by the shell); other hosts plain. Returns `{ status, headers, truncated, text(), json() }`. Bodies are capped at 4 MB and `truncated` says whether this one hit the cap. Response headers are an allow-list (content-type, content-length, etag, last-modified, link, retry-after, location, cache-control, date, `x-ratelimit-*`); cookies never reach a plugin. A fetch to a site the plugin declared fails outright when the desktop app is not connected, rather than going out without the login.
 - `ot.sites.status(site)` → `{ signedIn: boolean }`; `ot.sites.signIn(site)` opens the sign-in window.
 
 UI (`ui: true`):

@@ -1,5 +1,5 @@
 import { lookup as dnsLookup } from 'node:dns';
-import { Agent, type Dispatcher } from 'undici';
+import { Agent, type Dispatcher, fetch as undiciFetch } from 'undici';
 import { isLocalHost, isLocalIp } from './hosts.js';
 
 /** A proxied response as plugins see it. Bodies are text; binary sites are out of scope for v1. */
@@ -24,6 +24,10 @@ const MAX_HEADERS = 50;
 const MAX_HEADER_LENGTH = 8 * 1024;
 /** Consecutive unanswered calls before we treat the registered shell as gone and let a new one in. */
 const MAX_FAILURES = 3;
+/** The shell answers with the body wrapped in a JSON envelope, which is bigger than the body itself. */
+const SHELL_REPLY_MAX = BODY_MAX * 1.5;
+/** A contested hello should not hang the route; the shell is on loopback and either answers at once or is gone. */
+const HELLO_PROBE_MS = 2_000;
 const REDIRECT_STATUS = [301, 302, 303, 307, 308];
 
 /**
@@ -57,6 +61,9 @@ const REQUEST_HEADER_STRIP = new Set([
 
 /** Sent to the origin that was asked for, and to no other. */
 const CREDENTIAL_HEADERS = new Set(['authorization', 'proxy-authorization']);
+
+/** RFC 9110 token characters. A name outside this set is a plugin trying to shape the request itself. */
+const HEADER_NAME = /^[a-z0-9!#$%&'*+.^_`|~-]+$/i;
 
 function isAllowedResponseHeader(key: string): boolean {
   // set-cookie is named even though the allow-list already excludes it: this is the line that must never move.
@@ -98,7 +105,7 @@ function safeRequestHeaders(headers: Record<string, string> | undefined, keepCre
     if (Object.keys(out).length >= MAX_HEADERS) break;
     if (rawValue === null || rawValue === undefined) continue;
     const key = String(rawKey ?? '').trim().toLowerCase();
-    if (!key || REQUEST_HEADER_STRIP.has(key)) continue;
+    if (!key || !HEADER_NAME.test(key) || REQUEST_HEADER_STRIP.has(key)) continue;
     if (!keepCredentials && CREDENTIAL_HEADERS.has(key)) continue;
     out[key] = clean(rawValue);
   }
@@ -112,10 +119,10 @@ function withoutHeader(headers: Record<string, string> | undefined, name: string
 
 const encoder = new TextEncoder();
 
-function capText(text: string): { body: string; truncated: boolean; bytes: number } {
+function capText(text: string, limit = BODY_MAX): { body: string; truncated: boolean; bytes: number } {
   const bytes = encoder.encode(text);
-  if (bytes.length <= BODY_MAX) return { body: text, truncated: false, bytes: bytes.length };
-  return { body: new TextDecoder().decode(bytes.subarray(0, BODY_MAX)), truncated: true, bytes: BODY_MAX };
+  if (bytes.length <= limit) return { body: text, truncated: false, bytes: bytes.length };
+  return { body: new TextDecoder().decode(bytes.subarray(0, limit)), truncated: true, bytes: limit };
 }
 
 /**
@@ -123,8 +130,8 @@ function capText(text: string): { body: string; truncated: boolean; bytes: numbe
  * BODY_MAX, so a server that answers with a hundred megabytes costs us four and then stops — `content-length`
  * is a claim, not a limit, and this path must hold whether the server declares a length or lies about it.
  */
-async function readCapped(res: Response): Promise<{ body: string; truncated: boolean; bytes: number }> {
-  if (!res.body) return capText(await res.text());
+async function readCapped(res: Response, limit = BODY_MAX): Promise<{ body: string; truncated: boolean; bytes: number }> {
+  if (!res.body) return capText(await res.text(), limit);
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -134,9 +141,9 @@ async function readCapped(res: Response): Promise<{ body: string; truncated: boo
       const { done, value } = await reader.read();
       if (done) break;
       if (!value?.length) continue;
-      if (total + value.length > BODY_MAX) {
-        chunks.push(value.subarray(0, BODY_MAX - total));
-        total = BODY_MAX;
+      if (total + value.length > limit) {
+        chunks.push(value.subarray(0, limit - total));
+        total = limit;
         truncated = true;
         break;
       }
@@ -195,9 +202,11 @@ type FetchInit = RequestInit & { dispatcher?: unknown };
  * fetches and sign-in windows go there, so cookies never leave the shell's session partitions. Without a
  * shell (a checkout running the backend on its own) fetches go out plain and sign-in is unavailable.
  *
- * Trust: `hello` is first-come while the registered shell keeps answering — a second one is ignored until
- * the first has missed MAX_FAILURES calls in a row (or called `goodbye`), so a late arrival cannot take
- * over a live shell's fetches. The route that carries `hello` must accept it only from a loopback caller
+ * Trust: `hello` is first-come while the registered shell keeps answering — a second one is ignored unless a
+ * probe of the first goes unanswered, or the first has missed MAX_FAILURES calls in a row (or called
+ * `goodbye`), so a late arrival cannot take a live shell's fetches away from it. Only transport failures
+ * count towards that: a reply we reject as malformed or oversized is this request going wrong, not the shell
+ * going away. The route that carries `hello` must accept it only from a loopback caller
  * (Task 6). A hostile process already on this machine is outside the threat model: it can read the
  * backend's config.json and impersonate whatever it likes regardless of what this class does.
  */
@@ -207,21 +216,40 @@ export class ShellLink {
   private failures = 0;
   private dispatcher: unknown;
 
+  // The default fetch must come from the same undici as `safeDispatcher`'s Agent: Node's global fetch is
+  // its own bundled copy, and handing it a foreign dispatcher fails at connect time ('invalid onRequestStart
+  // method'). Tests pass their own fetchImpl; production takes this one.
   constructor(
-    private fetchImpl: typeof fetch = fetch,
+    private fetchImpl: typeof fetch = undiciFetch as unknown as typeof fetch,
     dispatcher?: unknown,
   ) {
     this.dispatcher = dispatcher;
   }
 
-  /** Register the shell's callback. Ignored while a registered shell is still answering. */
-  hello(port: number, token: string): void {
+  /**
+   * Register the shell's callback. A registered shell keeps the link only while it is actually there: a second
+   * hello probes the first one and, if that probe goes unanswered, hands the link straight to the caller. The
+   * common case for a second hello is a restarted shell whose predecessor died without a `goodbye`, and it
+   * should not have to wait out MAX_FAILURES of real traffic before its own fetches work.
+   */
+  async hello(port: number, token: string): Promise<void> {
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('hello needs a port');
     if (!token) throw new Error('hello needs a token');
-    if (this.available()) return; // the shell that got here first keeps the link until it stops answering
+    if (this.available() && !(await this.stillThere())) this.goodbye();
+    if (this.available()) return; // the registered shell answered: it keeps the link
     this.port = port;
     this.token = token;
     this.failures = 0;
+  }
+
+  /** One cheap round trip to the registered shell, on a short leash — only used to settle a contested hello. */
+  private async stillThere(): Promise<boolean> {
+    try {
+      await this.call('/status', { sites: [] }, { timeoutMs: HELLO_PROBE_MS });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** The shell is going away (quit, or handing over). Fetches fall back to plain and sign-in stops being offered. */
@@ -239,40 +267,41 @@ export class ShellLink {
     return (this.dispatcher ??= safeDispatcher());
   }
 
+  /** Only a shell that is not answering counts: this is the tally that decides it is gone, not an error count. */
   private noteFailure(): void {
     if (++this.failures >= MAX_FAILURES) this.goodbye(); // stopped answering: let the next shell register
   }
 
-  private async call(path: string, body: unknown): Promise<unknown> {
+  private async call(path: string, body: unknown, opts: { timeoutMs?: number; limit?: number } = {}): Promise<unknown> {
     const port = this.port;
     if (port === null) throw new Error(`shell ${path}: no shell is registered`);
+    let res: Response;
     try {
-      let res: Response;
-      try {
-        res = await this.fetchImpl(`http://127.0.0.1:${port}${path}`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', authorization: `Bearer ${this.token}` },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(TIMEOUT_MS),
-        });
-      } catch (err) {
-        throw new Error(`shell unreachable: ${err instanceof Error ? err.message : String(err)}`);
-      }
-      if (!res.ok) throw new Error(`shell ${path} ${res.status}`);
-      const { body: text, truncated } = await readCapped(res);
-      if (truncated) throw new Error(`shell ${path} sent a reply over the size cap`);
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        throw new Error(`shell ${path} sent a reply that is not json`);
-      }
-      this.failures = 0;
-      return parsed;
+      res = await this.fetchImpl(`http://127.0.0.1:${port}${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${this.token}` },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS),
+      });
     } catch (err) {
-      this.noteFailure();
-      throw err;
+      this.noteFailure(); // nothing answered on the socket: this is what "the shell is gone" looks like
+      throw new Error(`shell unreachable: ${err instanceof Error ? err.message : String(err)}`);
     }
+    if (!res.ok) {
+      if (res.status >= 500) this.noteFailure(); // the shell is up but broken; treat it like silence
+      throw new Error(`shell ${path} ${res.status}`);
+    }
+    // Everything below is one request going wrong, not the shell going away, so the tally stays where it is.
+    const { body: text, truncated } = await readCapped(res, opts.limit ?? BODY_MAX);
+    if (truncated) throw new Error(`shell ${path} sent a reply over the size cap`);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error(`shell ${path} sent a reply that is not json`);
+    }
+    this.failures = 0;
+    return parsed;
   }
 
   /** Which of `sites` have a session in the shell right now. */
@@ -302,8 +331,12 @@ export class ShellLink {
    * BODY_MAX, and the whole chain shares one timeout.
    */
   async fetch(url: string, init: ProxyInit, viaShell: boolean): Promise<ProxyResponse> {
-    if (viaShell && this.available()) {
-      return shapeShellResponse(await this.call('/fetch', { url, init }));
+    if (viaShell) {
+      // Never fall through to a plain fetch: the caller asked for this site's login, and sending the request
+      // without it is a different request. The route decides whether to offer sign-in or give up.
+      if (!this.available()) throw new Error('the desktop app is not connected');
+      // The envelope is JSON around a body that may already be at BODY_MAX, so it gets a little more room.
+      return shapeShellResponse(await this.call('/fetch', { url, init }, { limit: SHELL_REPLY_MAX }));
     }
     const signal = AbortSignal.timeout(TIMEOUT_MS); // one budget for the chain, not one per hop
     let current = url;
@@ -332,7 +365,14 @@ export class ShellLink {
         if (at.protocol === 'https:' && next.protocol === 'http:') {
           throw new Error('insecure redirect: https must not hand off to http');
         }
-        if (next.origin !== at.origin) keepCredentials = false; // a new origin never inherits the old one's login
+        if (next.origin !== at.origin) {
+          keepCredentials = false; // a new origin never inherits the old one's login
+          // 307/308 keep the method, which would replay the body at a host the plugin never addressed. The
+          // body goes, and its content-type with it; the request arrives as a bodyless POST/PUT.
+          if (res.status === 307 || res.status === 308) {
+            cur = { ...cur, body: undefined, headers: withoutHeader(cur.headers, 'content-type') };
+          }
+        }
         const method = (cur.method ?? 'GET').toUpperCase();
         // 303, and 301/302 on POST, become GET; the body goes, and its content-type goes with it
         if (res.status === 303 || ((res.status === 301 || res.status === 302) && method === 'POST')) {

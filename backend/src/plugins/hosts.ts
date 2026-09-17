@@ -61,16 +61,29 @@ function isLocalIpv4(h: string): boolean {
 }
 
 function isLocalIpv6(inner: string): boolean {
-  if (inner === '::1' || inner === '::') return true;
-  if (/^f[cd]/.test(inner)) return true; // fc00::/7, unique local
-  if (/^fe[89ab]/.test(inner)) return true; // fe80::/10, link-local
-  // IPv4-mapped: `::ffff:7f00:1` as URL writes it, or `::ffff:127.0.0.1` as a plugin might
-  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(inner);
+  const v = inner.replace(/%.*$/, ''); // a zone id rides along on link-local addresses: fe80::1%en0
+  if (v === '::1' || v === '::') return true;
+  if (/^(0{1,4}:){7}0{0,3}1$/.test(v)) return true; // the same loopback written out: 0:0:0:0:0:0:0:1
+  if (/^(0{1,4}:){7}0{1,4}$/.test(v)) return true; // and the unspecified address written out
+  if (/^ff/.test(v)) return true; // ff00::/8, multicast
+  if (/^f[cd]/.test(v)) return true; // fc00::/7, unique local
+  if (/^fe[89ab]/.test(v)) return true; // fe80::/10, link-local
+  // An IPv4 riding inside an IPv6: the mapped form `::ffff:…` and the NAT64 well-known prefix `64:ff9b::…`.
+  // Both reach the v4 address they carry, so both are judged as that address.
+  const carried = /^::ffff:(.+)$/.exec(v) ?? /^64:ff9b::(.+)$/.exec(v);
+  if (carried) {
+    const v4 = carriedIpv4(carried[1]);
+    if (v4) return isLocalIpv4(v4);
+  }
+  return false;
+}
+
+/** The tail of a mapped address, as either two hex groups (`7f00:1`, how URL writes it) or dotted quad. */
+function carriedIpv4(tail: string): string | null {
+  const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(tail);
   if (hex) {
     const n = (parseInt(hex[1], 16) << 16) | parseInt(hex[2], 16);
-    return isLocalIpv4([(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.'));
+    return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
   }
-  const dotted = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(inner);
-  if (dotted) return isLocalIpv4(dotted[1]);
-  return false;
+  return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(tail) ? tail : null;
 }
