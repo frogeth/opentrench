@@ -177,3 +177,76 @@ test('partitionFor: one persistent partition per site host', () => {
 test('without Electron the server half says so rather than failing obscurely', async () => {
   await assert.rejects(() => startShellLink({ log: () => {} }), /Electron/);
 });
+
+// The routes themselves need Electron; the server around them does not, so it gets a stand-in and a
+// real socket. What is being pinned here is the shape of the answer, not what the routes do.
+const stubImpl = {
+  signedIn: async (sites) => sites,
+  openSignIn: () => {},
+  fetchWithSite: async () => ({ status: 200, headers: {}, body: '', truncated: false }),
+};
+
+async function withLink(run) {
+  const link = await startShellLink({ log: () => {}, impl: stubImpl });
+  try {
+    return await run(link, (path, init = {}) =>
+      fetch(`http://127.0.0.1:${link.port}${path}`, {
+        method: 'POST',
+        ...init,
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${link.token}`, ...init.headers },
+      }),
+    );
+  } finally {
+    link.close();
+  }
+}
+
+test('an oversize body is answered, not dropped: a killed socket would look like a dead shell', async () => {
+  await withLink(async (_link, post) => {
+    // Over REQUEST_MAX (8 MB) with room to spare, so the cap trips well before the body ends.
+    const res = await post('/fetch', { body: JSON.stringify({ url: 'https://example.com', pad: 'x'.repeat(12 * 1024 * 1024) }) });
+    assert.equal(res.status, 413);
+    assert.deepEqual(await res.json(), { error: 'request body is too large' });
+  });
+});
+
+test('the link answers only a POST that carries its token', async () => {
+  await withLink(async (link, post) => {
+    const ok = await post('/status', { body: JSON.stringify({ sites: ['https://example.com'] }) });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(await ok.json(), { signedIn: ['https://example.com'] });
+
+    const noToken = await post('/status', { body: '{}', headers: { authorization: 'Bearer wrong' } });
+    assert.equal(noToken.status, 401);
+    // A token of a different length must be refused the same way, not thrown from timingSafeEqual.
+    const shortToken = await post('/status', { body: '{}', headers: { authorization: 'Bearer x' } });
+    assert.equal(shortToken.status, 401);
+
+    const wrongRoute = await post('/nope', { body: '{}' });
+    assert.equal(wrongRoute.status, 404);
+
+    const wrongMethod = await fetch(`http://127.0.0.1:${link.port}/status`, {
+      method: 'GET',
+      headers: { authorization: `Bearer ${link.token}` },
+    });
+    assert.equal(wrongMethod.status, 405);
+  });
+});
+
+test('a route that throws comes back as a message, never a stack', async () => {
+  const link = await startShellLink({
+    log: () => {},
+    impl: { ...stubImpl, fetchWithSite: async () => { throw new Error('nope'); } },
+  });
+  try {
+    const res = await fetch(`http://127.0.0.1:${link.port}/fetch`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${link.token}` },
+      body: JSON.stringify({ url: 'https://example.com' }),
+    });
+    assert.equal(res.status, 500);
+    assert.deepEqual(await res.json(), { error: 'nope' });
+  } finally {
+    link.close();
+  }
+});

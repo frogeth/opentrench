@@ -106,7 +106,7 @@ Backend (`backend/src/plugins.ts`, routes under `/api/plugins`):
 - Feed input: `POST /api/plugins/:id/post` and `/patch`, validated and capped, pushed into the hub with `source: 'plugin'`, `chatId: plugin:<id>:<chat>`, `chatName: <chat>`.
 - `FeedMessage.source` gains `'plugin'`. Spots that switch on source (avatar route, link building, forwarding, the rail) get a plugin branch.
 - Storage: `GET/PUT /api/plugins/:id/storage` in the state file; settings schema and values alongside.
-- Proxy: `POST /api/plugins/:id/fetch` checks the host against the manifest's `sites`, then asks the shell (IPC) to fetch with that site's partition when a session exists; otherwise fetches plain. Without the shell (backend run on its own) the proxy fetches plain and reports that sign-in needs the desktop app.
+- Proxy: `POST /api/plugins/:id/fetch` checks the host against the manifest's `sites`, then asks the shell (IPC) to fetch with that site's partition when a session exists; otherwise fetches plain. Without the shell (backend run on its own) the proxy fetches plain and reports that sign-in needs the desktop app. Known limitation: a fetch that goes through the shell cannot pin DNS — Chromium's `session.fetch` has no lookup hook — so for a declared site the name-based local-host check, re-applied on every redirect hop, is the only defence against DNS rebinding; a plain fetch resolves once and dials the addresses it checked.
 - Config: `plugins: { [id]: { enabled, approvedHash, settings } }`.
 
 Shell (`electron/main.js`):

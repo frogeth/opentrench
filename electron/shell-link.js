@@ -24,13 +24,22 @@ const http = require('node:http');
 
 /** What a plugin may receive as a body, in bytes. Matches BODY_MAX in backend/src/plugins/shell.ts. */
 const BODY_MAX = 4 * 1024 * 1024;
-/** What the backend may send us as a request. Its own bodies are capped well below this. */
-const REQUEST_MAX = 2 * 1024 * 1024;
+/**
+ * What the backend may send us as a request. A `/fetch` carries the plugin's own request body inside a
+ * JSON envelope, and escaping is what makes an envelope big: the backend's route accepts up to 1 MB of
+ * raw body, and a megabyte of non-ASCII becomes about six as `\uXXXX`. 8 MB leaves that worst case room
+ * rather than answering 413 to a request the backend considers well inside its own limit.
+ */
+const REQUEST_MAX = 8 * 1024 * 1024;
 const TIMEOUT_MS = 20_000;
 const MAX_REDIRECTS = 5;
 const MAX_RESPONSE_HEADERS = 50;
 const MAX_REQUEST_HEADERS = 40;
-const MAX_HEADER_VALUE = 4000;
+/** What a plugin may send on one header, and what it may be told on one. The reply cap is the backend's
+ * MAX_HEADER_LENGTH: a value we truncate harder than the backend would is a value the plugin never sees
+ * whole even though the backend would have passed it on. */
+const MAX_REQUEST_HEADER_VALUE = 4000;
+const MAX_RESPONSE_HEADER_VALUE = 8 * 1024;
 
 function requireElectron() {
   if (!electron) throw new Error('shell-link needs Electron: this half only runs inside the desktop app');
@@ -185,7 +194,7 @@ function isAllowedResponseHeader(key) {
 function clean(value) {
   return String(value)
     .replace(/[\r\n]+/g, ' ')
-    .slice(0, MAX_HEADER_VALUE);
+    .slice(0, MAX_RESPONSE_HEADER_VALUE);
 }
 
 /**
@@ -254,7 +263,7 @@ function requestHeadersFor(headers, { crossOrigin = false } = {}) {
     if (crossOrigin && ORIGIN_HEADERS.has(key)) continue;
     const value = String(rawValue);
     if (/[\r\n\0]/.test(value)) continue; // a value that carries a line break is a second header
-    out[key] = value.slice(0, MAX_HEADER_VALUE);
+    out[key] = value.slice(0, MAX_REQUEST_HEADER_VALUE);
   }
   return out;
 }
@@ -422,20 +431,47 @@ async function fetchWithSite(url, init) {
 // The link itself
 // ---------------------------------------------------------------------------
 
+/** A body past REQUEST_MAX, so the reply can say 413 instead of looking like a crash. */
+class TooLarge extends Error {
+  constructor() {
+    super('request body is too large');
+    this.status = 413;
+  }
+}
+
+/**
+ * Past the cap we stop *keeping* the body, but keep reading it. Two failures are being avoided here.
+ * Destroying the socket reaches the backend as a transport failure, and three of those in a row make
+ * it deregister a shell that is in fact healthy. Answering 413 while the upload is still in flight is
+ * the same failure wearing a different hat: undici reports the socket closing under a request it has
+ * not finished sending as `fetch failed`, and never looks at the reply. So the body is drained to its
+ * end and the 413 goes out after it, where the client will read it.
+ *
+ * The drain is not unbounded: a peer still sending after DRAIN_MAX is not our backend having an off
+ * day, and gets the socket torn down after all.
+ */
+const DRAIN_MAX = REQUEST_MAX * 4;
+
 function readJson(req) {
   return new Promise((resolve, reject) => {
     const parts = [];
     let size = 0;
+    let over = false;
     req.on('data', (d) => {
       size += d.length;
+      if (over) {
+        if (size > DRAIN_MAX) req.destroy(); // no longer a request, just noise
+        return;
+      }
       if (size > REQUEST_MAX) {
-        reject(new Error('body too large'));
-        req.destroy();
+        over = true;
+        parts.length = 0; // let go of what we have: we are not going to parse it
         return;
       }
       parts.push(d);
     });
     req.on('end', () => {
+      if (over) return reject(new TooLarge());
       const text = Buffer.concat(parts).toString('utf8');
       try {
         resolve(text ? JSON.parse(text) : {});
@@ -451,16 +487,30 @@ function why(e) {
   return e instanceof Error ? e.message : String(e);
 }
 
+/** Constant-time on the part an attacker can vary; the length is not a secret worth hiding. */
+function tokenMatches(header, token) {
+  const given = Buffer.from(String(header ?? ''), 'utf8');
+  const want = Buffer.from(`Bearer ${token}`, 'utf8');
+  return given.length === want.length && crypto.timingSafeEqual(given, want);
+}
+
+/** What the three routes actually do. Split out so the server can be tested without Electron. */
+function electronImpl() {
+  requireElectron(); // fail at startShellLink rather than on the first request the backend makes
+  return { signedIn, openSignIn, fetchWithSite };
+}
+
 /**
  * Start the callback server on a random loopback port. The token is the whole of the authentication:
  * a process on this machine that has neither the port nor the token cannot ask us for anything. (A
  * process that can read the backend's config is already past everything this could defend, which is
  * why there is nothing more here.)
  */
-function startShellLink({ log = console.log } = {}) {
+function startShellLink({ log = console.log, impl } = {}) {
   return new Promise((resolve, reject) => {
+    let routes;
     try {
-      requireElectron(); // fail here rather than on the first request the backend makes
+      routes = impl ?? electronImpl();
     } catch (e) {
       reject(e);
       return;
@@ -472,23 +522,24 @@ function startShellLink({ log = console.log } = {}) {
         res.end(JSON.stringify(obj));
       };
       try {
-        if (req.headers.authorization !== `Bearer ${token}`) return reply(401, { error: 'token' });
+        if (!tokenMatches(req.headers.authorization, token)) return reply(401, { error: 'token' });
         if (req.method !== 'POST') return reply(405, { error: 'method' });
         const route = (req.url ?? '').split('?')[0];
         const body = await readJson(req);
         if (route === '/status') {
           const sites = Array.isArray(body.sites) ? body.sites.map(String) : [];
-          return reply(200, { signedIn: await signedIn(sites) });
+          return reply(200, { signedIn: await routes.signedIn(sites) });
         }
         if (route === '/signin') {
-          openSignIn(String(body.site));
+          routes.openSignIn(String(body.site));
           return reply(200, { ok: true });
         }
         if (route === '/fetch') {
-          return reply(200, await fetchWithSite(String(body.url), body.init ?? {}));
+          return reply(200, await routes.fetchWithSite(String(body.url), body.init ?? {}));
         }
         reply(404, { error: 'route' });
       } catch (e) {
+        if (e instanceof TooLarge) return reply(413, { error: why(e) });
         log('[shell-link]', why(e));
         reply(500, { error: why(e) }); // the message, never the stack: this crosses a process boundary
       }
@@ -497,7 +548,14 @@ function startShellLink({ log = console.log } = {}) {
     server.listen(0, '127.0.0.1', () => {
       const { port } = server.address();
       log('[shell-link] listening on 127.0.0.1:' + port);
-      resolve({ port, token, close: () => server.close() });
+      resolve({
+        port,
+        token,
+        close: () => {
+          server.close();
+          server.closeAllConnections(); // the backend keeps its sockets alive; close() alone would wait for them
+        },
+      });
     });
   });
 }
@@ -520,7 +578,7 @@ async function hello(backendUrl, link, log = console.log) {
     } catch {
       /* the backend is not up yet */
     }
-    await new Promise((r) => setTimeout(r, 1000));
+    if (i < 9) await new Promise((r) => setTimeout(r, 1000)); // no waiting after the last try
   }
   log('[shell-link] backend never answered hello; plugin site fetches and sign-in are unavailable');
   return false;
