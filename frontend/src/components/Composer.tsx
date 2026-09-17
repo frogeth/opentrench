@@ -63,9 +63,14 @@ export function Composer({
       return cur.filter((f) => f.url !== url);
     });
 
-  // a reply pins the target to that message's chat
+  // a reply pins the target to that message's chat — and a reply to a chat this composer cannot
+  // send to (a plugin chat, or one outside the column) is dropped rather than sent somewhere else
   const replyTarget = reply ? targets.find((t) => t.name === reply.chatName) : undefined;
-  const target = replyTarget ?? targets.find((t) => t.id === targetId) ?? targets[0];
+  const target = reply ? replyTarget : targets.find((t) => t.id === targetId) ?? targets[0];
+  useEffect(() => {
+    if (reply && !replyTarget) onCancelReply();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reply, replyTarget]);
   useEffect(() => {
     if (reply) box.current?.focus();
   }, [reply]);

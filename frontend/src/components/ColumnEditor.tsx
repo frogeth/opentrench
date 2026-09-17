@@ -192,17 +192,19 @@ export function ColumnEditor({
   // Group by Discord server, channels under their category, then Telegram, then the plugins' chats.
   const groups = useMemo(() => {
     const cat = new Map(channels.map((c) => [c.id, c.category]));
-    const m = new Map<string, { source: Source; avatar?: string; items: { w: WatchedChat; category?: string }[] }>();
+    const m = new Map<string, { source: Source; label: string; avatar?: string; items: { w: WatchedChat; category?: string }[] }>();
     for (const w of watched) {
       const tail = w.source === 'discord' ? /\(([^)]*)\)\s*$/.exec(w.name)?.[1] : undefined;
       const server = w.source === 'discord' ? (tail === 'DM' ? 'Direct Messages' : tail ?? 'Discord') : w.source === 'plugin' ? 'Plugins' : 'Telegram';
-      const g = m.get(server) ?? { source: w.source, avatar: undefined, items: [] };
+      // keyed by source for the non-Discord groups, so a server actually named "Plugins" stays its own group
+      const key = w.source === 'discord' ? `discord:${server}` : `${w.source}:`;
+      const g = m.get(key) ?? { source: w.source, label: server, avatar: undefined, items: [] };
       if (!g.avatar && w.avatar && w.source === 'discord') g.avatar = w.avatar;
       g.items.push({ w, category: w.source === 'discord' ? cat.get(w.id) : undefined });
-      m.set(server, g);
+      m.set(key, g);
     }
-    const rank = (k: string) => (k === 'Plugins' ? 2 : k === 'Telegram' ? 1 : 0);
-    return [...m.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]));
+    const rank = (k: string) => (k === 'plugin:' ? 2 : k === 'telegram:' ? 1 : 0);
+    return [...m.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[1].label.localeCompare(b[1].label));
   }, [watched, channels]);
   const shortName = (w: WatchedChat) => (w.source === 'discord' ? w.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '') : w.name);
   const groupState = (items: { w: WatchedChat }[]) => {
@@ -348,19 +350,20 @@ export function ColumnEditor({
               </span>
             </div>
             <div className="fed-tree">
-              {groups.map(([server, g]) => {
+              {groups.map(([key, g]) => {
+                const server = g.label;
                 const st = groupState(g.items);
-                const isOpen = open[server] ?? false;
+                const isOpen = open[key] ?? false;
                 let lastCat: string | undefined;
                 return (
-                  <div key={server} className="ftree-group">
+                  <div key={key} className="ftree-group">
                     <div className="ftree-head">
-                      <button className="ftree-arrow" onClick={() => setOpen((o) => ({ ...o, [server]: !isOpen }))} aria-label={isOpen ? 'collapse' : 'expand'}>
+                      <button className="ftree-arrow" onClick={() => setOpen((o) => ({ ...o, [key]: !isOpen }))} aria-label={isOpen ? 'collapse' : 'expand'}>
                         {isOpen ? '▾' : '▸'}
                       </button>
                       <input type="checkbox" checked={st === 'all'} ref={(el) => el && (el.indeterminate = st === 'some')} onChange={() => toggleGroup(g.items)} />
                       {g.avatar ? <Avatar src={g.avatar} name={server} size={18} /> : <Logo source={g.source} size={14} />}
-                      <b onClick={() => setOpen((o) => ({ ...o, [server]: !isOpen }))}>{server}</b>
+                      <b onClick={() => setOpen((o) => ({ ...o, [key]: !isOpen }))}>{server}</b>
                       <span className="muted">{g.items.length}</span>
                     </div>
                     {isOpen &&

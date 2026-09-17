@@ -26,13 +26,8 @@ import { BridgeNotice } from './components/BridgeNotice';
 import { ONBOARDED_KEY, Onboarding } from './components/Onboarding';
 import { Lightbox } from './components/Lightbox';
 import type { ShareItem } from './components/ShareModal';
+import { displayChatName, normTg, watchKeyOf } from './feedKeys';
 
-/** Telegram chat id in one shape: strip '-', then a '100' supergroup marker only when a real (long) channel id follows. */
-const normTg = (id: string) => {
-  let s = id.startsWith('-') ? id.slice(1) : id;
-  if (s.startsWith('100') && s.length >= 12) s = s.slice(3);
-  return s;
-};
 const BOTS = { cove: COVE_BOT, basedbot: 'based_eth_bot', salpha: 'salpha_research_bot' } as const;
 type BotKind = keyof typeof BOTS;
 import { VirtualItem } from './components/Virtual';
@@ -89,7 +84,7 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 export type ChatOrder = 'bottom' | 'top';
 
 export default function App() {
-  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs, setPlugins } = useFeed();
+  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs, plugins, setPlugins } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
   // first-run checklist: once, when nothing is connected and the feed is empty; ⚙ → Accounts brings it back
   const [setupOpen, setSetupOpen] = useState(false);
@@ -513,10 +508,12 @@ export default function App() {
   // Discord is writable only through the Vencord bridge; a legacy token reads and nothing more
   const canSend = { discord: !!cfg?.discord.canSend && status.discordMode === 'bridge', telegram: !!cfg?.telegram.canSend } as const;
   // composing is platform-only: a plugin chat is never a send target
+  const sendableChat = (w: WatchedChat): w is WatchedChat & { source: SendTarget['source'] } => w.source !== 'plugin';
   const targetsFor = (names: Set<string> | null): SendTarget[] =>
     watched
-      .filter((w) => w.source !== 'plugin' && (!names || names.has(w.name)) && (!scope || scope.has(w.name)))
-      .map((w) => ({ id: w.id, name: w.name, source: w.source as SendTarget['source'] }));
+      .filter(sendableChat)
+      .filter((w) => (!names || names.has(w.name)) && (!scope || scope.has(w.name)))
+      .map((w) => ({ id: w.id, name: w.name, source: w.source }));
   // which chat each column's composer sends to; a plain click on a message picks that message's chat
   const [targetByCol, setTargetByCol] = useState<Record<string, string | undefined>>({});
   const composerFor = (colId: string, names: Set<string> | null) => (
@@ -691,6 +688,16 @@ export default function App() {
     api.plugins().then(setPlugins).catch(() => {});
   }, [wsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(reloadLists, [status.discord, status.telegram]);
+  // A plugin's first post into a chat adds a watch key and a watched chat that only the `plugins`
+  // event carries; keyed on the chat set, so the other reasons that event fires (a sign-in, a log)
+  // do not storm the two endpoints.
+  const pluginChatKeys = useMemo(() => plugins.flatMap((p) => Object.keys(p.chats)).sort().join('|'), [plugins]);
+  /** plugin id → the name its manifest gives it, for the "via <plugin>" tag */
+  const pluginNames = useMemo(() => Object.fromEntries(plugins.map((p) => [p.id, p.manifest?.name ?? p.id])), [plugins]);
+  useEffect(() => {
+    if (pluginChatKeys) reloadLists();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pluginChatKeys]);
   useEffect(() => {
     if (status.discord === 'connected') api.discordChannels().then(setChannels).catch(() => {});
   }, [status.discord]);
@@ -1008,7 +1015,13 @@ export default function App() {
   /** Only chats on the watch list exist in the UI; a removed chat disappears with its messages. */
   const chats = useMemo(() => {
     const m = new Map<string, { count: number; source: Source; avatar?: string; id: string }>();
-    for (const w of watched) m.set(w.name, { count: 0, source: w.source, avatar: w.avatar, id: w.id });
+    // Views are scoped by chat *name*, so two chats sharing one name would answer for each other.
+    // The backend lists plugin chats last, so a platform chat keeps the plain name and a colliding
+    // plugin chat shows as "<name> (plugin)". The proper fix is to key views by chatKey instead.
+    for (const w of watched) {
+      const name = displayChatName(w, watched);
+      if (!m.has(name)) m.set(name, { count: 0, source: w.source, avatar: w.avatar, id: w.id });
+    }
     for (const msg of messages) {
       const e = m.get(msg.chatName);
       if (!e) continue;
@@ -1034,8 +1047,7 @@ export default function App() {
   }, [cfg?.discord.watch, cfg?.telegram.watch, cfg?.pluginWatch]);
   const inWatch = (m: FeedMessage) => {
     if (watchedKeys.size === 0) return true;
-    const id = m.source === 'telegram' ? normTg(m.chatId) : m.chatId;
-    return watchedKeys.has(m.source === 'plugin' ? m.chatId : `${m.source}:${id}`);
+    return watchedKeys.has(watchKeyOf(m));
   };
 
   /** Which chat names the current view scopes to (null = everything watched). */
@@ -1365,6 +1377,7 @@ export default function App() {
         order={chatOrder}
         tokens={tokens}
         favorites={status.favorites}
+        pluginNames={pluginNames}
         autoChart={autoChart}
         compactEmbeds={compactEmbeds}
         chartProvider={chartProvider}
@@ -1557,6 +1570,7 @@ export default function App() {
                 order={chatOrder}
                 tokens={tokens}
                 favorites={status.favorites}
+                pluginNames={pluginNames}
                 discord
                 autoChart={autoChart}
                 compactEmbeds={compactEmbeds}

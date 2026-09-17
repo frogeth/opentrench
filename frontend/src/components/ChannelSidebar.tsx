@@ -1,6 +1,7 @@
 import { useState, type DragEvent, type ReactNode } from 'react';
 import type { DiscordChannel, MaskedConfig, TelegramDialog, WatchedChat } from '../api';
 import type { Source } from '../types';
+import { displayChatName } from '../feedKeys';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 
@@ -88,7 +89,11 @@ export function ChannelSidebar({
     .map((d) => ({ key: `t:${d.id}`, source: 'telegram', id: d.id, name: d.title, icon: `/api/telegram/avatar/${d.id}`, count: counts.get(d.title) ?? 0 }));
   const plugs: RailItem[] = watched
     .filter((w) => w.source === 'plugin')
-    .map((w) => ({ key: `p:${w.id}`, source: 'plugin', id: w.id, name: w.name, count: counts.get(w.name) ?? 0 }));
+    // a plugin chat that shares a platform chat's name shows the difference (views are name-scoped)
+    .map((w) => {
+      const name = displayChatName(w, watched);
+      return { key: `p:${w.id}`, source: 'plugin' as const, id: w.id, name, count: counts.get(name) ?? 0 };
+    });
   const unordered = [...guilds.values(), ...tg, ...plugs];
   const order = cfg?.railOrder ?? [];
   const items = [
