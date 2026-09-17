@@ -4,7 +4,8 @@ import { CHAINS } from './chains.js';
 import type { Endpoints } from './endpoints.js';
 import { SEL, V4_POOLS_SLOT, addressWord, decodeString, isV4PoolId, orientBySanity, priceFromReserves, priceFromSqrt, words } from './pools.js';
 import { isStable, nativeRef, quoteKey, type QuoteRef } from './quotes.js';
-import { evmCalls, evmCallsDetailed, isRevert, solanaAccounts, type EvmResult, type FetchLike, type SolanaAccount } from './rpc.js';
+import { evmCalls, evmCallsDetailed, isRevert, solanaAccounts, type EvmResult, type FetchLike } from './rpc.js';
+import type { BlockAt } from './history.js';
 import { decodeSolanaPool, kindOf, mintDecimals, tokenAccountAmount, type SolanaKind, type SolanaPool } from './solana.js';
 
 /**
@@ -30,6 +31,8 @@ export interface LiveDeps {
   fetch?: FetchLike;
   log?: (msg: string) => void;
   now?: () => number;
+  /** which block a chain was at when something happened, for prices at call time */
+  blockAt?: BlockAt;
 }
 
 export interface NetworkStatus {
@@ -579,6 +582,41 @@ export function createLivePricer(deps: LiveDeps) {
     );
   }
 
+  async function priceItemAt(it: Item, tsMs: number, depth: number): Promise<number | undefined> {
+    const chain = CHAINS[it.network];
+    const ep = deps.endpoints.urlFor(it.network);
+    if (!chain || chain.kind !== 'evm' || !ep || depth > MAX_DEPTH) return undefined;
+    let m = metaFor(it);
+    if (!m) {
+      const st = statusFor(it.network);
+      const ready: { it: Item; m: PoolMeta }[] = [];
+      await resolveEvm(chain.v4, ep.url, [it], ready, st);
+      m = ready[0]?.m;
+    }
+    if (!m || m.kind === 'unsupported' || m.kind === 'sol') return undefined;
+    const block = await deps.blockAt!(it.network, ep.url, tsMs);
+    if (block === undefined) return undefined;
+    const call = m.kind === 'v4' ? { to: chain.v4!, data: SEL.extsload + pad32(v4Slot(it.pairAddress)) } : { to: it.pairAddress, data: m.kind === 'v3' ? SEL.slot0 : SEL.getReserves };
+    const [r] = await evmCalls(ep.url, [call], fetchImpl, '0x' + block.toString(16));
+    if (!r) return undefined;
+    let price = 0;
+    if (m.kind === 'v2' || m.kind === 'curve2') {
+      const [r0, r1] = words(r);
+      if (r0 !== undefined && r1 !== undefined) price = m.tokenIs0 ? priceFromReserves(r0, r1, m.tokenDecimals, m.quoteDecimals) : priceFromReserves(r1, r0, m.tokenDecimals, m.quoteDecimals);
+    } else {
+      const [w] = words(r);
+      const sqrt = w === undefined ? 0n : m.kind === 'v4' ? w & MASK160 : w;
+      price = priceFromSqrt(sqrt, m.tokenDecimals, m.quoteDecimals, m.tokenIs0);
+    }
+    if (!(price > 0)) return undefined;
+    const q = quoteOf(it, m);
+    if ('usd' in q) return price;
+    if ('reason' in q) return undefined;
+    // the quote at the same moment: its own chain's block when it is an EVM pool; Solana refs have no history, so today's number
+    const qUsd = CHAINS[q.item.network]?.kind === 'evm' ? await priceItemAt(q.item, tsMs, depth + 1) : quoteUsd.get(q.item.key)?.usd;
+    return qUsd ? price * qUsd : undefined;
+  }
+
   return {
     /** price every token that has a pool: the quotes' quotes, then the quotes, then the tokens */
     async refresh(tokens: TokenInfo[]): Promise<void> {
@@ -626,6 +664,15 @@ export function createLivePricer(deps: LiveDeps) {
     /** what a quote asset is worth right now, for the status page */
     quotes(): Record<string, number> {
       return Object.fromEntries([...quoteUsd].map(([k, v]) => [k, v.usd]));
+    },
+    /**
+     * The token's dollar price at a moment in the past, read from its pool at that block (and its
+     * quote's pool at its own chain's block). EVM only: Solana nodes keep no old state.
+     */
+    async priceAt(t: TokenInfo, tsMs: number): Promise<number | undefined> {
+      const it = toItem(t);
+      if (!it || !deps.blockAt) return undefined;
+      return priceItemAt(it, tsMs, 0);
     },
     /** a screen (one client) reports the tokens it is showing */
     setVisible(client: string, addresses: string[]): void {

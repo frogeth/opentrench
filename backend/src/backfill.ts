@@ -18,14 +18,16 @@ export interface BackfillDeps {
   /** 1-minute candles of `token` in the pool (GT defaults to the pool's base token, which may be the other side); `beforeTs` is unix seconds */
   candles: (token: string, network: string, pool: string, beforeTs: number, limit: number) => Promise<Candle[]>;
   apply: (address: string, updates: CallMarketCap[]) => void;
+  /** the token's dollar price at that moment, read from its pool at the block (EVM chains with archive state) */
+  priceAt?: (t: TokenInfo, tsMs: number) => Promise<number | undefined>;
   log?: (msg: string) => void;
   now?: () => number;
 }
 export interface CallMarketCap {
   msgId: string;
-  /** set when read from a candle; absent when the minute had no candle (the cached value stays) */
+  /** set when read from a candle or the pool at the block; absent when neither answered (the cached value stays) */
   marketCap?: number;
-  source: 'candle' | 'cached';
+  source: 'candle' | 'cached' | 'chain';
 }
 
 /** a call younger than this may sit in a candle that is still open */
@@ -61,6 +63,25 @@ export async function backfillOnce(deps: BackfillDeps): Promise<number> {
     .slice(0, PER_CYCLE);
   let fixed = 0;
   for (const { t, calls } of due) {
+    // the pool at the call's block: exact, and no candle service in the way
+    if (deps.priceAt) {
+      const mcPerPrice = t.marketCap! / t.priceUsd!;
+      const updates: CallMarketCap[] = [];
+      for (const c of calls) {
+        try {
+          const usd = await deps.priceAt(t, c.ts);
+          updates.push(usd && Number.isFinite(usd * mcPerPrice) ? { msgId: c.msgId, marketCap: usd * mcPerPrice, source: 'chain' } : { msgId: c.msgId, source: 'cached' });
+        } catch (e: any) {
+          deps.log?.(`${t.symbol ?? t.address} pool at block failed: ${e?.message ?? e}`);
+          updates.push({ msgId: c.msgId, source: 'cached' });
+        }
+      }
+      if (updates.some((u) => u.source === 'chain')) {
+        deps.apply(t.address, updates);
+        fixed += updates.filter((u) => u.source === 'chain').length;
+        continue;
+      }
+    }
     const newest = Math.max(...calls.map((c) => c.ts));
     const oldest = Math.min(...calls.map((c) => c.ts));
     const limit = Math.min(1000, Math.ceil((newest - oldest) / 60_000) + 3);

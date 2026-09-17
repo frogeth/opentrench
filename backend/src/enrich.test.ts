@@ -188,4 +188,19 @@ describe('mapGeckoTerminal', () => {
   it('returns undefined without data', () => {
     expect(mapGeckoTerminal('base', { errors: [] })).toBeUndefined();
   });
+
+  it('the chain source runs beside dexscreener: it fills ticker, chain and pool the site lacks, and a placed pool skips geckoterminal', async () => {
+    const chain = vi.fn(async () => ({ network: 'robinhood', name: 'Fresh', symbol: 'FRSH', pairAddress: '0xpool', quoteSymbol: 'WETH', quoteAddress: '0xweth', dex: 'uniswap' }));
+    const gt = vi.fn(async () => undefined);
+    const noSite = createEnricher({ dexscreener: async () => undefined, geckoterminal: gt, chain });
+    const a = await noSite('0xabc', 'evm');
+    expect(a).toMatchObject({ network: 'robinhood', symbol: 'FRSH', name: 'Fresh', pairAddress: '0xpool', quoteSymbol: 'WETH', dex: 'uniswap' });
+    expect(gt).not.toHaveBeenCalled();
+    // the site's numbers win where both answer
+    const withSite = createEnricher({ dexscreener: async () => ({ network: 'robinhood', symbol: 'FRSHX', priceUsd: 1, pairAddress: '0xsite' }), geckoterminal: gt, chain });
+    expect(await withSite('0xabc', 'evm')).toMatchObject({ symbol: 'FRSHX', pairAddress: '0xsite', priceUsd: 1, name: 'Fresh' });
+    // a chain lookup that throws never hides the site
+    const boom = createEnricher({ dexscreener: async () => ({ symbol: 'OK' }), chain: async () => { throw new Error('rpc down'); }, log: () => {} });
+    expect(await boom('0xabc', 'evm')).toMatchObject({ symbol: 'OK' });
+  });
 });

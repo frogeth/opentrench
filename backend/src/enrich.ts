@@ -41,10 +41,14 @@ export interface EnrichSources {
   gtBusy?: () => boolean;
   /** launchpad classifier: badge + image/socials for fresh launches no chart site knows yet */
   launchpad?: (address: string, chain: Chain) => Promise<LaunchpadInfo | undefined>;
+  /** the chain itself: name, ticker, chain and pool from the contract and the factories (onchain/firstsight.ts) */
+  chain?: (address: string, chain: Chain) => Promise<Partial<TokenInfo> | undefined>;
   log?: (msg: string) => void;
 }
 
 const FILL_KEYS = ['imageUrl', 'name', 'symbol', 'website', 'twitter', 'telegram', 'network', 'pairCreatedAt', 'marketCap'] as const;
+/** what the chain itself can say about a token (see onchain/firstsight.ts) */
+const CHAIN_KEYS = ['network', 'name', 'symbol', 'pairAddress', 'quoteSymbol', 'quoteAddress', 'dex'] as const;
 
 /**
  * Dexscreener first. If it has no pair yet, GeckoTerminal (covers Robinhood
@@ -57,27 +61,45 @@ export function createEnricher(src: EnrichSources): TokenFetcher {
   return async (address, chain) => {
     let info: Partial<TokenInfo> | undefined;
 
-    if (src.dexscreener) {
-      try {
-        info = await src.dexscreener(address);
-      } catch (e: any) {
-        log(`dexscreener failed for ${address}: ${e?.message ?? e}`);
-      }
+    // Dexscreener and the chain at the same time: the chain answers in one round trip with the
+    // ticker and the pool, the site (when it has indexed the token) adds the numbers
+    const [ds, onchain] = await Promise.all([
+      src.dexscreener
+        ? src.dexscreener(address).catch((e: any) => {
+            log(`dexscreener failed for ${address}: ${e?.message ?? e}`);
+            return undefined;
+          })
+        : undefined,
+      src.chain
+        ? src.chain(address, chain).catch((e: any) => {
+            log(`chain lookup failed for ${address}: ${e?.message ?? e}`);
+            return undefined;
+          })
+        : undefined,
+    ]);
+    info = ds;
+    if (onchain) {
+      info = info ?? {};
+      for (const k of CHAIN_KEYS) if (!info[k] && onchain[k]) (info as any)[k] = onchain[k];
     }
     // a chain the chart sites do not index (Arc): its RPC places the contract at once, so the
     // chain, symbol and a chart are there even while the price feed is rate-limited or behind
     let placed: Partial<TokenInfo> | undefined;
-    if (!info && chain === 'evm' && src.rpcProbe) {
+    if (!info?.network && chain === 'evm' && src.rpcProbe) {
       try {
         placed = await src.rpcProbe(address);
       } catch (e: any) {
         log(`rpc probe failed for ${address}: ${e?.message ?? e}`);
       }
     }
-    if (!info && src.geckoterminal && !(placed && src.gtBusy?.())) {
+    // GeckoTerminal only when Dexscreener had nothing and no factory placed a pool for it
+    if (!ds && !info?.pairAddress && src.geckoterminal && !(placed && src.gtBusy?.()) && !(info?.network && src.gtBusy?.())) {
       try {
-        info = await src.geckoterminal(address, chain, placed?.network ? [placed.network] : undefined);
-        if (!info && !placed) log(`no pair on dexscreener or geckoterminal for ${address}`);
+        const gt = await src.geckoterminal(address, chain, (info?.network ?? placed?.network) ? [info?.network ?? placed!.network!] : undefined);
+        if (gt) {
+          info = info ?? {};
+          for (const k of Object.keys(gt) as (keyof TokenInfo)[]) if (info[k] === undefined && gt[k] !== undefined) (info as any)[k] = gt[k];
+        } else if (!placed && !info) log(`no pair on dexscreener or geckoterminal for ${address}`);
       } catch (e: any) {
         log(`geckoterminal failed for ${address}: ${e?.message ?? e}`);
       }
@@ -105,8 +127,9 @@ export function createEnricher(src: EnrichSources): TokenFetcher {
   };
 }
 
-export function createDefaultEnricher(opts: { o1ApiKey?: () => string | undefined } = {}): TokenFetcher {
+export function createDefaultEnricher(opts: { o1ApiKey?: () => string | undefined; chain?: EnrichSources['chain'] } = {}): TokenFetcher {
   return createEnricher({
+    chain: opts.chain,
     dexscreener: (a) => fetchDexscreener(a),
     geckoterminal: (a, c, networks) => fetchGeckoTerminal(a, c, undefined, networks),
     rpcProbe: (a) => probeChains(a),

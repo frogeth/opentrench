@@ -27,6 +27,8 @@ import { ShellLink } from './plugins/shell.js';
 import { createPluginsApi } from './plugins/api.js';
 import { jsonErrors } from './http.js';
 import { createEndpoints } from './onchain/endpoints.js';
+import { createChainSource } from './onchain/firstsight.js';
+import { createBlockFinder } from './onchain/history.js';
 import { CHAINS } from './onchain/chains.js';
 import { createLivePricer } from './onchain/live.js';
 import { createMarketApi } from './onchain/api.js';
@@ -45,7 +47,20 @@ const secretKey = fromApp ?? keychainKey({ blobFile: `${configFile}.key` });
 if (!secretKey) console.warn('[backend] no secret key and no OS keychain: tokens and wallet keys in config.json are stored in plain text');
 else console.log(`[backend] secrets in config.json sealed with the key from ${fromApp ? 'the desktop app' : 'the OS keychain'}`);
 const cfg = new ConfigStore(configFile, new SecretBox(secretKey));
-const hub: MessageHub = new MessageHub(150, createDefaultEnricher({ o1ApiKey: () => cfg.get().o1ApiKey }), {
+// RPC endpoints (custom > Alchemy > public) come first: the enricher asks the chain itself about a contract
+const endpoints = createEndpoints(() => ({ alchemyKey: cfg.get().marketData.alchemyKey, rpc: cfg.get().rpc }), fetch as any, (m) => console.warn('[market]', m));
+const chainSource = createChainSource({
+  endpoints,
+  // the chains the feed's tokens usually live on are asked first
+  prefer: () => {
+    const n = new Map<string, number>();
+    for (const t of hub.activeTokens(24 * 3600e3)) if (t.network) n.set(t.network, (n.get(t.network) ?? 0) + 1);
+    return [...n.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+  },
+  knownPool: (network) => hub.activeTokens(7 * 24 * 3600e3).find((t) => t.network === network && /^0x[0-9a-fA-F]{40}$/.test(t.pairAddress ?? '') && /uniswap|pancake|prjx|sushi/.test(t.dex ?? ''))?.pairAddress,
+  log: (m) => console.warn('[chain]', m),
+});
+const hub: MessageHub = new MessageHub(150, createDefaultEnricher({ o1ApiKey: () => cfg.get().o1ApiKey, chain: chainSource }), {
   security: createSecurityFetcher(),
   securityBatch: createSecurityBatchFetcher(),
   // the affiliate is opentrench's own, always
@@ -69,13 +84,13 @@ const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
 // curve in the feed): one batched RPC per chain every 3s, for exactly the tokens some screen is
 // showing (the app reports them; see onchain/live.ts). Custom RPC > Alchemy key > public endpoint.
 const LIVE_TICK_MS = 3_000;
-const endpoints = createEndpoints(() => ({ alchemyKey: cfg.get().marketData.alchemyKey, rpc: cfg.get().rpc }), fetch as any, (m) => console.warn('[market]', m));
 const pricer = createLivePricer({
   endpoints,
   apply: (addr, info) => hub.updateMarket(addr, info),
   // a quote asset's main pool: Dexscreener as a directory only; the price is then read on-chain
   discover: async (network, address) => (await fetchDexscreenerChain(network, [address])).get(address) ?? (await fetchDexscreenerChain(network, [address])).get(address.toLowerCase()),
   log: (m) => console.warn('[market]', m),
+  blockAt: createBlockFinder(fetch as any),
 });
 void endpoints.probeAlchemy(cfg.get().marketData.alchemyKey).then((st) => {
   if (st.hasKey) console.log(`[market] alchemy serves ${st.chains.length ? st.chains.join(', ') : 'nothing'}${st.error ? ` (${st.error})` : ''}`);
@@ -117,6 +132,8 @@ setInterval(() => void refreshMarket(byNewest(mine(hub.activeTokens(ACTIVE_WINDO
 const backfill = createBackfiller({
   tokens: () => mine(hub.activeTokens(ACTIVE_WINDOW_MS)),
   candles: (token, network, pool, beforeTs, limit) => fetchOhlcv(gtSlugFor(network), pool, '1m', limit, fetch, beforeTs, token),
+  // the pool at the call's block first (EVM chains with archive state); candles when that cannot answer
+  priceAt: (t, ts) => pricer.priceAt(t, ts),
   apply: (address, updates) => hub.applyCallMarketCaps(address, updates),
   log: (m) => console.warn('[backfill]', m),
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PER_CYCLE, SETTLE_MS, backfillOnce, marketCapsAt, pendingCalls, repairCandleMarketCaps, type CallMarketCap } from './backfill.js';
 import type { Candle } from './geckoterminal.js';
 import type { CallRecord, TokenInfo } from './types.js';
@@ -118,5 +118,21 @@ describe('backfillOnce', () => {
     expect(t.calls[1]).toMatchObject({ msgId: 'fine', marketCap: 180_000, mcSource: undefined }); // within 50×: kept, re-read later
     expect(t.calls[2]).toMatchObject({ msgId: 'cached', marketCap: 100_000, mcSource: 'cached' });
     expect(pendingCalls(t, NOW).map((c) => c.msgId)).toEqual(['first', 'fine']);
+  });
+
+  it('reads the pool at the call\'s block first and marks those calls as chain-read; candles only when the chain cannot answer', async () => {
+    const now = 10_000_000;
+    const t = { address: '0xa', network: 'robinhood', pairAddress: '0xp', marketCap: 1_000_000, priceUsd: 0.001, lastCallTs: now - 200_000, symbol: 'A', calls: [{ msgId: 'm1', ts: now - 200_000 }, { msgId: 'm2', ts: now - 100_000 }] } as any;
+    const apply = vi.fn();
+    const candles = vi.fn(async () => []);
+    const priceAt = vi.fn(async (_t: any, ts: number) => (ts === now - 200_000 ? 0.002 : undefined));
+    const fixed = await backfillOnce({ tokens: () => [t], candles, apply, priceAt, now: () => now });
+    expect(fixed).toBe(1);
+    expect(apply).toHaveBeenCalledWith('0xa', [{ msgId: 'm1', marketCap: 2_000_000, source: 'chain' }, { msgId: 'm2', source: 'cached' }]);
+    expect(candles).not.toHaveBeenCalled();
+    // nothing from the chain: the candle path runs as before
+    const none = vi.fn(async () => undefined);
+    await backfillOnce({ tokens: () => [t], candles, apply, priceAt: none, now: () => now });
+    expect(candles).toHaveBeenCalledTimes(1);
   });
 });

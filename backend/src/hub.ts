@@ -207,7 +207,7 @@ export class MessageHub extends EventEmitter {
   }
 
   /** Market caps read back from the calls' own minute candles (backfill.ts); the first call's value is the entry. */
-  applyCallMarketCaps(address: string, updates: { msgId: string; marketCap?: number; source: 'candle' | 'cached' }[]): void {
+  applyCallMarketCaps(address: string, updates: { msgId: string; marketCap?: number; source: 'candle' | 'cached' | 'chain' }[]): void {
     const t = this.tokens.get(address);
     if (!t) return;
     let changed = false;
@@ -215,7 +215,7 @@ export class MessageHub extends EventEmitter {
       const c = t.calls.find((c) => c.msgId === u.msgId);
       if (!c) continue;
       c.mcSource = u.source;
-      if (u.source === 'candle' && u.marketCap !== undefined && u.marketCap > 0) {
+      if (u.source !== 'cached' && u.marketCap !== undefined && u.marketCap > 0) {
         c.marketCap = u.marketCap;
         if (c === t.calls[0]) t.firstCallMarketCap = u.marketCap;
         changed = true;

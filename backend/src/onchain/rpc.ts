@@ -34,13 +34,13 @@ export interface EvmResult {
 const errText = (e: unknown): string => (typeof e === 'string' ? e : typeof (e as any)?.message === 'string' ? (e as any).message : JSON.stringify(e ?? 'error')).slice(0, 200);
 
 /** One batched eth_call round; results align with `calls`. A batch-level error throws, so the caller sees the node is refusing us. */
-export async function evmCallsDetailed(url: string, calls: EvmCall[], fetchImpl: FetchLike = fetch as unknown as FetchLike): Promise<EvmResult[]> {
+export async function evmCallsDetailed(url: string, calls: EvmCall[], fetchImpl: FetchLike = fetch as unknown as FetchLike, block = 'latest'): Promise<EvmResult[]> {
   const out: EvmResult[] = calls.map(() => ({}));
   let start = 0;
   while (start < calls.length) {
     const chunk = chunkFor.get(url) ?? CHUNK;
     const slice = calls.slice(start, start + chunk);
-    const body = slice.map((c, i) => ({ jsonrpc: '2.0', id: start + i, method: 'eth_call', params: [{ to: c.to, data: c.data }, 'latest'] }));
+    const body = slice.map((c, i) => ({ jsonrpc: '2.0', id: start + i, method: 'eth_call', params: [{ to: c.to, data: c.data }, block] }));
     const json = await post(fetchImpl, url, body);
     if (!Array.isArray(json)) {
       // a single object back for a batch is the node refusing the batch as a whole
@@ -65,8 +65,16 @@ export async function evmCallsDetailed(url: string, calls: EvmCall[], fetchImpl:
 }
 
 /** evmCallsDetailed without the errors: undefined where the node returned one. */
-export async function evmCalls(url: string, calls: EvmCall[], fetchImpl: FetchLike = fetch as unknown as FetchLike): Promise<(string | undefined)[]> {
-  return (await evmCallsDetailed(url, calls, fetchImpl)).map((r) => r.result);
+export async function evmCalls(url: string, calls: EvmCall[], fetchImpl: FetchLike = fetch as unknown as FetchLike, block = 'latest'): Promise<(string | undefined)[]> {
+  return (await evmCallsDetailed(url, calls, fetchImpl, block)).map((r) => r.result);
+}
+
+/** a block's number and unix timestamp; `tag` is 'latest' or a hex number */
+export async function evmBlock(url: string, tag: string, fetchImpl: FetchLike = fetch as unknown as FetchLike): Promise<{ number: number; ts: number } | undefined> {
+  const json: any = await post(fetchImpl, url, { jsonrpc: '2.0', id: 1, method: 'eth_getBlockByNumber', params: [tag, false] });
+  const b = json?.result;
+  if (!b || typeof b.number !== 'string' || typeof b.timestamp !== 'string') return undefined;
+  return { number: Number(BigInt(b.number)), ts: Number(BigInt(b.timestamp)) };
 }
 
 /** a node error that says the call itself is wrong (rather than the node being busy) */

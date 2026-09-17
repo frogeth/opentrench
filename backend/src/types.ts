@@ -155,7 +155,7 @@ export interface CallRecord {
   /** market cap when the call was registered (first call: the first enrichment after it) */
   marketCap?: number;
   /** set once the backfill ran: 'candle' = read from the 1-minute candle of the call's minute (exact), 'cached' = no candle for that minute, the registration number stays */
-  mcSource?: 'candle' | 'cached' | 'scan';
+  mcSource?: 'candle' | 'cached' | 'scan' | 'chain';
   /** posted by a bot (an alert bot that called first); a friend's copy uses it to drop bot echoes */
   bot?: true;
 }
