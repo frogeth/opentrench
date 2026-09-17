@@ -24,8 +24,12 @@ export interface PluginConfig {
 }
 const LOG_MAX = 200;
 
-/** Why the registry refused, so callers (the routes) answer by the reason and not by the wording. */
-export type RegistryErrorCode = 'unknown' | 'needs-approval' | 'not-enabled' | 'changed';
+/**
+ * Why the registry refused, so callers (the routes) answer by the reason and not by the wording.
+ * 'unknown' is an id the folder does not have; 'broken' is one it does, whose file will not parse —
+ * a different thing to tell the user, and a different thing for the UI to offer to do about it.
+ */
+export type RegistryErrorCode = 'unknown' | 'broken' | 'needs-approval' | 'not-enabled' | 'changed';
 export class RegistryError extends Error {
   constructor(
     readonly code: RegistryErrorCode,
@@ -34,6 +38,11 @@ export class RegistryError extends Error {
     super(message);
     this.name = 'RegistryError';
   }
+}
+
+/** Nothing usable under that id: either the folder has no such file, or the one it has will not parse. */
+function notLoaded(p: Loaded | undefined): RegistryError {
+  return p ? new RegistryError('broken', p.error ?? 'the plugin file will not load') : new RegistryError('unknown', 'unknown plugin');
 }
 
 /** An id for a broken file that no other entry holds: its name, else the name plus a slice of its hash, else a counter. */
@@ -127,7 +136,7 @@ export class PluginRegistry {
   }
   manifest(id: string): PluginManifest {
     const p = this.loaded.get(id);
-    if (!p?.manifest) throw new RegistryError('unknown', p?.error ?? 'unknown plugin');
+    if (!p?.manifest) throw notLoaded(p);
     return p.manifest;
   }
   /**
@@ -148,7 +157,7 @@ export class PluginRegistry {
   }
   approve(id: string): void {
     const p = this.loaded.get(id);
-    if (!p?.manifest) throw new RegistryError('unknown', p?.error ?? 'unknown plugin');
+    if (!p?.manifest) throw notLoaded(p);
     this.cfg.update((c) => {
       c.plugins[id] = { ...(c.plugins[id] ?? { enabled: false }), approvedHash: p.hash };
     });
@@ -156,7 +165,7 @@ export class PluginRegistry {
   }
   enable(id: string): void {
     const p = this.loaded.get(id);
-    if (!p?.manifest) throw new RegistryError('unknown', p?.error ?? 'unknown plugin');
+    if (!p?.manifest) throw notLoaded(p);
     if (this.cfg.get().plugins[id]?.approvedHash !== p.hash) throw new RegistryError('needs-approval', 'approve this version of the plugin first');
     this.cfg.update((c) => {
       c.plugins[id] = { ...c.plugins[id], enabled: true };

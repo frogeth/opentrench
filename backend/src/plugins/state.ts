@@ -27,7 +27,7 @@ export class PluginState {
   constructor(private file: string) {
     try {
       const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
-        for (const [id, r] of Object.entries<any>(raw ?? {})) {
+      for (const [id, r] of Object.entries<any>(raw ?? {})) {
         this.data[id] = { storage: Object.assign(Object.create(null), r?.storage ?? {}), settings: r?.settings ?? {}, chats: r?.chats ?? {} };
       }
     } catch {

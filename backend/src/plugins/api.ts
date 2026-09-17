@@ -129,7 +129,8 @@ export function createPluginsApi(
   /** The registry says why it refused; the status follows from that, not from the wording. */
   const statusFor = (e: unknown, fallback: number): number => {
     const code = e instanceof RegistryError ? e.code : undefined;
-    return code === 'unknown' ? 404 : code === 'not-enabled' ? 403 : code === 'changed' ? 409 : fallback;
+    // 'broken' is 422: the id is real and the request was well formed, but the file behind it will not parse.
+    return code === 'unknown' ? 404 : code === 'not-enabled' ? 403 : code === 'changed' ? 409 : code === 'broken' ? 422 : fallback;
   };
   const enabled = (req: Request, res: Response): string | null => {
     const id = String(req.params.id);
@@ -322,7 +323,9 @@ export function createPluginsApi(
     if (req.body?.attachments !== undefined) {
       try {
         const media = toMedia(manifest, req.body.attachments);
-        patch.media = media.length ? media : undefined;
+        // An empty list is an instruction, not a missing field: `undefined` would drop out of the
+        // patch on the way to the client and leave the old images on screen.
+        patch.media = media;
         patch.hasAttachment = media.length > 0;
       } catch (e) {
         return fail(res, 400, why(e));
@@ -336,9 +339,10 @@ export function createPluginsApi(
   r.put('/plugins/watch', (req, res) => {
     const key = String(req.body?.key ?? '');
     if (!/^plugin:[a-z0-9-]+:[a-z0-9-]+$/.test(key)) return fail(res, 400, 'key');
-    // Only a chat a plugin has actually posted: the watch list is what the pickers and columns read,
-    // and a key with nothing behind it is a row no one can ever name or clear.
-    if (!reg.list().some((p) => key in p.chats)) return fail(res, 400, 'no plugin has posted that chat');
+    // Switching one on needs a chat a plugin has actually posted: the watch list is what the pickers
+    // and columns read, and a key with nothing behind it is a row no one can name. Switching off is
+    // always allowed — that is how a leftover key gets cleared.
+    if (req.body?.on && !reg.list().some((p) => key in p.chats)) return fail(res, 400, 'no plugin has posted that chat');
     cfg.update((c) => {
       c.pluginWatch = c.pluginWatch.filter((k) => k !== key);
       if (req.body?.on) c.pluginWatch.push(key);

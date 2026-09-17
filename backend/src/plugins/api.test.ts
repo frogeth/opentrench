@@ -11,6 +11,13 @@ import { ShellLink } from './shell.js';
 import { createPluginsApi, isLoopbackCaller, pluginHeaders, proxyBody } from './api.js';
 import { jsonErrors } from '../http.js';
 
+/** a plugin that may write the feed but stores nothing, for the refusals that need one */
+const LOUD = `export const manifest = {"id":"loud-feed","name":"Loud feed","version":"1.0.0","api":1,"sites":["https://example.com"],"permissions":["feed:write"]};
+export default function main(ot) {}`;
+
+/** a file that will not parse: an id the folder has, with nothing usable behind it */
+const BROKEN = 'export default function main(ot) {}';
+
 /** a second plugin in the folder with no feed:write, for the refusals that need one */
 const QUIET = `export const manifest = {"id":"quiet-feed","name":"Quiet feed","version":"1.0.0","api":1,"sites":["https://example.com"],"permissions":["storage"]};
 export default function main(ot) {}`;
@@ -39,11 +46,13 @@ interface Harness {
 /** One backend's worth of plugin routes on a random port, with a fake shell and a fake downloader. */
 const tmpDirs: string[] = [];
 
-function harness(opts: { blacklist?: string[]; download?: (url: string) => Response | Promise<Response>; hold?: () => Promise<void>; quiet?: boolean } = {}): Harness {
+function harness(opts: { blacklist?: string[]; download?: (url: string) => Response | Promise<Response>; hold?: () => Promise<void>; quiet?: boolean; loud?: boolean; broken?: boolean } = {}): Harness {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ot-plugins-api-'));
   tmpDirs.push(dir);
   fs.writeFileSync(path.join(dir, 'hello-feed.js'), FILE);
   if (opts.quiet) fs.writeFileSync(path.join(dir, 'quiet-feed.js'), QUIET);
+  if (opts.loud) fs.writeFileSync(path.join(dir, 'loud-feed.js'), LOUD);
+  if (opts.broken) fs.writeFileSync(path.join(dir, 'broken-feed.js'), BROKEN);
   const cfg: any = { plugins: {}, pluginWatch: [] };
   const store = { get: () => cfg, update: (fn: (c: any) => void) => fn(cfg) };
   const state = new PluginState(path.join(dir, 'plugins-state.json'));
@@ -448,6 +457,14 @@ describe('plugins api guards', () => {
       expect(t.hub.hello().messages.find((m) => m.id === 'plugin:hello-feed:alerts:1')!.contracts).toEqual([
         expect.objectContaining({ address: '0xdac17f958d2ee523a2206206994597c13d831ec7' }),
       ]);
+      // …but an edit is not a call: nothing is registered against the token and nobody is pinged
+      expect(t.hub.hello().tokens).toEqual([]);
+      expect(t.hub.hello().mentions).toEqual([]);
+      // an attachment list that arrives empty clears the images rather than leaving them on screen
+      expect((await t.j('POST', '/plugins/hello-feed/patch', { id: 'plugin:hello-feed:alerts:1', attachments: [{ url: 'https://example.com/a.png' }] })).status).toBe(200);
+      expect(t.hub.hello().messages.find((m) => m.id === 'plugin:hello-feed:alerts:1')).toMatchObject({ hasAttachment: true, media: [{ kind: 'image', url: 'https://example.com/a.png' }] });
+      expect((await t.j('POST', '/plugins/hello-feed/patch', { id: 'plugin:hello-feed:alerts:1', attachments: [] })).status).toBe(200);
+      expect(t.hub.hello().messages.find((m) => m.id === 'plugin:hello-feed:alerts:1')).toMatchObject({ hasAttachment: false, media: [] });
       const offSite = await t.j('POST', '/plugins/hello-feed/patch', { id: 'plugin:hello-feed:alerts:1', attachments: [{ url: 'https://elsewhere.example.com/a.png' }] });
       expect(offSite.status).toBe(400);
       expect(offSite.body.error).toMatch(/sites/);
@@ -486,17 +503,23 @@ describe('plugins api guards', () => {
     }
   });
   it('storage needs the permission to read as well as write, and refuses a key that names a prototype', async () => {
-    const t = harness({ quiet: true });
+    const t = harness({ quiet: true, loud: true });
     try {
       await approved(t);
       expect((await t.j('PUT', '/plugins/hello-feed/storage/__proto__', { value: { polluted: true } })).status).toBe(400);
       expect((await t.j('PUT', '/plugins/hello-feed/storage/constructor', { value: 1 })).status).toBe(400);
       expect((await t.j('PUT', '/plugins/hello-feed/storage/prototype', { value: 1 })).status).toBe(400);
       expect(({} as any).polluted).toBeUndefined();
-      // quiet-feed has the storage permission; a plugin without it can read nothing
+      // quiet-feed has the storage permission, loud-feed does not: reading is gated like writing
       await t.j('POST', '/plugins/quiet-feed/approve');
       await t.j('POST', '/plugins/quiet-feed/enable');
       expect((await t.j('GET', '/plugins/quiet-feed/storage')).status).toBe(200);
+      await t.j('POST', '/plugins/loud-feed/approve');
+      await t.j('POST', '/plugins/loud-feed/enable');
+      const denied = await t.j('GET', '/plugins/loud-feed/storage');
+      expect(denied.status).toBe(403);
+      expect(denied.body.error).toMatch(/storage permission/);
+      expect((await t.j('PUT', '/plugins/loud-feed/storage/k', { value: 1 })).status).toBe(403);
     } finally {
       t.close();
     }
@@ -511,6 +534,26 @@ describe('plugins api guards', () => {
       expect(t.cfg.pluginWatch).toEqual([]);
       expect((await t.j('PUT', '/plugins/watch', { key: 'plugin:hello-feed:made-up', on: true })).status).toBe(400);
       expect((await t.j('PUT', '/plugins/watch', { key: 'nonsense', on: true })).status).toBe(400);
+      // switching off is always allowed: a key left over from a plugin that is gone has to be clearable
+      t.cfg.pluginWatch.push('plugin:gone-feed:old');
+      expect((await t.j('PUT', '/plugins/watch', { key: 'plugin:gone-feed:old', on: false })).status).toBe(200);
+      expect(t.cfg.pluginWatch).toEqual([]);
+    } finally {
+      t.close();
+    }
+  });
+  it('a file that will not parse is listed, and answers 422 with what is wrong with it', async () => {
+    const t = harness({ broken: true });
+    try {
+      const listed = (await t.j('GET', '/plugins')).body.find((p: any) => p.id === 'broken-feed');
+      expect(listed.error).toMatch(/no manifest/);
+      for (const route of ['approve', 'enable']) {
+        const r = await t.j('POST', `/plugins/broken-feed/${route}`);
+        expect(r.status).toBe(422); // the id is real; the file behind it is not
+        expect(r.body.error).toMatch(/no manifest/);
+      }
+      // and an id the folder does not have at all is still a 404
+      expect((await t.j('POST', '/plugins/never-existed/approve')).status).toBe(404);
     } finally {
       t.close();
     }
