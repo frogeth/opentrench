@@ -1063,6 +1063,18 @@ export default function App() {
     if (next && typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission().then(setNotify);
   };
 
+  /** a plugin chat in or out of the feed; its key is the whole chat id, `plugin:<plugin>:<chat>` */
+  const togglePluginWatch = async (key: string, on: boolean) => {
+    setBusy(true);
+    try {
+      await api.pluginWatch(key, on);
+      if (!on && view.chat?.id === key) setView({ rail: view.rail });
+      reloadLists();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggleWatch = async (source: 'discord' | 'telegram', id: string, on: boolean) => {
     if (!cfg) return;
     setBusy(true);
@@ -1787,6 +1799,7 @@ export default function App() {
           watched={watched}
           channels={channels}
           callers={knownCallers}
+          plugins={plugins}
           onClose={() => setEditing(null)}
           onSave={(c) => {
             if (c.type === 'osmint' && flatColumns.some((x) => x.type === 'osmint' && x.id !== c.id)) {
@@ -1960,6 +1973,10 @@ export default function App() {
           onCompactEmbeds={setCompactEmbeds}
           chartProvider={chartProvider}
           onChartProvider={setChartProvider}
+          plugins={plugins}
+          pluginErrors={pluginErrors}
+          pluginSchemas={pluginSchemas}
+          onPluginsChanged={() => void api.plugins().then(setPlugins).catch(() => {})}
         />
       )}
       {addOpen && (
@@ -1969,8 +1986,10 @@ export default function App() {
           cfg={cfg}
           channels={channels}
           dialogs={dialogs}
+          plugins={plugins}
           busy={busy}
           onToggle={toggleWatch}
+          onTogglePlugin={togglePluginWatch}
           onPreview={openPreview}
           onClose={() => setAddOpen(null)}
         />

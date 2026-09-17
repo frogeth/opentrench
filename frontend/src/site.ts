@@ -5,4 +5,5 @@ export const DOCS = {
   gettingStarted: `${SITE_URL}/docs/`,
   discordBridge: `${SITE_URL}/docs/discord/`,
   telegram: `${SITE_URL}/docs/telegram/`,
+  plugins: `${SITE_URL}/docs/plugins/`,
 } as const;

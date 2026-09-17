@@ -1418,3 +1418,21 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 .plugin-prompt-row span { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
 .plugin-prompt-addr { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; color: var(--text); }
 .plugin-toast { bottom: 48px; }
+/* ⚙ → Plugins */
+.plugins-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+.plugins-add .fed-input { flex: 1; min-width: 200px; }
+.plugin-row { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.plugin-row.on { border-color: var(--accent); }
+.plugin-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plugin-meta { font-size: 11px; display: flex; flex-direction: column; gap: 2px; }
+.plugin-site { margin-right: 8px; }
+.plugin-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.plugin-settings { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 8px; }
+.plugin-field { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.plugin-field > span { min-width: 140px; }
+.plugin-field .fed-input { flex: 1; min-width: 0; }
+.plugin-log { max-height: 200px; overflow: auto; font-size: 11px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; white-space: pre-wrap; }
+.plugin-approve { max-width: 520px; padding: 18px; }
+.plugin-approve .err { border: 1px solid #a33; border-radius: 6px; padding: 8px 10px; }
+/* the file itself, for reading before approving: never edited here, only read */
+.plugin-code { max-height: 260px; overflow: auto; font-family: var(--mono); font-size: 11px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }

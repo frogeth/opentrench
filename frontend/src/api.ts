@@ -21,6 +21,22 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return data as T;
 }
 
+/** A route that answers with a file rather than JSON; a refusal is still JSON, so it is unwrapped here. */
+async function text(path: string): Promise<string> {
+  const res = await fetch(`/api${path}`, { headers: { ...REQUESTED_WITH } });
+  const body = await res.text();
+  if (!res.ok) {
+    let error = res.statusText;
+    try {
+      error = JSON.parse(body).error ?? error;
+    } catch {
+      /* not JSON: keep the status */
+    }
+    throw new Error(error);
+  }
+  return body;
+}
+
 export interface BotPolicy {
   default: 'hide' | 'show';
   allow: string[];
@@ -316,21 +332,12 @@ export const api = {
   pluginEnable: (id: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/enable`),
   pluginDisable: (id: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/disable`),
   pluginRemove: (id: string) => req<{ ok: true }>('DELETE', `/plugins/${encodeURIComponent(id)}`),
-  /** the plugin's source as it sits on disk (text, not JSON) */
-  pluginCode: async (id: string) => {
-    const res = await fetch(`/api/plugins/${encodeURIComponent(id)}/code`, { headers: { ...REQUESTED_WITH } });
-    const text = await res.text();
-    if (!res.ok) {
-      let error = res.statusText;
-      try {
-        error = JSON.parse(text).error ?? error;
-      } catch {
-        /* not JSON: keep the status */
-      }
-      throw new Error(error);
-    }
-    return text;
-  },
+  /** the module the sandbox imports: the exact approved bytes, and only while the plugin is enabled */
+  pluginCode: (id: string) => text(`/plugins/${encodeURIComponent(id)}/code`),
+  /** the same file for a person to read — any plugin the folder has, approved or not */
+  pluginSource: (id: string) => text(`/plugins/${encodeURIComponent(id)}/source`),
+  /** is the desktop shell connected? (what site sign-in needs) */
+  pluginsShell: () => req<{ available: boolean }>('GET', '/plugins/shell'),
   pluginLogs: (id: string) => req<{ ts: number; level: PluginLogLevel; text: string }[]>('GET', `/plugins/${encodeURIComponent(id)}/logs`),
   pluginLog: (id: string, level: PluginLogLevel, text: string) => req<{ ok: true }>('POST', `/plugins/${encodeURIComponent(id)}/log`, { level, text }),
   pluginPost: (id: string, post: unknown) => req<{ ok: true; id: string }>('POST', `/plugins/${encodeURIComponent(id)}/post`, post),

@@ -293,6 +293,23 @@ export function createPluginsApi(
     res.setHeader('cache-control', 'no-store');
     res.send(source);
   });
+  r.get('/plugins/:id/source', (req, res) => {
+    // Not `code`'s gate: the dialog offers "view code" *before* the user approves or enables anything.
+    // Served as text for a reader, never as a module — nothing can import this back into the app.
+    const id = loaded(req, res);
+    if (!id) return;
+    let source: string;
+    try {
+      source = reg.source(id);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException)?.code === 'ENOENT') return fail(res, 404, 'the plugin file is gone; reload the plugins folder');
+      return fail(res, statusFor(e, 400), why(e));
+    }
+    res.setHeader('content-type', 'text/plain; charset=utf-8');
+    res.setHeader('cache-control', 'no-store');
+    res.setHeader('x-content-type-options', 'nosniff');
+    res.send(source);
+  });
   r.get('/plugins/:id/logs', (req, res) => {
     const id = loaded(req, res);
     if (!id) return;

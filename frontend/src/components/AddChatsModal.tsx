@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DiscordChannel, MaskedConfig, TelegramDialog } from '../api';
+import type { PluginInfo } from '../types';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 
@@ -8,9 +9,9 @@ import { Icon } from './Icon';
 import { discordChatName, discordGlyph } from './ChannelSidebar';
 
 /**
- * Popup picker for both platforms: every Discord server & channel, or every
- * Telegram chat, each with an add/remove toggle and a preview button that
- * opens the chat's recent history without adding it.
+ * Popup picker for every source: Discord servers & channels, Telegram chats, and the chats plugins
+ * have posted — each with an add/remove toggle, and (on the platforms) a preview button that opens
+ * the chat's recent history without adding it.
  */
 export function AddChatsModal({
   initialSource,
@@ -18,8 +19,10 @@ export function AddChatsModal({
   cfg,
   channels,
   dialogs,
+  plugins,
   busy,
   onToggle,
+  onTogglePlugin,
   onPreview,
   onClose,
 }: {
@@ -28,12 +31,15 @@ export function AddChatsModal({
   cfg: MaskedConfig | null;
   channels: DiscordChannel[];
   dialogs: TelegramDialog[];
+  plugins: PluginInfo[];
   busy: boolean;
   onToggle: (source: 'discord' | 'telegram', id: string, on: boolean) => Promise<void>;
+  /** a plugin chat's key is its whole id, `plugin:<plugin>:<chat>` */
+  onTogglePlugin: (key: string, on: boolean) => Promise<void>;
   onPreview: (source: 'discord' | 'telegram', id: string, name: string, guildId?: string) => void;
   onClose: () => void;
 }) {
-  const [source, setSource] = useState<'discord' | 'telegram'>(initialSource);
+  const [source, setSource] = useState<'discord' | 'telegram' | 'plugin'>(initialSource);
   const [q, setQ] = useState('');
   const [guild, setGuild] = useState<string | undefined>(guildId);
   useEffect(() => {
@@ -69,8 +75,36 @@ export function AddChatsModal({
     if (shownGuilds.length && !shownGuilds.some((g) => g.id === guild)) setGuild(shownGuilds[0].id);
   }, [guild, shownGuilds]);
 
+  const pluginChats = useMemo(
+    () => plugins.flatMap((p) => Object.entries(p.chats).map(([chatId, name]) => ({ plugin: p, chatId, name }))),
+    [plugins],
+  );
+
   let body;
-  if (source === 'telegram') {
+  if (source === 'plugin') {
+    const rows = pluginChats.filter((c) => !query || c.name.toLowerCase().includes(query) || (c.plugin.manifest?.name ?? c.plugin.id).toLowerCase().includes(query));
+    body = (
+      <div className="modal-list">
+        {rows.map(({ plugin, chatId, name }) => {
+          const on = cfg?.pluginWatch.includes(chatId) ?? false;
+          return (
+            <div key={chatId} className={`pick${on ? ' on' : ''}`}>
+              {/* no preview: a plugin chat has no history to fetch — what it posted is already in the feed */}
+              <span className="pick-main">
+                <Icon name="plug" size={16} />
+                <span className="pick-name">{name}</span>
+                <span className="muted">{plugin.manifest?.name ?? plugin.id}</span>
+              </span>
+              <button className={`chan-toggle${on ? ' on' : ''}`} disabled={busy} onClick={() => onTogglePlugin(chatId, !on)}>
+                {on ? '✓ in feed' : '+ add'}
+              </button>
+            </div>
+          );
+        })}
+        {rows.length === 0 && <div className="empty">{pluginChats.length ? 'No match.' : 'No plugin has posted a chat yet. Enable one in ⚙ → Plugins.'}</div>}
+      </div>
+    );
+  } else if (source === 'telegram') {
     const counts = { all: dialogs.length, group: 0, channel: 0, dm: 0, bot: 0 } as Record<TgKind, number>;
     for (const d of dialogs) counts[d.type]++;
     const inFeed = dialogs.filter((d) => cfg?.telegram.watch.includes(d.id)).length;
@@ -187,13 +221,16 @@ export function AddChatsModal({
             <button className={source === 'telegram' ? 'active' : ''} onClick={() => setSource('telegram')}>
               <Logo source="telegram" size={13} /> Telegram
             </button>
+            <button className={source === 'plugin' ? 'active' : ''} onClick={() => setSource('plugin')}>
+              <Icon name="plug" size={13} /> Plugins
+            </button>
           </div>
           <input className="modal-search" placeholder="search…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
           <button className="close" onClick={onClose}>
             close
           </button>
         </div>
-        <div className="hint modal-hint">Click a name to preview it without adding. "+ add" puts it in your feed.</div>
+        <div className="hint modal-hint">{source === 'plugin' ? 'Chats your plugins have posted. "+ add" keeps one in your feed; removing it hides it until the plugin posts again.' : 'Click a name to preview it without adding. "+ add" puts it in your feed.'}</div>
         {body}
       </div>
     </div>

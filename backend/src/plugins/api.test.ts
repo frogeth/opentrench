@@ -324,6 +324,29 @@ describe('plugins api guards', () => {
       t.close();
     }
   });
+  it('source serves the file for any plugin the folder has, enabled or not, as plain text', async () => {
+    const t = harness({ broken: true });
+    try {
+      // the approval dialog's "view code" is read before a plugin is approved, let alone enabled
+      const before = await fetch(t.base + '/plugins/hello-feed/source');
+      expect(before.status).toBe(200);
+      expect(before.headers.get('content-type')).toMatch(/text\/plain/);
+      expect(before.headers.get('cache-control')).toBe('no-store');
+      expect(await before.text()).toBe(FILE);
+      // a file that will not parse is exactly the one worth reading
+      const broken = await fetch(t.base + '/plugins/broken-feed/source');
+      expect(broken.status).toBe(200);
+      expect(await broken.text()).toBe(BROKEN);
+      // …and a plugin the folder does not have is still a 404
+      expect((await t.j('GET', '/plugins/nope/source')).status).toBe(404);
+      fs.rmSync(path.join(t.dir, 'hello-feed.js'));
+      const gone = await t.j('GET', '/plugins/hello-feed/source');
+      expect(gone.status).toBe(404);
+      expect(gone.body.error).toMatch(/gone/);
+    } finally {
+      t.close();
+    }
+  });
   it('add-url takes https only, no local hosts, no redirects, and nothing over the size cap', async () => {
     const other = FILE.replace(/hello-feed/g, 'other-feed');
     const t = harness({

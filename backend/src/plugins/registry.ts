@@ -155,6 +155,17 @@ export class PluginRegistry {
     }
     return bytes.toString('utf8');
   }
+  /**
+   * The bytes on disk, for the user to read before they trust them. `code` is the module the sandbox
+   * imports and is rightly fenced off (enabled, and the exact approved bytes); this is the file as a
+   * reader sees it, so it answers for any plugin the folder has — an unapproved one, above all, since
+   * reading it is what the approval dialog asks the user to do.
+   */
+  source(id: string): string {
+    const p = this.loaded.get(id);
+    if (!p) throw new RegistryError('unknown', 'unknown plugin');
+    return fs.readFileSync(p.file, 'utf8');
+  }
   approve(id: string): void {
     const p = this.loaded.get(id);
     if (!p?.manifest) throw notLoaded(p);
