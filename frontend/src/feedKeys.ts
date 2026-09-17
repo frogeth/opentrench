@@ -15,10 +15,13 @@ export const normTg = (id: string) => {
 export const watchKeyOf = (m: Pick<FeedMessage, 'source' | 'chatId'>): string =>
   m.source === 'plugin' ? m.chatId : m.source === 'telegram' ? `telegram:${normTg(m.chatId)}` : `discord:${m.chatId}`;
 
+/** The names the platforms have taken, for `displayChatName`; build it once per list, not per chat. */
+export const platformChatNames = (all: WatchedChat[]): Set<string> => new Set(all.filter((w) => w.source !== 'plugin').map((w) => w.name));
+
 /**
- * What a chat is called on screen. Views are scoped by chat *name*, so a plugin chat that happens
- * to share a platform chat's name would answer for it: show that one as "<name> (plugin)" instead.
- * The proper fix is keying views by chatKey rather than by name.
+ * What a chat is *called on screen*. Views are still scoped by the raw chat name, so this is a
+ * label and never an identity: a plugin chat sharing a platform chat's name reads as
+ * "<name> (plugin)" so the two are told apart on sight. The proper fix is keying views by chatKey.
  */
-export const displayChatName = (w: WatchedChat, all: WatchedChat[]): string =>
-  w.source === 'plugin' && all.some((o) => o.source !== 'plugin' && o.name === w.name) ? `${w.name} (plugin)` : w.name;
+export const displayChatName = (w: WatchedChat, platformNames: Set<string>): string =>
+  w.source === 'plugin' && platformNames.has(w.name) ? `${w.name} (plugin)` : w.name;

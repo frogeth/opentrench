@@ -65,7 +65,9 @@ export function Composer({
 
   // a reply pins the target to that message's chat — and a reply to a chat this composer cannot
   // send to (a plugin chat, or one outside the column) is dropped rather than sent somewhere else
-  const replyTarget = reply ? targets.find((t) => t.name === reply.chatName) : undefined;
+  const replyTarget = reply
+    ? targets.find((t) => t.source === reply.source && String(t.id) === String(reply.chatId)) ?? targets.find((t) => t.name === reply.chatName)
+    : undefined;
   const target = reply ? replyTarget : targets.find((t) => t.id === targetId) ?? targets[0];
   useEffect(() => {
     if (reply && !replyTarget) onCancelReply();

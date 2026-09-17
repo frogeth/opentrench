@@ -1,7 +1,7 @@
 import { useState, type DragEvent, type ReactNode } from 'react';
 import type { DiscordChannel, MaskedConfig, TelegramDialog, WatchedChat } from '../api';
 import type { Source } from '../types';
-import { displayChatName } from '../feedKeys';
+import { displayChatName, platformChatNames } from '../feedKeys';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
 
@@ -35,7 +35,10 @@ interface RailItem {
   key: string; // g:<id> | t:<id> | p:<id>
   source: Source;
   id: string;
+  /** the chat name messages carry: the identity views scope by */
   name: string;
+  /** what to show — the name, or a plugin chat's "<name> (plugin)" when a platform chat took it */
+  label: string;
   icon?: string;
   count: number;
 }
@@ -80,20 +83,18 @@ export function ChannelSidebar({
   const guilds = new Map<string, RailItem>();
   for (const c of channels) {
     if (!watchedDc.has(c.id)) continue;
-    const g = guilds.get(c.guildId) ?? { key: `g:${c.guildId}`, source: 'discord', id: c.guildId, name: c.guildName, icon: c.guildIcon, count: 0 };
+    const g = guilds.get(c.guildId) ?? { key: `g:${c.guildId}`, source: 'discord', id: c.guildId, name: c.guildName, label: c.guildName, icon: c.guildIcon, count: 0 };
     g.count += counts.get(discordChatName(c)) ?? 0;
     guilds.set(c.guildId, g);
   }
   const tg: RailItem[] = dialogs
     .filter((d) => watchedTg.has(d.id))
-    .map((d) => ({ key: `t:${d.id}`, source: 'telegram', id: d.id, name: d.title, icon: `/api/telegram/avatar/${d.id}`, count: counts.get(d.title) ?? 0 }));
+    .map((d) => ({ key: `t:${d.id}`, source: 'telegram', id: d.id, name: d.title, label: d.title, icon: `/api/telegram/avatar/${d.id}`, count: counts.get(d.title) ?? 0 }));
+  const taken = platformChatNames(watched);
   const plugs: RailItem[] = watched
     .filter((w) => w.source === 'plugin')
-    // a plugin chat that shares a platform chat's name shows the difference (views are name-scoped)
-    .map((w) => {
-      const name = displayChatName(w, watched);
-      return { key: `p:${w.id}`, source: 'plugin' as const, id: w.id, name, count: counts.get(name) ?? 0 };
-    });
+    // the label tells a plugin chat from a platform chat of the same name; the name stays the name
+    .map((w) => ({ key: `p:${w.id}`, source: 'plugin' as const, id: w.id, name: w.name, label: displayChatName(w, taken), count: counts.get(w.name) ?? 0 }));
   const unordered = [...guilds.values(), ...tg, ...plugs];
   const order = cfg?.railOrder ?? [];
   const items = [
@@ -144,7 +145,7 @@ export function ChannelSidebar({
           className={`guild${it.key === view.rail ? ' active' : ''}${overKey === it.key && dragKey && dragKey !== it.key ? ' drop-target' : ''}${
             dragKey === it.key ? ' dragging' : ''
           }`}
-          title={`${it.name}${it.count ? ` · ${it.count}` : ''} (drag to reorder)`}
+          title={`${it.label}${it.count ? ` · ${it.count}` : ''} (drag to reorder)`}
           draggable
           onDragStart={onDragStart(it.key)}
           onDragOver={onDragOver(it.key)}
@@ -161,11 +162,11 @@ export function ChannelSidebar({
           }
         >
           {it.icon ? (
-            <RailIcon src={it.icon} name={it.name} />
+            <RailIcon src={it.icon} name={it.label} />
           ) : it.key === 'g:dm' ? (
             <span>@</span>
           ) : (
-            <span>{it.name.slice(0, 2).toUpperCase()}</span>
+            <span>{it.label.slice(0, 2).toUpperCase()}</span>
           )}
           <span className={`guild-src guild-src-${it.source}`}>
             <Logo source={it.source} size={9} />
@@ -234,7 +235,7 @@ export function ChannelSidebar({
               <Logo source="plugin" size={9} /> Plugins
             </div>
             {plugs.map((p) =>
-              row(p.id, view.chat?.id === p.id, () => onView({ rail: 'all', chat: { name: p.name, id: p.id, source: 'plugin' } }), <Logo source="plugin" size={14} />, p.name, p.count),
+              row(p.id, view.chat?.id === p.id, () => onView({ rail: 'all', chat: { name: p.name, id: p.id, source: 'plugin' } }), <Logo source="plugin" size={14} />, p.label, p.count),
             )}
           </div>
         )}
@@ -250,16 +251,16 @@ export function ChannelSidebar({
       </>
     );
   } else if (active && active.source !== 'discord') {
-    const glyph = active.source === 'plugin' ? <Logo source="plugin" size={16} /> : <Avatar src={active.icon} name={active.name} size={20} />;
+    const glyph = active.source === 'plugin' ? <Logo source="plugin" size={16} /> : <Avatar src={active.icon} name={active.label} size={20} />;
     head = (
       <>
-        {glyph} <b>{active.name}</b>
+        {glyph} <b>{active.label}</b>
         <Logo source={active.source} size={11} />
       </>
     );
     list = (
       <>
-        {row(active.id, true, () => onView({ rail: active.key, chat: { name: active.name, id: active.id, source: active.source } }), glyph, active.name, active.count)}
+        {row(active.id, true, () => onView({ rail: active.key, chat: { name: active.name, id: active.id, source: active.source } }), glyph, active.label, active.count)}
         <div className="hint" style={{ padding: '10px 8px' }}>
           {active.source === 'plugin' ? 'A plugin chat has no channels.' : 'Telegram chats have no channels.'} Other chats sit on the rail on the left.
         </div>
@@ -278,8 +279,8 @@ export function ChannelSidebar({
     }
     head = (
       <>
-        {active?.icon ? <RailIcon className="sidebar-icon" src={active.icon} name={active.name} /> : active?.id === 'dm' ? <span className="chan-hash">@</span> : <Logo source="discord" size={16} />}
-        <b>{active?.name ?? 'Discord'}</b>
+        {active?.icon ? <RailIcon className="sidebar-icon" src={active.icon} name={active.label} /> : active?.id === 'dm' ? <span className="chan-hash">@</span> : <Logo source="discord" size={16} />}
+        <b>{active?.label ?? 'Discord'}</b>
         <Logo source="discord" size={11} />
       </>
     );

@@ -26,7 +26,7 @@ import { BridgeNotice } from './components/BridgeNotice';
 import { ONBOARDED_KEY, Onboarding } from './components/Onboarding';
 import { Lightbox } from './components/Lightbox';
 import type { ShareItem } from './components/ShareModal';
-import { displayChatName, normTg, watchKeyOf } from './feedKeys';
+import { displayChatName, normTg, platformChatNames, watchKeyOf } from './feedKeys';
 
 const BOTS = { cove: COVE_BOT, basedbot: 'based_eth_bot', salpha: 'salpha_research_bot' } as const;
 type BotKind = keyof typeof BOTS;
@@ -692,10 +692,13 @@ export default function App() {
   // event carries; keyed on the chat set, so the other reasons that event fires (a sign-in, a log)
   // do not storm the two endpoints.
   const pluginChatKeys = useMemo(() => plugins.flatMap((p) => Object.keys(p.chats)).sort().join('|'), [plugins]);
+  const lastPluginChatKeys = useRef('');
   /** plugin id → the name its manifest gives it, for the "via <plugin>" tag */
   const pluginNames = useMemo(() => Object.fromEntries(plugins.map((p) => [p.id, p.manifest?.name ?? p.id])), [plugins]);
   useEffect(() => {
-    if (pluginChatKeys) reloadLists();
+    // the last plugin chat going away changes both lists as much as the first one arriving
+    if (pluginChatKeys || lastPluginChatKeys.current) reloadLists();
+    lastPluginChatKeys.current = pluginChatKeys;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pluginChatKeys]);
   useEffect(() => {
@@ -1014,13 +1017,14 @@ export default function App() {
 
   /** Only chats on the watch list exist in the UI; a removed chat disappears with its messages. */
   const chats = useMemo(() => {
-    const m = new Map<string, { count: number; source: Source; avatar?: string; id: string }>();
-    // Views are scoped by chat *name*, so two chats sharing one name would answer for each other.
-    // The backend lists plugin chats last, so a platform chat keeps the plain name and a colliding
-    // plugin chat shows as "<name> (plugin)". The proper fix is to key views by chatKey instead.
+    const m = new Map<string, { count: number; source: Source; avatar?: string; id: string; label: string }>();
+    // Keyed by the raw chat name, which is what messages carry and what the views scope by. Two
+    // chats can still share one name: the first one in wins (the backend lists plugin chats last,
+    // so a platform chat keeps its name), and `label` tells a colliding plugin chat apart on screen
+    // without becoming its identity. The proper fix is to key views by chatKey instead.
+    const taken = platformChatNames(watched);
     for (const w of watched) {
-      const name = displayChatName(w, watched);
-      if (!m.has(name)) m.set(name, { count: 0, source: w.source, avatar: w.avatar, id: w.id });
+      if (!m.has(w.name)) m.set(w.name, { count: 0, source: w.source, avatar: w.avatar, id: w.id, label: displayChatName(w, taken) });
     }
     for (const msg of messages) {
       const e = m.get(msg.chatName);
@@ -1500,15 +1504,15 @@ export default function App() {
           if (tabsRef.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) tabsRef.current.scrollLeft += e.deltaY;
         }}
       >
-        {chats.map(([name, { count, source, avatar, id }]) => (
+        {chats.map(([name, { count, source, avatar, id, label }]) => (
           <button
             key={name}
             className={`tab${view.chat?.name === name ? ' active' : ''}`}
             onClick={() => openChat(name, source, id)}
-            title={name}
+            title={label}
           >
             {avatar ? <Avatar src={avatar} name={name} size={16} /> : <Logo source={source} size={11} />}
-            <span className="tab-name">{name}</span>
+            <span className="tab-name">{label}</span>
             {count > 0 && <span className="tab-count">{count}</span>}
           </button>
         ))}
