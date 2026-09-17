@@ -25,6 +25,10 @@ import { PluginState } from './plugins/state.js';
 import { ShellLink } from './plugins/shell.js';
 import { createPluginsApi } from './plugins/api.js';
 import { jsonErrors } from './http.js';
+import { createEndpoints } from './onchain/endpoints.js';
+import { createQuoteSource } from './onchain/quotes.js';
+import { createLivePricer } from './onchain/live.js';
+import { createMarketApi } from './onchain/api.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..'); // backend/ (parent of src/ or dist/)
@@ -60,7 +64,37 @@ const HOT_REFRESH_MS = 10_000;
 const HOT_WINDOW_MS = 60 * 60 * 1000;
 const REFRESH_MS = 60_000;
 const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
-const applyMarket = (addr: string, info: Partial<TokenInfo>) => hub.updateMarket(addr, info);
+// Live prices from the pools themselves (Uniswap v2/v3/v4, pump.fun curves): one batched RPC per
+// chain, every 5s for the last hour's tokens and every 30s for the rest of the day. Custom RPC >
+// Alchemy key > public endpoint (see onchain/endpoints.ts).
+const LIVE_HOT_MS = 5_000;
+const LIVE_REST_MS = 30_000;
+const endpoints = createEndpoints(() => cfg.get().marketData, fetch as any, (m) => console.warn('[market]', m));
+const quotes = createQuoteSource(fetch, (m) => console.warn('[market]', m));
+const pricer = createLivePricer({ endpoints, quotes, apply: (addr, info) => hub.updateMarket(addr, info), log: (m) => console.warn('[market]', m) });
+void quotes.refresh();
+void endpoints.probeAlchemy(cfg.get().marketData.alchemyKey).then((st) => {
+  if (st.hasKey) console.log(`[market] alchemy serves ${st.chains.length ? st.chains.join(', ') : 'nothing'}${st.error ? ` (${st.error})` : ''}`);
+});
+const livePool = (t: TokenInfo) => !!t.network && !!t.pairAddress;
+let liveTick = 0;
+setInterval(() => {
+  // every tick the hot hour; every sixth tick the whole day, in one batch so the two never collide
+  liveTick = (liveTick + 1) % (LIVE_REST_MS / LIVE_HOT_MS);
+  const window = liveTick === 0 ? ACTIVE_WINDOW_MS : HOT_WINDOW_MS;
+  void pricer.refresh(byNewest(mine(hub.activeTokens(window).filter(livePool))));
+}, LIVE_HOT_MS).unref();
+// An API answer with a price marks the price as the API's, so the live pricer knows the market cap
+// it sees next is theirs (it keeps its own caps on that source's supply).
+const applyMarket = (addr: string, info: Partial<TokenInfo>) => {
+  // a token the pools are answering for keeps the on-chain price; the API still fills in the rest
+  if (pricer.isLive(addr)) {
+    const { priceUsd: _p, marketCap: _m, ...rest } = info;
+    hub.updateMarket(addr, rest);
+    return;
+  }
+  hub.updateMarket(addr, info.priceUsd !== undefined ? { ...info, priceSource: 'api', priceAt: Date.now() } : info);
+};
 const refreshHot = createMarketRefresher(applyMarket, (m) => console.warn('[refresh]', m), { gt: false });
 const refreshMarket = createMarketRefresher(applyMarket, (m) => console.warn('[refresh]', m));
 // newest calls first so a burst of new tokens never starves the ones people are watching
@@ -194,6 +228,7 @@ app.use(
     takenChatNames: async () => new Set((await svc.watchedChats()).filter((c) => c.source !== 'plugin').map((c) => c.name)),
   }),
 );
+app.use('/api', createMarketApi(cfg, endpoints, pricer));
 app.use('/api', createApi(cfg, hub, svc, hover, (t) => refreshMarket([t])));
 
 const dist = path.resolve(root, '..', 'frontend', 'dist');

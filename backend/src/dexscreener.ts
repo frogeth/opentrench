@@ -45,6 +45,7 @@ export function mapDexscreener(json: any, address: string): Partial<TokenInfo> |
   if (best.chainId) out.network = String(best.chainId);
   if (best.pairAddress) out.pairAddress = String(best.pairAddress);
   if (best.quoteToken?.symbol) out.quoteSymbol = String(best.quoteToken.symbol);
+  if (best.quoteToken?.address) out.quoteAddress = String(best.quoteToken.address);
   if (best.dexId) out.dex = String(best.dexId);
   if (best.url) out.chartUrl = String(best.url);
   if (best.chainId && best.pairAddress) out.embedUrl = dexscreenerEmbedUrl(String(best.chainId), String(best.pairAddress));

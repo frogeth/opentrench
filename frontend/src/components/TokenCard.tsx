@@ -1,4 +1,5 @@
 import { netLabel } from '../format';
+import { LiveDot } from './LiveDot';
 import { useState } from 'react';
 import type { Contract, TokenInfo } from '../types';
 import { Icon, type IconName } from './Icon';
@@ -71,7 +72,7 @@ export function TokenCard({ c, t }: { c: Contract; t?: TokenInfo }) {
               {short} <Icon name="copy" size={11} />
             </span>
             {hasPrice && price(t?.priceUsd) && <span>{price(t?.priceUsd)}</span>}
-            {hasPrice && money(t?.marketCap) && <span>MC {money(t?.marketCap)}</span>}
+            {hasPrice && money(t?.marketCap) && <span>MC {money(t?.marketCap)}<LiveDot t={t} /></span>}
             {hasPrice && money(t?.liquidity) && <span>Liq {money(t?.liquidity)}</span>}
             {change !== undefined && (
               <span className={change >= 0 ? 'up' : 'down'}>

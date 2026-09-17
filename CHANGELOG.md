@@ -7,6 +7,10 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Live prices and market caps straight from the pool: Uniswap v2 (reserves), v3 (slot0), v4 (PoolManager storage) and pump.fun bonding curves, one batched RPC per chain, every 5 s for the last hour's calls and every 30 s for the rest of the day. Cards show a green dot when the number is live; Dexscreener and GeckoTerminal keep filling in liquidity, volume and 24h change, and still price whatever the pools cannot (Raydium, PumpSwap, Meteora, pairs quoted in something that is not a native coin or a stable).
+- Settings → Feed → Market data: paste an Alchemy API key (probed once; used for every chain it answers for) and/or a custom RPC per chain (beats Alchemy and the public endpoint). Per-chain status shows what each chain uses, how many tokens are live, and why the rest are skipped.
+- Tokens no API has described yet (Pons launches, fresh pairs) are priced as soon as their pool exists: the quote asset is read from the pair itself.
+
 ## v0.10.0 — 2026-09-17
 
 - A column's bell now respects that column's filters and your hidden tokens: no sound for a call the column would not show.

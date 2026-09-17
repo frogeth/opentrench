@@ -87,6 +87,8 @@ export function mapPumpfun(c: any): LaunchpadInfo | undefined {
   if (img) out.imageUrl = img;
   const mc = Number(c.usd_market_cap);
   if (Number.isFinite(mc) && mc > 0) out.marketCap = mc;
+  // the bonding curve account is the "pool" while the token is on the curve: it is what the live pricer reads
+  if (typeof c.bonding_curve === 'string' && c.bonding_curve) out.pairAddress = c.bonding_curve;
   const created = Number(c.created_timestamp);
   if (Number.isFinite(created) && created > 0) out.pairCreatedAt = created;
   const x = xUrl(c.twitter);

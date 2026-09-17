@@ -1,4 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { LiveDot } from './LiveDot';
 import { createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import type { CallRecord, TokenInfo } from '../types';
 import { api } from '../api';
@@ -199,7 +200,7 @@ export function TokenModal({ t, now, favorites, me = [], onClose, onShare, onBuy
           </div>
           <div className="call-right tmodal-nums">
             <span className="call-kv">{money(t.volume24h) ? <>V <b>{money(t.volume24h)}</b></> : ' '}</span>
-            <span className="call-kv call-mc">{money(t.marketCap) ? <>MC <b>{money(t.marketCap)}</b></> : <b className="muted">—</b>}</span>
+            <span className="call-kv call-mc">{money(t.marketCap) ? <>MC <b>{money(t.marketCap)}</b></> : <b className="muted">—</b>}<LiveDot t={t} /></span>
             <span className="call-kv call-ath">{money(t.athMarketCap) ? <>ATH <b>{money(t.athMarketCap)}</b></> : ' '}</span>
             <span className="call-kv">{money(t.liquidity) ? <>Liq <b>{money(t.liquidity)}</b></> : ' '}</span>
           </div>

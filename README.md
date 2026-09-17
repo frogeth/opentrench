@@ -116,6 +116,12 @@ the sidebar, not in settings.
   contract nobody has called yet: a desktop notification with a sound (enable
   with the 🔔 in the top bar) and a message to your own Telegram Saved
   Messages (toggle in Settings).
+- **Live prices from the pool.** Uniswap v2 / v3 / v4 pools and pump.fun curves
+  are read on-chain (one batched RPC per chain, every 5 s for the last hour's
+  calls); cards show a green dot when the number is live. Public RPCs work out
+  of the box; Settings → Feed → Market data takes an Alchemy key or a custom
+  RPC per chain. Dexscreener / GeckoTerminal fill in the rest and price what the
+  pools cannot.
 - **Launchpads.** pump.fun (coin API: image + market cap while still
   bonding), Bankr, Stonks, Pons and Flap (read straight off the token contract
   on Robinhood Chain / BNB), Virtuals, Clanker and letsbonk are detected

@@ -135,6 +135,11 @@ export function mapGeckoTerminal(slug: string, tokenJson: any, poolJson?: any, i
     if (other) out.quoteSymbol = other.replace(/\s+\d+(\.\d+)?%$/, '');
     const dex = poolJson?.data?.relationships?.dex?.data?.id;
     if (dex) out.dex = String(dex);
+    // relationships.base_token / quote_token ids look like "arc_0xabc…"; the one that is not us is the quote
+    const rel = poolJson?.data?.relationships ?? {};
+    const ids = [rel.base_token?.data?.id, rel.quote_token?.data?.id].filter((x: unknown): x is string => typeof x === 'string').map((x: string) => x.replace(new RegExp(`^${slug}_`), ''));
+    const otherAddr = ids.find((x: string) => x.toLowerCase() !== String(a.address ?? "").toLowerCase());
+    if (otherAddr) out.quoteAddress = otherAddr;
     const ch = num(p.price_change_percentage?.h24);
     if (ch !== undefined) out.change24h = ch;
     const pliq = num(p.reserve_in_usd);

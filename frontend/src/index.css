@@ -1443,3 +1443,18 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 .plugin-approve-body .err { border: 1px solid #a33; border-radius: 6px; padding: 8px 10px; }
 /* the file itself, for reading before approving: never edited here, only read */
 .plugin-code { max-height: 260px; overflow: auto; font-family: var(--mono); font-size: 11px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* a price read straight from the pool */
+.live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); margin-left: 5px; vertical-align: middle; animation: live-dot 2.4s ease-out infinite; }
+@keyframes live-dot { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent); } 70% { box-shadow: 0 0 0 5px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+/* Settings → Feed → Market data */
+.md-chains { display: grid; grid-template-columns: 1fr; gap: 4px; margin-top: 6px; }
+.md-chain { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.md-chain .md-name { width: 120px; flex: none; }
+.md-src { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.md-src-alchemy { color: var(--ok); border-color: var(--ok); }
+.md-src-custom { color: var(--gold); border-color: var(--gold); }
+.md-chain .md-live { color: var(--muted); white-space: nowrap; }
+.md-chain .md-err { color: var(--err); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.md-chain input { flex: 1; min-width: 0; }

@@ -181,6 +181,27 @@ export interface MaskedConfig {
   opensea: { hasWallet: boolean; walletAddress?: string; rpc: Record<string, string>; chains?: { id: string; name: string; defaultRpc: string; symbol: string }[] };
   plugins: Record<string, { enabled: boolean; approvedHash?: string }>;
   pluginWatch: string[];
+  marketData: { hasAlchemyKey: boolean; rpc: Record<string, string> };
+}
+/** Settings → Feed → Market data: what the live pricer is using per chain */
+export interface MarketStatus {
+  alchemy: { hasKey: boolean; chains: string[]; probedAt?: number; probing: boolean; error?: string };
+  rpc: Record<string, string>;
+  chains: {
+    network: string;
+    name: string;
+    native: string;
+    /** Alchemy serves this chain (with a key) */
+    alchemy: boolean;
+    defaultRpc: string;
+    source: 'custom' | 'alchemy' | 'public';
+    live?: number;
+    skipped?: number;
+    /** why tokens were skipped, counted by reason */
+    reasons?: Record<string, number>;
+    lastOkAt?: number;
+    lastError?: string;
+  }[];
 }
 export interface WatchedChat {
   /** a plugin chat's id is its whole watch key, `plugin:<plugin>:<chat>` */
@@ -331,6 +352,9 @@ export const api = {
   opensea: () => req<MaskedConfig['opensea']>('GET', '/opensea'),
   setOpenSeaWallet: (key: string) => req<MaskedConfig['opensea']>('PUT', '/opensea/wallet', { key }),
   setOpenSeaRpc: (chain: string, url: string) => req<MaskedConfig['opensea']>('PUT', '/opensea/rpc', { chain, url }),
+  market: () => req<MarketStatus>('GET', '/market'),
+  setAlchemyKey: (key: string) => req<MarketStatus>('PUT', '/market/alchemy', { key }),
+  setMarketRpc: (chain: string, url: string) => req<MarketStatus>('PUT', '/market/rpc', { chain, url }),
   osQuote: (locator: string, quantity: number, chain?: string) => req<import('./types').MintJob>('POST', '/osmint/quote', { locator, quantity, chain }),
   osSend: (jobId: string) => req<{ ok: true }>('POST', '/osmint/send', { jobId }),
   osArm: (jobId: string, on: boolean) => req<import('./types').MintJob>('POST', '/osmint/arm', { jobId, on }),

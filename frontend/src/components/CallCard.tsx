@@ -1,4 +1,5 @@
 import { useContext, useState } from 'react';
+import { LiveDot } from './LiveDot';
 import type { CallRecord, TokenInfo } from '../types';
 import { chartEmbedUrl, copyText, isFavorite, money, price, shortAddr, telegramShareUrl, timeAgo, type ChartProvider } from '../format';
 import { Avatar } from './Avatar';
@@ -166,6 +167,7 @@ export function CallCard({
         <span className="call-row-r">
           <span className="call-kv call-mc">
             MC <b>{money(t.marketCap) ?? '—'}</b>
+            <LiveDot t={t} />
           </span>
           {mult !== undefined && <span className={`call-mult${mult >= 1 ? ' up' : ' down'}`}>{fmtX(mult)}</span>}
           <span className="call-age">{timeAgo(t.lastCallTs ?? t.firstSeenTs, now)}</span>

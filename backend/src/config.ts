@@ -207,6 +207,10 @@ export interface Config {
    * network can be tampered with in transit — a quoted balance/fee can be lied about, and a
    * broadcast transaction can be silently dropped. */
   opensea: { walletKey?: string; rpc: Record<string, string> };
+  /** Live on-chain prices: an Alchemy key (used for every chain Alchemy serves) and/or custom RPC
+   * URLs by network (dexscreener chain ids); a custom URL beats Alchemy, which beats the public RPC.
+   * Same https-or-localhost rule as opensea.rpc. */
+  marketData: { alchemyKey?: string; rpc: Record<string, string> };
   /** TrenchTogether: share my calls on the LAN (token = the pairing secret), and the friends I follow */
   together: { share: boolean; name: string; token: string; peers: { host: string; port: number; token: string; name: string }[] };
   /** plugins the user has enabled, keyed by manifest id; approvedHash is the SHA-256 of the file the user approved */
@@ -231,13 +235,14 @@ const DEFAULT: Config = {
   hiddenTokens: [],
   j7: { favorites: [] },
   opensea: { rpc: {} },
+  marketData: { rpc: {} },
   together: { share: false, name: '', token: '', peers: [] },
   plugins: {},
   pluginWatch: [],
 };
 
 /** The fields that are sealed on disk when a key is available (see secrets.ts). */
-type SecretPath = 'discord.token' | 'telegram.apiHash' | 'telegram.session' | 'o1ApiKey' | 'j7.token' | 'opensea.walletKey';
+type SecretPath = 'discord.token' | 'telegram.apiHash' | 'telegram.session' | 'o1ApiKey' | 'j7.token' | 'opensea.walletKey' | 'marketData.alchemyKey';
 
 export class ConfigStore {
   private cfg: Config;
@@ -308,6 +313,7 @@ export class ConfigStore {
       seenTokens: this.cfg.seenTokens,
       hiddenTokens: this.cfg.hiddenTokens,
       opensea: { hasWallet: !!this.cfg.opensea.walletKey, rpc: this.cfg.opensea.rpc },
+      marketData: { hasAlchemyKey: !!this.cfg.marketData.alchemyKey, rpc: this.cfg.marketData.rpc },
       together: { share: this.cfg.together.share, name: this.cfg.together.name, peers: this.cfg.together.peers.map((p) => ({ host: p.host, port: p.port, name: p.name })) },
       plugins: this.cfg.plugins,
       pluginWatch: this.cfg.pluginWatch,
@@ -364,6 +370,18 @@ export class ConfigStore {
               .map(([k, v]) => [k, String(v).slice(0, 500)]),
           ),
         },
+        marketData: {
+          alchemyKey: (() => {
+            const k = this.secret(raw.marketData?.alchemyKey, 'marketData.alchemyKey');
+            return typeof k === 'string' && /^[A-Za-z0-9_-]{8,200}$/.test(k) ? k : undefined;
+          })(),
+          rpc: Object.fromEntries(
+            Object.entries(raw.marketData?.rpc ?? {})
+              .filter(([k, v]) => /^[a-z0-9_]{1,30}$/.test(k) && (/^https:\/\//i.test(String(v)) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(String(v))))
+              .slice(0, 40)
+              .map(([k, v]) => [k, String(v).slice(0, 500)]),
+          ),
+        },
         together: {
           share: raw.together?.share === true,
           name: String(raw.together?.name ?? '').trim().slice(0, 40),
@@ -402,6 +420,7 @@ export class ConfigStore {
       o1ApiKey: put(c.o1ApiKey, 'o1ApiKey'),
       j7: { ...c.j7, token: put(c.j7.token, 'j7.token') },
       opensea: { ...c.opensea, walletKey: put(c.opensea.walletKey, 'opensea.walletKey') },
+      marketData: { ...c.marketData, alchemyKey: put(c.marketData.alchemyKey, 'marketData.alchemyKey') },
     };
   }
 

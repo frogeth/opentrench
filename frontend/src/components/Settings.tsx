@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, type BotSeen, type MaskedConfig, TogetherInfo } from '../api';
+import { api, type BotSeen, type MarketStatus, type MaskedConfig, TogetherInfo } from '../api';
 import type { PluginInfo, Status } from '../types';
 import type { SettingField } from '../plugins/route';
 import { PluginsSection } from './PluginsSection';
@@ -168,6 +168,7 @@ export function Settings({
                 </label>
                 <div className="hint">The call card under the message already shows the token's numbers and holder data.</div>
               </section>
+              <MarketDataSection onChange={reload} />
               <FavoritesSection cfg={cfg} onChange={reload} />
               <BotsSection cfg={cfg} onChange={reload} />
               <BlacklistSection cfg={cfg} onChange={reload} />
@@ -643,6 +644,88 @@ function OpenSeaSection({ onChange }: { onChange: () => void }) {
         </div>
       ))}
       {err && <div className="err">{err}</div>}
+    </section>
+  );
+}
+
+function MarketDataSection({ onChange }: { onChange: () => void }) {
+  const [st, setSt] = useState<MarketStatus | undefined>();
+  const [key, setKey] = useState('');
+  const [rpc, setRpc] = useState<Record<string, string>>({});
+  const [showRpc, setShowRpc] = useState(false);
+  const { busy, err, run } = useAsync();
+  const load = () =>
+    api
+      .market()
+      .then((m) => {
+        setSt(m);
+        setRpc(m.rpc);
+      })
+      .catch(() => {});
+  useEffect(() => {
+    void load();
+    const id = setInterval(() => void load(), 5000);
+    return () => clearInterval(id);
+  }, []);
+  if (!st) return null;
+  const served = st.alchemy.chains;
+  const srcLabel = (c: MarketStatus['chains'][number]) => (c.source === 'custom' ? 'custom RPC' : c.source === 'alchemy' ? 'Alchemy' : 'public RPC');
+  const liveNow = st.chains.reduce((n, c) => n + (c.live ?? 0), 0);
+  return (
+    <section>
+      <h2>Market data</h2>
+      <div className="hint">
+        Prices and market caps are read straight from the pool (Uniswap v2, v3, v4 and pump.fun curves) every 5 seconds for the last hour's calls, and every 30 seconds for the rest of the day. Cards with a green dot are live. Everything else on a card (liquidity, volume, 24h change) still comes from Dexscreener and GeckoTerminal, which also price whatever the pools cannot.
+        {liveNow > 0 && <> <b>{liveNow}</b> token{liveNow === 1 ? '' : 's'} live right now.</>}
+      </div>
+      <div className="hint" style={{ marginTop: 8 }}>
+        Public RPCs work but rate-limit. An <b>Alchemy API key</b> is used for every chain Alchemy serves; a <b>custom RPC</b> per chain beats both.
+      </div>
+      <div className="row-inline">
+        <input type="password" placeholder={st.alchemy.hasKey ? 'replace the Alchemy API key' : 'Alchemy API key'} value={key} onChange={(e) => setKey(e.target.value)} autoComplete="new-password" spellCheck={false} />
+        <button disabled={busy || !key.trim()} onClick={() => void run(async () => { setSt(await api.setAlchemyKey(key.trim())); setKey(''); onChange(); })}>
+          {busy ? 'checking…' : 'Save'}
+        </button>
+        {st.alchemy.hasKey && (
+          <button disabled={busy} onClick={() => void run(async () => { setSt(await api.setAlchemyKey('')); onChange(); })}>
+            Remove
+          </button>
+        )}
+      </div>
+      {st.alchemy.hasKey && (
+        <div className="hint">
+          {st.alchemy.probing ? 'Checking which chains the key answers for…' : served.length ? <>Alchemy answers for {served.map((n) => st.chains.find((c) => c.network === n)?.name ?? n).join(', ')}.</> : st.alchemy.error ?? 'The key answered for no chain.'}
+        </div>
+      )}
+      {err && <div className="err">{err}</div>}
+      <div className="md-chains">
+        {st.chains.map((c) => (
+          <div className="md-chain" key={c.network}>
+            <span className="md-name">{c.name}</span>
+            <span className={`md-src md-src-${c.source}`} title={c.source === 'public' ? c.defaultRpc : c.source === 'custom' ? st.rpc[c.network] : 'Alchemy'}>
+              {srcLabel(c)}
+            </span>
+            {c.lastError ? (
+              <span className="md-err" title={c.lastError}>{c.lastError}</span>
+            ) : c.live !== undefined || c.skipped !== undefined ? (
+              <span className="md-live" title={c.reasons && Object.keys(c.reasons).length ? Object.entries(c.reasons).map(([why, n]) => `${n} × ${why}`).join('\n') : 'live: priced from the pool this tick'}>
+                {c.live ?? 0} live{c.skipped ? ` · ${c.skipped} skipped` : ''}
+              </span>
+            ) : null}
+            {showRpc && (
+              <>
+                <input placeholder={c.defaultRpc} value={rpc[c.network] ?? ''} onChange={(e) => setRpc((r) => ({ ...r, [c.network]: e.target.value }))} spellCheck={false} />
+                <button disabled={busy} onClick={() => void run(async () => { const m = await api.setMarketRpc(c.network, rpc[c.network] ?? ''); setSt(m); setRpc(m.rpc); onChange(); })}>
+                  Save
+                </button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="row-inline" style={{ marginTop: 6 }}>
+        <button onClick={() => setShowRpc((v) => !v)}>{showRpc ? 'hide custom RPCs' : 'custom RPCs…'}</button>
+      </div>
     </section>
   );
 }

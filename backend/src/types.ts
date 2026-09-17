@@ -228,6 +228,12 @@ export interface TokenInfo {
   pairAddress?: string;
   /** the other side of the main pool (WETH, USDC, SOL, …): what the token is paired with */
   quoteSymbol?: string;
+  /** that asset's contract (0x0 for the chain's native coin in a v4 pool); needed to read v4 pools */
+  quoteAddress?: string;
+  /** where the current price came from: read from the pool on-chain, or an API (Dexscreener / GeckoTerminal / launchpad) */
+  priceSource?: 'chain' | 'api';
+  /** when that price was read (ms) */
+  priceAt?: number;
   /** the venue of that pool (uniswap, raydium, pumpswap, …), or the launchpad's bonding curve */
   dex?: string;
   chartUrl?: string;
