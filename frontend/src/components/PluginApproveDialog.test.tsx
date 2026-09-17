@@ -77,6 +77,33 @@ describe('PluginApproveDialog', () => {
     expect(api.pluginEnable).toHaveBeenCalledWith('hello-feed');
     expect(onApproved).toHaveBeenCalled();
   });
+  it('approves the version it showed even when the list moves on underneath', async () => {
+    vi.mocked(api.pluginApprove).mockRejectedValueOnce(new Error('the file changed since you opened it; review it again'));
+    const onApproved = vi.fn();
+    await render(<PluginApproveDialog plugin={plugin()} onClose={() => {}} onApproved={onApproved} />);
+    // a rescan lands while the dialog is open: same plugin, different bytes
+    await render(<PluginApproveDialog plugin={plugin({ hash: 'b'.repeat(64) })} onClose={() => {}} onApproved={onApproved} />);
+    expect(text()).toContain('a'.repeat(12)); // still the version on screen when it opened
+    await click(button('approve and enable'));
+    expect(api.pluginApprove).toHaveBeenCalledWith('hello-feed', 'a'.repeat(64));
+    expect(api.pluginEnable).not.toHaveBeenCalled();
+    expect(onApproved).not.toHaveBeenCalled();
+    expect(container.querySelector('.plugin-approve-err')?.textContent).toContain('review it again');
+  });
+  it('keeps Tab inside itself while it is open', async () => {
+    await render(<PluginApproveDialog plugin={plugin()} onClose={() => {}} onApproved={() => {}} />);
+    const stops = [...container.querySelectorAll('button')] as HTMLButtonElement[];
+    const last = stops[stops.length - 1];
+    last.focus();
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    });
+    expect(document.activeElement).toBe(stops[0]);
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
+    });
+    expect(document.activeElement).toBe(last);
+  });
   it('keeps a failed enable inside the dialog and stays open', async () => {
     vi.mocked(api.pluginEnable).mockRejectedValueOnce(new Error('the plugin file changed on disk'));
     const onApproved = vi.fn();

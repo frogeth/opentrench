@@ -10,6 +10,18 @@ export type PluginLogLevel = 'info' | 'warn' | 'error';
  */
 const REQUESTED_WITH = { 'x-requested-with': 'opentrench' } as const;
 
+/** A refusal the backend explained: its status and the rest of what it answered, for callers that act on it. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly data: Record<string, unknown> = {},
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method,
@@ -17,7 +29,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? res.statusText);
+  if (!res.ok) throw new ApiError(data.error ?? res.statusText, res.status, data);
   return data as T;
 }
 
@@ -328,7 +340,8 @@ export const api = {
   pluginsReload: () => req<PluginInfo[]>('POST', '/plugins/reload'),
   /** `replaced` says a plugin with that id was already in the folder and has just been overwritten */
   pluginAdd: (source: string) => req<PluginInfo & { replaced: boolean }>('POST', '/plugins/add', { source }),
-  pluginAddUrl: (url: string) => req<PluginInfo & { replaced: boolean }>('POST', '/plugins/add-url', { url }),
+  /** 409 with `replaces` means a plugin of that id is already installed; ask, then call again with `replace` */
+  pluginAddUrl: (url: string, replace?: boolean) => req<PluginInfo & { replaced: boolean }>('POST', '/plugins/add-url', replace ? { url, replace } : { url }),
   /** read a file's manifest without installing it, to say what is about to be added */
   pluginInspect: (source: string) => req<NonNullable<PluginInfo['manifest']>>('POST', '/plugins/inspect', { source }),
   /** the hash is the version the approval dialog showed: the backend refuses a file that changed since */

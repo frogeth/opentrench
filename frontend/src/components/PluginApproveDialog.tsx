@@ -35,6 +35,12 @@ const why = (e: unknown): string => (e instanceof Error ? e.message : String(e))
  */
 export function PluginApproveDialog({ plugin, onClose, onApproved }: { plugin: PluginInfo; onClose: () => void; onApproved: () => void }) {
   const manifest = plugin.manifest!;
+  /**
+   * The version being reviewed, fixed at the moment the dialog opened. A rescan while it is open
+   * changes `plugin` underneath, and approving the *new* bytes would approve something nobody read —
+   * so the old hash is what goes to the backend, which then refuses it (409) and says to look again.
+   */
+  const [reviewed] = useState(plugin.hash);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(null);
@@ -47,9 +53,26 @@ export function PluginApproveDialog({ plugin, onClose, onApproved }: { plugin: P
     const returnTo = document.activeElement as HTMLElement | null;
     dialog.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      onClose();
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      // While this is open it is the whole window: Tab cycles inside it rather than wandering off
+      // into the Settings page behind, where the buttons it would reach are not the ones on screen.
+      if (e.key !== 'Tab' || !dialog.current) return;
+      const stops = [...dialog.current.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input, [tabindex]:not([tabindex="-1"])')];
+      if (stops.length === 0) return;
+      const first = stops[0];
+      const last = stops[stops.length - 1];
+      const here = document.activeElement as HTMLElement | null;
+      if (!e.shiftKey && (here === last || !dialog.current.contains(here))) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && (here === first || here === dialog.current || !dialog.current.contains(here))) {
+        e.preventDefault();
+        last.focus();
+      }
     };
     document.addEventListener('keydown', onKey, true);
     return () => {
@@ -80,7 +103,7 @@ export function PluginApproveDialog({ plugin, onClose, onApproved }: { plugin: P
     setErr(null);
     try {
       // the hash of the version on screen: a file swapped while this was open is refused, not approved
-      await api.pluginApprove(plugin.id, plugin.hash);
+      await api.pluginApprove(plugin.id, reviewed);
       await api.pluginEnable(plugin.id);
       onApproved();
     } catch (e: unknown) {
@@ -101,7 +124,7 @@ export function PluginApproveDialog({ plugin, onClose, onApproved }: { plugin: P
         </div>
         <div className="plugin-approve-body">
           <p>
-            <b>Version</b> {manifest.version} · <b>file</b> {plugin.file} · <b>hash</b> <code>{plugin.hash.slice(0, 12)}</code>{' '}
+            <b>Version</b> {manifest.version} · <b>file</b> {plugin.file} · <b>hash</b> <code>{reviewed.slice(0, 12)}</code>{' '}
             <button className="link" disabled={loadingCode} onClick={viewCode}>
               {loadingCode ? 'loading…' : code === null ? 'view code' : 'hide code'}
             </button>

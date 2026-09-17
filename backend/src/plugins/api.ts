@@ -9,7 +9,7 @@ import { CREDENTIAL_HEADERS, HEADER_NAME_RE, REDIRECT_STATUS, REQUEST_HEADER_STR
 import { extractManifest, MAX_FILE, MAX_FILE_MESSAGE } from './manifest.js';
 import { RegistryError, type PluginRegistry } from './registry.js';
 import { safeDispatcher, type ShellLink } from './shell.js';
-import type { PluginState, SettingField } from './state.js';
+import { settingFields, type PluginState, type SettingField } from './state.js';
 
 /** The slice of ConfigStore these routes need (keeps tests free of the real store). */
 export interface WatchConfig {
@@ -36,35 +36,6 @@ const SETTINGS_MAX = 64 * 1024;
 /** Key names that mean something to an object rather than to the plugin storing them. */
 const PROTOTYPE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const ADD_URL_TIMEOUT_MS = 15_000;
-/** the settings form a plugin may declare: small, flat, and every field named once */
-const SCHEMA_FIELDS_MAX = 20;
-const SCHEMA_KEY_RE = /^[a-z0-9_-]{1,40}$/i;
-const SCHEMA_LABEL_MAX = 60;
-const SCHEMA_TYPES = ['text', 'number', 'toggle', 'secret'];
-
-/**
- * The app validates a schema before it ever gets here (see the router), but this route is reachable
- * on its own, so it checks the same things rather than trusting the caller: what is stored is what
- * the settings form will render.
- */
-export function settingFields(raw: unknown): SettingField[] {
-  if (!Array.isArray(raw) || raw.length > SCHEMA_FIELDS_MAX) throw new Error(`the settings schema must be an array of at most ${SCHEMA_FIELDS_MAX} fields`);
-  const seen = new Set<string>();
-  return raw.map((entry) => {
-    const f = (entry ?? {}) as Record<string, unknown>;
-    const key = String(f.key ?? '');
-    if (!SCHEMA_KEY_RE.test(key)) throw new Error(`settings field key ${JSON.stringify(f.key)} must be 1-40 letters, digits, _ or -`);
-    if (PROTOTYPE_KEYS.has(key.toLowerCase())) throw new Error(`settings field key ${key} is reserved`);
-    if (seen.has(key)) throw new Error(`settings field key ${key} appears twice`);
-    seen.add(key);
-    if (typeof f.label !== 'string' || !f.label || f.label.length > SCHEMA_LABEL_MAX) throw new Error(`settings field ${key} needs a label of at most ${SCHEMA_LABEL_MAX} characters`);
-    if (typeof f.type !== 'string' || !SCHEMA_TYPES.includes(f.type)) throw new Error(`settings field ${key} has an unknown type; use ${SCHEMA_TYPES.join(', ')}`);
-    const field: SettingField = { key, label: f.label, type: f.type as SettingField['type'] };
-    if ('default' in f) field.default = f.default;
-    return field;
-  });
-}
-
 /**
  * Is the peer on this machine? `/shell/hello` hands out the socket a plugin's site-authenticated
  * fetches go out on, so only a process on this box may claim it — not the LAN, and not a machine
@@ -261,8 +232,21 @@ export function createPluginsApi(
     }
     if (u.protocol !== 'https:') return fail(res, 400, 'an https URL to a .js file');
     if (isLocalHost(u.hostname)) return fail(res, 400, 'local addresses are off limits');
+    let source: string;
     try {
-      const source = await download(u.toString(), fetchImpl, addUrlDispatcher());
+      source = await download(u.toString(), fetchImpl, addUrlDispatcher());
+    } catch (e) {
+      return fail(res, 400, why(e));
+    }
+    try {
+      // What is behind a link is only known once it has been fetched, so the question about replacing
+      // an installed plugin is asked here rather than guessed from the URL: the id in the manifest is
+      // the one that decides. Nothing is written until the caller comes back with `replace`.
+      const m = extractManifest(source);
+      const had = reg.get(m.id);
+      if (had && !req.body?.replace) {
+        return res.status(409).json({ error: `would replace ${had.manifest?.name ?? had.id}`, replaces: had.id });
+      }
       res.json(reg.add(source));
     } catch (e) {
       fail(res, 400, why(e));
@@ -462,9 +446,11 @@ export function createPluginsApi(
     res.json({ values: rec.settings, schema: rec.schema });
   });
   r.put('/plugins/:id/schema', (req, res) => {
-    // Only a running plugin declares its form; the app forwards what the plugin asked for.
+    // Only a running plugin declares its form; the app forwards what the plugin asked for. The form
+    // and the answers to it are the plugin's own stored data, so the storage permission covers both.
     const id = enabled(req, res);
     if (!id) return;
+    if (!reg.manifest(id).permissions.includes('storage')) return fail(res, 403, 'plugin lacks the storage permission');
     let schema: SettingField[];
     try {
       schema = settingFields(req.body?.schema);

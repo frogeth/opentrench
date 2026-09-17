@@ -372,6 +372,8 @@ describe('plugins api guards', () => {
       expect((await t.j('GET', '/plugins/hello-feed/settings')).body.schema).toEqual(schema);
       await t.j('POST', '/plugins/hello-feed/enable');
       expect((await t.j('PUT', '/plugins/hello-feed/schema', { schema: [{ key: 'bad key!', label: 'x', type: 'text' }] })).status).toBe(400);
+      expect((await t.j('PUT', '/plugins/hello-feed/schema', { schema: [{ key: 'a', label: 'x', type: 'text', default: { nested: true } }] })).status).toBe(400);
+      expect((await t.j('PUT', '/plugins/hello-feed/schema', { schema: [{ key: 'a', label: 'x', type: 'text', default: 'x'.repeat(20 * 1024) }] })).status).toBe(400);
       expect((await t.j('PUT', '/plugins/hello-feed/schema', { schema: [{ key: 'a', label: 'x', type: 'colour' }] })).status).toBe(400);
       expect((await t.j('PUT', '/plugins/hello-feed/schema', { schema: new Array(21).fill({ key: 'a', label: 'x', type: 'text' }) })).status).toBe(400);
       // a refused schema never replaces the one that works
@@ -399,6 +401,35 @@ describe('plugins api guards', () => {
       const gone = await t.j('GET', '/plugins/hello-feed/source');
       expect(gone.status).toBe(404);
       expect(gone.body.error).toMatch(/gone/);
+    } finally {
+      t.close();
+    }
+  });
+  it('a settings form is part of a plugin\'s storage: no storage permission, no schema', async () => {
+    const t = harness({ loud: true });
+    try {
+      await t.j('POST', '/plugins/loud-feed/approve');
+      await t.j('POST', '/plugins/loud-feed/enable');
+      const denied = await t.j('PUT', '/plugins/loud-feed/schema', { schema: [{ key: 'a', label: 'A', type: 'text' }] });
+      expect(denied.status).toBe(403);
+      expect(denied.body.error).toMatch(/storage/);
+      expect((await t.j('GET', '/plugins/loud-feed/settings')).body.schema).toEqual([]);
+    } finally {
+      t.close();
+    }
+  });
+  it('add-url refuses to overwrite an installed plugin until the caller says replace', async () => {
+    const t = harness({ download: () => new Response(`${FILE}\n// v2`, { status: 200 }) });
+    try {
+      await approved(t);
+      const asked = await t.j('POST', '/plugins/add-url', { url: 'https://example.com/hello-feed.js' });
+      expect(asked.status).toBe(409);
+      expect(asked.body).toMatchObject({ error: 'would replace Hello feed', replaces: 'hello-feed' });
+      // nothing was written: the plugin the user approved is still the one in the folder
+      expect((await t.j('GET', '/plugins')).body[0]).toMatchObject({ enabled: true, needsApproval: false });
+      const done = await t.j('POST', '/plugins/add-url', { url: 'https://example.com/hello-feed.js', replace: true });
+      expect(done.status).toBe(200);
+      expect(done.body).toMatchObject({ id: 'hello-feed', replaced: true, needsApproval: true });
     } finally {
       t.close();
     }

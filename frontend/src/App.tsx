@@ -761,6 +761,8 @@ export default function App() {
    * The form a plugin declares is the app's to remember: it is stored server-side so Settings can show
    * it while the plugin is switched off. Debounced, because a plugin may declare it on every start.
    */
+  /** the last error each plugin reported, so the same one repeating is not logged again */
+  const lastPluginError = useRef(new Map<string, string>());
   const schemaSaves = useRef(new Map<string, number>());
   useEffect(() => () => schemaSaves.current.forEach((t) => window.clearTimeout(t)), []);
   const rememberSchema = (id: string, schema: SettingField[]) => {
@@ -1893,7 +1895,10 @@ export default function App() {
         onSchema={rememberSchema}
         onError={(id, t) => {
           setPluginErrors((e) => ({ ...e, [id]: t }));
-          // the same line in the plugin's own log, so ⚙ → Plugins shows it in context and it survives a reload
+          // The same line in the plugin's own log, so ⚙ → Plugins shows it in context and it survives
+          // a reload — but a plugin throwing the same thing every tick must not fill the log with it.
+          if (lastPluginError.current.get(id) === t) return;
+          lastPluginError.current.set(id, t);
           void api.pluginLog(id, 'error', t).catch(() => {});
         }}
       />

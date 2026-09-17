@@ -75,6 +75,12 @@ describe('routeCall', () => {
   it('settings.get hands the plugin its own answers, not the form the app renders', async () => {
     expect(await routeCall(ctx(), { method: 'settings.get', args: [] })).toEqual({ limit: 3 });
   });
+  it('settings are storage: a plugin that did not ask for storage gets neither the form nor the answers', async () => {
+    const c = ctx({ manifest: { ...ctx().manifest, permissions: ['feed:write'] } });
+    await expect(routeCall(c, { method: 'settings.get', args: [] })).rejects.toThrow('storage');
+    await expect(routeCall(c, { method: 'settings.schema', args: [[{ key: 'k', label: 'K', type: 'text' }]] })).rejects.toThrow('storage');
+    expect(c.ui.setSchema).not.toHaveBeenCalled();
+  });
   it('settings.schema takes a valid schema and refuses a bad key', async () => {
     const setSchema = vi.fn();
     const c = ctx({ ui: { setTitle: vi.fn(), setSubtitle: vi.fn(), badge: vi.fn(), setSchema } });
@@ -87,6 +93,8 @@ describe('routeCall', () => {
     await expect(routeCall(c, { method: 'settings.schema', args: [[{ key: 'no spaces', label: 'x', type: 'text' }]] })).rejects.toThrow('key');
     await expect(routeCall(c, { method: 'settings.schema', args: [[{ key: 'k', label: 'x', type: 'colour' }]] })).rejects.toThrow('type');
     await expect(routeCall(c, { method: 'settings.schema', args: ['nope'] })).rejects.toThrow('schema');
+    await expect(routeCall(c, { method: 'settings.schema', args: [[{ key: 'k', label: 'x', type: 'text', default: { a: 1 } }]] })).rejects.toThrow('default');
+    await expect(routeCall(c, { method: 'settings.schema', args: [[{ key: 'k', label: 'x', type: 'text', default: 'x'.repeat(20 * 1024) }]] })).rejects.toThrow('too large');
     for (const key of ['__proto__', 'constructor', 'prototype', 'ConStructor'])
       await expect(routeCall(c, { method: 'settings.schema', args: [[{ key, label: 'x', type: 'text' }]] })).rejects.toThrow('reserved');
     await expect(

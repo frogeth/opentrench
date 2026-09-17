@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api';
+import { ApiError, api } from '../api';
 import type { SettingField } from '../plugins/route';
 import { DOCS } from '../site';
 import type { PluginInfo } from '../types';
@@ -25,6 +25,9 @@ function SettingsForm({ id, fields }: { id: string; fields?: SettingField[] }) {
   const [values, setValues] = useState<Record<string, unknown> | null>(null);
   const [state, setState] = useState<'clean' | 'dirty' | 'saved'>('clean');
   const [err, setErr] = useState<string | null>(null);
+  // A plugin re-declaring the same form on every start hands us a new array each time; only a form
+  // that actually differs may reload the values and throw away what the user has half typed.
+  const fieldsKey = JSON.stringify(fields ?? []);
   useEffect(() => {
     let live = true;
     setValues(null);
@@ -44,7 +47,8 @@ function SettingsForm({ id, fields }: { id: string; fields?: SettingField[] }) {
     return () => {
       live = false;
     };
-  }, [id, fields]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, fieldsKey]);
   if (schema.length === 0) return null;
   if (!values) return <div className="hint">Loading settings…</div>;
   const set = (key: string, v: unknown) => {
@@ -119,6 +123,7 @@ export function PluginsSection({
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setErr(null);
+    setNote(null); // whatever was last added is no longer what just happened
     try {
       await fn();
       onChanged();
@@ -153,54 +158,59 @@ export function PluginsSection({
 
   /**
    * Installing says what landed, because a replacement is the case that matters: the file the user
-   * approved before is gone, and the new one starts unapproved. A local file's manifest is read first
-   * (nothing is written by that) so the question can name the plugin being replaced.
+   * approved before is gone, and the new one starts unapproved.
    */
-  const add = async (source: string, link?: string) => {
+  const landed = (info: PluginInfo & { replaced: boolean }) => {
+    const name = info.manifest?.name ?? info.id;
+    setNote(info.replaced ? `replaced ${name}; it needs approval again` : `added ${name} ${info.manifest?.version ?? ''} — review & approve`.trim());
+    onChanged();
+  };
+  /** the plugin this id would overwrite, if the user already has one under it */
+  const installed = (id: string | undefined) => (id ? plugins.find((p) => p.id === id) : undefined);
+  const okToReplace = (name: string) => window.confirm(`Replace the installed ${name}? Its approval is reset.`);
+  const addFile = async (f: File) => {
+    // the same file picked twice in a row must still fire a change event
+    if (fileInput.current) fileInput.current.value = '';
     setBusy(true);
     setErr(null);
     setNote(null);
     try {
-      const info = link ? await api.pluginAddUrl(link) : await api.pluginAdd(source);
-      const name = info.manifest?.name ?? info.id;
-      setNote(info.replaced ? `replaced ${name}; it needs approval again` : `added ${name} ${info.manifest?.version ?? ''} — review & approve`.trim());
-      onChanged();
+      // what the file *is* decides what it would replace, so its manifest is read first; `inspect`
+      // writes nothing, and an unreadable file is refused here rather than half-installed
+      const source = await f.text();
+      const had = installed((await api.pluginInspect(source)).id);
+      if (had && !okToReplace(had.manifest?.name ?? had.id)) return;
+      landed(await api.pluginAdd(source));
     } catch (e: unknown) {
       setErr(why(e));
     } finally {
       setBusy(false);
     }
   };
-  /** the plugin this source would overwrite, if the user already has one under that id */
-  const installed = (id: string | undefined) => (id ? plugins.find((p) => p.id === id) : undefined);
-  const okToReplace = (p: PluginInfo | undefined) => !p || window.confirm(`Replace the installed ${p.manifest?.name ?? p.id}? Its approval is reset.`);
-  const addFile = async (f: File) => {
-    // the same file picked twice in a row must still fire a change event
-    if (fileInput.current) fileInput.current.value = '';
-    let had: PluginInfo | undefined;
-    let source: string;
-    try {
-      source = await f.text();
-      had = installed((await api.pluginInspect(source)).id);
-    } catch (e: unknown) {
-      // unreadable, or no usable manifest: say so here rather than letting `add` repeat it
-      setErr(why(e));
-      return;
-    }
-    if (okToReplace(had)) await add(source);
-  };
   const addUrl = async () => {
     const link = url.trim();
-    // the id a `<id>.js` link would install under; the backend has the last word either way
-    let id: string | undefined;
+    setBusy(true);
+    setErr(null);
+    setNote(null);
     try {
-      id = /([a-z0-9-]+)\.js$/i.exec(new URL(link).pathname)?.[1];
-    } catch {
-      /* not a URL we can read an id from */
+      // What is behind a link is only known once the backend has fetched it: a 409 here means the
+      // file's own id names a plugin already installed, and the same call goes back with `replace`.
+      let info: PluginInfo & { replaced: boolean };
+      try {
+        info = await api.pluginAddUrl(link);
+      } catch (e: unknown) {
+        const clash = e instanceof ApiError && e.status === 409 && typeof e.data.replaces === 'string' ? e.data.replaces : null;
+        if (!clash) throw e;
+        if (!okToReplace(installed(clash)?.manifest?.name ?? clash)) return;
+        info = await api.pluginAddUrl(link, true);
+      }
+      landed(info);
+      setUrl(''); // …and a link that did not install stays in the box to be fixed
+    } catch (e: unknown) {
+      setErr(why(e));
+    } finally {
+      setBusy(false);
     }
-    if (!okToReplace(installed(id))) return;
-    await add('', link);
-    setUrl('');
   };
   const pending = approving ? plugins.find((p) => p.id === approving) : undefined;
   return (
@@ -296,6 +306,8 @@ export function PluginsSection({
       ))}
       {pending?.manifest && pending.needsApproval && (
         <PluginApproveDialog
+          // a rescan gives the same plugin new bytes: a fresh dialog, with the old code pane gone
+          key={pending.hash}
           plugin={pending}
           onClose={() => setApproving(null)}
           onApproved={() => {

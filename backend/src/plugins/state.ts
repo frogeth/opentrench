@@ -18,6 +18,43 @@ export interface PluginRecord {
 // The storage bag is keyed by whatever a plugin asks for, so it gets no prototype to walk into.
 const EMPTY = (): PluginRecord => ({ storage: Object.create(null), settings: {}, chats: {}, schema: [] });
 const MAX_STORAGE_BYTES = 256 * 1024;
+/** the settings form a plugin may declare: small, flat, and every field named once */
+const SCHEMA_FIELDS_MAX = 20;
+const SCHEMA_KEY_RE = /^[a-z0-9_-]{1,40}$/i;
+const SCHEMA_LABEL_MAX = 60;
+const SCHEMA_TYPES = ['text', 'number', 'toggle', 'secret'];
+const SCHEMA_BYTES_MAX = 16 * 1024;
+/** key names that would reach through a plain settings object instead of sitting in it */
+const RESERVED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * The app validates a schema before it ever reaches the backend, but the route is reachable on its
+ * own and the state file can be edited by hand, so both doors check the same things: what is stored
+ * is what the settings form will render, field for field.
+ */
+export function settingFields(raw: unknown): SettingField[] {
+  if (!Array.isArray(raw) || raw.length > SCHEMA_FIELDS_MAX) throw new Error(`the settings schema must be an array of at most ${SCHEMA_FIELDS_MAX} fields`);
+  if (Buffer.byteLength(JSON.stringify(raw ?? null)) > SCHEMA_BYTES_MAX) throw new Error(`the settings schema is too large (${SCHEMA_BYTES_MAX / 1024} KB max)`);
+  const seen = new Set<string>();
+  return raw.map((entry) => {
+    const f = (entry ?? {}) as Record<string, unknown>;
+    if (typeof f.key !== 'string' || !SCHEMA_KEY_RE.test(f.key)) throw new Error(`settings field key ${JSON.stringify(f.key)} must be 1-40 letters, digits, _ or -`);
+    if (RESERVED_KEYS.has(f.key.toLowerCase())) throw new Error(`settings field key ${f.key} is reserved`);
+    if (seen.has(f.key)) throw new Error(`settings field key ${f.key} appears twice`);
+    seen.add(f.key);
+    if (typeof f.label !== 'string' || !f.label || f.label.length > SCHEMA_LABEL_MAX) throw new Error(`settings field ${f.key} needs a label of at most ${SCHEMA_LABEL_MAX} characters`);
+    if (typeof f.type !== 'string' || !SCHEMA_TYPES.includes(f.type)) throw new Error(`settings field ${f.key} has an unknown type; use ${SCHEMA_TYPES.join(', ')}`);
+    const field: SettingField = { key: f.key, label: f.label, type: f.type as SettingField['type'] };
+    // a default is one of the values an input can hold; an object or an array is neither
+    if ('default' in f) {
+      const d = f.default;
+      if (typeof d !== 'string' && typeof d !== 'number' && typeof d !== 'boolean') throw new Error(`settings field ${f.key} needs a default that is text, a number or true/false`);
+      field.default = d;
+    }
+    return field;
+  });
+}
+
 /** distinct chats one plugin may name; each one becomes a watch key and a row in the pickers */
 const CHATS_MAX = 32;
 /** Coalesce a burst of writes… */
@@ -37,7 +74,15 @@ export class PluginState {
     try {
       const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
       for (const [id, r] of Object.entries<any>(raw ?? {})) {
-        this.data[id] = { storage: Object.assign(Object.create(null), r?.storage ?? {}), settings: r?.settings ?? {}, chats: r?.chats ?? {}, schema: Array.isArray(r?.schema) ? r.schema : [] };
+        // The file is ours, but it is a file: a schema that no longer validates is dropped rather
+        // than handed to the settings form, which trusts what it is given.
+        let schema: SettingField[] = [];
+        try {
+          schema = settingFields(r?.schema ?? []);
+        } catch (e: any) {
+          console.warn(`[plugins] ${id}: stored settings form dropped —`, e?.message ?? e);
+        }
+        this.data[id] = { storage: Object.assign(Object.create(null), r?.storage ?? {}), settings: r?.settings ?? {}, chats: r?.chats ?? {}, schema };
       }
     } catch {
       /* first run */

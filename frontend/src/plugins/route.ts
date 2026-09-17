@@ -74,9 +74,13 @@ const KEY_RE = /^[a-z0-9_-]{1,40}$/i;
 /** keys that would reach through a plain settings object instead of sitting in it */
 const RESERVED_KEYS = ['__proto__', 'constructor', 'prototype'];
 
+/** a schema is a form, not a payload: this is far more than 20 labelled fields ever need */
+const SCHEMA_BYTES_MAX = 16 * 1024;
+
 /** A settings form is small, flat and declared in full: anything else is refused rather than half-shown. */
 const settingsSchema = (v: unknown): SettingField[] => {
   if (!Array.isArray(v) || v.length > 20) throw new Error('the settings schema must be an array of at most 20 fields');
+  if (new Blob([JSON.stringify(v)]).size > SCHEMA_BYTES_MAX) throw new Error(`the settings schema is too large (${SCHEMA_BYTES_MAX / 1024} KB max)`);
   const seen = new Set<string>();
   return v.map((raw) => {
     const f = (raw ?? {}) as Record<string, unknown>;
@@ -87,7 +91,11 @@ const settingsSchema = (v: unknown): SettingField[] => {
     if (typeof f.label !== 'string' || !f.label || f.label.length > 60) throw new Error(`settings field ${f.key} needs a label of at most 60 characters`);
     if (typeof f.type !== 'string' || !FIELD_TYPES.includes(f.type)) throw new Error(`settings field ${f.key} has an unknown type; use ${FIELD_TYPES.join(', ')}`);
     const field: SettingField = { key: f.key, label: f.label, type: f.type as SettingField['type'] };
-    if ('default' in f) field.default = f.default;
+    // a default is one of the values an input can hold; an object or an array is neither
+    if ('default' in f) {
+      if (typeof f.default !== 'string' && typeof f.default !== 'number' && typeof f.default !== 'boolean') throw new Error(`settings field ${f.key} needs a default that is text, a number or true/false`);
+      field.default = f.default;
+    }
     return field;
   });
 };
@@ -146,10 +154,14 @@ export async function routeCall(ctx: PluginContext, call: PluginCall): Promise<u
     case 'storage.remove':
       need(ctx, 'storage');
       return ctx.api.pluginStorageSet(ctx.id, str(a0, 'key', 100), undefined);
+    // A form and the answers to it are the plugin's own stored data, kept in the same file as its
+    // storage bag and gated the same way.
     case 'settings.schema':
+      need(ctx, 'storage');
       ctx.ui.setSchema(settingsSchema(a0));
       return null;
     case 'settings.get':
+      need(ctx, 'storage');
       // the plugin asked for its own answers; the form it declared is the app's business, not its
       return ctx.api.pluginSettings(ctx.id).then((r) => r.values);
     case 'ui.setTitle':

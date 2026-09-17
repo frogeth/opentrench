@@ -3,9 +3,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { PluginsSection } from './PluginsSection';
 import type { PluginInfo } from '../types';
-import { api } from '../api';
+import { ApiError, api } from '../api';
 
-vi.mock('../api', () => ({
+vi.mock('../api', async (real) => ({
+  ...(await real<Record<string, unknown>>()),
   api: {
     pluginSettings: vi.fn(async () => ({ values: {}, schema: [] })),
     pluginSettingsSet: vi.fn(async () => ({ ok: true })),
@@ -135,12 +136,32 @@ describe('PluginsSection', () => {
     expect(text()).toContain('added Hello feed 2.0.0 — review & approve');
     confirm.mockRestore();
   });
-  it('says when a link replaced what was installed', async () => {
-    await render(<PluginsSection plugins={[]} errors={{}} schemas={{}} onChanged={() => {}} />);
+  it('asks about a link the backend says would replace something, then installs it', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    vi.mocked(api.pluginAddUrl).mockRejectedValueOnce(new ApiError('would replace Hello feed', 409, { replaces: 'hello-feed' }));
+    await render(<PluginsSection plugins={[plugin()]} errors={{}} schemas={{}} onChanged={() => {}} />);
     const url = container.querySelector('input.fed-input') as HTMLInputElement;
     await type(url, 'https://example.com/hello-feed.js');
     await click(button('add from link'));
-    expect(api.pluginAddUrl).toHaveBeenCalledWith('https://example.com/hello-feed.js');
+    expect(confirm).toHaveBeenCalledWith('Replace the installed Hello feed? Its approval is reset.');
+    expect(api.pluginAddUrl).toHaveBeenCalledTimes(1); // the user said no: never asked again with replace
+    expect(url.value).toBe('https://example.com/hello-feed.js'); // …and the link is still there to retry
+
+    confirm.mockReturnValue(true);
+    vi.mocked(api.pluginAddUrl).mockRejectedValueOnce(new ApiError('would replace Hello feed', 409, { replaces: 'hello-feed' }));
+    await click(button('add from link'));
+    expect(api.pluginAddUrl).toHaveBeenLastCalledWith('https://example.com/hello-feed.js', true);
     expect(text()).toContain('replaced Hello feed; it needs approval again');
+    expect(url.value).toBe('');
+    confirm.mockRestore();
+  });
+  it('keeps a link that would not install in the box, with the reason', async () => {
+    vi.mocked(api.pluginAddUrl).mockRejectedValueOnce(new ApiError('fetch failed: 404', 400));
+    await render(<PluginsSection plugins={[]} errors={{}} schemas={{}} onChanged={() => {}} />);
+    const url = container.querySelector('input.fed-input') as HTMLInputElement;
+    await type(url, 'https://example.com/nope.js');
+    await click(button('add from link'));
+    expect(text()).toContain('fetch failed: 404');
+    expect(url.value).toBe('https://example.com/nope.js');
   });
 });
