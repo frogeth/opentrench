@@ -204,7 +204,8 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
     store.flush();
     pluginState.flush();
     svc.rooms.stop();
-    process.exit(0);
+    // one turn of the loop so the rooms' bye frames reach the socket before the process goes
+    setImmediate(() => process.exit(0));
   });
 }
 

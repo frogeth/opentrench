@@ -49,8 +49,11 @@ type Peer = {
   clock: { now: number };
 };
 
-/** `inert`: clients that never dial, for tests about config and validation on relays that do not exist. */
-function peer(name: string, opts: { inert?: boolean } = {}): Peer {
+/**
+ * `inert`: clients that never dial, for tests about config and validation on relays that do not exist.
+ * `live`: the real clock instead of the frozen one (`clock.now`), for the throttle's timers.
+ */
+function peer(name: string, opts: { inert?: boolean; live?: boolean; sendGapMs?: number } = {}): Peer {
   const cfg = new ConfigStore(tmpFile());
   const hub = new MessageHub(10);
   const p: Peer = { name, cfg, hub, sends: [], clients: [], statuses: 0, clock: { now: Date.now() }, mgr: undefined as unknown as RoomsManager };
@@ -59,7 +62,8 @@ function peer(name: string, opts: { inert?: boolean } = {}): Peer {
     hub,
     version: 'test',
     name: () => p.name,
-    now: () => p.clock.now,
+    now: opts.live ? Date.now : () => p.clock.now,
+    sendGapMs: opts.sendGapMs,
     onStatus: () => p.statuses++,
     clientFactory: (o: RoomClientOptions) => {
       const c = new RoomClient({ ...o, backoffMs: FAST, paceMs: 1 }) as RoomClient & { stops: number };
@@ -153,7 +157,7 @@ describe('RoomsManager', () => {
     await connected(a);
     const joined = b.mgr.join(room.invite);
     expect(joined.id).toBe(room.id);
-    expect(joined.name).toBe(`127.0.0.1:${new URL(h.url).port}`);
+    expect(joined.name).toBe('room');
     expect(joined.invite).toBe(room.invite);
     await connected(b);
     await until(() => a.mgr.status()[0]!.members === 1, 3000, 'A sees B');
@@ -161,44 +165,83 @@ describe('RoomsManager', () => {
     await until(() => !!b.hub.getToken(SOL), 3000, 'B has the token');
     const t = b.hub.getToken(SOL)!;
     expect(t.via).toBe('A');
-    expect(t.calls.map((c) => c.author)).toEqual(['alice']);
+    expect(t.calls.map((c) => [c.author, c.via])).toEqual([['alice', 'A']]);
     expect(tokenSends(a, SOL)).toHaveLength(1);
     expect(tokenSends(a, SOL)[0]!.plain).toEqual({ k: 'token', name: 'A', token: expect.objectContaining({ address: SOL }) });
     expect(tokenSends(a, SOL)[0]!.plain.token.via).toBeUndefined();
-    // B's hub now emits token events for SOL (via A): B must not echo them back into the room
-    b.hub.applyRemoteToken('Carol', { ...t, via: undefined, calls: [{ ...t.calls[0]!, msgId: 'other', author: 'carol' }] });
-    await sleep(100);
+    // B's hub emits a token event for SOL when another friend adds a call to it (applied synchronously,
+    // so the manager has already decided by the time the call is counted): nothing goes out from B
+    b.hub.applyRemoteToken('Carol', { ...t, via: undefined, calls: [{ ...t.calls[0]!, msgId: 'other', author: 'carol', via: undefined }] });
+    expect(b.hub.getToken(SOL)!.calls.map((c) => c.author)).toEqual(['alice', 'carol']);
     expect(tokenSends(b)).toHaveLength(0);
     expect(a.hub.getToken(SOL)!.calls).toHaveLength(1);
   });
 
-  it('sends at most one message per token per 30 s, and only when a newer call exists', async () => {
+  it('only a token own calls trigger a send: a friend call arriving on a token we called does not re-send it', async () => {
     const h = await startRelay();
     const a = peer('A');
+    const b = peer('B');
+    const room = a.mgr.create('r', h.url);
+    await connected(a);
+    b.mgr.join(room.invite);
+    await connected(b);
+    await until(() => a.mgr.status()[0]!.members === 1, 3000, 'A sees B');
+    a.hub.push(call(SOL, 'alice'));
+    await until(() => !!b.hub.getToken(SOL), 3000, 'B has the token');
+    // B's own chat calls it too: B sends, and A's copy gains B's call tagged via B
+    b.hub.push(call(SOL, 'bob', Date.now(), { chatId: 'bc', chatName: '#bc' }));
+    expect(tokenSends(b, SOL)).toHaveLength(1);
+    await until(() => a.hub.getToken(SOL)!.calls.length === 2, 3000, 'A has B call');
+    expect(a.hub.getToken(SOL)!.calls.map((c) => [c.author, c.via])).toEqual([['alice', undefined], ['bob', 'B']]);
+    expect(a.hub.getToken(SOL)!.via).toBeUndefined();
+    expect(tokenSends(a, SOL)).toHaveLength(1);
+    // a market tick on A re-emits the token; still nothing new of A's own to say
+    a.hub.updateMarket(SOL, { marketCap: 7 });
+    expect(tokenSends(a, SOL)).toHaveLength(1);
+    // a second own call on A goes out, with the full list (peers dedupe by message id)
+    a.clock.now += 60_000;
+    a.hub.push(call(SOL, 'anna'));
+    expect(tokenSends(a, SOL)).toHaveLength(2);
+    expect(tokenSends(a, SOL)[1]!.plain.token.calls.map((c: any) => c.author)).toEqual(['alice', 'bob', 'anna']);
+  });
+
+  it('sends at most one message per token per gap; a call inside the gap goes out when the gap ends, not lost', async () => {
+    const h = await startRelay();
+    const GAP = 300;
+    const a = peer('A', { live: true, sendGapMs: GAP });
     a.mgr.create('r', h.url);
     await connected(a);
-    const t0 = a.clock.now;
+    const t0 = Date.now();
     a.hub.push(call(SOL, 'alice', t0));
     expect(tokenSends(a, SOL)).toHaveLength(1);
-    // a second call inside the window waits
+    // two more callers inside the gap: one deferred send, carrying both, when the gap ends
     a.hub.push(call(SOL, 'bob', t0 + 1));
+    a.hub.push(call(SOL, 'carol', t0 + 2));
     expect(tokenSends(a, SOL)).toHaveLength(1);
-    // …and rides the next token event after it (a market tick here), with every call so far
-    a.clock.now = t0 + 60_000;
-    a.hub.updateMarket(SOL, { marketCap: 5 });
-    expect(tokenSends(a, SOL)).toHaveLength(2);
-    expect(tokenSends(a, SOL)[1]!.plain.token.calls.map((c: any) => c.author)).toEqual(['alice', 'bob']);
+    await sleep(GAP / 3);
+    expect(tokenSends(a, SOL)).toHaveLength(1);
+    await until(() => tokenSends(a, SOL).length === 2, GAP * 3, 'deferred send');
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(GAP - 5);
+    expect(tokenSends(a, SOL)[1]!.plain.token.calls.map((c: any) => c.author)).toEqual(['alice', 'bob', 'carol']);
     // a token event with nothing newer to say is not sent, however long ago the last one was
-    a.clock.now = t0 + 120_000;
+    await sleep(GAP + 20);
     a.hub.updateMarket(SOL, { marketCap: 6 });
     expect(tokenSends(a, SOL)).toHaveLength(2);
-    // a newer call after the window goes out at once
-    a.hub.push(call(SOL, 'carol', t0 + 2));
+    // a newer call after the gap goes out at once
+    a.hub.push(call(SOL, 'dave', t0 + 3));
     expect(tokenSends(a, SOL)).toHaveLength(3);
-    expect(tokenSends(a, SOL)[2]!.plain.token.calls.map((c: any) => c.author)).toEqual(['alice', 'bob', 'carol']);
-    // a different token has its own window
-    a.hub.push(call(EVM, 'dave', t0 + 3));
+    // a different token has its own gap
+    a.hub.push(call(EVM, 'erin', t0 + 4));
     expect(tokenSends(a, EVM)).toHaveLength(1);
+    // the newest own call, not the last appended one, is what counts: an older call appended later is nothing new
+    a.hub.push(call(EVM, 'old', t0 - 5000));
+    expect(tokenSends(a, EVM)).toHaveLength(1);
+    // stop() cancels a pending deferred send
+    a.hub.push(call(SOL, 'frank', t0 + 5));
+    expect(tokenSends(a, SOL)).toHaveLength(3);
+    a.mgr.stop();
+    await sleep(GAP + 50);
+    expect(tokenSends(a, SOL)).toHaveLength(3);
   });
 
   it('replays the last 24 h of own calls when a room connects, newest first, so a late joiner catches up', async () => {
@@ -212,6 +255,10 @@ describe('RoomsManager', () => {
     const room = a.mgr.create('r', h.url);
     await connected(a);
     expect(tokenSends(a).map((s) => s.plain.token.address)).toEqual([EVM, SOL]);
+    // the replay counts as sent: a market tick right after does not send the token again
+    a.hub.updateMarket(EVM, { marketCap: 5 });
+    a.hub.updateMarket(SOL, { marketCap: 5 });
+    expect(tokenSends(a)).toHaveLength(2);
     const b = peer('B');
     b.mgr.join(room.invite, 'mine');
     await connected(b);
@@ -331,6 +378,9 @@ describe('RoomsManager', () => {
     expect(a.hub.listenerCount('event')).toBe(0);
     a.hub.push(call(SOL, 'alice'));
     expect(tokenSends(a)).toHaveLength(0);
+    expect(a.mgr.status().map((r) => r.state)).toEqual(['disconnected', 'disconnected']);
+    a.mgr.sync();
+    expect(a.clients).toHaveLength(2);
     expect(a.mgr.status().map((r) => r.state)).toEqual(['disconnected', 'disconnected']);
   });
 });

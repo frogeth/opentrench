@@ -160,6 +160,8 @@ export interface CallRecord {
   mcSource?: 'candle' | 'cached' | 'scan' | 'chain';
   /** posted by a bot (an alert bot that called first); a friend's copy uses it to drop bot echoes */
   bot?: true;
+  /** TrenchTogether: the friend this call arrived from (absent for calls from this machine's own chats) */
+  via?: string;
 }
 
 /** Holder security from GoPlus (EVM) or RugCheck (Solana). Percentages are 0..100. */

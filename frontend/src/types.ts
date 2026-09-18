@@ -155,6 +155,8 @@ export interface CallRecord {
   marketCap?: number;
   /** 'candle': corrected from the 1-minute candle of the call's minute; 'cached': checked, no candle, registration number kept */
   mcSource?: 'candle' | 'cached' | 'scan' | 'chain';
+  /** TrenchTogether: the friend this call arrived from (absent for calls from this machine's own chats) */
+  via?: string;
 }
 
 /** Holder security from GoPlus (EVM) or RugCheck (Solana). Percentages are 0..100. */

@@ -11,8 +11,10 @@ import { decodeInvite, encodeInvite, newRoomKey, relayHostOf, relayUrlOf, roomId
  * in is applied to the hub exactly like a LAN friend's calls.
  *
  * Only calls travel. Every app prices what is on its own screen from the chain, so market numbers
- * are never sent and `hub.remoteLive` is left alone for room peers. A token that reached this hub
- * `via` someone else is never re-sent: rooms overlap, and the loop would never end.
+ * are never sent and `hub.remoteLive` is left alone for room peers. Only this machine's own calls
+ * (those without `via`) ever trigger a send: rooms overlap, and re-sending a friend's call under
+ * this name would loop for ever. The message still carries the token's full call list; peers
+ * dedupe by message id.
  */
 
 /** The relay new rooms land on when the user has no preference. The only place this URL is spelled. */
@@ -49,6 +51,8 @@ export interface RoomsManagerDeps {
   name: () => string;
   log?: (m: string) => void;
   now?: () => number;
+  /** tests: a shorter per-token send gap */
+  sendGapMs?: number;
   /** tests: build clients with fast backoff and pacing */
   clientFactory?: (opts: RoomClientOptions) => RoomClient;
   /** something the settings screen shows changed (state, members) */
@@ -60,10 +64,14 @@ type Running = { client: RoomClient; key: string; relay: string; access?: string
 
 export class RoomsManager {
   private readonly running = new Map<string, Running>();
-  /** address → the newest call ts sent and when, for the per-token throttle. */
+  /** address → the newest own call ts sent and when, for the per-token throttle. */
   private readonly lastSent = new Map<string, { ts: number; at: number }>();
+  /** address → the send booked for when its gap ends, so a call inside the gap is delayed, not lost. */
+  private readonly deferred = new Map<string, NodeJS.Timeout>();
+  private stopped = false;
   private readonly log: (m: string) => void;
   private readonly now: () => number;
+  private readonly sendGapMs: number;
   private readonly onEvent = (ev: ServerEvent) => {
     if (ev.type === 'token') this.share(ev.token);
   };
@@ -71,11 +79,13 @@ export class RoomsManager {
   constructor(private readonly deps: RoomsManagerDeps) {
     this.log = deps.log ?? (() => {});
     this.now = deps.now ?? Date.now;
+    this.sendGapMs = deps.sendGapMs ?? SEND_GAP_MS;
     deps.hub.on('event', this.onEvent);
   }
 
   /** Start a client for every configured room, restart the ones whose secrets changed, stop the ones that are gone. Safe to call repeatedly. */
   sync(): void {
+    if (this.stopped) return;
     const { rooms, memberId } = this.deps.cfg.get().together;
     const want = new Map(rooms.map((r) => [r.id, r]));
     for (const [id, run] of this.running) {
@@ -141,7 +151,8 @@ export class RoomsManager {
     if (this.room(inv.id)) throw new Error('you are already in that room');
     this.checkRoom();
     const code = cleanAccess(access);
-    return this.add({ id: inv.id, key: inv.key, relay: inv.relay, name: cleanName(name) || relayHostOf(inv.relay), joinedAt: this.now(), ...(code ? { access: code } : {}) });
+    // the card shows the relay host anyway, so an unnamed room is just 'room' like a created one
+    return this.add({ id: inv.id, key: inv.key, relay: inv.relay, name: cleanName(name) || 'room', joinedAt: this.now(), ...(code ? { access: code } : {}) });
   }
 
   leave(id: string): void {
@@ -173,41 +184,71 @@ export class RoomsManager {
     this.sync();
   }
 
-  /** For shutdown: every client leaves, nothing more goes out. */
+  /** For shutdown: every client leaves, nothing more goes out, and sync() stays a no-op. */
   stop(): void {
+    this.stopped = true;
     this.deps.hub.off('event', this.onEvent);
+    for (const t of this.deferred.values()) clearTimeout(t);
+    this.deferred.clear();
     for (const run of this.running.values()) run.client.stop();
     this.running.clear();
   }
 
   // --- outbound -----------------------------------------------------------------
 
-  /** One of this hub's tokens changed: send it when it has a call of our own that is newer than the last one sent. */
-  private share(t: TokenInfo): void {
-    if (t.via || !t.calls.length) return;
-    const newest = t.calls[t.calls.length - 1]!.ts;
+  /**
+   * One of this hub's tokens changed: send it when it has an own call newer than the last one sent.
+   * Inside the gap the send is booked for when the gap ends (`fromTimer` is that booking firing), so
+   * a second caller within 30 s reaches the room 30 s late rather than on some later market tick.
+   */
+  private share(t: TokenInfo | undefined, fromTimer = false): void {
+    if (this.stopped || !t) return;
+    const newest = newestOwnCall(t);
+    if (newest === undefined) return;
     const last = this.lastSent.get(t.address);
+    if (last && newest <= last.ts) return;
     const now = this.now();
-    if (last && (newest <= last.ts || now - last.at < SEND_GAP_MS)) return;
+    if (last && !fromTimer && now - last.at < this.sendGapMs) {
+      this.defer(t.address, last.at + this.sendGapMs - now);
+      return;
+    }
     let sent = false;
     for (const { client } of this.running.values()) if (client.send({ k: 'token', name: this.deps.name(), token: shareable(t) })) sent = true;
-    if (!sent) return;
-    // re-insert so the map stays in send order and the oldest is what a full map drops
-    this.lastSent.delete(t.address);
-    this.lastSent.set(t.address, { ts: newest, at: now });
-    if (this.lastSent.size > LAST_SENT_MAX) this.lastSent.delete(this.lastSent.keys().next().value!);
+    if (sent) this.record(t.address, newest, now);
+  }
+
+  private defer(address: string, ms: number): void {
+    if (this.deferred.has(address)) return;
+    const timer = setTimeout(() => {
+      this.deferred.delete(address);
+      this.share(this.deps.hub.getToken(address), true);
+    }, ms);
+    timer.unref?.();
+    this.deferred.set(address, timer);
   }
 
   /** A room just connected: the last day of this hub's own calls, newest first, so its members see what they missed. */
   private replay(client: RoomClient): void {
+    const now = this.now();
     const own = this.deps.hub
-      .activeTokens(SHARE_WINDOW_MS, this.now())
-      .filter((t) => !t.via && t.calls.length)
-      .sort((a, b) => b.lastCallTs - a.lastCallTs)
+      .activeTokens(SHARE_WINDOW_MS, now)
+      .map((t) => ({ t, newest: newestOwnCall(t) }))
+      .filter((x): x is { t: TokenInfo; newest: number } => x.newest !== undefined)
+      .sort((a, b) => b.newest - a.newest)
       .slice(0, REPLAY_MAX);
     const name = this.deps.name();
-    for (const t of own) client.send({ k: 'token', name, token: shareable(t) });
+    for (const { t, newest } of own) {
+      // counts as sent: the first market tick after a reconnect must not send it all over again
+      if (client.send({ k: 'token', name, token: shareable(t) })) this.record(t.address, newest, now);
+    }
     if (own.length) this.log(`rooms: ${client.id} replaying ${own.length} calls`);
+  }
+
+  private record(address: string, ts: number, at: number): void {
+    // re-insert so the map stays in send order and the oldest is what a full map drops
+    this.lastSent.delete(address);
+    this.lastSent.set(address, { ts, at });
+    if (this.lastSent.size > LAST_SENT_MAX) this.lastSent.delete(this.lastSent.keys().next().value!);
   }
 
   // --- helpers ---------------------------------------------------------------------
@@ -231,6 +272,13 @@ export class RoomsManager {
     this.sync();
     return { ...room, invite: encodeInvite({ relay: room.relay, key: room.key }) };
   }
+}
+
+/** The ts of the newest call from this machine's own chats, or undefined when every call came via a friend. Calls are not kept sorted, so a max, not the tail. */
+function newestOwnCall(t: TokenInfo): number | undefined {
+  let newest: number | undefined;
+  for (const c of t.calls) if (!c.via && (newest === undefined || c.ts > newest)) newest = c.ts;
+  return newest;
 }
 
 const cleanName = (s: string | undefined): string => (s ?? '').trim().slice(0, NAME_MAX);
