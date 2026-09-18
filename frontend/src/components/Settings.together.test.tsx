@@ -119,18 +119,52 @@ describe('Settings → Together: rooms', () => {
     expect(button('Copied')).toBeTruthy();
   });
 
-  it('Rotate asks first, then re-keys the room and copies the new invite', async () => {
+  it('New invite asks inline first, then re-keys the room and copies the new invite', async () => {
     mocks.together.mockImplementation(async () => together({ rooms: [room()] }));
     mocks.rotateRoom.mockResolvedValue({ room: room({ invite: 'opentrench://room/relay.example/NEW' }), status: live() });
-    vi.stubGlobal('confirm', vi.fn(() => false));
     await render(statusWith(live()));
-    await click(button('Rotate'));
+    await click(button('New invite'));
+    expect(container.querySelector('.room-card')?.textContent).toContain('Make a new invite? Everyone in the room has to join again with it.');
+    await click(button('No'));
     expect(mocks.rotateRoom).not.toHaveBeenCalled();
-    vi.stubGlobal('confirm', vi.fn(() => true));
-    await click(button('Rotate'));
+    expect(button('New invite')).toBeTruthy();
+    await click(button('New invite'));
+    await click(button('Yes'));
     expect(mocks.rotateRoom).toHaveBeenCalledWith('r1');
     expect(clipboard).toEqual(['opentrench://room/relay.example/NEW']);
-    expect(container.textContent).toContain('New invite copied');
+    expect(container.querySelector('.room-notice')?.textContent).toBe('New invite copied. Send it to your friends.');
+  });
+
+  it('after New invite, says the invite is ready even when the clipboard is off', async () => {
+    mocks.together.mockImplementation(async () => together({ rooms: [room()] }));
+    mocks.rotateRoom.mockResolvedValue({ room: room({ invite: 'opentrench://room/relay.example/NEW' }), status: live() });
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    await render(statusWith(live()));
+    await click(button('New invite'));
+    await click(button('Yes'));
+    expect(container.querySelector('.room-notice')?.textContent).toBe('New invite ready. Copy it and send it to your friends.');
+  });
+
+  it('Leave asks inline, then leaves the room', async () => {
+    mocks.together.mockImplementation(async () => together({ rooms: [room()] }));
+    mocks.leaveRoom.mockResolvedValue({ ok: true, status: live() });
+    await render(statusWith(live()));
+    await click(button('Leave'));
+    expect(container.querySelector('.room-card')?.textContent).toContain('Leave this room?');
+    await click(button('No'));
+    expect(mocks.leaveRoom).not.toHaveBeenCalled();
+    await click(button('Leave'));
+    await click(button('Yes'));
+    expect(mocks.leaveRoom).toHaveBeenCalledWith('r1');
+  });
+
+  it('shows the error with a Retry when the page cannot load', async () => {
+    mocks.together.mockRejectedValueOnce(new Error('backend is away'));
+    await render(statusWith(live()));
+    expect(container.querySelector('.err')?.textContent).toContain('backend is away');
+    await click(button('Retry'));
+    expect(container.querySelector('.err')).toBeNull();
+    expect(container.textContent).toContain('No rooms yet');
   });
 
   it('puts every state into plain words', async () => {
@@ -199,7 +233,7 @@ describe('Settings → Together: create', () => {
     expect(mocks.setRelay).toHaveBeenCalledWith('wss://relay.example');
     expect(mocks.createRoom).toHaveBeenCalledWith('degen circle', 'wss://relay.example');
     expect(clipboard).toEqual([made.invite]);
-    expect(container.querySelector('.room-card .room-notice')?.textContent).toBe('Invite copied — send it to your friends');
+    expect(container.querySelector('.room-card .room-notice')?.textContent).toBe('Invite copied. Send it to your friends.');
     expect(byPlaceholder('e.g. degen circle').value).toBe('');
   });
 
@@ -210,6 +244,14 @@ describe('Settings → Together: create', () => {
     await click(button('Create'));
     expect(mocks.setRelay).not.toHaveBeenCalled();
     expect(mocks.createRoom).toHaveBeenCalledWith('x', DEFAULT_RELAY);
+  });
+
+  it("shows the relay's answer under the form when create fails", async () => {
+    mocks.createRoom.mockRejectedValueOnce(new Error('could not reach relay.opentrench.app'));
+    await render(statusWith(live()));
+    await type(byPlaceholder('e.g. degen circle'), 'x');
+    await click(button('Create'));
+    expect(container.querySelector('.room-form .err')?.textContent).toBe('could not reach relay.opentrench.app');
   });
 
   it('Check probes the relay and shows what it found', async () => {
@@ -236,18 +278,24 @@ describe('Settings → Together: join', () => {
     expect(byPlaceholder('opentrench://room/').value).toBe('');
   });
 
-  it('asks for an access code only after the relay wanted one', async () => {
-    mocks.joinRoom.mockRejectedValueOnce(new Error('relay wants an access code'));
+  it('reveals the access-code field from its link and sends the code', async () => {
+    mocks.joinRoom.mockResolvedValue({ room: room(), status: live() });
     await render(statusWith(live()));
     expect(byPlaceholder('access code')).toBeUndefined();
-    await type(byPlaceholder('opentrench://room/'), INVITE);
-    await click(button('Join'));
-    expect(container.querySelector('.err')?.textContent).toBe('relay wants an access code');
+    await click(button('This relay asks for an access code'));
     expect(byPlaceholder('access code')).toBeTruthy();
-    mocks.joinRoom.mockResolvedValue({ room: room(), status: live() });
+    await type(byPlaceholder('opentrench://room/'), INVITE);
     await type(byPlaceholder('access code'), 'letmein');
     await click(button('Join'));
     expect(mocks.joinRoom).toHaveBeenLastCalledWith(INVITE, undefined, 'letmein');
+  });
+
+  it('shows a join error under the form', async () => {
+    mocks.joinRoom.mockRejectedValueOnce(new Error('relay wants an access code'));
+    await render(statusWith(live()));
+    await type(byPlaceholder('opentrench://room/'), INVITE);
+    await click(button('Join'));
+    expect(container.querySelector('.err')?.textContent).toBe('relay wants an access code');
   });
 
   it('a deep-linked invite lands in the Join field', async () => {

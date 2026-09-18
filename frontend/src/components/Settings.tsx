@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, type BotSeen, type MarketStatus, type MaskedConfig, type RelayProbe, type RoomInfo, type TogetherInfo } from '../api';
 import type { PluginInfo, Status } from '../types';
 import type { SettingField } from '../plugins/route';
@@ -1057,21 +1057,40 @@ const relayHost = (url: string) => {
 /** TrenchTogether: rooms over a relay first (friends anywhere), the same-network mode under a disclosure. */
 function TogetherSection({ status, initialInvite }: { status: Status; initialInvite?: string }) {
   const [info, setInfo] = useState<TogetherInfo | null>(null);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ id: string; text: string } | null>(null);
+  const noticeTimer = useRef<number | undefined>(undefined);
   const live = status.together;
-  const load = () => api.together().then(setInfo).catch(() => {});
+  const load = () =>
+    api
+      .together()
+      .then((i) => {
+        setInfo(i);
+        setLoadErr(null);
+      })
+      .catch((e: any) => setLoadErr(e?.message ?? String(e)));
   useEffect(() => {
     void load();
   }, [live?.sharing, live?.peers.length, live?.rooms?.length]);
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
   /** a room just made (or re-keyed): show it, put its invite on the clipboard and say so under the card for a moment */
-  const announce = async (room: RoomInfo, text: string) => {
+  const announce = async (room: RoomInfo, copied: string, ready: string) => {
     await load();
-    if (await copyText(room.invite)) {
-      setNotice({ id: room.id, text });
-      window.setTimeout(() => setNotice((n) => (n?.id === room.id ? null : n)), 4000);
-    }
+    const ok = await copyText(room.invite);
+    setNotice({ id: room.id, text: ok ? copied : ready });
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice((n) => (n?.id === room.id ? null : n)), 4000);
   };
-  if (!info) return <div className="hint">Loading…</div>;
+  if (!info) {
+    return loadErr ? (
+      <div className="row-inline">
+        <span className="err">Could not load: {loadErr}</span>
+        <button onClick={() => void load()}>Retry</button>
+      </div>
+    ) : (
+      <div className="hint">Loading…</div>
+    );
+  }
   return (
     <>
       <RoomsSection
@@ -1079,9 +1098,9 @@ function TogetherSection({ status, initialInvite }: { status: Status; initialInv
         live={live}
         notice={notice}
         onChange={load}
-        onRotated={(room) => void announce(room, 'New invite copied — send it to your friends')}
+        onRotated={(room) => void announce(room, 'New invite copied. Send it to your friends.', 'New invite ready. Copy it and send it to your friends.')}
       />
-      <CreateRoom info={info} onCreated={(room) => void announce(room, 'Invite copied — send it to your friends')} />
+      <CreateRoom info={info} onCreated={(room) => void announce(room, 'Invite copied. Send it to your friends.', 'Invite ready. Copy it and send it to your friends.')} />
       <JoinRoom initialInvite={initialInvite} onJoined={load} />
       <SameNetwork info={info} live={live} onInfo={setInfo} onChange={load} />
     </>
@@ -1117,7 +1136,11 @@ function RoomsSection({
 function RoomCard({ room, st, notice, onChange, onRotated }: { room: RoomInfo; st?: RoomLive; notice: string | null; onChange: () => void; onRotated: (room: RoomInfo) => void }) {
   const { busy, err, run } = useAsync();
   const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(copiedTimer.current), []);
   const [access, setAccess] = useState('');
+  /** the question shown in place of the buttons before an action that affects the whole room */
+  const [ask, setAsk] = useState<'rotate' | 'leave' | null>(null);
   const state = st?.state ?? 'connecting';
   const words = state === 'disconnected' && st?.error ? `${ROOM_STATE.disconnected} · ${st.error}` : ROOM_STATE[state];
   const dot = state === 'connected' ? 'on' : state === 'connecting' || state === 'rate-limited' ? 'mid' : 'off';
@@ -1125,23 +1148,22 @@ function RoomCard({ room, st, notice, onChange, onRotated }: { room: RoomInfo; s
   const copy = async () => {
     if (await copyText(room.invite)) {
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
+      window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
     }
   };
-  const rotate = () => {
-    if (!window.confirm('Make a new invite? Everyone in the room has to join again with it.')) return;
-    void run(async () => {
+  const rotate = () =>
+    run(async () => {
+      setAsk(null);
       const r = await api.rotateRoom(room.id);
       onRotated(r.room);
     });
-  };
-  const leave = () => {
-    if (!window.confirm(`Leave ${room.name}? You need an invite to come back.`)) return;
-    void run(async () => {
+  const leave = () =>
+    run(async () => {
+      setAsk(null);
       await api.leaveRoom(room.id);
       onChange();
     });
-  };
   const saveAccess = () =>
     run(async () => {
       await api.setRoomAccess(room.id, access.trim());
@@ -1163,7 +1185,7 @@ function RoomCard({ room, st, notice, onChange, onRotated }: { room: RoomInfo; s
         </div>
         {state === 'access-denied' && (
           <div className="row-inline room-access">
-            <input placeholder="access code from whoever runs the relay" value={access} onChange={(e) => setAccess(e.target.value)} spellCheck={false} onKeyDown={onEnter(!busy && !!access.trim(), () => void saveAccess())} />
+            <input aria-label="access code" placeholder="access code from whoever runs the relay" value={access} onChange={(e) => setAccess(e.target.value)} spellCheck={false} onKeyDown={onEnter(!busy && !!access.trim(), () => void saveAccess())} />
             <button disabled={busy || !access.trim()} onClick={() => void saveAccess()}>
               Save
             </button>
@@ -1171,13 +1193,27 @@ function RoomCard({ room, st, notice, onChange, onRotated }: { room: RoomInfo; s
         )}
       </div>
       <div className="room-actions">
-        <button onClick={() => void copy()}>{copied ? 'Copied' : 'Copy invite'}</button>
-        <button disabled={busy} onClick={rotate}>
-          Rotate
-        </button>
-        <button disabled={busy} onClick={leave}>
-          Leave
-        </button>
+        {ask ? (
+          <>
+            <span className="room-ask">{ask === 'rotate' ? 'Make a new invite? Everyone in the room has to join again with it.' : 'Leave this room?'}</span>
+            <button className={ask === 'leave' ? 'danger' : 'primary'} disabled={busy} onClick={() => void (ask === 'rotate' ? rotate() : leave())}>
+              Yes
+            </button>
+            <button disabled={busy} onClick={() => setAsk(null)}>
+              No
+            </button>
+          </>
+        ) : (
+          <>
+            <button onClick={() => void copy()}>{copied ? 'Copied' : 'Copy invite'}</button>
+            <button disabled={busy} onClick={() => setAsk('rotate')} title="re-key the room: the old invite stops working">
+              New invite
+            </button>
+            <button disabled={busy} onClick={() => setAsk('leave')}>
+              Leave
+            </button>
+          </>
+        )}
       </div>
       {notice && <div className="room-notice">{notice}</div>}
       {err && <div className="err room-err">{err}</div>}
@@ -1264,10 +1300,6 @@ function JoinRoom({ initialInvite, onJoined }: { initialInvite?: string; onJoine
   const [access, setAccess] = useState('');
   const [askAccess, setAskAccess] = useState(false);
   const { busy, err, run } = useAsync();
-  // the relay turned the join down for want of a code: show the field and keep it until the join goes through
-  useEffect(() => {
-    if (err && /access/i.test(err)) setAskAccess(true);
-  }, [err]);
   const canJoin = !busy && invite.trim().length > 0;
   const join = () =>
     run(async () => {
@@ -1282,13 +1314,17 @@ function JoinRoom({ initialInvite, onJoined }: { initialInvite?: string; onJoine
     <section className="room-form">
       <h2>Join a room</h2>
       <div className="row-inline">
-        <input placeholder="opentrench://room/…" value={invite} spellCheck={false} autoFocus={!!initialInvite} onChange={(e) => setInvite(e.target.value)} onKeyDown={onEnter(canJoin, () => void join())} />
-        <input className="room-join-name" placeholder="name it (optional)" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} onKeyDown={onEnter(canJoin, () => void join())} />
+        <input aria-label="invite link" placeholder="opentrench://room/…" value={invite} spellCheck={false} autoFocus={!!initialInvite} onChange={(e) => setInvite(e.target.value)} onKeyDown={onEnter(canJoin, () => void join())} />
+        <input aria-label="room name" placeholder="name it (optional)" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} onKeyDown={onEnter(canJoin, () => void join())} />
       </div>
-      {askAccess && (
+      {askAccess ? (
         <div className="row-inline">
-          <input placeholder="access code from whoever runs the relay" value={access} spellCheck={false} onChange={(e) => setAccess(e.target.value)} onKeyDown={onEnter(canJoin, () => void join())} />
+          <input aria-label="access code" placeholder="access code from whoever runs the relay" value={access} spellCheck={false} onChange={(e) => setAccess(e.target.value)} onKeyDown={onEnter(canJoin, () => void join())} />
         </div>
+      ) : (
+        <button className="link room-access-link" onClick={() => setAskAccess(true)}>
+          This relay asks for an access code
+        </button>
       )}
       <div className="row-inline">
         <button className="primary" disabled={!canJoin} onClick={() => void join()}>
@@ -1307,6 +1343,8 @@ function SameNetwork({ info, live, onInfo, onChange }: { info: TogetherInfo; liv
   const [pairing, setPairing] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
   const [byLink, setByLink] = useState(false);
+  const copiedTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(copiedTimer.current), []);
   const { busy, err, run } = useAsync();
   useEffect(() => setName(info.name), [info.name]);
   const nearby = live?.nearby ?? [];
@@ -1320,7 +1358,8 @@ function SameNetwork({ info, live, onInfo, onChange }: { info: TogetherInfo; liv
   const copy = async (s: string) => {
     if (await copyText(s)) {
       setCopied(s);
-      setTimeout(() => setCopied(null), 1200);
+      window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = window.setTimeout(() => setCopied(null), 1200);
     }
   };
   const addPeer = () =>

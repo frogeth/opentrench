@@ -1496,7 +1496,8 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 .settings .md-chains { gap: 6px; }
 .settings .md-chain { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
 /* Settings → Together: rooms first, the same-network mode folded under a disclosure */
-.settings .field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 180px; min-width: 0; font-size: 12px; }
+.settings .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12px; }
+.room-form .row-inline > .field { flex: 1 1 180px; }
 .settings .field-label { font-size: 11px; color: var(--muted); }
 .room-form .row-inline { flex-wrap: wrap; align-items: flex-end; }
 .room-form .row-inline > input { flex: 1 1 180px; }
@@ -1512,6 +1513,10 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 .room-access { margin-top: 4px; flex-wrap: wrap; }
 .room-access > input { flex: 1 1 180px; }
 .room-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.room-ask { font-size: 12px; color: var(--text); flex: 1 1 100%; text-align: right; }
+.settings .room-actions button.danger { border-color: var(--err); color: var(--err); }
+.settings .room-access-link { align-self: flex-start; font-size: 12px; color: var(--muted); cursor: pointer; }
+.settings .room-access-link:hover { color: var(--text); }
 .room-notice { grid-column: 1 / -1; color: var(--accent); font-size: 12px; }
 .room-err { grid-column: 1 / -1; }
 .probe-ok { color: var(--accent); font-size: 12px; }
@@ -1531,6 +1536,7 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 .settings .lan-body h3 { font-size: 12px; font-weight: 600; margin: 0 0 2px; display: flex; align-items: center; gap: 8px; }
 .lan-body .row-inline { flex-wrap: wrap; }
 .lan-body .row-inline > input { flex: 1 1 180px; }
+.lan-body .hdr-toggle { white-space: normal; text-align: left; }
 @media (max-width: 760px) {
   .modal.modal-settings { flex-direction: column; height: min(92vh, 900px); }
   .settings-nav { width: auto; flex-direction: row; flex-wrap: wrap; border-right: none; border-bottom: 1px solid var(--line); padding: 10px 12px 10px; gap: 4px; }
@@ -1540,4 +1546,5 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
   .modal-settings .settings { padding: 14px 16px 24px; }
   .room-card { grid-template-columns: 1fr; }
   .room-actions { justify-content: flex-start; }
+  .room-ask { text-align: left; }
 }
