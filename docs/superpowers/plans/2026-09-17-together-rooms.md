@@ -52,7 +52,7 @@
 
 **Files:** create `backend/src/rooms/manager.ts` (+ test), modify `backend/src/services.ts`, `backend/src/types.ts` (`Status.together.rooms`), `backend/src/hub.ts` (nothing new if `applyRemoteToken` suffices).
 
-- [ ] `DEFAULT_RELAY = 'wss://relay.opentrench.app'` exported from `backend/src/rooms/manager.ts`.
+- [ ] `no default relay (owner decision 2026-09-17)` exported from `backend/src/rooms/manager.ts`.
 - [ ] `class RoomsManager`: `sync()` starts/stops a RoomClient per configured room; `status()` → `{ id, name, relay, state, members, error }[]`; `create(name, relay?)` → generates key, updates config, syncs, returns the invite; `join(invite, name?)`; `leave(id)`; `rotate(id)` (new key + id, same name/relay); `invite(id)`. Outbound: subscribe to `hub.on('event')` for `type: 'token'` where the token has at least one call from this machine's own chats (no `via`) and a call newer than the last sent for that token; throttle one send per token per 30 s per room; on each room's `connected` state send the last 24 h of own-called tokens, newest first, ≤ 200. Inbound: `hub.applyRemoteToken(name, token)`. `remoteLive` unchanged (room tokens are not in it).
 - [ ] `Status.together.rooms` added (backend + `frontend/src/types.ts`); `togetherStatus()` includes it; `syncTogether()` calls `rooms.sync()`.
 - [ ] Tests (manager with a fake hub + in-process relay): create → invite decodes to the same relay/key; two managers in one room exchange a call; a `via` token is not re-sent; throttle; rotate changes id and invite; leave stops the client; join with a bad invite throws a readable error.

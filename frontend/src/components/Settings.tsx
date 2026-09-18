@@ -1228,7 +1228,8 @@ function RoomCard({ room, st, notice, onChange, onRotated }: { room: RoomInfo; s
 }
 
 function CreateRoom({ info, onCreated }: { info: TogetherInfo; onCreated: (room: RoomInfo) => void }) {
-  const pref = info.relay || info.defaultRelay;
+  // the last relay this machine used; there is no official one to fall back to
+  const pref = info.relay;
   const [name, setName] = useState('');
   const [relay, setRelay] = useState(pref);
   const [probe, setProbe] = useState<RelayProbe | null>(null);
@@ -1238,20 +1239,20 @@ function CreateRoom({ info, onCreated }: { info: TogetherInfo; onCreated: (room:
     setProbing(true);
     setProbe(null);
     try {
-      setProbe(await api.probeRelay(relay.trim() || info.defaultRelay));
+      setProbe(await api.probeRelay(relay.trim()));
     } catch (e: any) {
       setProbe({ ok: false, error: e.message ?? String(e) });
     } finally {
       setProbing(false);
     }
   };
-  const canCreate = !busy && name.trim().length > 0;
+  const canCreate = !busy && name.trim().length > 0 && relay.trim().length > 0;
   const create = () =>
     run(async () => {
       const url = relay.trim();
       // the relay typed here becomes the one new rooms go on, so next time it is already filled in
-      if (url !== pref) await api.setRelay(url === info.defaultRelay ? '' : url);
-      const r = await api.createRoom(name.trim(), url || undefined);
+      if (url !== pref) await api.setRelay(url);
+      const r = await api.createRoom(name.trim(), url);
       setName('');
       onCreated(r.room);
     });
@@ -1266,7 +1267,7 @@ function CreateRoom({ info, onCreated }: { info: TogetherInfo; onCreated: (room:
         <label className="field">
           <span className="field-label">Relay</span>
           <input
-            placeholder={info.defaultRelay}
+            placeholder="wss://your-relay.example"
             value={relay}
             spellCheck={false}
             onChange={(e) => {
@@ -1284,7 +1285,8 @@ function CreateRoom({ info, onCreated }: { info: TogetherInfo; onCreated: (room:
         <summary>What's a relay?</summary>
         <div className="hint">
           The server the room lives on. It passes messages between members and can't read them: everything is encrypted on your machine with a key only the invite
-          carries. A default relay address is prefilled; until it is up, use your own or a friend's. Hosting one is a few commands.{' '}
+          carries. There is no official relay: host your own (it's one command) or use a friend's. Whoever creates the room picks the relay; the invite carries its
+          address, so people who join set nothing up.{' '}
           <a href={DOCS.relay} target="_blank" rel="noreferrer">
             Host your own relay
           </a>

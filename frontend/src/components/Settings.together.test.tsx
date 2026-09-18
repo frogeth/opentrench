@@ -6,9 +6,9 @@ import { Settings } from './Settings';
 import type { Status } from '../types';
 import type { RoomInfo, TogetherInfo } from '../api';
 
-const DEFAULT_RELAY = 'wss://relay.opentrench.app';
+const RELAY_PLACEHOLDER = 'wss://your-relay.example';
 const room = (over: Partial<RoomInfo> = {}): RoomInfo => ({ id: 'r1', name: 'degen circle', relay: 'wss://relay.example', joinedAt: 1, hasAccess: false, invite: 'opentrench://room/relay.example/' + 'k'.repeat(43), ...over });
-const together = (over: Partial<TogetherInfo> = {}): TogetherInfo => ({ share: false, name: 'me', peers: [], pairings: [], rooms: [], memberId: 'm1', relay: '', defaultRelay: DEFAULT_RELAY, ...over });
+const together = (over: Partial<TogetherInfo> = {}): TogetherInfo => ({ share: false, name: 'me', peers: [], pairings: [], rooms: [], memberId: 'm1', relay: '', ...over });
 
 const mocks = vi.hoisted(() => ({
   together: vi.fn(),
@@ -223,9 +223,15 @@ describe('Settings → Together: rooms', () => {
 });
 
 describe('Settings → Together: create', () => {
-  it('prefills the relay with the default and explains what a relay is', async () => {
+  it('starts with an empty relay field (there is no official relay), remembers the last one used, and explains what a relay is', async () => {
     await render(statusWith(live()));
-    expect(byPlaceholder(DEFAULT_RELAY).value).toBe(DEFAULT_RELAY);
+    expect(byPlaceholder(RELAY_PLACEHOLDER).value).toBe('');
+    expect((button('Create') as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    mocks.together.mockImplementation(async () => together({ relay: 'wss://mine.example' }));
+    await render(statusWith(live()));
+    expect(byPlaceholder(RELAY_PLACEHOLDER).value).toBe('wss://mine.example');
     const help = container.querySelector('.relay-help')!;
     expect(help.querySelector('summary')?.textContent).toBe("What's a relay?");
     expect(help.textContent).toContain("The server the room lives on. It passes messages between members and can't read them");
@@ -242,7 +248,7 @@ describe('Settings → Together: create', () => {
     mocks.setRelay.mockResolvedValue({ relay: 'wss://relay.example' });
     await render(statusWith(live()));
     await type(byPlaceholder('e.g. degen circle'), 'degen circle');
-    await type(byPlaceholder(DEFAULT_RELAY), 'wss://relay.example');
+    await type(byPlaceholder(RELAY_PLACEHOLDER), 'wss://relay.example');
     await click(button('Create'));
     expect(mocks.setRelay).toHaveBeenCalledWith('wss://relay.example');
     expect(mocks.createRoom).toHaveBeenCalledWith('degen circle', 'wss://relay.example');
@@ -251,32 +257,35 @@ describe('Settings → Together: create', () => {
     expect(byPlaceholder('e.g. degen circle').value).toBe('');
   });
 
-  it('does not touch the preference when the relay is the one already set', async () => {
+  it('does not touch the preference when the relay is the one already remembered', async () => {
     mocks.createRoom.mockResolvedValue({ room: room(), status: live() });
+    mocks.together.mockImplementation(async () => together({ relay: 'wss://mine.example' }));
     await render(statusWith(live()));
     await type(byPlaceholder('e.g. degen circle'), 'x');
     await click(button('Create'));
     expect(mocks.setRelay).not.toHaveBeenCalled();
-    expect(mocks.createRoom).toHaveBeenCalledWith('x', DEFAULT_RELAY);
+    expect(mocks.createRoom).toHaveBeenCalledWith('x', 'wss://mine.example');
   });
 
   it("shows the relay's answer under the form when create fails", async () => {
-    mocks.createRoom.mockRejectedValueOnce(new Error('could not reach relay.opentrench.app'));
+    mocks.createRoom.mockRejectedValueOnce(new Error('could not reach mine.example'));
+    mocks.together.mockImplementation(async () => together({ relay: 'wss://mine.example' }));
     await render(statusWith(live()));
     await type(byPlaceholder('e.g. degen circle'), 'x');
     await click(button('Create'));
-    expect(container.querySelector('.room-form .err')?.textContent).toBe('could not reach relay.opentrench.app');
+    expect(container.querySelector('.room-form .err')?.textContent).toBe('could not reach mine.example');
   });
 
   it('Check probes the relay and shows what it found', async () => {
     mocks.probeRelay.mockResolvedValue({ ok: true, v: 1, rooms: 3 });
+    mocks.together.mockImplementation(async () => together({ relay: 'wss://mine.example' }));
     await render(statusWith(live()));
     await click(button('Check'));
-    expect(mocks.probeRelay).toHaveBeenCalledWith(DEFAULT_RELAY);
+    expect(mocks.probeRelay).toHaveBeenCalledWith('wss://mine.example');
     expect(container.querySelector('.probe-ok')?.textContent).toBe('relay v1 · 3 rooms');
-    mocks.probeRelay.mockResolvedValue({ ok: false, error: 'could not reach relay.opentrench.app' });
+    mocks.probeRelay.mockResolvedValue({ ok: false, error: 'could not reach mine.example' });
     await click(button('Check'));
-    expect(container.querySelector('.probe-err')?.textContent).toBe('could not reach relay.opentrench.app');
+    expect(container.querySelector('.probe-err')?.textContent).toBe('could not reach mine.example');
   });
 });
 

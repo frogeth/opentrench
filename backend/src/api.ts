@@ -6,7 +6,6 @@ import { decodePairing, newToken } from './together.js';
 import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
 import { LAYOUT_NAME_MAX, MAX_LAYOUTS, sanitizeColumns, type Layout, type Room } from './config.js';
 import type { ConfigStore } from './config.js';
-import { DEFAULT_RELAY } from './rooms/manager.js';
 import { relayHostOf, relayUrlOf } from './rooms/crypto.js';
 import { isLocalHost } from './plugins/hosts.js';
 import { safeDispatcher } from './plugins/shell.js';
@@ -272,7 +271,6 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       rooms: cfg.get().together.rooms.map(roomView),
       memberId: t.memberId,
       relay: t.relay,
-      defaultRelay: DEFAULT_RELAY,
       pairings: svc.togetherPairings(),
       status: hub.getStatus().together,
     };

@@ -11,7 +11,7 @@ import { ConfigStore } from './config.js';
 import { MessageHub } from './hub.js';
 import { RoomClient, type RoomClientOptions } from './rooms/client.js';
 import { decodeInvite } from './rooms/crypto.js';
-import { DEFAULT_RELAY, RoomsManager } from './rooms/manager.js';
+import { NO_RELAY_MESSAGE, RoomsManager } from './rooms/manager.js';
 import { safeDispatcher } from './plugins/shell.js';
 
 const APP = { 'x-requested-with': 'opentrench' } as const;
@@ -95,7 +95,7 @@ describe('rooms API', () => {
     expect(body.memberId).toBe(cfg.get().together.memberId);
     expect(body.memberId).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(body.relay).toBe('');
-    expect(body.defaultRelay).toBe(DEFAULT_RELAY);
+    expect(body).not.toHaveProperty('defaultRelay');
     expect(body.pairings).toEqual([]);
   });
 
@@ -120,9 +120,10 @@ describe('rooms API', () => {
     expect(JSON.stringify(list).replace(room.invite, '')).not.toContain(stored.key);
   });
 
-  it('a create with no relay lands on the default one', async () => {
-    const { room } = await (await call('POST', '/together/rooms', { name: 'x' })).json();
-    expect(room.relay).toBe(DEFAULT_RELAY);
+  it('a create with no relay and no remembered one is a 400 asking for a relay address', async () => {
+    const res = await call('POST', '/together/rooms', { name: 'x' });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe(NO_RELAY_MESSAGE);
   });
 
   it('join with garbage is a 400 with the readable message', async () => {
@@ -179,7 +180,7 @@ describe('rooms API', () => {
   });
 
   it('every mutating route refuses a request without the app header', async () => {
-    const { room } = await (await call('POST', '/together/rooms', { name: 'x' })).json();
+    const { room } = await (await call('POST', '/together/rooms', { name: 'x', relay: 'wss://relay.example' })).json();
     const attempts: [string, string, unknown?][] = [
       ['POST', '/together/rooms', { name: 'y' }],
       ['POST', '/together/rooms/join', { invite: room.invite }],
@@ -197,6 +198,7 @@ describe('rooms API', () => {
     expect(cfg.get().together.rooms.map((r) => r.id)).toEqual([room.id]);
     expect(cfg.get().together.rooms[0].access).toBeUndefined();
     expect(cfg.get().together.relay).toBe('');
+    // (the header-bearing create above did not set the preference either: routes never touch it, only the UI does)
     // the listing carries every invite (the room keys), so it is app-only too; the probe stays open
     const listing = await call('GET', '/together', undefined, {});
     expect(listing.status).toBe(403);

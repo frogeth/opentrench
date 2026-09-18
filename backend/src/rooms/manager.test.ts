@@ -9,7 +9,7 @@ import { MessageHub } from '../hub.js';
 import type { FeedMessage, TokenInfo } from '../types.js';
 import { RoomClient, type RoomClientOptions } from './client.js';
 import { decodeInvite, isRoomKey, newRoomKey, roomIdOf } from './crypto.js';
-import { DEFAULT_RELAY, RoomsManager } from './manager.js';
+import { NO_RELAY_MESSAGE, RoomsManager } from './manager.js';
 
 const FAST = { min: 50, max: 200 };
 const SOL = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
@@ -136,17 +136,17 @@ describe('RoomsManager', () => {
     expect(a.statuses).toBeGreaterThan(0);
   });
 
-  it('create: defaults the name, falls back to the preferred relay then the default, and rejects a bad relay readably', async () => {
+  it('create: defaults the name, falls back to the remembered relay, refuses to guess one, and rejects a bad relay readably', async () => {
     const a = peer('A', { inert: true });
     expect(a.mgr.create('', 'ws://127.0.0.1:1').name).toBe('room');
     a.cfg.update((c) => (c.together.relay = 'wss://mine.example'));
     expect(a.mgr.create('x').relay).toBe('wss://mine.example');
     a.cfg.update((c) => (c.together.relay = ''));
-    expect(a.mgr.create('y').relay).toBe(DEFAULT_RELAY);
+    expect(() => a.mgr.create('y')).toThrow(NO_RELAY_MESSAGE);
     expect(a.mgr.create('z', 'wss://Relay.Example.COM:443/').relay).toBe('wss://relay.example.com');
     expect(() => a.mgr.create('w', 'http://relay.example')).toThrow(/wss:\/\//);
     expect(() => a.mgr.create('w', 'ws://not-local.example')).toThrow(/localhost/);
-    expect(a.mgr.status().map((r) => r.name)).toEqual(['room', 'x', 'y', 'z']);
+    expect(a.mgr.status().map((r) => r.name)).toEqual(['room', 'x', 'z']);
   });
 
   it('a call pushed on A lands in B hub tagged via A; a token that came via someone else is never re-sent', async () => {

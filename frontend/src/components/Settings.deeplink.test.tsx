@@ -5,7 +5,7 @@ import { act } from 'react';
 import { Settings } from './Settings';
 import type { Status } from '../types';
 
-const together = { share: false, name: 'me', peers: [], pairings: [], rooms: [], memberId: 'm1', relay: '', defaultRelay: 'wss://relay.opentrench.app' };
+const together = { share: false, name: 'me', peers: [], pairings: [], rooms: [], memberId: 'm1', relay: '' };
 vi.mock('../api', async (real) => ({
   ...(await real<Record<string, unknown>>()),
   api: {

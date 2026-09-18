@@ -257,7 +257,6 @@ export interface TogetherInfo {
   memberId: string;
   /** the relay new rooms go on; '' = the app default */
   relay: string;
-  defaultRelay: string;
   status?: import('./types').Status['together'];
 }
 /** What the "check" on a relay URL found. Never a thrown error: a wrong URL is an answer. */

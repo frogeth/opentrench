@@ -17,7 +17,8 @@ import { decodeInvite, encodeInvite, newRoomKey, relayHostOf, relayUrlOf, roomId
  */
 
 /** The relay new rooms land on when the user has no preference. The only place this URL is spelled. */
-export const DEFAULT_RELAY = 'wss://relay.opentrench.app';
+/** There is no official relay: a room needs the address of one you host or a friend hosts. */
+export const NO_RELAY_MESSAGE = 'enter a relay address (wss://…): host one or use a friend\'s';
 
 /** Same window as the LAN share (together.ts keeps its copy private): a day of calls on join. */
 const SHARE_WINDOW_MS = 24 * 3600e3;
@@ -136,9 +137,11 @@ export class RoomsManager {
     return r && encodeInvite({ relay: r.relay, key: r.key });
   }
 
-  /** A new room on `relay` (or the preferred one, or the default); the invite is what friends paste. */
+  /** A new room on `relay` (or the last relay this machine used); the invite is what friends paste. */
   create(name: string, relay?: string): Room & { invite: string } {
-    const url = relayUrlOf(relayHostOf(relay?.trim() || this.deps.cfg.get().together.relay || DEFAULT_RELAY));
+    const chosen = relay?.trim() || this.deps.cfg.get().together.relay;
+    if (!chosen) throw new Error(NO_RELAY_MESSAGE);
+    const url = relayUrlOf(relayHostOf(chosen));
     this.checkRoom();
     const key = newRoomKey();
     return this.add({ id: roomIdOf(key), key, relay: url, name: cleanName(name) || 'room', joinedAt: this.now() });
