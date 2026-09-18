@@ -42,7 +42,7 @@
 <h3>Create one</h3>
 <ol class="steps">
 <li>⚙ → <b>Together</b> → <b>Create a room</b>.</li>
-<li>Give it a name. The relay field is prefilled with the default relay; leave it, or paste the address of a relay you host yourself (<a href="#relay">Host a relay</a>).</li>
+<li>Give it a name. A default relay address is prefilled; until it is up, use your own or a friend's (<a href="#relay">Host a relay</a>). <b>Check</b> next to the field asks that relay whether it is up; Create does not, so a relay that does not answer shows on the room card instead.</li>
 <li>Press <b>Create</b>. The room appears as a card with a status dot and how many members are online.</li>
 <li>Press <b>Copy invite</b> and send the link to your friends however you talk to them.</li>
 </ol>
@@ -51,16 +51,16 @@
 <h2 id="join"><span class="n">02</span>Join a room</h2>
 <p>Either click the <code>opentrench://room/…</code> link. The desktop app opens Settings → Together with the invite filled in; press <b>Join</b>.</p>
 <p>Or paste the invite into <b>Join a room</b> and press <b>Join</b>. Pasting works on the web page too.</p>
-<p>The invite carries the relay's address, so there is nothing to configure. If that relay asks for an access code, the app asks you for it once.</p>
+<p>The invite carries the relay's address, so there is nothing to configure. If that relay asks for an access code, enter it under <b>This relay asks for an access code</b> before you press Join, or later on the room card when it says <code>relay wants an access code</code>. The code is kept per room, next to its key.</p>
 
 <h2 id="travels"><span class="n">03</span>What travels</h2>
-<p><b>Only calls</b>: the token, who called it, in which chat, and when. On joining, a member sends its calls of the last 24 hours (newest first, at most 200) so the room catches up; after that, every new call from one of its own chats, at most once per token every 30 seconds.</p>
+<p><b>Only calls</b>: the token (its address and chain), who called it, in which chat, and when. On joining, a member sends its calls of the last 24 hours (newest first, at most 200) so the room catches up; after that, every new call from one of its own chats, at most once per token every 30 seconds.</p>
 <p><b>Never chat messages.</b> Nothing anyone wrote in a channel leaves your machine.</p>
-<p>Each app prices tokens itself, from the chain, like any other token on its screen. No market numbers travel between friends.</p>
+<p>No prices, market caps, liquidity, volume or holder data either. Each app prices tokens itself, like any other token on its screen: live from the pool while the token is on screen, from Dexscreener otherwise.</p>
 <p>A call that arrived through a room shows <code>via &lt;name&gt;</code> on the card, with the name the friend set in the Together page. Calls that came <em>via</em> someone are not sent on again, so a room cannot echo.</p>
 
 <h2 id="rotate"><span class="n">04</span>Rotate and leave</h2>
-<p><b>Rotate</b> makes a new key, so a new room id and a new invite. Everyone has to join again with the new link; anyone still holding the old one is out. That is the only way to remove someone.</p>
+<p><b>Rotate</b> (the <b>New invite</b> button) makes a new key, so a new room id and a new invite. The old room gets one last notice that it was rotated: every other member's card shows <code>invite changed — ask for the new one</code> and stops reconnecting. They press <b>Leave</b> on that card and join again with the new link; anyone still holding the old one is out. That is the only way to remove someone.</p>
 <p><b>Leave</b> disconnects from the room and forgets its key on your machine. The others keep going.</p>
 
 <h2 id="lan"><span class="n">05</span>Same Wi-Fi instead</h2>
@@ -84,7 +84,7 @@
 <p>A relay is the server side of a room. It is a dumb fan-out: it takes each message a member sends and passes it to the room's other members. It only ever carries ciphertext. Every message is encrypted on the sender's machine with the key from the invite, and that key never reaches the relay.</p>
 <p>It is one Node process with no database. Rooms live in memory, plus one JSON file per room on disk if you give it a data directory, so a restart keeps the last day of messages and a friend who joins late still catches up.</p>
 <p>Your invite carries your relay's address; friends configure nothing. Create a room with your relay in the relay field, copy the invite, and everyone who joins with it lands on your relay.</p>
-<p>The app ships the default relay's address prefilled in the create form. Hosting your own is a few commands and means nobody but you sees your circle's traffic. The code is in <a href="https://github.com/frogeth/opentrench/tree/main/relay"><code>relay/</code></a> in the repository. Node 22.</p>
+<p>A default relay address is prefilled in the create form; until it is up, use your own or a friend's. Hosting one is a few commands and means nobody but you sees your circle's traffic. The code is in <a href="https://github.com/frogeth/opentrench/tree/main/relay"><code>relay/</code></a> in the repository. Node 22.</p>
 
 <h2 id="hosting"><span class="n">08</span>Hosting</h2>
 <p>Three routes. Each ends with an address starting <code>wss://</code> that you paste in the relay field when you create a room.</p>
@@ -114,12 +114,12 @@ PORT=8080 RELAY_DATA_DIR=./data node relay/dist/index.js</code></pre>
 <p><code>caddy run</code> with that file, point the DNS name at the host, and the relay's address is <code>wss://relay.example.com</code>. Behind Caddy or any other proxy that sets <code>x-forwarded-for</code>, start the relay with <code>RELAY_TRUST_PROXY=1</code>.</p>
 <h3 id="access-code">The access code</h3>
 <p>Without a code, anyone who knows your relay's address can create rooms on it. They still cannot read anyone else's room, but they use your machine. Set <code>RELAY_ACCESS_CODE</code> to close that: the relay then refuses every connection that does not carry the code.</p>
-<p>Give the code to your friends alongside the invite. When they create or join a room on your relay, the app asks for the code and remembers it for that relay. Without it the room card says <code>relay wants an access code</code>.</p>
+<p>Give the code to your friends alongside the invite. They enter it when they create or join the room (<b>This relay asks for an access code</b> under the join form), or afterwards on the room card, which says <code>relay wants an access code</code> and shows a field for it. The app keeps the code per room, next to that room's key, not per relay.</p>
 <h3 id="check">Checking it works</h3>
 <pre><code>curl https://&lt;host&gt;/</code></pre>
 <p>answers</p>
 <pre><code>{"name":"opentrench-relay","v":1,"rooms":0}</code></pre>
-<p><code>rooms</code> is how many rooms the relay holds right now. The app calls the same address to confirm that what you typed in the relay field is a relay before it creates or joins a room there.</p>
+<p><code>rooms</code> is how many rooms the relay holds right now. The <b>Check</b> button next to the relay field in the create form calls the same address and shows the version and room count. Create and Join do not probe first: a room on a relay that does not answer simply shows <code>offline · retrying · could not reach &lt;host&gt;</code> on its card and keeps retrying.</p>
 
 <h2 id="env"><span class="n">09</span>Environment</h2>
 <table class="env">
@@ -143,12 +143,14 @@ PORT=8080 RELAY_DATA_DIR=./data node relay/dist/index.js</code></pre>
 <table class="env">
 <tr><th>It says</th><th>What to do</th></tr>
 <tr><td><code>connecting…</code></td><td>Wait a few seconds. The app retries on its own, 2 s then up to 15 s apart.</td></tr>
-<tr><td><code>offline · retrying</code></td><td>The relay is unreachable or your network dropped. Nothing to do unless it stays that way; then check the relay's address with <code>https://&lt;host&gt;/</code> in a browser.</td></tr>
-<tr><td><code>invite changed — ask for the new one</code></td><td>Someone rotated the room. Your key no longer matches; leave this room and join with the new invite.</td></tr>
+<tr><td><code>connected</code></td><td>All good. The number after it is how many members the relay sees right now.</td></tr>
+<tr><td><code>offline · retrying</code></td><td>The relay is unreachable or your network dropped, and the reason follows. Nothing to do unless it stays that way; then check the relay's address with <code>https://&lt;host&gt;/</code> in a browser.</td></tr>
+<tr><td><code>offline · retrying · could not reach &lt;host&gt;</code></td><td>The address in the invite does not answer. Check it, or ask the person who sent the invite whether the relay is up. The default relay shows this until it is brought up.</td></tr>
+<tr><td><code>invite changed — ask for the new one</code></td><td>Someone rotated the room. Your key no longer matches and the app stops reconnecting; press <b>Leave</b> and join with the new invite.</td></tr>
 <tr><td><code>this relay needs updating</code></td><td>The relay runs an older protocol than your app. Whoever hosts it has to pull and redeploy (<a href="#updating">Updating</a>).</td></tr>
-<tr><td><code>relay wants an access code</code></td><td>This relay is private. Ask its operator for the code and enter it when the app asks.</td></tr>
+<tr><td><code>relay wants an access code</code></td><td>This relay is private. Ask its operator for the code and enter it in the field that appears on the room card.</td></tr>
 <tr><td><code>room is full</code></td><td>The relay's member limit for this room is reached (50 by default). Someone has to leave, or the operator raises <code>RELAY_MAX_MEMBERS</code>.</td></tr>
-<tr><td><code>could not reach &lt;host&gt;</code></td><td>The address in the invite does not answer. Check it, or ask the person who sent the invite whether the relay is up. The default relay shows this until it is brought up.</td></tr>
+<tr><td><code>slow down · retrying</code></td><td>The relay cut the connection for sending too fast (more than 30 messages a second). The app backs off and reconnects on its own.</td></tr>
 </table>
 <div class="aside">Something else? <a href="https://discord.gg/6ByE8fPNN">Ask on Discord</a>, or open an issue on <a href="https://github.com/frogeth/opentrench/issues">GitHub</a>.</div>
 </article></div></main><footer><div class="wrap"><span>opentrench</span><a href="../">Getting started</a><a href="https://github.com/frogeth/opentrench/blob/main/CHANGELOG.md">Changelog</a><a href="https://github.com/frogeth/opentrench">GitHub</a><a href="https://discord.gg/6ByE8fPNN">Discord</a><span style="margin-left:auto">MIT · runs on your machine</span></div></footer>

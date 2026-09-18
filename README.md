@@ -82,10 +82,11 @@ npm run dev
 ## Host a relay
 
 Rooms run through a relay, a small server in [`relay/`](relay/) that fans out
-encrypted messages and cannot read them; the app ships a default address, and
-one command puts your own on Fly.io, in Docker, or behind Caddy on any Node
-host. Every route, the environment variables, the access code and what the
-operator can see: [docs/relay.md](docs/relay.md).
+encrypted messages and cannot read them. A default relay address is prefilled;
+until it is up, use your own or a friend's: one command puts one on Fly.io, in
+Docker, or behind Caddy on any Node host. Every route, the environment
+variables, the access code and what the operator can see:
+[docs/relay.md](docs/relay.md).
 
 ## What the feed does
 
@@ -150,7 +151,8 @@ in settings.
 - **TrenchTogether.** Share your calls with friends anywhere: create a room in
   Settings → Together, send the one invite link, and their calls show in your
   feed marked `via <name>` while yours show in theirs. Only calls travel, never
-  chat messages, and every message is encrypted on your machine with a key that
+  chat messages or market numbers (each app prices tokens itself), and every
+  message is encrypted on your machine with a key that
   lives in the invite, so the relay in between sees ciphertext and nothing
   else. Rotate makes a new invite when someone should be out. The same-network
   mode is still there for people on one Wi-Fi who want nothing to leave the

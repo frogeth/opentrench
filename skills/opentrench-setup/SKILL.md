@@ -82,31 +82,42 @@ A room is a private channel for calls. It lives on a relay: a small server that 
 encrypted messages between members and cannot read them. Nothing to port-forward, no IP
 handed out; friends can be anywhere.
 
-1. ⚙ → **Together** (sidebar) → **Create a room**: type a name. The relay field is prefilled
-   with the default; "What's a relay?" under it explains the server. Create.
+1. ⚙ → **Together** (sidebar) → **Create a room**: type a name. A default relay address is
+   prefilled; until it is up, use your own or a friend's (see Host a relay). **Check** next to
+   the field asks the relay whether it is up; Create does not probe first. "What's a relay?"
+   under it explains the server. Create.
 2. **Copy invite** on the room card and send it to the friend (any messenger). It looks like
    `opentrench://room/<relay-host>/<key>`; whoever has it is in, so treat it like a password.
 3. The friend pastes it into **Join a room** → Join, or clicks the link with opentrench
    installed (it opens Together with the invite filled in).
 4. Their calls appear in the feed with a `via <name>` tag; the room card shows members online.
 
-**Rotate** makes a new key = a new invite; everyone re-joins with it, anyone with the old one is
-out. That is the only way to remove someone. **Leave** drops the room on this machine only.
+**Rotate** (the **New invite** button) makes a new key = a new invite. The other members' cards
+say `invite changed — ask for the new one` and stop reconnecting; they Leave and re-join with
+the new invite, anyone with the old one is out. That is the only way to remove someone.
+**Leave** drops the room on this machine only.
 
-What travels: calls only (token, chain, who called it), encrypted on each machine with the key
-in the invite. No chat text, no prices: every app prices what is on its screen itself (§6), so
-a friend's call is priced live on your side the same as your own.
+What travels: calls only (token address and chain, who called it, in which chat, when),
+encrypted on each machine with the key in the invite. No chat text; no prices, market caps,
+liquidity, volume or holder data: every app prices what is on its screen itself (§6, live from
+the pool on screen, Dexscreener otherwise), so a friend's call is priced on your side the same
+as your own.
+
+A relay with an access code: enter it per room, on create, under "This relay asks for an access
+code" on join, or in the field the room card shows when it says `relay wants an access code`.
 
 State on a room card:
 
 | Card says | Meaning / what to do |
 | --- | --- |
 | connecting… | First connect or a reconnect; give it 15 s. |
-| offline · retrying | Relay unreachable. Check the host in the invite / relay field; is the relay up (`curl https://<host>/` should answer JSON)? The default relay may not be up yet. |
-| invite changed — ask for the new one | Messages no longer decrypt: the room was rotated. Leave, join the new invite. |
+| connected | Fine; `N online` is how many members the relay sees. |
+| offline · retrying | Relay unreachable or the network dropped; the reason follows, most often `could not reach <host>`. Check the host in the invite / relay field; is the relay up (`curl https://<host>/` should answer JSON)? The default relay shows this until it is brought up. |
+| invite changed — ask for the new one | The room was rotated; the app stops reconnecting. Leave, join the new invite. |
 | this relay needs updating | The relay speaks an older protocol than the app. Whoever hosts it must update it (see Host a relay). Nothing to do on the client. |
-| relay wants an access code | The relay runs with `RELAY_ACCESS_CODE`; ask its operator for the code. Without it, use another relay. |
+| relay wants an access code | The relay runs with `RELAY_ACCESS_CODE`; ask its operator for the code and enter it in the field on the room card (kept per room). |
 | room is full | 50 members per room (or the relay's room cap). Rotate into a second room or raise the relay's limits. |
+| slow down · retrying | The relay cut the connection for sending too fast; the app backs off and reconnects by itself. |
 
 Known failure modes:
 - Two people made two rooms instead of one joining the other: rooms are separate keys. One

@@ -15,9 +15,9 @@ Your invite carries your relay's address; friends configure nothing. Create a
 room with your relay in the relay field, copy the invite, and everyone who
 joins with it lands on your relay.
 
-The app ships a default relay address prefilled in the create form. Hosting
-your own is a few commands and means nobody but you sees your circle's
-traffic.
+A default relay address is prefilled in the create form; until it is up, use
+your own or a friend's. Hosting one is a few commands and means nobody but you
+sees your circle's traffic.
 
 The code is in [`relay/`](../relay/) in the repo. Node 22.
 
@@ -104,9 +104,11 @@ They still cannot read anyone else's room, but they use your machine. Set
 `RELAY_ACCESS_CODE` to close that: the relay then refuses every connection
 that does not carry the code.
 
-Give the code to your friends alongside the invite. When they create or join a
-room on your relay, the app asks for the code and remembers it for that relay.
-Without it the room card says `relay wants an access code`.
+Give the code to your friends alongside the invite. They enter it when they
+create or join the room (**This relay asks for an access code** under the join
+form), or afterwards on the room card, which says `relay wants an access code`
+and shows a field for it. The app keeps the code per room, next to that
+room's key, not per relay.
 
 ## Checking it works
 
@@ -120,9 +122,11 @@ answers
 {"name":"opentrench-relay","v":1,"rooms":0}
 ```
 
-`rooms` is how many rooms the relay holds right now. The app calls the same
-address to confirm that what you typed in the relay field is a relay before it
-creates or joins a room there.
+`rooms` is how many rooms the relay holds right now. The **Check** button
+next to the relay field in the create form calls the same address and shows
+the version and room count. Create and Join do not probe first: a room on a
+relay that does not answer simply shows `offline · retrying · could not reach
+<host>` on its card and keeps retrying.
 
 ## Updating
 

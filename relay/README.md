@@ -32,14 +32,14 @@ relay.example.com {
 }
 ```
 
-`GET /` answers `{"name":"opentrench-relay","v":1,"rooms":<n>}`: use it as the health check, and the app uses it to confirm an address is a relay before joining.
+`GET /` answers `{"name":"opentrench-relay","v":1,"rooms":<n>}`: use it as the health check. The app's **Check** button in the create form calls it too; Create and Join do not probe first.
 
 ## Environment
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `PORT` | `8080` | Port to listen on (all interfaces). |
-| `RELAY_ACCESS_CODE` | unset | When set, only apps configured with this code can join rooms here. For a relay private to your circle. |
+| `RELAY_ACCESS_CODE` | unset | When set, only apps that send this code can create or join rooms here; members enter it per room (on create, on join, or on the room card when it says `relay wants an access code`). For a relay private to your circle. |
 | `RELAY_MAX_ROOMS` | `1000` | Rooms the relay will hold at once. |
 | `RELAY_MAX_MEMBERS` | `50` | Members per room. |
 | `RELAY_DATA_DIR` | unset | Directory for one `<room>.json` per room; unset keeps buffers in memory only. |

@@ -182,7 +182,7 @@ describe('Settings → Together: rooms', () => {
     await render(
       statusWith(
         live({
-          rooms: states.map(([state], i) => ({ id: `r${i}`, name: `room ${i}`, relay: 'wss://relay.example', state, members: 0, pending: 0, ...(state === 'disconnected' ? { error: 'could not reach relay.example' } : {}) })),
+          rooms: states.map(([state], i) => ({ id: `r${i}`, name: `room ${i}`, relay: 'wss://relay.example', state, members: 0, pending: 0, ...(state === 'disconnected' ? { error: 'ECONNREFUSED' } : {}) })),
         }),
       ),
     );
@@ -196,6 +196,20 @@ describe('Settings → Together: rooms', () => {
     // "N online" only when connected or when someone is there
     expect(cards[0].textContent).toContain('0 online');
     expect(cards[1].textContent).not.toContain('online');
+  });
+
+  it('turns the socket error codes into "could not reach <host>" and leaves other reasons as they came', async () => {
+    const errors: [string, string][] = [
+      ['ENOTFOUND', 'could not reach relay.example:8443'],
+      ['ETIMEDOUT', 'could not reach relay.example:8443'],
+      ['EAI_AGAIN', 'could not reach relay.example:8443'],
+      ['ECONNRESET', 'could not reach relay.example:8443'],
+      ['relay closed: 4006', 'relay closed: 4006'],
+    ];
+    mocks.together.mockImplementation(async () => together({ rooms: errors.map((_, i) => room({ id: `r${i}`, name: `room ${i}`, relay: 'wss://relay.example:8443/' })) }));
+    await render(statusWith(live({ rooms: errors.map(([error], i) => ({ id: `r${i}`, name: `room ${i}`, relay: 'wss://relay.example:8443/', state: 'disconnected', members: 0, pending: 0, error })) })));
+    const cards = [...container.querySelectorAll('.room-card')];
+    errors.forEach(([, words], i) => expect(cards[i].textContent).toContain(`offline · retrying · ${words}`));
   });
 
   it('saves an access code for a room the relay turned away', async () => {

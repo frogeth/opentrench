@@ -1054,6 +1054,12 @@ const relayHost = (url: string) => {
   }
 };
 
+/** the socket errors that all mean "nothing answered at that address" */
+const UNREACHABLE = /\b(ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|ECONNRESET)\b/;
+
+/** the reason next to `offline · retrying`: a bare Node error code becomes words, anything else is shown as it came */
+const offlineReason = (error: string, relay: string) => (UNREACHABLE.test(error) ? `could not reach ${relayHost(relay)}` : error);
+
 /** TrenchTogether: rooms over a relay first (friends anywhere), the same-network mode under a disclosure. */
 function TogetherSection({ status, initialInvite }: { status: Status; initialInvite?: string }) {
   const [info, setInfo] = useState<TogetherInfo | null>(null);
@@ -1142,7 +1148,7 @@ function RoomCard({ room, st, notice, onChange, onRotated }: { room: RoomInfo; s
   /** the question shown in place of the buttons before an action that affects the whole room */
   const [ask, setAsk] = useState<'rotate' | 'leave' | null>(null);
   const state = st?.state ?? 'connecting';
-  const words = state === 'disconnected' && st?.error ? `${ROOM_STATE.disconnected} · ${st.error}` : ROOM_STATE[state];
+  const words = state === 'disconnected' && st?.error ? `${ROOM_STATE.disconnected} · ${offlineReason(st.error, room.relay)}` : ROOM_STATE[state];
   const dot = state === 'connected' ? 'on' : state === 'connecting' || state === 'rate-limited' ? 'mid' : 'off';
   const members = st?.members ?? 0;
   const copy = async () => {
@@ -1278,7 +1284,7 @@ function CreateRoom({ info, onCreated }: { info: TogetherInfo; onCreated: (room:
         <summary>What's a relay?</summary>
         <div className="hint">
           The server the room lives on. It passes messages between members and can't read them: everything is encrypted on your machine with a key only the invite
-          carries. Use the default, or host your own — it's one command.{' '}
+          carries. A default relay address is prefilled; until it is up, use your own or a friend's. Hosting one is a few commands.{' '}
           <a href={DOCS.relay} target="_blank" rel="noreferrer">
             Host your own relay
           </a>
