@@ -8,8 +8,13 @@ import { open, roomIdOf, seal } from './crypto.js';
  *
  * The relay sees the room id, the member id and ciphertext; everything with meaning (names,
  * tokens) is sealed with the room key before it goes out and opened after it comes in. The
- * client reconnects on its own like the LAN guest does, and turns terminal problems (wrong
- * key, old relay, access code, full) into states the settings screen can show as-is.
+ * client reconnects on its own like the LAN guest does, and turns relay refusals (old relay,
+ * access code, full) into states the settings screen can show as-is.
+ *
+ * Ciphertext never changes state. The room id is derived from the key, so a client cannot hold
+ * the wrong key for a room it computed the id of: a message that does not open is the sender's
+ * doing (a copied id and a made-up key, or plain garbage), never ours. Three such messages mute
+ * that sender for the rest of the connection; the socket stays up and everyone else is heard.
  */
 
 export type RoomState = 'connecting' | 'connected' | 'disconnected' | 'key-mismatch' | 'relay-too-old' | 'access-denied' | 'full' | 'rate-limited';
@@ -28,17 +33,25 @@ export type RoomClientOptions = {
   WebSocketImpl?: typeof WebSocket;
   /** Reconnect delay bounds; tests shrink them so a reconnect takes milliseconds, not seconds. */
   backoffMs?: { min: number; max: number };
+  /** Gap between two outbound messages; tests shrink it to drain a burst quickly. */
+  paceMs?: number;
 };
 
 /** The wire protocol this client speaks. Kept here rather than imported: the relay package is a dev-only dependency of the app. */
 const PROTOCOL_VERSION = 1;
-/** Undecryptable messages in a row before the room is declared a key mismatch (spec §3). */
+/** Undecryptable messages from one sender before it is muted for the connection. */
 const STRIKES = 3;
-/** A wrong key, an old relay, an access code or a full room does not fix itself in seconds; poll gently. */
+/** An old relay, an access code or a full room does not fix itself in seconds; poll gently. */
 const SLOW_RETRY_MS = 60_000;
 /** The relay's hello limit is per minute; half of that is enough to get back under it. */
 const RATE_RETRY_MS = 30_000;
 const HANDSHAKE_TIMEOUT_MS = 8_000;
+/** 20 messages a second: under the relay's 30/s so a join burst (up to 200 calls) never trips its limit. */
+const PACE_MS = 50;
+/** Outbound backlog past which the oldest messages are dropped: 25 s of sending is more than any burst needs. */
+const QUEUE_MAX = 500;
+/** Display names come from strangers' ciphertext; long enough for any real name, short enough for any list. */
+const NAME_MAX = 64;
 
 type RelayErrorCode = 'too-old' | 'too-new' | 'access' | 'full' | 'rate' | 'bad';
 /** The relay's close codes, one per error, for a socket that closed without an error frame reaching us first. */
@@ -62,14 +75,19 @@ export class RoomClient extends EventEmitter {
   private timer?: NodeJS.Timeout;
   private backoff: number;
   private stopped = true;
-  /** Undecryptable messages in a row; a good one resets it. */
-  private strikes = 0;
+  /** Undecryptable messages per sender on this connection; at STRIKES the sender is muted. */
+  private readonly strikes = new Map<string, number>();
   /** Set when the current socket hit a relay error, so its close is not mistaken for a plain drop. */
-  private failure?: RelayErrorCode | 'key-mismatch';
+  private failure?: RelayErrorCode;
+  /** Sealed bodies waiting for their turn on the wire. */
+  private queue: string[] = [];
+  private paceTimer?: NodeJS.Timeout;
+  private queueDropLogged = false;
   private readonly log: (m: string) => void;
   private readonly WS: typeof WebSocket;
   private readonly minBackoff: number;
   private readonly maxBackoff: number;
+  private readonly paceMs: number;
 
   constructor(private readonly opts: RoomClientOptions) {
     super();
@@ -79,7 +97,13 @@ export class RoomClient extends EventEmitter {
     this.WS = opts.WebSocketImpl ?? WebSocket;
     this.minBackoff = opts.backoffMs?.min ?? 2_000;
     this.maxBackoff = opts.backoffMs?.max ?? 15_000;
+    this.paceMs = opts.paceMs ?? PACE_MS;
     this.backoff = this.minBackoff;
+  }
+
+  /** Messages accepted by send() that have not gone out yet. */
+  get pending(): number {
+    return this.queue.length;
   }
 
   start(): void {
@@ -88,11 +112,11 @@ export class RoomClient extends EventEmitter {
     this.connect();
   }
 
-  /** Drop whatever is there and dial again now (the user pressed reconnect); the backoff starts over. */
+  /** Drop whatever is there and dial again now (the user pressed reconnect); the backoff starts over. A stopped client stays stopped. */
   reconnect(): void {
+    if (this.stopped) return;
     clearTimeout(this.timer);
     this.backoff = this.minBackoff;
-    this.stopped = false;
     this.abandon();
     this.connect();
   }
@@ -101,6 +125,7 @@ export class RoomClient extends EventEmitter {
   stop(): void {
     this.stopped = true;
     clearTimeout(this.timer);
+    this.dropQueue();
     if (this.ws && this.state === 'connected') this.sendFrame({ t: 'msg', body: seal(this.opts.key, this.id, { k: 'bye' }) });
     this.abandon();
     this.members = 0;
@@ -108,10 +133,23 @@ export class RoomClient extends EventEmitter {
     this.setState('disconnected');
   }
 
-  /** Seals and sends one plaintext object to the room. False when there is no live, welcomed socket. */
+  /**
+   * Seals one plaintext object and queues it for the room. True means accepted, not delivered: the
+   * queue drains at one message per `paceMs` and is dropped with the connection. False when there
+   * is no welcomed socket to drain into.
+   */
   send(plain: object): boolean {
     if (this.state !== 'connected' || !this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
-    return this.sendFrame({ t: 'msg', body: seal(this.opts.key, this.id, plain) });
+    this.queue.push(seal(this.opts.key, this.id, plain));
+    if (this.queue.length > QUEUE_MAX) {
+      this.queue.shift();
+      if (!this.queueDropLogged) {
+        this.queueDropLogged = true;
+        this.log(`rooms: ${this.id} outbound queue full (${QUEUE_MAX}); dropping the oldest`);
+      }
+    }
+    this.pump();
+    return true;
   }
 
   // --- connection --------------------------------------------------------------
@@ -119,9 +157,18 @@ export class RoomClient extends EventEmitter {
   private connect(): void {
     if (this.stopped) return;
     this.failure = undefined;
-    this.strikes = 0;
+    this.strikes.clear();
+    this.queueDropLogged = false;
     this.setState('connecting');
-    const ws = new this.WS(`${this.opts.relay}/v1`, { handshakeTimeout: HANDSHAKE_TIMEOUT_MS });
+    let ws: WebSocket;
+    try {
+      ws = new this.WS(`${this.opts.relay}/v1`, { handshakeTimeout: HANDSHAKE_TIMEOUT_MS });
+    } catch (e) {
+      // A relay URL that does not parse throws here, before any socket exists; treat it like a failed dial.
+      this.lastError = (e as Error).message;
+      this.onClosed();
+      return;
+    }
     this.ws = ws;
     ws.on('open', () => {
       if (this.ws !== ws) return;
@@ -167,15 +214,17 @@ export class RoomClient extends EventEmitter {
   }
 
   private onClosed(): void {
+    this.dropQueue();
     if (this.members) this.emit('members', (this.members = 0));
     this.peers.clear();
     const failure = this.failure;
-    // A terminal state set by the error frame stays visible while we wait; a plain drop is just disconnected.
+    // A state set by the error frame stays visible while we wait; a plain drop is just disconnected.
     if (!failure || failure === 'too-new' || failure === 'bad') this.setState('disconnected');
     if (this.stopped) return;
     let delay: number;
     if (failure === 'rate') delay = RATE_RETRY_MS;
-    else if (failure) delay = SLOW_RETRY_MS;
+    // `bad` is a frame the relay would not take; the next dial may well go fine, so no slow retry.
+    else if (failure && failure !== 'bad') delay = SLOW_RETRY_MS;
     else {
       delay = this.backoff;
       this.backoff = Math.min(this.maxBackoff, this.backoff * 2);
@@ -194,6 +243,26 @@ export class RoomClient extends EventEmitter {
       this.lastError = (e as Error).message;
       return false;
     }
+  }
+
+  /** Sends the head of the queue and books the next turn `paceMs` later; a no-op while a turn is booked. */
+  private pump(): void {
+    if (this.paceTimer) return;
+    const body = this.queue.shift();
+    if (body === undefined) return;
+    this.sendFrame({ t: 'msg', body });
+    this.paceTimer = setTimeout(() => {
+      this.paceTimer = undefined;
+      this.pump();
+    }, this.paceMs);
+    this.paceTimer.unref?.();
+  }
+
+  /** Whatever was waiting belongs to a connection that is gone: a replay on the next welcome would be stale. */
+  private dropQueue(): void {
+    this.queue = [];
+    clearTimeout(this.paceTimer);
+    this.paceTimer = undefined;
   }
 
   private setState(s: RoomState): void {
@@ -229,62 +298,65 @@ export class RoomClient extends EventEmitter {
     const others = Array.isArray(f.members) ? f.members.filter((m): m is string => typeof m === 'string' && m !== this.memberId) : [];
     this.members = others.length;
     const buffer = Array.isArray(f.buffer) ? f.buffer : [];
+    let good = 0;
+    let unreadable = 0;
+    const unreadableFrom = new Set<string>();
     for (const raw of buffer) {
       const m = raw as Buffered | null;
       if (!m || typeof m !== 'object' || typeof m.from !== 'string' || typeof m.body !== 'string') continue;
       // This app's own calls are already in its hub, and it may have sent them under an older key.
       if (m.from === this.memberId) continue;
-      this.onMessage(m.from, m.body);
-      if (this.failure) return; // three strikes closed the socket; nothing after this is trustworthy
+      if (this.onMessage(m.from, m.body)) good++;
+      else {
+        unreadable++;
+        unreadableFrom.add(m.from);
+      }
     }
     // Names replayed from the buffer belong to whoever spoke in the last day; keep only those still here.
     for (const id of [...this.peers.keys()]) if (!others.includes(id)) this.peers.delete(id);
     this.sendFrame({ t: 'msg', body: seal(this.opts.key, this.id, { k: 'hello', name: this.opts.name(), v: this.opts.version }) });
     this.backoff = this.minBackoff;
-    this.lastError = undefined;
+    // One sender's garbage is that sender's problem; a whole room we cannot read is worth a line in Settings.
+    this.lastError = good === 0 && unreadableFrom.size >= 2 ? `${unreadable} messages from ${unreadableFrom.size} members did not decrypt` : undefined;
     this.log(`rooms: ${this.id} connected, ${this.members} online, ${buffer.length} buffered`);
     this.setState('connected');
     this.emit('members', this.members);
     this.emit('peers');
   }
 
-  private onMessage(from: string, body: string): void {
+  /** Opens and applies one message. True when it decrypted (whatever it said); false for a muted sender or unreadable body. */
+  private onMessage(from: string, body: string): boolean {
+    const strikes = this.strikes.get(from) ?? 0;
+    if (strikes >= STRIKES) return false;
     const plain = open(this.opts.key, this.id, body);
-    if (plain === undefined) return this.strike();
-    this.strikes = 0;
-    if (!plain || typeof plain !== 'object') return;
+    if (plain === undefined) {
+      this.strikes.set(from, strikes + 1);
+      if (strikes + 1 === STRIKES) this.log(`rooms: ${this.id} muting ${from} after ${STRIKES} undecryptable messages`);
+      return false;
+    }
+    if (strikes) this.strikes.delete(from);
+    if (!plain || typeof plain !== 'object') return true;
     const p = plain as Record<string, unknown>;
     switch (p.k) {
       case 'hello':
         if (typeof p.name === 'string' && p.name) {
-          this.peers.set(from, p.name);
+          this.peers.set(from, p.name.slice(0, NAME_MAX));
           this.emit('peers');
         }
-        return;
+        return true;
       case 'token': {
         const t = p.token as Partial<TokenInfo> | undefined;
-        if (!t || typeof t !== 'object' || typeof t.address !== 'string' || !Array.isArray(t.calls)) return;
-        const name = typeof p.name === 'string' && p.name ? p.name : (this.peers.get(from) ?? 'friend');
+        if (!t || typeof t !== 'object' || typeof t.address !== 'string' || typeof t.chain !== 'string' || !Array.isArray(t.calls)) return true;
+        const name = typeof p.name === 'string' && p.name ? p.name.slice(0, NAME_MAX) : (this.peers.get(from) ?? 'friend');
         this.opts.onToken(name, t as TokenInfo);
-        return;
+        return true;
       }
       case 'bye':
         if (this.peers.delete(from)) this.emit('peers');
-        return;
+        return true;
       default:
-        return;
+        return true;
     }
-  }
-
-  /** One undecryptable message. Three in a row means the key is not this room's: stop reading and say so. */
-  private strike(): void {
-    if (++this.strikes < STRIKES) return;
-    this.failure = 'key-mismatch';
-    this.lastError = 'messages do not decrypt with this key; the room may have been rotated';
-    this.log(`rooms: ${this.id} key mismatch after ${STRIKES} undecryptable messages`);
-    this.setState('key-mismatch');
-    // Our own close: the close handler sees the failure already set and schedules the slow retry.
-    this.ws?.close();
   }
 
   private onPresence(list: string[]): void {
