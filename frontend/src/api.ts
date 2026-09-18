@@ -177,7 +177,15 @@ export interface MaskedConfig {
   layouts: Layout[];
   seenTokens: string[];
   hiddenTokens: string[];
-  together: { share: boolean; name: string; peers: { host: string; port: number; name: string }[] };
+  together: {
+    share: boolean;
+    name: string;
+    peers: { host: string; port: number; name: string }[];
+    /** relay rooms, without their keys */
+    rooms: { id: string; relay: string; name: string; joinedAt: number }[];
+    memberId: string;
+    relay: string;
+  };
   opensea: { hasWallet: boolean; walletAddress?: string };
   plugins: Record<string, { enabled: boolean; approvedHash?: string }>;
   pluginWatch: string[];

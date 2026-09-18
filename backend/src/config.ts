@@ -3,6 +3,7 @@ import { SecretBox, isSealed } from './secrets.js';
 import path from 'node:path';
 import type { BotPolicy } from './types.js';
 import { PLUGIN_ID_RE } from './plugins/manifest.js';
+import { isMemberId, isRoomId, isRoomKey, newMemberId, roomIdOf } from './rooms/crypto.js';
 
 /** One column of the terminal. `chats` are `<source>:<id>` keys of watched chats; empty = every watched chat. */
 export interface ColumnDef {
@@ -171,6 +172,17 @@ export function sanitizeColumns(raw: unknown): ColumnDef[] {
   return out;
 }
 
+/** One relay room (spec §5). `relay` is a ws(s):// URL; `name` is what the user calls it, `joinedAt` ms since epoch. */
+export interface Room {
+  id: string;
+  key: string;
+  relay: string;
+  name: string;
+  joinedAt: number;
+}
+export const MAX_ROOMS = 50;
+const RELAY_URL = /^wss?:\/\//i;
+
 export interface Config {
   /** `send`: the user explicitly enabled composing messages from the app (Discord: after the ToS warning) */
   /** Discord: the Vencord bridge needs nothing stored; a legacy user token gives read-only access without the plugin */
@@ -212,7 +224,18 @@ export interface Config {
   /** an Alchemy key, used for every chain Alchemy serves (probed at boot and when set) */
   marketData: { alchemyKey?: string };
   /** TrenchTogether: share my calls on the LAN (token = the pairing secret), and the friends I follow */
-  together: { share: boolean; name: string; token: string; peers: { host: string; port: number; token: string; name: string }[] };
+  together: {
+    share: boolean;
+    name: string;
+    token: string;
+    peers: { host: string; port: number; token: string; name: string }[];
+    /** relay rooms I am in; `key` is the room secret (sealed on disk), `id` = roomIdOf(key) */
+    rooms: Room[];
+    /** this install's id on relays, generated once; not a secret (names travel inside ciphertext) */
+    memberId: string;
+    /** the relay new rooms are created on; '' = the app default */
+    relay: string;
+  };
   /** plugins the user has enabled, keyed by manifest id; approvedHash is the SHA-256 of the file the user approved */
   plugins: Record<string, { enabled: boolean; approvedHash?: string }>;
   /** plugin chats in the feed: `plugin:<pluginId>:<chat>` keys */
@@ -237,24 +260,29 @@ const DEFAULT: Config = {
   opensea: {},
   rpc: {},
   marketData: {},
-  together: { share: false, name: '', token: '', peers: [] },
+  together: { share: false, name: '', token: '', peers: [], rooms: [], memberId: '', relay: '' },
   plugins: {},
   pluginWatch: [],
 };
 
-/** The fields that are sealed on disk when a key is available (see secrets.ts). */
-type SecretPath = 'discord.token' | 'telegram.apiHash' | 'telegram.session' | 'o1ApiKey' | 'j7.token' | 'opensea.walletKey' | 'marketData.alchemyKey';
+/** The fields that are sealed on disk when a key is available (see secrets.ts). A room key is addressed by its room id. */
+type SecretPath = 'discord.token' | 'telegram.apiHash' | 'telegram.session' | 'o1ApiKey' | 'j7.token' | 'opensea.walletKey' | 'marketData.alchemyKey' | `together.rooms.${string}`;
 
 export class ConfigStore {
   private cfg: Config;
   /** Sealed values this backend has no key for: kept verbatim on disk so the desktop app still finds them. */
   private locked: Partial<Record<SecretPath, string>> = {};
+  /** Rooms whose key is locked: everything but the key, so toDisk() can write the entry back whole. */
+  private lockedRooms: Omit<Room, 'key'>[] = [];
 
   constructor(
     private file: string,
     private box: SecretBox = new SecretBox(),
   ) {
     this.cfg = this.load();
+    // The member id is minted on first sight and reaches disk with the next save, like any other
+    // defaulted field: forcing a write here would turn every read-only boot into a file rewrite.
+    if (!isMemberId(this.cfg.together.memberId)) this.cfg.together.memberId = newMemberId();
     if (this.plainOnDisk) {
       // a file from before sealing (or written by a keyless dev backend): seal it now, not on the next edit
       this.save();
@@ -316,7 +344,14 @@ export class ConfigStore {
       opensea: { hasWallet: !!this.cfg.opensea.walletKey },
       rpc: this.cfg.rpc,
       marketData: { hasAlchemyKey: !!this.cfg.marketData.alchemyKey },
-      together: { share: this.cfg.together.share, name: this.cfg.together.name, peers: this.cfg.together.peers.map((p) => ({ host: p.host, port: p.port, name: p.name })) },
+      together: {
+        share: this.cfg.together.share,
+        name: this.cfg.together.name,
+        peers: this.cfg.together.peers.map((p) => ({ host: p.host, port: p.port, name: p.name })),
+        rooms: this.cfg.together.rooms.map((r) => ({ id: r.id, relay: r.relay, name: r.name, joinedAt: r.joinedAt })),
+        memberId: this.cfg.together.memberId,
+        relay: this.cfg.together.relay,
+      },
       plugins: this.cfg.plugins,
       pluginWatch: this.cfg.pluginWatch,
     };
@@ -387,6 +422,9 @@ export class ConfigStore {
             .filter((p: any) => p && typeof p.host === 'string' && typeof p.token === 'string' && Number.isInteger(Number(p.port)))
             .map((p: any) => ({ host: String(p.host).slice(0, 120), port: Number(p.port), token: String(p.token).slice(0, 100), name: String(p.name ?? '').slice(0, 40) }))
             .slice(0, 20),
+          rooms: this.loadRooms(raw.together?.rooms),
+          memberId: isMemberId(raw.together?.memberId) ? raw.together.memberId : '',
+          relay: typeof raw.together?.relay === 'string' && RELAY_URL.test(raw.together.relay.trim()) ? raw.together.relay.trim().slice(0, 200) : '',
         },
         plugins: Object.fromEntries(
           Object.entries(raw.plugins && typeof raw.plugins === 'object' && !Array.isArray(raw.plugins) ? raw.plugins : {})
@@ -406,12 +444,62 @@ export class ConfigStore {
     }
   }
 
+  /**
+   * The rooms list from disk. A room is kept only when its id is the hash of its key, so a
+   * hand-edited or corrupted entry can never point the app at a relay room it holds no key for.
+   * A room whose key is sealed with a key this backend lacks is set aside in `lockedRooms` (and
+   * `locked`) so a save writes it back untouched for the desktop app.
+   */
+  private loadRooms(raw: unknown): Room[] {
+    if (!Array.isArray(raw)) return [];
+    const out: Room[] = [];
+    const seen = new Set<string>();
+    for (const r of raw) {
+      if (out.length + this.lockedRooms.length >= MAX_ROOMS) break;
+      if (!r || typeof r !== 'object') continue;
+      const { id, relay: relayRaw } = r as any;
+      // id and relay are checked before the key is read so a bad entry never lands in `locked`
+      if (!isRoomId(id) || seen.has(id)) continue;
+      const relay = typeof relayRaw === 'string' ? relayRaw.trim().slice(0, 200) : '';
+      if (!RELAY_URL.test(relay)) {
+        console.warn(`[config] dropping room ${id}: relay must be a ws:// or wss:// URL`);
+        continue;
+      }
+      const at: SecretPath = `together.rooms.${id}`;
+      const key = this.secret((r as any).key, at);
+      const name = String((r as any).name ?? '').trim().slice(0, 40) || 'room';
+      const joinedAt = Number.isFinite(Number((r as any).joinedAt)) ? Number((r as any).joinedAt) : Date.now();
+      if (key === undefined) {
+        if (!this.locked[at]) continue; // no key at all: nothing to join with
+        console.warn(`[config] room "${name}" (${id}) is sealed with a key this backend was not given; it stays on disk but is unavailable`);
+        seen.add(id);
+        this.lockedRooms.push({ id, relay, name, joinedAt });
+        continue;
+      }
+      if (!isRoomKey(key) || roomIdOf(key) !== id) {
+        console.warn(`[config] dropping room "${name}" (${id}): its key does not match its id`);
+        continue;
+      }
+      seen.add(id);
+      out.push({ id, key, relay, name, joinedAt });
+    }
+    return out;
+  }
+
   /** What goes on disk: the config with each secret sealed (when there is a key), or the locked ciphertext when this backend holds no value for it. */
   private toDisk(): Record<string, unknown> {
     const c = this.cfg;
     const put = (v: string | undefined, at: SecretPath) => (v !== undefined ? this.box.seal(v) : this.locked[at]);
     return {
       ...c,
+      together: {
+        ...c.together,
+        rooms: [
+          ...c.together.rooms.map((r) => ({ ...r, key: put(r.key, `together.rooms.${r.id}`) })),
+          // a room re-joined from its invite on this backend supersedes the copy it could not open
+          ...this.lockedRooms.filter((l) => !c.together.rooms.some((r) => r.id === l.id)).map((r) => ({ ...r, key: this.locked[`together.rooms.${r.id}`] })),
+        ],
+      },
       discord: { ...c.discord, token: put(c.discord.token, 'discord.token') },
       telegram: { ...c.telegram, apiHash: put(c.telegram.apiHash, 'telegram.apiHash'), session: put(c.telegram.session, 'telegram.session') },
       o1ApiKey: put(c.o1ApiKey, 'o1ApiKey'),

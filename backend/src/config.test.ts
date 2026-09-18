@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ConfigStore, DEFAULT_COLUMNS, sanitizeColumns, sanitizeLayouts } from './config.js';
 import { SecretBox, isSealed } from './secrets.js';
+import { isMemberId, newRoomKey, roomIdOf } from './rooms/crypto.js';
 
 const tmpFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tf-cfg-')), 'config.json');
 
@@ -277,5 +278,118 @@ describe('plugins config', () => {
       'plugin:hello-feed:alerts',
       'plugin:hello-feed:news',
     ]);
+  });
+});
+
+describe('together rooms', () => {
+  const KEY = Buffer.alloc(32, 9);
+  const key = newRoomKey();
+  const id = roomIdOf(key);
+  const room = { id, key, relay: 'wss://relay.example', name: 'degens', joinedAt: 1700000000000 };
+
+  it('round-trips rooms with the key sealed on disk', () => {
+    const file = tmpFile();
+    new ConfigStore(file, new SecretBox(KEY)).update((c) => {
+      c.together.rooms.push({ ...room });
+      c.together.relay = 'wss://mine.example';
+    });
+    const text = fs.readFileSync(file, 'utf8');
+    expect(text).not.toContain(key);
+    const disk = JSON.parse(text);
+    expect(disk.together.rooms).toHaveLength(1);
+    expect(isSealed(disk.together.rooms[0].key)).toBe(true);
+    expect(disk.together.rooms[0]).toMatchObject({ id, relay: 'wss://relay.example', name: 'degens', joinedAt: 1700000000000 });
+    const again = new ConfigStore(file, new SecretBox(KEY)).get().together;
+    expect(again.rooms).toEqual([room]);
+    expect(again.relay).toBe('wss://mine.example');
+  });
+
+  it('an old config gets no rooms and a member id that survives a save', () => {
+    const file = tmpFile();
+    fs.writeFileSync(file, JSON.stringify({ together: { share: true, name: 'me', token: 't', peers: [] } }));
+    const a = new ConfigStore(file);
+    expect(a.get().together.rooms).toEqual([]);
+    expect(a.get().together.relay).toBe('');
+    const mid = a.get().together.memberId;
+    expect(isMemberId(mid)).toBe(true);
+    a.update((c) => c.favorites.push('x'));
+    expect(new ConfigStore(file).get().together.memberId).toBe(mid);
+    // a fresh store (no file at all) also gets one
+    expect(isMemberId(new ConfigStore(tmpFile()).get().together.memberId)).toBe(true);
+  });
+
+  it('replaces a junk member id', () => {
+    const file = tmpFile();
+    fs.writeFileSync(file, JSON.stringify({ together: { memberId: 'short' } }));
+    const mid = new ConfigStore(file).get().together.memberId;
+    expect(mid).not.toBe('short');
+    expect(isMemberId(mid)).toBe(true);
+  });
+
+  it('masked() shows rooms without their keys', () => {
+    const file = tmpFile();
+    const s = new ConfigStore(file, new SecretBox(KEY));
+    s.update((c) => c.together.rooms.push({ ...room }));
+    const m = s.masked().together;
+    expect(m.rooms).toEqual([{ id, relay: 'wss://relay.example', name: 'degens', joinedAt: 1700000000000 }]);
+    expect(m.memberId).toBe(s.get().together.memberId);
+    expect(m.relay).toBe('');
+    expect(JSON.stringify(s.masked())).not.toContain(key);
+  });
+
+  it('a room sealed with another key stays on disk and out of get()', () => {
+    const file = tmpFile();
+    new ConfigStore(file, new SecretBox(KEY)).update((c) => c.together.rooms.push({ ...room }));
+    const other = new ConfigStore(file, new SecretBox(Buffer.alloc(32, 1)));
+    expect(other.get().together.rooms).toEqual([]);
+    expect(other.masked().together.rooms).toEqual([]);
+    const key2 = newRoomKey();
+    other.update((c) => c.together.rooms.push({ id: roomIdOf(key2), key: key2, relay: 'ws://localhost:8787', name: 'local', joinedAt: 1 }));
+    const disk = JSON.parse(fs.readFileSync(file, 'utf8'));
+    expect(disk.together.rooms.map((r: any) => r.id).sort()).toEqual([id, roomIdOf(key2)].sort());
+    const back = new ConfigStore(file, new SecretBox(KEY)).get().together.rooms;
+    expect(back.map((r) => r.id)).toEqual([id]); // key2 was sealed with the other box's key
+    expect(back[0].key).toBe(key);
+  });
+
+  it('drops rooms with a mismatched id, a bad relay or a bad key, dedupes ids, and defaults name/joinedAt', () => {
+    const file = tmpFile();
+    const k2 = newRoomKey();
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        together: {
+          relay: 'http://not-a-socket',
+          rooms: [
+            { id: roomIdOf(k2), key: key, relay: 'wss://a', name: 'wrong id', joinedAt: 1 },
+            { id, key, relay: 'https://a', name: 'bad relay', joinedAt: 1 },
+            { id, key, relay: 'wss://first', name: '  ', joinedAt: 'soon' },
+            { id, key, relay: 'wss://second', name: 'dup', joinedAt: 2 },
+            { id: roomIdOf(k2), key: 'nope', relay: 'wss://a', name: 'bad key', joinedAt: 1 },
+            { id: roomIdOf(k2), key: k2, relay: 'ws://localhost:1', name: 'x'.repeat(60), joinedAt: 5 },
+            'junk',
+          ],
+        },
+      }),
+    );
+    const before = Date.now();
+    const t = new ConfigStore(file).get().together;
+    expect(t.relay).toBe('');
+    expect(t.rooms.map((r) => [r.id, r.relay, r.name])).toEqual([
+      [id, 'wss://first', 'room'],
+      [roomIdOf(k2), 'ws://localhost:1', 'x'.repeat(40)],
+    ]);
+    expect(t.rooms[0].joinedAt).toBeGreaterThanOrEqual(before);
+    expect(t.rooms[1].joinedAt).toBe(5);
+  });
+
+  it('caps the list at 50 rooms', () => {
+    const file = tmpFile();
+    const rooms = Array.from({ length: 55 }, (_, i) => {
+      const k = newRoomKey();
+      return { id: roomIdOf(k), key: k, relay: 'wss://r', name: `r${i}`, joinedAt: i };
+    });
+    fs.writeFileSync(file, JSON.stringify({ together: { rooms } }));
+    expect(new ConfigStore(file).get().together.rooms).toHaveLength(50);
   });
 });
