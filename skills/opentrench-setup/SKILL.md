@@ -1,6 +1,6 @@
 ---
 name: opentrench-setup
-description: Use when someone is installing opentrench, connecting Discord or Telegram to it, adding channels, or when the desktop app shows a red discord/telegram pill, "backend did not come up", a blank column, or a plugin that will not connect. Walks through the exact steps for macOS and Windows and the known failure modes.
+description: Use when someone is installing opentrench, connecting Discord or Telegram to it, adding channels, sharing calls with a friend, joining a room, sending or pasting an invite link, hosting a relay, adding an Alchemy key or custom RPC for live prices, or when the desktop app shows a red discord/telegram pill, "backend did not come up", a blank column, a plugin that will not connect, a room stuck on "offline · retrying" or "this relay needs updating", prices that are not live, or a card without the green dot. Walks through the exact steps for macOS and Windows and the known failure modes.
 ---
 
 # opentrench setup
@@ -51,8 +51,8 @@ Known failure modes:
 - "Discord is not installed" from the button: only /Applications/Discord*.app (macOS) and
   %LOCALAPPDATA%\Discord* (Windows) are searched.
 
-A user token still works as a read-only fallback (⚙ → Accounts → Discord → token). Say plainly
-that it is a self-bot and carries ban risk.
+There is no token field any more. A token saved by an older version keeps being read until the
+plugin connects, then the plugin is the one way in.
 
 ## 3. Connect Telegram
 
@@ -76,11 +76,119 @@ puts it in the feed, the eye previews it. The search box narrows servers, channe
 Columns (All Calls, All Chats, Trending, Top Callers, Website, bots…) are added with the + in
 the column header row; each column has its own channel scope and filters.
 
+## 5. Share calls with friends (rooms)
+
+A room is a private channel for calls. It lives on a relay: a small server that passes
+encrypted messages between members and cannot read them. Nothing to port-forward, no IP
+handed out; friends can be anywhere.
+
+1. ⚙ → **Together** (sidebar) → **Create a room**: type a name. The relay field is prefilled
+   with the default; "What's a relay?" under it explains the server. Create.
+2. **Copy invite** on the room card and send it to the friend (any messenger). It looks like
+   `opentrench://room/<relay-host>/<key>`; whoever has it is in, so treat it like a password.
+3. The friend pastes it into **Join a room** → Join, or clicks the link with opentrench
+   installed (it opens Together with the invite filled in).
+4. Their calls appear in the feed with a `via <name>` tag; the room card shows members online.
+
+**Rotate** makes a new key = a new invite; everyone re-joins with it, anyone with the old one is
+out. That is the only way to remove someone. **Leave** drops the room on this machine only.
+
+What travels: calls only (token, chain, who called it), encrypted on each machine with the key
+in the invite. No chat text, no prices: every app prices what is on its screen itself (§6), so
+a friend's call is priced live on your side the same as your own.
+
+State on a room card:
+
+| Card says | Meaning / what to do |
+| --- | --- |
+| connecting… | First connect or a reconnect; give it 15 s. |
+| offline · retrying | Relay unreachable. Check the host in the invite / relay field; is the relay up (`curl https://<host>/` should answer JSON)? The default relay may not be up yet. |
+| invite changed — ask for the new one | Messages no longer decrypt: the room was rotated. Leave, join the new invite. |
+| this relay needs updating | The relay speaks an older protocol than the app. Whoever hosts it must update it (see Host a relay). Nothing to do on the client. |
+| relay wants an access code | The relay runs with `RELAY_ACCESS_CODE`; ask its operator for the code. Without it, use another relay. |
+| room is full | 50 members per room (or the relay's room cap). Rotate into a second room or raise the relay's limits. |
+
+Known failure modes:
+- Two people made two rooms instead of one joining the other: rooms are separate keys. One
+  creates, the rest join that invite.
+- A friend on an older opentrench sees "update opentrench": the relay is newer than their app.
+- Clicking an `opentrench://` link does nothing: the link handler registers on first launch of
+  the installed app; open the app once, or paste the invite into Join a room.
+- Calls from the room show but stay unpriced: that is §6, not the room.
+
+**Same Wi-Fi instead** (no relay, nothing leaves the network) still exists under that
+disclosure on the same page: the nearby list shows machines on the LAN, **Allow** a request
+when the 4-letter code matches on both screens, port 3211 must be open between them.
+
+## 6. Live prices and your Alchemy key
+
+Every token on screen is priced from its pool on-chain every 3 s (one batched RPC per chain).
+A green dot on the card = the number is live. Off-screen tokens are not read; Dexscreener and
+GeckoTerminal still fill liquidity, volume and 24h change.
+
+Setup: ⚙ → **Market data**.
+- Paste an **Alchemy API key** → Save. Save probes it; the list under it names the chains the
+  key answers for (Robinhood Chain and HyperEVM included). Same table serves NFT mints.
+- Or a **custom RPC** per chain in that chain's row → Save. Priority: custom RPC > Alchemy >
+  public endpoint. Each row shows the source in use and `N live · M skipped`; hover "skipped"
+  for the reasons.
+- Public RPCs work with no key, but rate-limit.
+
+Known failure modes:
+- `0 live` on every chain: no screen is reporting yet (open a calls column: only visible
+  tokens are priced), or the RPC is down (the chain row shows the error; try another source).
+- "paired with X, which is not priced": the token's quote asset has no pool the app can read.
+  Nothing to do; Dexscreener prices it.
+- A card without the dot: its pool type is not read on-chain yet (a v4 pool with no quote
+  address yet, PancakeSwap Infinity, or a pool no directory has listed). Dexscreener prices it
+  on its normal cadence.
+- Robinhood rows full of 429 / rate-limit: the public RPC throttles; add the Alchemy key.
+- "The key answered for no chain": wrong or revoked key, or the Alchemy app has every network
+  disabled; check the app on dashboard.alchemy.com.
+
+The Alchemy key is stored sealed like the other secrets; custom RPC URLs are plain text in
+`config.json`.
+
+## Host a relay
+
+Anyone can run the relay from the repo (`relay/`): one Node 22 process, no database. Pick one:
+
+```sh
+# Fly.io (shipped fly.toml: 256 MB, one region, a volume for room buffers)
+cd relay && fly launch --copy-config --yes && fly volumes create relay_data --size 1 && fly deploy
+
+# Docker
+docker build -t opentrench-relay ./relay && docker run -d -p 8080:8080 -v relay-data:/data opentrench-relay
+
+# Any Node host, behind a TLS proxy (the app connects over wss://)
+npm ci -w relay && npm run build -w relay && PORT=8080 RELAY_DATA_DIR=./data node relay/dist/index.js
+```
+
+Caddy in front of the Node route: `relay.example.com { reverse_proxy 127.0.0.1:8080 }`.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `PORT` | `8080` | Port to listen on. |
+| `RELAY_ACCESS_CODE` | unset | Only apps configured with this code can join; a relay private to your circle. |
+| `RELAY_MAX_ROOMS` | `1000` | Rooms held at once. |
+| `RELAY_MAX_MEMBERS` | `50` | Members per room. |
+| `RELAY_DATA_DIR` | unset | One `<room>.json` per room so a restart keeps the last day; unset = memory only. |
+| `RELAY_BUFFER_HOURS` | `24` | How long recent messages are kept for late joiners (also capped at 2000). |
+| `RELAY_TRUST_PROXY` | `0` | `1` to read the client IP from `fly-client-ip` / last `x-forwarded-for` for the per-IP limit. Only behind a proxy that sets that header itself (Fly does; `fly.toml` sets it). |
+
+Verify: `curl https://<host>/` → `{"name":"opentrench-relay","v":1,"rooms":N}`. Then in the
+app put `wss://<host>` in the relay field when creating a room. Your invite carries your
+relay's address; friends configure nothing.
+
+The operator sees IPs, member ids and traffic volume. Not calls, names or tokens: those are
+inside the ciphertext. A room nobody visits for 7 days is dropped, file included.
+
 ## Where things live
 
 - macOS: config and state in `~/Library/Application Support/opentrench/` (`config.json`,
-  `state.json`; tokens inside are encrypted with a key in the Keychain). Logs:
-  `~/Library/Logs/opentrench/desktop.log` and the app menu's Open Log Folder.
+  `state.json`; tokens, room keys and the Alchemy key inside are sealed with a key in the
+  Keychain; custom RPC URLs are plain). Logs: `~/Library/Logs/opentrench/desktop.log` and the
+  app menu's Open Log Folder.
 - Windows: `%APPDATA%\opentrench\` and the same Open Log Folder entry in the File menu.
 - The backend answers on http://127.0.0.1:3210 (`/api/version` shows the build).
 
