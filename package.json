@@ -4,16 +4,18 @@
   "workspaces": [
     "backend",
     "frontend",
-    "electron"
+    "electron",
+    "relay"
   ],
   "scripts": {
     "dev": "concurrently -k -n api,web \"npm run dev -w backend\" \"npm run dev -w frontend\"",
     "build": "npm run build -w frontend && npm run build -w backend",
     "start": "npm start -w backend",
-    "test": "npm test -w backend && npm test -w frontend",
-    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
+    "test": "npm test -w backend && npm test -w frontend && npm test -w relay",
+    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend && npm run typecheck -w relay",
     "desktop": "npm run build && npm start -w electron",
-    "desktop:dist": "npm run build && npm run dist -w electron"
+    "desktop:dist": "npm run build && npm run dist -w electron",
+    "relay": "npm run build -w relay && npm start -w relay"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
