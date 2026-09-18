@@ -179,7 +179,10 @@ export interface Room {
   relay: string;
   name: string;
   joinedAt: number;
+  /** the relay's access code, when it wants one (plain text: it gates the relay, not the room's contents) */
+  access?: string;
 }
+const ACCESS_MAX = 100;
 export const MAX_ROOMS = 50;
 
 /**
@@ -362,7 +365,7 @@ export class ConfigStore {
         share: this.cfg.together.share,
         name: this.cfg.together.name,
         peers: this.cfg.together.peers.map((p) => ({ host: p.host, port: p.port, name: p.name })),
-        rooms: this.cfg.together.rooms.map((r) => ({ id: r.id, relay: r.relay, name: r.name, joinedAt: r.joinedAt })),
+        rooms: this.cfg.together.rooms.map((r) => ({ id: r.id, relay: r.relay, name: r.name, joinedAt: r.joinedAt, hasAccess: !!r.access })),
         memberId: this.cfg.together.memberId,
         relay: this.cfg.together.relay,
       },
@@ -490,11 +493,14 @@ export class ConfigStore {
       const name = String((r as any).name ?? '').trim().slice(0, 40) || 'room';
       const j = (r as any).joinedAt;
       const joinedAt = Number.isInteger(j) && j > 0 ? (j as number) : Date.now();
+      const a = (r as any).access;
+      const access = typeof a === 'string' ? a.trim().slice(0, ACCESS_MAX) : '';
+      const rest = { relay, name, joinedAt, ...(access ? { access } : {}) };
       if (key === undefined) {
         if (!this.locked[at]) continue; // no key at all: nothing to join with
         console.warn(`[config] room "${name}" (${id}) is sealed with a key this backend was not given; it stays on disk but is unavailable`);
         seen.add(id);
-        this.lockedRooms.push({ id, relay, name, joinedAt });
+        this.lockedRooms.push({ id, ...rest });
         continue;
       }
       if (!isRoomKey(key) || roomIdOf(key) !== id) {
@@ -502,7 +508,7 @@ export class ConfigStore {
         continue;
       }
       seen.add(id);
-      out.push({ id, key, relay, name, joinedAt });
+      out.push({ id, key, ...rest });
     }
     return out;
   }

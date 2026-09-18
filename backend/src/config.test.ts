@@ -332,10 +332,39 @@ describe('together rooms', () => {
     const s = new ConfigStore(file, new SecretBox(KEY));
     s.update((c) => c.together.rooms.push({ ...room }));
     const m = s.masked().together;
-    expect(m.rooms).toEqual([{ id, relay: 'wss://relay.example', name: 'degens', joinedAt: 1700000000000 }]);
+    expect(m.rooms).toEqual([{ id, relay: 'wss://relay.example', name: 'degens', joinedAt: 1700000000000, hasAccess: false }]);
     expect(m.memberId).toBe(s.get().together.memberId);
     expect(m.relay).toBe('');
     expect(JSON.stringify(s.masked())).not.toContain(key);
+  });
+
+  it('keeps a relay access code with the room, trimmed and capped, and masks it to a boolean', () => {
+    const file = tmpFile();
+    const k2 = newRoomKey();
+    const s = new ConfigStore(file, new SecretBox(KEY));
+    s.update((c) => {
+      c.together.rooms.push({ ...room, access: '  sesame  ' });
+      c.together.rooms.push({ id: roomIdOf(k2), key: k2, relay: 'wss://b', name: 'open', joinedAt: 2 });
+    });
+    const again = new ConfigStore(file, new SecretBox(KEY));
+    expect(again.get().together.rooms.map((r) => r.access)).toEqual(['sesame', undefined]);
+    expect(again.masked().together.rooms.map((r) => r.hasAccess)).toEqual([true, false]);
+    expect(JSON.stringify(again.masked())).not.toContain('sesame');
+    // a hand-edited file: junk types are dropped, long codes cut, an empty one is no code at all
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        together: {
+          rooms: [
+            { id, key, relay: 'wss://a', name: 'n', joinedAt: 1, access: 'x'.repeat(150) },
+            { id: roomIdOf(k2), key: k2, relay: 'wss://b', name: 'n', joinedAt: 1, access: 42 },
+          ],
+        },
+      }),
+    );
+    const t = new ConfigStore(file).get().together;
+    expect(t.rooms[0].access).toBe('x'.repeat(100));
+    expect('access' in t.rooms[1]).toBe(false);
   });
 
   it('a room sealed with another key stays on disk and out of get()', () => {

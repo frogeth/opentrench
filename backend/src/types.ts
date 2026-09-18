@@ -1,3 +1,5 @@
+import type { RoomStatus } from './rooms/manager.js';
+
 export type Source = 'discord' | 'telegram' | 'plugin';
 export type Chain = 'sol' | 'evm';
 
@@ -463,6 +465,8 @@ export interface Status {
     requests: { id: string; name: string; from: string; code: string; ts: number }[];
     /** this machine's own asks, and where they stand */
     outgoing: { id: string; name: string; host: string; port: number; code: string; state: 'pending' | 'approved' | 'denied' | 'failed'; error?: string }[];
+    /** relay rooms this install is in, in config order */
+    rooms: RoomStatus[];
   };
 }
 

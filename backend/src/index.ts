@@ -203,6 +203,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     store.flush();
     pluginState.flush();
+    svc.rooms.stop();
     process.exit(0);
   });
 }
