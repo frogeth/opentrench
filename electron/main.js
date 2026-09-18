@@ -3,6 +3,7 @@ const { app, BrowserWindow, shell, nativeTheme, dialog, Menu, safeStorage, ipcMa
 const discordSetup = require('./discord-setup');
 const shellLink = require('./shell-link');
 const stale = require('./stale');
+const { isLink, findLink } = require('./deeplink');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -16,6 +17,9 @@ let child = null;
 let win = null;
 // The loopback callback the backend uses for a plugin's site-authenticated fetches and sign-in windows.
 let link = null;
+// The last opentrench:// link the OS handed us (an invite clicked in a browser or a chat), kept until
+// the page takes it: the page pulls it once on start (`link:pending`) and hears later ones as `link`.
+let pendingLink;
 
 // A plain-text log next to the backend's (app.getPath('logs')): what the desktop shell prints,
 // plus every renderer or helper process Chromium loses, with its reason. A Website column that
@@ -328,7 +332,67 @@ function createWindow() {
   });
   win.webContents.on('unresponsive', () => console.error('[desktop] page unresponsive'));
   win.webContents.on('responsive', () => console.log('[desktop] page responsive again'));
+  // A link that arrived before the page was there to hear it (the app was started by one).
+  const wc = win.webContents;
+  wc.on('did-finish-load', () => {
+    if (pendingLink) wc.send('link', pendingLink);
+  });
   win.on('closed', () => (win = null));
+}
+
+// ---------- opentrench:// links ----------
+// An invite (`opentrench://room/<relay>/<key>`) clicked in a browser or a chat opens us with it.
+// macOS delivers it as `open-url` to the running app (or the one it just started for it); Windows
+// and Linux start a second process with the link in its argv, which the single-instance lock hands
+// to the first before that second one quits. Only strings of one shape are ever forwarded to the
+// page (deeplink.js), and the key is never written to the log.
+function registerProtocol() {
+  try {
+    // In dev the executable is Electron itself, so the registration has to say which app to run.
+    const ok = app.isPackaged || process.argv.length < 2 ? app.setAsDefaultProtocolClient('opentrench') : app.setAsDefaultProtocolClient('opentrench', process.execPath, [path.resolve(process.argv[1])]);
+    if (!ok) console.error('[desktop] could not register as the opentrench:// handler');
+  } catch (e) {
+    console.error('[desktop] protocol registration', e);
+  }
+}
+function deliverLink(url) {
+  if (!isLink(url)) return;
+  pendingLink = url;
+  console.log(`[desktop] link ${url.replace(/\/[^/]*$/, '/…')}`);
+  if (win && !win.isDestroyed()) {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    if (!win.webContents.isLoading()) win.webContents.send('link', url);
+  } else if (app.isReady() && BrowserWindow.getAllWindows().length === 0) {
+    // macOS with every window closed: the app is up, the page is not; did-finish-load sends it
+    createWindow();
+  }
+}
+const singleInstance = app.requestSingleInstanceLock();
+if (!singleInstance) {
+  app.quit();
+} else {
+  registerProtocol();
+  app.on('second-instance', (_e, argv) => {
+    const url = findLink(argv);
+    if (url) deliverLink(url);
+    else if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+  });
+  app.on('open-url', (e, url) => {
+    e.preventDefault();
+    deliverLink(url);
+  });
+  // Windows and Linux: a first launch by a link carries it in our own argv.
+  deliverLink(findLink(process.argv));
+  ipcMain.handle('link:pending', () => {
+    const u = pendingLink;
+    pendingLink = undefined;
+    return u;
+  });
 }
 
 // ---------- auto-update (GitHub Releases) ----------
@@ -547,6 +611,8 @@ function buildMenu() {
 }
 
 app.whenReady().then(async () => {
+  // another opentrench already holds the lock and got our link; we are on our way out
+  if (!singleInstance) return;
   openLog();
   buildMenu();
   wireDiscordSetup();

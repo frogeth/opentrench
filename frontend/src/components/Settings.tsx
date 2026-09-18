@@ -47,6 +47,8 @@ export function Settings({
   pluginErrors,
   pluginSchemas,
   onPluginsChanged,
+  initialTab,
+  initialInvite,
 }: {
   status: Status;
   onClose: () => void;
@@ -67,9 +69,13 @@ export function Settings({
   pluginSchemas: Record<string, SettingField[]>;
   /** re-read the plugin list after something in the Plugins tab changed it */
   onPluginsChanged: () => void;
+  /** the tab to open on (a deep link opens Together) */
+  initialTab?: Tab;
+  /** an opentrench://room/… invite the app was opened with, to fill in on the Together tab */
+  initialInvite?: string;
 }) {
   const [cfg, setCfg] = useState<MaskedConfig | null>(null);
-  const [tab, setTab] = useState<Tab>('accounts');
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'accounts');
   const [version, setVersion] = useState<string | null>(null);
   useEffect(() => {
     (hasBridge('version') ? desktop!.version() : fetch('/api/version').then((r) => r.json()).then((j) => String(j.version))).then(setVersion).catch(() => {});
@@ -172,7 +178,7 @@ export function Settings({
             </>
           )}
           {cfg && tab === 'market' && <MarketDataSection onChange={reload} />}
-          {cfg && tab === 'together' && <TogetherSection status={status} />}
+          {cfg && tab === 'together' && <TogetherSection status={status} initialInvite={initialInvite} />}
           {cfg && tab === 'plugins' && <PluginsSection plugins={plugins} errors={pluginErrors} schemas={pluginSchemas} onChanged={onPluginsChanged} />}
           {cfg && tab === 'trading' && (
             <>
@@ -1026,12 +1032,12 @@ function J7Section({ cfg, status, onChange }: { cfg: MaskedConfig; status: Statu
 }
 
 /** TrenchTogether: share my calls with a friend on the same network, or follow theirs. */
-function TogetherSection({ status }: { status: Status }) {
+function TogetherSection({ status, initialInvite }: { status: Status; initialInvite?: string }) {
   const [info, setInfo] = useState<TogetherInfo | null>(null);
   const [name, setName] = useState('');
-  const [pairing, setPairing] = useState('');
+  const [pairing, setPairing] = useState(initialInvite ?? '');
   const [copied, setCopied] = useState<string | null>(null);
-  const [byLink, setByLink] = useState(false);
+  const [byLink, setByLink] = useState(!!initialInvite);
   const { busy, err, run } = useAsync();
   const load = () =>
     api

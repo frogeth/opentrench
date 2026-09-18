@@ -35,6 +35,7 @@ const BOTS = { cove: COVE_BOT, basedbot: 'based_eth_bot', salpha: 'salpha_resear
 type BotKind = keyof typeof BOTS;
 import { VirtualItem } from './components/Virtual';
 import { Settings } from './components/Settings';
+import { desktop, hasBridge } from './desktop';
 import { ChannelSidebar, discordChatName, type View } from './components/ChannelSidebar';
 import { AddChatsModal } from './components/AddChatsModal';
 import { Logo } from './components/Logo';
@@ -109,6 +110,22 @@ export type ChatOrder = 'bottom' | 'top';
 export default function App() {
   const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs, plugins, setPlugins } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // an invite link (opentrench://room/…) clicked outside the app: Settings → Together opens with it filled in
+  const [pendingInvite, setPendingInvite] = useState<string | null>(null);
+  useEffect(() => {
+    if (!hasBridge('pendingLink') || !hasBridge('onLink')) return;
+    const take = (url: string | undefined) => {
+      if (!url || !/^opentrench:\/\/room\//.test(url)) return;
+      setPendingInvite(url);
+      setSettingsOpen(true);
+    };
+    void desktop!.pendingLink().then(take).catch(() => {});
+    return desktop!.onLink((url) => {
+      take(url);
+      // the shell keeps the last link until the page asks for it; this page has it now
+      void desktop!.pendingLink().catch(() => {});
+    });
+  }, []);
   // first-run checklist: once, when nothing is connected and the feed is empty; ⚙ → Accounts brings it back
   const [setupOpen, setSetupOpen] = useState(false);
   const setupChecked = useRef(false);
@@ -2000,13 +2017,19 @@ export default function App() {
       )}
       {settingsOpen && (
         <Settings
+          // a new invite while Settings is already open remounts it on the Together tab
+          key={pendingInvite ?? 'settings'}
+          initialTab={pendingInvite ? 'together' : undefined}
+          initialInvite={pendingInvite ?? undefined}
           onShowSetup={() => {
             setSettingsOpen(false);
+            setPendingInvite(null);
             setSetupOpen(true);
           }}
           status={status}
           onClose={() => {
             setSettingsOpen(false);
+            setPendingInvite(null);
             reloadLists();
           }}
           chatOrder={chatOrder}
