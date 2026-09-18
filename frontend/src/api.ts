@@ -177,7 +177,15 @@ export interface MaskedConfig {
   layouts: Layout[];
   seenTokens: string[];
   hiddenTokens: string[];
-  together: { share: boolean; name: string; peers: { host: string; port: number; name: string }[] };
+  together: {
+    share: boolean;
+    name: string;
+    peers: { host: string; port: number; name: string }[];
+    /** relay rooms, without their keys */
+    rooms: { id: string; relay: string; name: string; joinedAt: number }[];
+    memberId: string;
+    relay: string;
+  };
   opensea: { hasWallet: boolean; walletAddress?: string };
   plugins: Record<string, { enabled: boolean; approvedHash?: string }>;
   pluginWatch: string[];
@@ -228,14 +236,31 @@ export interface DiscordChannel {
   dm?: boolean;
   avatar?: string;
 }
+/** A relay room this install is in, as the settings screen shows it: no key; the invite is what friends paste. */
+export interface RoomInfo {
+  id: string;
+  name: string;
+  relay: string;
+  joinedAt: number;
+  /** the relay wants an access code and one is set */
+  hasAccess: boolean;
+  invite: string;
+}
 export interface TogetherInfo {
   share: boolean;
   name: string;
   peers: { host: string; port: number; name: string }[];
   /** one per LAN address, only while sharing */
   pairings: string[];
+  rooms: RoomInfo[];
+  /** this install's id on relays; not a secret */
+  memberId: string;
+  /** the relay new rooms go on; '' = the app default */
+  relay: string;
   status?: import('./types').Status['together'];
 }
+/** What the "check" on a relay URL found. Never a thrown error: a wrong URL is an answer. */
+export type RelayProbe = { ok: true; v: number; rooms: number } | { ok: false; error: string };
 
 export interface TelegramDialog {
   id: string;
@@ -335,6 +360,16 @@ export const api = {
   followNearby: (id: string) => req<{ status: import('./types').Status['together'] }>('POST', `/together/nearby/${encodeURIComponent(id)}/follow`),
   forgetOutgoing: (id: string) => req<{ status: import('./types').Status['together'] }>('DELETE', `/together/outgoing/${encodeURIComponent(id)}`),
   answerRequest: (id: string, allow: boolean) => req<{ status: import('./types').Status['together'] }>('POST', `/together/requests/${encodeURIComponent(id)}/${allow ? 'allow' : 'deny'}`),
+  /** rooms: a private channel over a relay; the invite is the whole secret */
+  createRoom: (name: string, relay?: string) => req<{ room: RoomInfo; status: import('./types').Status['together'] }>('POST', '/together/rooms', { name, ...(relay ? { relay } : {}) }),
+  joinRoom: (invite: string, name?: string, access?: string) =>
+    req<{ room: RoomInfo; status: import('./types').Status['together'] }>('POST', '/together/rooms/join', { invite, ...(name ? { name } : {}), ...(access ? { access } : {}) }),
+  leaveRoom: (id: string) => req<{ ok: true; status: import('./types').Status['together'] }>('DELETE', `/together/rooms/${encodeURIComponent(id)}`),
+  rotateRoom: (id: string) => req<{ room: RoomInfo; status: import('./types').Status['together'] }>('POST', `/together/rooms/${encodeURIComponent(id)}/rotate`),
+  setRoomAccess: (id: string, access: string) => req<{ ok: true }>('PUT', `/together/rooms/${encodeURIComponent(id)}/access`, { access }),
+  /** the relay new rooms go on; '' returns to the default */
+  setRelay: (relay: string) => req<{ relay: string }>('PUT', '/together/relay', { relay }),
+  probeRelay: (url: string) => req<RelayProbe>('GET', `/together/relay/probe?url=${encodeURIComponent(url)}`),
   /** hide call cards from the calls columns (the token keeps being tracked) */
   markHidden: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/hidden', { add, remove }),
   setColumns: (columns: ColumnDef[]) => req<ColumnDef[]>('PUT', '/columns', { columns }),

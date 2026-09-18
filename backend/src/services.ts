@@ -14,6 +14,7 @@ import { MintGoClient } from './mintgo.js';
 import os from 'node:os';
 import { RankingsPoller, keyFor } from './opensea/rankings.js';
 import { TOGETHER_PORT, TogetherDiscovery, TogetherGuest, TogetherHost, encodePairing, lanAddresses, newCode, newToken, pollPairing, requestPairing } from './together.js';
+import { RoomsManager } from './rooms/manager.js';
 import { Minter } from './opensea/minter.js';
 import { createLaunchWatcher } from './deploys.js';
 import { detectContracts } from './contracts.js';
@@ -68,6 +69,8 @@ export class Services {
   // ---------- TrenchTogether ----------
   readonly togetherHost: TogetherHost; // built in the constructor: field initializers run before `hub` is assigned
   readonly discovery: TogetherDiscovery;
+  /** relay rooms: one client per room in config, fed from the hub; the routes call it directly */
+  readonly rooms: RoomsManager;
   private guests = new Map<string, TogetherGuest>();
   /** this machine's own pairing asks, by request id */
   private outgoing = new Map<string, { id: string; name: string; host: string; port: number; code: string; state: 'pending' | 'approved' | 'denied' | 'failed'; error?: string; timer?: NodeJS.Timeout }>();
@@ -146,6 +149,7 @@ export class Services {
       port: togetherPort(),
       clients: this.togetherHost.clients,
       peers: [...this.guests.values()].map((g) => ({ name: g.name, url: g.url, state: g.state, error: g.lastError })),
+      rooms: this.rooms.status(),
     });
   }
   /** Dial every friend again now. */
@@ -194,6 +198,8 @@ export class Services {
       for (const g of this.guests.values()) if (g.state === 'connected') for (const a of g.live) s.add(a);
       return s;
     };
+    // rooms are priced locally, so they add nothing to remoteLive
+    this.rooms.sync();
     this.togetherStatus();
   }
   /** RPC per chain for minting: index.ts swaps in the resolver that also knows the Alchemy key (custom > Alchemy > public). */
@@ -230,6 +236,14 @@ export class Services {
     this.togetherHost.on('requests', () => this.togetherStatus());
     this.discovery = new TogetherDiscovery({ name: () => this.togetherName(), port: () => togetherPort(), announce: () => this.togetherHost.listening, version: process.env.TRENCHFEED_APP_VERSION ?? 'dev' });
     this.discovery.on('nearby', () => this.togetherStatus());
+    this.rooms = new RoomsManager({
+      cfg,
+      hub,
+      version: process.env.TRENCHFEED_APP_VERSION ?? 'dev',
+      name: () => this.togetherName(),
+      log: (m) => console.log(`[together] ${m}`),
+      onStatus: () => this.togetherStatus(),
+    });
     this.discovery.start();
     hub.on('event', (e) => {
       if (e.type === 'ping') void this.ping(e.token, e.msg);

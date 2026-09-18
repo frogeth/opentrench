@@ -1,0 +1,22 @@
+app = "opentrench-relay"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  RELAY_DATA_DIR = "/data"
+  RELAY_TRUST_PROXY = "1"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  min_machines_running = 1
+
+[[mounts]]
+  source = "relay_data"
+  destination = "/data"
+
+[[vm]]
+  memory = "256mb"

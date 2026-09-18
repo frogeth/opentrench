@@ -5,6 +5,9 @@ export const DOCS = {
   gettingStarted: `${SITE_URL}/docs/`,
   discordBridge: `${SITE_URL}/docs/discord/`,
   telegram: `${SITE_URL}/docs/telegram/`,
+  together: `${SITE_URL}/docs/together/`,
+  /** how to host a relay: one command, linked from "What's a relay?" */
+  relay: `${SITE_URL}/docs/together/#relay`,
   /**
    * The plugin reference lives in the repo (`docs/plugins.md`) and has no page on the site yet, so
    * this points at the file itself rather than at a `/docs/plugins/` that would 404. Move it to

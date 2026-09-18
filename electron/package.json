@@ -28,6 +28,7 @@
       "main.js",
       "preload.js",
       "shell-link.js",
+      "deeplink.js",
       "discord-setup.js",
       "stale.js",
       "entitlements.mac.plist"

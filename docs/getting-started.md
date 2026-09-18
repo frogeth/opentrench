@@ -150,6 +150,23 @@ with every caller pinned on it, and the full call list.
 
 ---
 
+## 7. Share calls with friends
+
+⚙ → **Together** → **Create a room**: give it a name, paste a relay address
+(there is no official relay: host your own, see [Host a relay](relay.md), or
+use a friend's; the field remembers the last relay you used), press
+**Copy invite** and send the link. Your friends click it (the app opens with
+the invite filled in) or paste it under **Join a room**, and from then on each
+other's calls appear in the feed marked `via <name>`. Only calls travel, never
+chat messages or market numbers, and everything is encrypted with a key that
+lives in the invite, so the relay cannot read it. The full story, rotating an
+invite and what the status words mean: [TrenchTogether](together.md).
+
+Sharing with someone on the same Wi-Fi, with no relay at all, is still there
+under **Same Wi-Fi instead** on the same page.
+
+---
+
 ## Troubleshooting
 
 - **discord: auth_error** — the token is wrong or expired. Copy it again; it

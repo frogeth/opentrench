@@ -4,8 +4,12 @@ import type { HoverFetchers } from './hover.js';
 import { mapLongAsset, resolveNumeraires } from './long.js';
 import { decodePairing, newToken } from './together.js';
 import { fetchOhlcv, gtSlugFor } from './geckoterminal.js';
-import { LAYOUT_NAME_MAX, MAX_LAYOUTS, sanitizeColumns, type Layout } from './config.js';
+import { LAYOUT_NAME_MAX, MAX_LAYOUTS, sanitizeColumns, type Layout, type Room } from './config.js';
 import type { ConfigStore } from './config.js';
+import { relayHostOf, relayUrlOf } from './rooms/crypto.js';
+import { isLocalHost } from './plugins/hosts.js';
+import { safeDispatcher } from './plugins/shell.js';
+import { fetch as undiciFetch, type Dispatcher } from 'undici';
 import type { MessageHub } from './hub.js';
 import type { Services } from './services.js';
 import { IpfsCache } from './ipfs.js';
@@ -20,6 +24,92 @@ let lastQuote = 0;
 /** test-only: clear the quote throttle so test files aren't coupled to each other's timing. */
 export function __resetOsmintQuoteThrottle(): void {
   lastQuote = 0;
+}
+
+/** A relay's `GET /` answer is at most a few dozen bytes; anything bigger is some other server. */
+const PROBE_BODY_MAX = 8 * 1024;
+const PROBE_TIMEOUT_MS = 4000;
+/** Built on the first wss:// probe: connections pinned to addresses the safe lookup cleared (see plugins/shell.ts). */
+let probeAgent: Dispatcher | undefined;
+/** test-only: the dispatcher wss:// probes go through, so a test can watch it (or make it refuse). */
+export function __setProbeDispatcher(d: Dispatcher | undefined): void {
+  probeAgent = d;
+}
+
+/**
+ * Asks `url` (the wss:// address the user typed) for the relay's `GET /` card. The same rules as a
+ * room's relay: wss:// unless loopback, and nothing else inside the user's network. A relay is on
+ * the internet by definition, so a LAN or link-local address here is a URL pointed at a router's
+ * admin page or a cloud metadata service, not at a relay. The name check is the cheap first pass; a
+ * public name that resolves to a local address is caught by the pinned dispatcher, whose lookup
+ * refuses every such answer before a socket is opened. Loopback goes out plain: that lookup refuses
+ * 127.0.0.1, and a relay on this machine is exactly what ws://localhost means.
+ */
+export async function probeRelay(url: string): Promise<{ ok: true; v: number; rooms: number } | { ok: false; error: string }> {
+  let host: string;
+  try {
+    host = relayHostOf(url);
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? String(e) };
+  }
+  // relayUrlOf picks ws:// for the loopback names; those get http://, everything else https://
+  const ws = relayUrlOf(host);
+  const http = ws.replace(/^ws/i, 'http') + '/';
+  if (ws.startsWith('wss://') && isLocalHost(new URL(http).hostname)) {
+    return { ok: false, error: 'a relay is on the internet; that address is inside your network' };
+  }
+  let res: ProbeResponse;
+  try {
+    const init = { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS), redirect: 'manual' as const, headers: { accept: 'application/json' } };
+    // undici's own fetch for the pinned case: the Agent must come from the same undici as the fetch that uses it
+    // the two fetches' Response classes type their body stream from different libraries; the probe reads only this much of either
+    res = (ws.startsWith('wss://') ? await undiciFetch(http, { ...init, dispatcher: (probeAgent ??= safeDispatcher()) }) : await fetch(http, init)) as unknown as ProbeResponse;
+  } catch (e: any) {
+    const timeout = e?.name === 'TimeoutError' || e?.name === 'AbortError';
+    return { ok: false, error: timeout ? `${host} did not answer in ${PROBE_TIMEOUT_MS / 1000} s` : `could not reach ${host}` };
+  }
+  if (!res.ok) {
+    await res.body?.cancel().catch(() => {});
+    return { ok: false, error: `${host} answered ${res.status}; that is not an opentrench relay` };
+  }
+  let body: string;
+  try {
+    body = await readCapped(res, PROBE_BODY_MAX);
+  } catch {
+    return { ok: false, error: `${host} is not an opentrench relay` };
+  }
+  let card: any;
+  try {
+    card = JSON.parse(body);
+  } catch {
+    return { ok: false, error: `${host} is not an opentrench relay` };
+  }
+  if (card?.name !== 'opentrench-relay' || !Number.isInteger(card.v) || !Number.isInteger(card.rooms)) {
+    return { ok: false, error: `${host} is not an opentrench relay` };
+  }
+  return { ok: true, v: card.v, rooms: card.rooms };
+}
+
+/** What both fetches give back, as much of it as the probe reads (the two Response classes type their stream differently). */
+type ProbeResponse = { ok: boolean; status: number; body: ReadableStream<any> | null };
+
+/** The response body as text, or a throw once it passes `max` bytes (the rest is not read). */
+async function readCapped(res: ProbeResponse, max: number): Promise<string> {
+  const reader: ReadableStreamDefaultReader<Uint8Array> | undefined = res.body?.getReader();
+  if (!reader) return '';
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel().catch(() => {});
+      throw new Error('body too large');
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hover?: HoverFetchers, refreshToken?: (t: TokenInfo) => Promise<void>): Router {
@@ -163,7 +253,55 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     }),
   );
   // ---------- TrenchTogether ----------
-  r.get('/together', wrap(() => ({ ...cfg.masked().together, pairings: svc.togetherPairings(), status: hub.getStatus().together })));
+  /** A room as the settings screen sees it: no key, plus the invite friends paste. */
+  const roomView = (room: Room) => ({
+    id: room.id,
+    name: room.name,
+    relay: room.relay,
+    joinedAt: room.joinedAt,
+    hasAccess: !!room.access,
+    invite: svc.rooms.invite(room.id) ?? '',
+  });
+  const togetherInfo = () => {
+    const t = cfg.masked().together;
+    return {
+      share: t.share,
+      name: t.name,
+      peers: t.peers,
+      rooms: cfg.get().together.rooms.map(roomView),
+      memberId: t.memberId,
+      relay: t.relay,
+      pairings: svc.togetherPairings(),
+      status: hub.getStatus().together,
+    };
+  };
+  /**
+   * Room routes (spec §5). What the manager throws is the user's own mistake, spelled for the screen
+   * ("that is not a room invite", "you are not in that room"), so it goes back as a 400 with the
+   * message as-is (logged all the same, so a real bug is not a silent 400); wrap's 500 stays for
+   * everything else. Mutations need the app's own header, as the plugin routes do: a page in a
+   * browser must not be able to join this install to a room.
+   */
+  const REQUESTED_WITH = 'opentrench';
+  const rooms =
+    (mutating: boolean, fn: (req: Request, res: Response) => Promise<unknown> | unknown) => async (req: Request, res: Response) => {
+      if (mutating && req.get('x-requested-with') !== REQUESTED_WITH) {
+        res.status(403).json({ error: 'this request must come from the opentrench app' });
+        return;
+      }
+      try {
+        const out = await fn(req, res);
+        if (!res.headersSent) res.json(out ?? { ok: true });
+      } catch (e: any) {
+        console.error('[api]', req.method, req.path, e?.message ?? e);
+        if (!res.headersSent) res.status(400).json({ error: e?.message ?? String(e) });
+      }
+    };
+  // The listing carries every room's invite, which is the room key: app-only, like the mutations.
+  r.get(
+    '/together',
+    rooms(true, () => togetherInfo()),
+  );
   r.put(
     '/together',
     wrap(async (req) => {
@@ -172,7 +310,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
         if (typeof req.body?.name === 'string') c.together.name = req.body.name.trim().slice(0, 40);
       });
       await svc.syncTogether();
-      return { ...cfg.masked().together, pairings: svc.togetherPairings(), status: hub.getStatus().together };
+      return togetherInfo();
     }),
   );
   // a new pairing secret: every friend has to pair again
@@ -194,7 +332,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
         c.together.peers.push({ host: p.host, port: p.port, token: p.token, name: p.name });
       });
       await svc.syncTogether();
-      return { ...cfg.masked().together, status: hub.getStatus().together };
+      return togetherInfo();
     }),
   );
   // one click on a name heard on the network: ask to follow; the friend's Allow does the rest
@@ -239,9 +377,63 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       const port = Number(req.body?.port);
       cfg.update((c) => (c.together.peers = c.together.peers.filter((x) => !(x.host === host && x.port === port))));
       await svc.syncTogether();
-      return { ...cfg.masked().together, status: hub.getStatus().together };
+      return togetherInfo();
     }),
   );
+  // ---- rooms: a private channel over a relay; the invite is the whole secret ----
+  r.post(
+    '/together/rooms',
+    rooms(true, (req) => {
+      const room = svc.rooms.create(String(req.body?.name ?? ''), typeof req.body?.relay === 'string' ? req.body.relay : undefined);
+      return { room: roomView(room), status: hub.getStatus().together };
+    }),
+  );
+  r.post(
+    '/together/rooms/join',
+    rooms(true, (req) => {
+      const name = typeof req.body?.name === 'string' ? req.body.name : undefined;
+      const access = typeof req.body?.access === 'string' ? req.body.access : undefined;
+      const room = svc.rooms.join(String(req.body?.invite ?? ''), name, access);
+      return { room: roomView(room), status: hub.getStatus().together };
+    }),
+  );
+  r.delete(
+    '/together/rooms/:id',
+    rooms(true, (req) => {
+      svc.rooms.leave(String(req.params.id));
+      return { ok: true, status: hub.getStatus().together };
+    }),
+  );
+  // a fresh key under the same name: whoever holds the old invite is out
+  r.post(
+    '/together/rooms/:id/rotate',
+    rooms(true, (req) => {
+      const room = svc.rooms.rotate(String(req.params.id));
+      return { room: roomView(room), status: hub.getStatus().together };
+    }),
+  );
+  r.put(
+    '/together/rooms/:id/access',
+    rooms(true, (req) => {
+      svc.rooms.setAccess(String(req.params.id), String(req.body?.access ?? ''));
+      return { ok: true };
+    }),
+  );
+  // the relay new rooms go on; '' goes back to the app default. Stored canonical, as config.ts loads it.
+  r.put(
+    '/together/relay',
+    rooms(true, (req) => {
+      const raw = String(req.body?.relay ?? '').trim();
+      const relay = raw ? relayUrlOf(relayHostOf(raw)) : '';
+      cfg.update((c) => (c.together.relay = relay));
+      return { relay };
+    }),
+  );
+  // the settings screen's "check": is there an opentrench relay at this URL? Never a 500: a bad
+  // URL, a private address and a server that is not a relay are all answers, not failures.
+  r.get('/together/relay/probe', async (req, res) => {
+    res.json(await probeRelay(String(req.query.url ?? '')));
+  });
   // Long (app.long.xyz): the page fetches Long's indexer (Cloudflare blocks the server) and hands the raw asset here.
   r.post(
     '/long/asset',

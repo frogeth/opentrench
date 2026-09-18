@@ -1,3 +1,5 @@
+import type { RoomStatus } from './rooms/manager.js';
+
 export type Source = 'discord' | 'telegram' | 'plugin';
 export type Chain = 'sol' | 'evm';
 
@@ -158,6 +160,8 @@ export interface CallRecord {
   mcSource?: 'candle' | 'cached' | 'scan' | 'chain';
   /** posted by a bot (an alert bot that called first); a friend's copy uses it to drop bot echoes */
   bot?: true;
+  /** TrenchTogether: the friend this call arrived from (absent for calls from this machine's own chats) */
+  via?: string;
 }
 
 /** Holder security from GoPlus (EVM) or RugCheck (Solana). Percentages are 0..100. */
@@ -463,6 +467,8 @@ export interface Status {
     requests: { id: string; name: string; from: string; code: string; ts: number }[];
     /** this machine's own asks, and where they stand */
     outgoing: { id: string; name: string; host: string; port: number; code: string; state: 'pending' | 'approved' | 'denied' | 'failed'; error?: string }[];
+    /** relay rooms this install is in, in config order */
+    rooms: RoomStatus[];
   };
 }
 

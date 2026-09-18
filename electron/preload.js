@@ -13,4 +13,12 @@ contextBridge.exposeInMainWorld('desktop', {
   version: () => ipcRenderer.invoke('app:version'),
   /** run the updater now; it reports with its own dialog */
   checkForUpdates: () => ipcRenderer.invoke('updates:check'),
+  /** the opentrench:// link the app was opened with, handed over once; undefined when there was none */
+  pendingLink: () => ipcRenderer.invoke('link:pending'),
+  /** later opentrench:// links while the page is up; returns the unsubscribe */
+  onLink: (cb) => {
+    const h = (_e, url) => cb(url);
+    ipcRenderer.on('link', h);
+    return () => ipcRenderer.removeListener('link', h);
+  },
 });

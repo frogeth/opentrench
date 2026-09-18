@@ -31,6 +31,10 @@ export interface DesktopBridge {
   discordRemove(): Promise<DiscordSetupResult>;
   version(): Promise<string>;
   checkForUpdates(): Promise<{ ok: boolean; version: string }>;
+  /** the opentrench:// link the app was opened with, handed over once; undefined when there was none */
+  pendingLink(): Promise<string | undefined>;
+  /** later opentrench:// links while the page is up; returns the unsubscribe */
+  onLink(cb: (url: string) => void): () => void;
 }
 
 declare global {

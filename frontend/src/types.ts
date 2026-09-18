@@ -155,6 +155,8 @@ export interface CallRecord {
   marketCap?: number;
   /** 'candle': corrected from the 1-minute candle of the call's minute; 'cached': checked, no candle, registration number kept */
   mcSource?: 'candle' | 'cached' | 'scan' | 'chain';
+  /** TrenchTogether: the friend this call arrived from (absent for calls from this machine's own chats) */
+  via?: string;
 }
 
 /** Holder security from GoPlus (EVM) or RugCheck (Solana). Percentages are 0..100. */
@@ -432,6 +434,18 @@ export interface Status {
     requests: { id: string; name: string; from: string; code: string; ts: number }[];
     /** this machine's own asks, and where they stand */
     outgoing: { id: string; name: string; host: string; port: number; code: string; state: 'pending' | 'approved' | 'denied' | 'failed'; error?: string }[];
+    /** relay rooms this install is in, in config order */
+    rooms: {
+      id: string;
+      name: string;
+      relay: string;
+      state: 'connecting' | 'connected' | 'disconnected' | 'key-mismatch' | 'relay-too-old' | 'access-denied' | 'full' | 'rate-limited';
+      /** other members online right now */
+      members: number;
+      error?: string;
+      /** messages accepted but not yet on the wire (a join replay draining) */
+      pending: number;
+    }[];
   };
 }
 

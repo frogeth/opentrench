@@ -258,7 +258,8 @@ export class MessageHub extends EventEmitter {
       if (t.calls.some((x) => x.msgId === c.msgId)) continue;
       // the same caller in the same chat already counted here (our own copy of that chat, or an earlier share): a repeat
       if (t.calls.some((x) => x.source === c.source && x.chatName === c.chatName && normAuthor(x.author) === normAuthor(c.author))) continue;
-      t.calls.push({ ...c });
+      // tagged with who it came from, so a re-share of this token sends only this machine's own calls
+      t.calls.push({ ...c, via: peer });
       chats.add(remoteCallKey(c.source, c.chatName, c.author));
       if (!t.calledIn.includes(c.chatName)) t.calledIn.push(c.chatName);
       t.lastCallTs = Math.max(t.lastCallTs ?? 0, c.ts);

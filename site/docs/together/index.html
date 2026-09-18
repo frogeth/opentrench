@@ -1,0 +1,164 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Share calls with friends — opentrench</title><meta name="description" content="TrenchTogether rooms: share your calls with friends anywhere with one link, encrypted on your machine. And how to host your own relay on Fly.io, in Docker or behind Caddy.">
+<meta property="og:title" content="Share calls with friends — opentrench"><meta property="og:description" content="TrenchTogether rooms: share your calls with friends anywhere with one link, encrypted on your machine. And how to host your own relay on Fly.io, in Docker or behind Caddy."><meta property="og:image" content="https://opentrench.app/img/together.png"><link rel="canonical" href="https://opentrench.app/docs/together/">
+<link rel="icon" href="../../img/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../style.css"></head><body><header class="nav"><div class="wrap">
+<a class="brand" href="../../"><img src="../../img/icon.png" alt="">opentrench</a>
+<nav class="links">
+<a class="txt" href="../">Getting started</a>
+<a class="txt on" href="./">Together</a>
+<a class="icon" href="https://discord.gg/6ByE8fPNN" title="Community Discord" aria-label="Community Discord"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.4a18 18 0 0 1 4.4 1.3 15.6 15.6 0 0 0-15.2 0A18 18 0 0 1 8.8 3.4L8.6 3a19.8 19.8 0 0 0-4.9 1.4C.6 9.1-.2 13.7.2 18.2a20 20 0 0 0 6 3l1.3-2a12.9 12.9 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12 0l.5.4-2 1 1.3 2a20 20 0 0 0 6-3c.5-5.2-.8-9.7-3.5-13.8ZM8.5 15.4c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Zm7 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Z"/></svg></a>
+<a class="icon" href="https://github.com/frogeth/opentrench" title="GitHub" aria-label="GitHub"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
+<a class="pillbtn" href="https://github.com/frogeth/opentrench/releases/latest">Download</a>
+</nav></div></header>
+<main class="wrap"><div class="docs">
+<div class="toc">
+<div class="k">Rooms</div>
+<a href="#rooms">1 · What a room is</a>
+<a href="#join">2 · Join a room</a>
+<a href="#travels">3 · What travels</a>
+<a href="#rotate">4 · Rotate and leave</a>
+<a href="#lan">5 · Same Wi-Fi instead</a>
+<a href="#trust">6 · Trust</a>
+<div class="k" style="margin-top:16px">Host a relay</div>
+<a href="#relay">7 · What a relay does</a>
+<a href="#hosting">8 · Hosting</a>
+<a href="#env">9 · Environment</a>
+<a href="#updating">10 · Updating</a>
+<div class="k" style="margin-top:16px">Help</div>
+<a href="#trouble">Troubleshooting</a>
+<a href="../">Getting started</a>
+<a href="https://discord.gg/6ByE8fPNN">Ask on Discord</a>
+</div>
+<article>
+<h1>Share calls with friends</h1>
+<p class="lead">TrenchTogether: a room for your circle's calls. One link joins it, from anywhere. Everything is encrypted on your machine, and the relay in between reads nothing.</p>
+<div class="frame"><img src="../../img/together.png" alt="Settings → Together: a room card with its invite"></div>
+
+<h2 id="rooms"><span class="n">01</span>What a room is</h2>
+<p>A room is a private channel for your calls. It lives on a <b>relay</b>, a small server that passes messages between the room's members and cannot read them, because every message is encrypted on your machine with a key only the invite carries. Friends join with one link, from anywhere, and nothing on your side listens on the internet.</p>
+<h3>Create one</h3>
+<ol class="steps">
+<li>⚙ → <b>Together</b> → <b>Create a room</b>.</li>
+<li>Give it a name and paste a relay address. There is no official relay: host your own (<a href="#relay">Host a relay</a>, one command) or use a friend's. The field is empty the first time and remembers the last relay you used. <b>Check</b> next to the field asks that relay whether it is up; Create does not, so a relay that does not answer shows on the room card instead.</li>
+<li>Press <b>Create</b>. The room appears as a card with a status dot and how many members are online.</li>
+<li>Press <b>Copy invite</b> and send the link to your friends however you talk to them.</li>
+</ol>
+<p>The invite looks like <code>opentrench://room/&lt;relay-host&gt;/&lt;key&gt;</code>. The key is the whole secret: whoever has it is in.</p>
+
+<h2 id="join"><span class="n">02</span>Join a room</h2>
+<p>Either click the <code>opentrench://room/…</code> link. The desktop app opens Settings → Together with the invite filled in; press <b>Join</b>.</p>
+<p>Or paste the invite into <b>Join a room</b> and press <b>Join</b>. Pasting works on the web page too.</p>
+<p>The invite carries the relay's address, so there is nothing to configure. If that relay asks for an access code, enter it under <b>This relay asks for an access code</b> before you press Join, or later on the room card when it says <code>relay wants an access code</code>. The code is kept per room, next to its key.</p>
+
+<h2 id="travels"><span class="n">03</span>What travels</h2>
+<p><b>Only calls</b>: the token (its address and chain), who called it, in which chat, and when. On joining, a member sends its calls of the last 24 hours (newest first, at most 200) so the room catches up; after that, every new call from one of its own chats, at most once per token every 30 seconds.</p>
+<p><b>Never chat messages.</b> Nothing anyone wrote in a channel leaves your machine.</p>
+<p>No prices, market caps, liquidity, volume or holder data either. Each app prices tokens itself, like any other token on its screen: live from the pool while the token is on screen, from Dexscreener otherwise.</p>
+<p>A call that arrived through a room shows <code>via &lt;name&gt;</code> on the card, with the name the friend set in the Together page. Calls that came <em>via</em> someone are not sent on again, so a room cannot echo.</p>
+
+<h2 id="rotate"><span class="n">04</span>Rotate and leave</h2>
+<p><b>Rotate</b> (the <b>New invite</b> button) makes a new key, so a new room id and a new invite. The old room gets one last notice that it was rotated: every other member's card shows <code>invite changed — ask for the new one</code> and stops reconnecting. They press <b>Leave</b> on that card and join again with the new link; anyone still holding the old one is out. That is the only way to remove someone.</p>
+<p><b>Leave</b> disconnects from the room and forgets its key on your machine. The others keep going.</p>
+
+<h2 id="lan"><span class="n">05</span>Same Wi-Fi instead</h2>
+<p>The older mode is still there, under <b>Same Wi-Fi instead</b> on the same page. It uses no relay: nothing leaves the network.</p>
+<ul>
+<li>Turn on sharing. Your machine announces itself on the local network, and friends see you by name under <b>Nearby</b> and press <b>Connect</b>.</li>
+<li>You get an <b>Allow / Ignore</b> prompt with a four-character code shown on both screens. Allow does the pairing.</li>
+<li>Not found under Nearby (a VPN, a stricter router)? Copy the <b>pair by link</b> string and send it over; the other side pastes it. It carries your LAN address and port <code>3211</code>.</li>
+</ul>
+<div class="aside">Rooms sit beside this mode, not on top of it. Use both if you like.</div>
+
+<h2 id="trust"><span class="n">06</span>Trust</h2>
+<p>The relay sees your IP address and how much you send, never a call or a name, because everything is encrypted with the key in the invite and the relay never gets that key. Joining a room means trusting its relay's operator with that much, and no more.</p>
+<p>Anyone with the invite is in, so treat it like a group password: share it where only the people you want can read it, and rotate it if it gets out.</p>
+<h3>What the operator can and cannot see</h3>
+<p><b>Can see:</b> each member's IP address, its member id (a random value the app made once at install; it is not a name), when it connects, how many messages it sends and how big they are, and how many rooms exist.</p>
+<p><b>Cannot see:</b> any call, token, chat name or display name. Those are inside the ciphertext, and the key stays in the invite. The relay does not learn who is in a room beyond the member ids, and it cannot tell one room's purpose from another's.</p>
+<div class="aside warn"><b>Anyone who gets the invite can join the room and read everything in it.</b> The relay cannot stop that; only rotating the room can.</div>
+
+<h2 id="relay"><span class="n">07</span>What a relay does</h2>
+<p>A relay is the server side of a room. It is a dumb fan-out: it takes each message a member sends and passes it to the room's other members. It only ever carries ciphertext. Every message is encrypted on the sender's machine with the key from the invite, and that key never reaches the relay.</p>
+<p>It is one Node process with no database. Rooms live in memory, plus one JSON file per room on disk if you give it a data directory, so a restart keeps the last day of messages and a friend who joins late still catches up.</p>
+<p>Your invite carries your relay's address; friends configure nothing. Create a room with your relay in the relay field, copy the invite, and everyone who joins with it lands on your relay.</p>
+<p>There is no official relay. The relay field in the create form is empty and remembers the last relay you used; to start a room you host your own or use a friend's. Hosting one is a few commands and means nobody but you sees your circle's traffic. The code is in <a href="https://github.com/frogeth/opentrench/tree/main/relay"><code>relay/</code></a> in the repository. Node 22.</p>
+
+<h2 id="hosting"><span class="n">08</span>Hosting</h2>
+<p>Three routes. Each ends with an address starting <code>wss://</code> that you paste in the relay field when you create a room.</p>
+<h3 id="fly">Fly.io</h3>
+<p>The shipped <code>fly.toml</code> asks for 256 MB in one region and mounts a volume for the room buffers. From a checkout of the repo:</p>
+<pre><code>cd relay
+fly launch --copy-config --yes
+fly volumes create relay_data --size 1
+fly deploy</code></pre>
+<p><code>fly launch</code> picks an app name (or change <code>app</code> in <code>fly.toml</code> first). Your relay's address is then <code>wss://&lt;app&gt;.fly.dev</code>.</p>
+<p>To make it private, set the access code before deploying:</p>
+<pre><code>fly secrets set RELAY_ACCESS_CODE=&lt;something long&gt;</code></pre>
+<p><code>fly.toml</code> already sets <code>RELAY_TRUST_PROXY=1</code>, which Fly needs for the per-IP limits to see real client addresses.</p>
+<h3 id="docker">Docker</h3>
+<pre><code>docker build -t opentrench-relay ./relay
+docker run -d --name relay -p 8080:8080 -v relay-data:/data opentrench-relay</code></pre>
+<p>The image keeps its room files in <code>/data</code>; the named volume keeps them across restarts. Add <code>-e RELAY_ACCESS_CODE=&lt;code&gt;</code> to make it private. The app connects over <code>wss://</code>, so put a TLS proxy in front (the Caddyfile below, pointed at port 8080) and use <code>wss://&lt;your host&gt;</code> as the address.</p>
+<h3 id="caddy">Any Node host behind Caddy</h3>
+<p>Build and run:</p>
+<pre><code>npm ci -w relay
+npm run build -w relay
+PORT=8080 RELAY_DATA_DIR=./data node relay/dist/index.js</code></pre>
+<p>Run it under whatever keeps processes alive on your host (systemd, pm2, a screen session). Then a Caddyfile, complete; Caddy fetches the certificate itself:</p>
+<pre><code>relay.example.com {
+    reverse_proxy 127.0.0.1:8080
+}</code></pre>
+<p><code>caddy run</code> with that file, point the DNS name at the host, and the relay's address is <code>wss://relay.example.com</code>. Behind Caddy or any other proxy that sets <code>x-forwarded-for</code>, start the relay with <code>RELAY_TRUST_PROXY=1</code>.</p>
+<h3 id="access-code">The access code</h3>
+<p>Without a code, anyone who knows your relay's address can create rooms on it. They still cannot read anyone else's room, but they use your machine. Set <code>RELAY_ACCESS_CODE</code> to close that: the relay then refuses every connection that does not carry the code.</p>
+<p>Give the code to your friends alongside the invite. They enter it when they create or join the room (<b>This relay asks for an access code</b> under the join form), or afterwards on the room card, which says <code>relay wants an access code</code> and shows a field for it. The app keeps the code per room, next to that room's key, not per relay.</p>
+<h3 id="check">Checking it works</h3>
+<pre><code>curl https://&lt;host&gt;/</code></pre>
+<p>answers</p>
+<pre><code>{"name":"opentrench-relay","v":1,"rooms":0}</code></pre>
+<p><code>rooms</code> is how many rooms the relay holds right now. The <b>Check</b> button next to the relay field in the create form calls the same address and shows the version and room count. Create and Join do not probe first: a room on a relay that does not answer simply shows <code>offline · retrying · could not reach &lt;host&gt;</code> on its card and keeps retrying.</p>
+
+<h2 id="env"><span class="n">09</span>Environment</h2>
+<table class="env">
+<tr><th>Variable</th><th>Default</th><th>Meaning</th></tr>
+<tr><td><code>PORT</code></td><td><code>8080</code></td><td>Port to listen on (all interfaces).</td></tr>
+<tr><td><code>RELAY_ACCESS_CODE</code></td><td>unset</td><td>When set, only apps that know this code can create or join rooms here. For a relay private to your circle.</td></tr>
+<tr><td><code>RELAY_MAX_ROOMS</code></td><td><code>1000</code></td><td>Rooms the relay will hold at once.</td></tr>
+<tr><td><code>RELAY_MAX_MEMBERS</code></td><td><code>50</code></td><td>Members per room.</td></tr>
+<tr><td><code>RELAY_DATA_DIR</code></td><td>unset</td><td>Directory for one <code>&lt;room&gt;.json</code> per room; unset keeps buffers in memory only, so a restart loses them.</td></tr>
+<tr><td><code>RELAY_BUFFER_HOURS</code></td><td><code>24</code></td><td>How long a room keeps its recent messages for late joiners (also capped at 2000 messages).</td></tr>
+<tr><td><code>RELAY_TRUST_PROXY</code></td><td><code>0</code></td><td><code>1</code> to take the client address from <code>fly-client-ip</code> or the last <code>x-forwarded-for</code> entry for the per-IP limits. Turn it on only behind a proxy that overwrites or appends that header itself (Fly does; the shipped <code>fly.toml</code> sets it). Off, the relay uses the socket address.</td></tr>
+</table>
+<p>Other limits are fixed: a message is at most 64 KB, a member may send 30 messages a second, a room with no member for 7 days is dropped, file included.</p>
+
+<h2 id="updating"><span class="n">10</span>Updating</h2>
+<p>Pull the repo, rebuild, redeploy: <code>fly deploy</code> on Fly, <code>docker build</code> and a new <code>docker run</code> for Docker, <code>npm run build -w relay</code> and a restart on a Node host. Room files on the volume survive.</p>
+<p>Members are told to update only if the protocol version moves. The app then shows <code>this relay needs updating</code> on the room card until you redeploy. A relay newer than an app refuses that app with <code>too-new</code>, so update relays first.</p>
+
+<h2 id="trouble">Troubleshooting</h2>
+<p>The room card shows one of these next to its dot.</p>
+<table class="env">
+<tr><th>It says</th><th>What to do</th></tr>
+<tr><td><code>connecting…</code></td><td>Wait a few seconds. The app retries on its own, 2 s then up to 15 s apart.</td></tr>
+<tr><td><code>connected</code></td><td>All good. The number after it is how many members the relay sees right now.</td></tr>
+<tr><td><code>offline · retrying</code></td><td>The relay is unreachable or your network dropped, and the reason follows. Nothing to do unless it stays that way; then check the relay's address with <code>https://&lt;host&gt;/</code> in a browser.</td></tr>
+<tr><td><code>offline · retrying · could not reach &lt;host&gt;</code></td><td>The address in the invite does not answer. Check it, or ask the person who sent the invite whether the relay is up. A relay that has not been started yet shows this too.</td></tr>
+<tr><td><code>invite changed — ask for the new one</code></td><td>Someone rotated the room. Your key no longer matches and the app stops reconnecting; press <b>Leave</b> and join with the new invite.</td></tr>
+<tr><td><code>this relay needs updating</code></td><td>The relay runs an older protocol than your app. Whoever hosts it has to pull and redeploy (<a href="#updating">Updating</a>).</td></tr>
+<tr><td><code>relay wants an access code</code></td><td>This relay is private. Ask its operator for the code and enter it in the field that appears on the room card.</td></tr>
+<tr><td><code>room is full</code></td><td>The relay's member limit for this room is reached (50 by default). Someone has to leave, or the operator raises <code>RELAY_MAX_MEMBERS</code>.</td></tr>
+<tr><td><code>slow down · retrying</code></td><td>The relay cut the connection for sending too fast (more than 30 messages a second). The app backs off and reconnects on its own.</td></tr>
+</table>
+<div class="aside">Something else? <a href="https://discord.gg/6ByE8fPNN">Ask on Discord</a>, or open an issue on <a href="https://github.com/frogeth/opentrench/issues">GitHub</a>.</div>
+</article></div></main><footer><div class="wrap"><span>opentrench</span><a href="../">Getting started</a><a href="https://github.com/frogeth/opentrench/blob/main/CHANGELOG.md">Changelog</a><a href="https://github.com/frogeth/opentrench">GitHub</a><a href="https://discord.gg/6ByE8fPNN">Discord</a><span style="margin-left:auto">MIT · runs on your machine</span></div></footer>
+<script>
+// one click copies a code block; the button never ends up in the copied text
+const COPY_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
+const DONE_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+document.querySelectorAll('pre').forEach(pre=>{const b=document.createElement('button');b.type='button';b.className='copy';b.innerHTML=COPY_ICON;b.title='Copy';b.setAttribute('aria-label','copy to clipboard');b.onclick=async()=>{const text=(pre.querySelector('code')||pre).innerText.replace(/\n$/,'');try{await navigator.clipboard.writeText(text)}catch{const r=document.createRange();r.selectNodeContents(pre.querySelector('code')||pre);const sel=getSelection();sel.removeAllRanges();sel.addRange(r);document.execCommand('copy');sel.removeAllRanges()}b.innerHTML=DONE_ICON;b.title='Copied';b.classList.add('done');setTimeout(()=>{b.innerHTML=COPY_ICON;b.title='Copy';b.classList.remove('done')},1600)};pre.appendChild(b)});
+const links=[...document.querySelectorAll('.toc a[href^="#"]')];const secs=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){links.forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='#'+e.target.id))}})},{rootMargin:'-20% 0px -70% 0px'});secs.forEach(s=>io.observe(s));
+</script></body></html>
