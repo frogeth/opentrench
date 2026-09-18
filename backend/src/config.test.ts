@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConfigStore, DEFAULT_COLUMNS, sanitizeColumns, sanitizeLayouts } from './config.js';
 import { SecretBox, isSealed } from './secrets.js';
 import { isMemberId, newRoomKey, roomIdOf } from './rooms/crypto.js';
@@ -282,6 +282,7 @@ describe('plugins config', () => {
 });
 
 describe('together rooms', () => {
+  afterEach(() => vi.restoreAllMocks());
   const KEY = Buffer.alloc(32, 9);
   const key = newRoomKey();
   const id = roomIdOf(key);
@@ -383,13 +384,86 @@ describe('together rooms', () => {
     expect(t.rooms[1].joinedAt).toBe(5);
   });
 
-  it('caps the list at 50 rooms', () => {
+  it('caps the list at 50 rooms and says so once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const file = tmpFile();
     const rooms = Array.from({ length: 55 }, (_, i) => {
       const k = newRoomKey();
-      return { id: roomIdOf(k), key: k, relay: 'wss://r', name: `r${i}`, joinedAt: i };
+      return { id: roomIdOf(k), key: k, relay: 'wss://r', name: `r${i}`, joinedAt: i + 1 };
     });
     fs.writeFileSync(file, JSON.stringify({ together: { rooms } }));
     expect(new ConfigStore(file).get().together.rooms).toHaveLength(50);
+    expect(warn.mock.calls.filter(([m]) => String(m).includes('55 rooms'))).toHaveLength(1);
+  });
+
+  it('canonicalises relay URLs with the invite rule and drops what it rejects', () => {
+    const file = tmpFile();
+    const mk = (relay: string) => {
+      const k = newRoomKey();
+      return { id: roomIdOf(k), key: k, relay, name: relay, joinedAt: 1 };
+    };
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        together: {
+          relay: 'WSS://Relay.Example:443/',
+          rooms: [mk('ws://relay.example'), mk('wss://relay.example/v1'), mk('wss://a:b@relay.example'), mk('wss://relay.example?x=1'), mk('WSS://Relay.Example:443/'), mk('ws://LOCALHOST:8787')],
+        },
+      }),
+    );
+    const t = new ConfigStore(file).get().together;
+    expect(t.relay).toBe('wss://relay.example');
+    expect(t.rooms.map((r) => r.relay)).toEqual(['wss://relay.example', 'ws://localhost:8787']);
+    fs.writeFileSync(file, JSON.stringify({ together: { relay: 'ws://relay.example' } }));
+    expect(new ConfigStore(file).get().together.relay).toBe('');
+  });
+
+  it('joinedAt must be a positive integer, else now', () => {
+    const file = tmpFile();
+    const mk = (joinedAt: unknown) => {
+      const k = newRoomKey();
+      return { id: roomIdOf(k), key: k, relay: 'wss://r', name: 'x', joinedAt };
+    };
+    fs.writeFileSync(file, JSON.stringify({ together: { rooms: [mk(0), mk(-5), mk(1.5), mk('7'), mk(7)] } }));
+    const before = Date.now();
+    const got = new ConfigStore(file).get().together.rooms.map((r) => r.joinedAt);
+    expect(got.slice(0, 4).every((j) => j >= before)).toBe(true); // a numeric string is not a number JSON wrote
+    expect(got[4]).toBe(7);
+  });
+
+  it('seals a plain-text room key the moment a keyed store loads it', () => {
+    const file = tmpFile();
+    fs.writeFileSync(file, JSON.stringify({ together: { rooms: [room] } }));
+    const s = new ConfigStore(file, new SecretBox(KEY));
+    expect(s.get().together.rooms[0].key).toBe(key);
+    const disk = JSON.parse(fs.readFileSync(file, 'utf8'));
+    expect(isSealed(disk.together.rooms[0].key)).toBe(true);
+    expect(Object.keys(disk.together.rooms[0]).sort()).toEqual(['id', 'joinedAt', 'key', 'name', 'relay']);
+  });
+
+  it('a locked room is written back byte-identical, and re-joining it replaces the locked copy', () => {
+    const file = tmpFile();
+    new ConfigStore(file, new SecretBox(KEY)).update((c) => c.together.rooms.push({ ...room }));
+    const sealed = JSON.parse(fs.readFileSync(file, 'utf8')).together.rooms[0].key as string;
+    const plain = new ConfigStore(file, new SecretBox());
+    plain.update((c) => c.favorites.push('x'));
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).together.rooms[0].key).toBe(sealed);
+    // the same invite pasted again on this keyless backend: one entry on disk, the readable one
+    plain.update((c) => c.together.rooms.push({ ...room, name: 'again' }));
+    const disk = JSON.parse(fs.readFileSync(file, 'utf8')).together.rooms;
+    expect(disk).toHaveLength(1);
+    expect(disk[0].name).toBe('again');
+    const back = new ConfigStore(file, new SecretBox(KEY)).get().together.rooms;
+    expect(back).toEqual([{ ...room, name: 'again' }]);
+  });
+
+  it('warns once per locked room and does not count it among the other secrets', () => {
+    const file = tmpFile();
+    new ConfigStore(file, new SecretBox(KEY)).update((c) => c.together.rooms.push({ ...room }));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    new ConfigStore(file, new SecretBox());
+    const lines = warn.mock.calls.map(([m]) => String(m));
+    expect(lines.filter((l) => l.includes('degens'))).toHaveLength(1);
+    expect(lines.some((l) => /\d+ secret\(s\)/.test(l))).toBe(false);
   });
 });

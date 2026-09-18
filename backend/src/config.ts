@@ -3,7 +3,7 @@ import { SecretBox, isSealed } from './secrets.js';
 import path from 'node:path';
 import type { BotPolicy } from './types.js';
 import { PLUGIN_ID_RE } from './plugins/manifest.js';
-import { isMemberId, isRoomId, isRoomKey, newMemberId, roomIdOf } from './rooms/crypto.js';
+import { isMemberId, isRoomId, isRoomKey, newMemberId, relayHostOf, relayUrlOf, roomIdOf } from './rooms/crypto.js';
 
 /** One column of the terminal. `chats` are `<source>:<id>` keys of watched chats; empty = every watched chat. */
 export interface ColumnDef {
@@ -181,7 +181,20 @@ export interface Room {
   joinedAt: number;
 }
 export const MAX_ROOMS = 50;
-const RELAY_URL = /^wss?:\/\//i;
+
+/**
+ * A relay URL in the one form invites carry (`wss://host[:port]`, lower-case host, no default
+ * port, `ws://` only to loopback), or undefined with the reason. The same rule as the create
+ * form, so a hand-edited config cannot point a room at a plaintext relay across the internet.
+ */
+function canonicalRelay(v: unknown): { url?: string; error?: string } {
+  if (typeof v !== 'string') return { error: 'not a string' };
+  try {
+    return { url: relayUrlOf(relayHostOf(v.slice(0, 200))) };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
 
 export interface Config {
   /** `send`: the user explicitly enabled composing messages from the app (Discord: after the ToS warning) */
@@ -288,7 +301,8 @@ export class ConfigStore {
       this.save();
       this.plainOnDisk = false;
     }
-    const n = Object.keys(this.locked).length;
+    // locked room keys were each named by loadRooms() already
+    const n = Object.keys(this.locked).filter((k) => !k.startsWith('together.rooms.')).length;
     if (n) console.warn(`[config] ${n} secret(s) in ${this.file} are sealed with a key this backend was not given; they stay on disk but are unavailable`);
   }
   private plainOnDisk = false;
@@ -424,7 +438,12 @@ export class ConfigStore {
             .slice(0, 20),
           rooms: this.loadRooms(raw.together?.rooms),
           memberId: isMemberId(raw.together?.memberId) ? raw.together.memberId : '',
-          relay: typeof raw.together?.relay === 'string' && RELAY_URL.test(raw.together.relay.trim()) ? raw.together.relay.trim().slice(0, 200) : '',
+          relay: (() => {
+            if (raw.together?.relay === undefined || raw.together.relay === '') return '';
+            const { url, error } = canonicalRelay(raw.together.relay);
+            if (!url) console.warn(`[config] ignoring together.relay: ${error}`);
+            return url ?? '';
+          })(),
         },
         plugins: Object.fromEntries(
           Object.entries(raw.plugins && typeof raw.plugins === 'object' && !Array.isArray(raw.plugins) ? raw.plugins : {})
@@ -452,23 +471,25 @@ export class ConfigStore {
    */
   private loadRooms(raw: unknown): Room[] {
     if (!Array.isArray(raw)) return [];
+    if (raw.length > MAX_ROOMS) console.warn(`[config] ${raw.length} rooms on disk; only the first ${MAX_ROOMS} are kept`);
     const out: Room[] = [];
     const seen = new Set<string>();
     for (const r of raw) {
       if (out.length + this.lockedRooms.length >= MAX_ROOMS) break;
       if (!r || typeof r !== 'object') continue;
-      const { id, relay: relayRaw } = r as any;
+      const { id } = r as any;
       // id and relay are checked before the key is read so a bad entry never lands in `locked`
       if (!isRoomId(id) || seen.has(id)) continue;
-      const relay = typeof relayRaw === 'string' ? relayRaw.trim().slice(0, 200) : '';
-      if (!RELAY_URL.test(relay)) {
-        console.warn(`[config] dropping room ${id}: relay must be a ws:// or wss:// URL`);
+      const { url: relay, error } = canonicalRelay((r as any).relay);
+      if (!relay) {
+        console.warn(`[config] dropping room ${id}: ${error}`);
         continue;
       }
       const at: SecretPath = `together.rooms.${id}`;
       const key = this.secret((r as any).key, at);
       const name = String((r as any).name ?? '').trim().slice(0, 40) || 'room';
-      const joinedAt = Number.isFinite(Number((r as any).joinedAt)) ? Number((r as any).joinedAt) : Date.now();
+      const j = (r as any).joinedAt;
+      const joinedAt = Number.isInteger(j) && j > 0 ? (j as number) : Date.now();
       if (key === undefined) {
         if (!this.locked[at]) continue; // no key at all: nothing to join with
         console.warn(`[config] room "${name}" (${id}) is sealed with a key this backend was not given; it stays on disk but is unavailable`);
