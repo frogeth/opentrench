@@ -128,6 +128,29 @@ describe('MessageHub', () => {
     expect(tokensOf(events).at(-1)?.priceUsd).toBe(1.5);
   });
 
+  it('a call of ours on a token that arrived via a friend and was never identified fetches it, once', async () => {
+    const calls: string[] = [];
+    let release: (() => void) | undefined;
+    const hub = new MessageHub(500, async (addr) => {
+      calls.push(addr);
+      await new Promise<void>((r) => (release = r));
+      return { symbol: 'TINDER', network: 'robinhood' };
+    });
+    const now = Date.now();
+    hub.applyRemoteToken('spedly', { chain: 'evm', address: EVM, seen: 1, calledIn: ['Trenches'], calls: [{ author: 'x', chatName: 'Trenches', source: 'telegram', msgId: 't1', ts: now, marketCap: 1 }], firstSeenTs: now, lastCallTs: now, symbol: 'TINDER', network: 'robinhood' } as any);
+    expect(calls).toEqual([]); // came whole: nothing to fetch
+    const bare = hub.getToken(EVM)!;
+    bare.symbol = undefined;
+    bare.network = undefined;
+    hub.push(msg(1, EVM));
+    hub.push(msg(2, EVM));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(calls).toEqual([EVM]); // one fetch in flight covers both calls
+    release?.();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(hub.getToken(EVM)).toMatchObject({ symbol: 'TINDER', network: 'robinhood' });
+  });
+
   it('retries enrichment while the price is missing, then stops', async () => {
     vi.useFakeTimers();
     try {

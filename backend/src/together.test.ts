@@ -66,6 +66,27 @@ describe('hub.applyRemoteToken', () => {
     hub.applyRemoteToken('Moussa', token('0xb', [call('m9', 'Alpha')], { marketCap: 2 }));
     expect(hub.getToken('0xb')!.marketCap).toBe(2);
   });
+  it('a token that arrives without a ticker or chain is identified here, one that arrives whole is not fetched again', async () => {
+    const fetched: string[] = [];
+    const hub = new MessageHub(10, async (addr) => {
+      fetched.push(addr);
+      return { symbol: 'TINDER', name: 'Tinder', network: 'robinhood' };
+    });
+    // the friend shared it the instant the call landed, before their own enrichment answered
+    hub.applyRemoteToken('spedly', token('0xbare', [call('m1', 'Trenches')], { symbol: undefined, network: undefined }));
+    hub.applyRemoteToken('spedly', token('0xwhole', [call('m2', 'Trenches')]));
+    await waitFor(() => hub.getToken('0xbare')?.symbol === 'TINDER');
+    expect(fetched).toEqual(['0xbare']);
+    expect(hub.getToken('0xbare')).toMatchObject({ symbol: 'TINDER', name: 'Tinder', network: 'robinhood', via: 'spedly' });
+  });
+  it('a later share fills a missing ticker or name, never overwriting what this machine found', () => {
+    const hub = new MessageHub(10);
+    hub.applyRemoteToken('spedly', token('0xa', [call('m1', 'Alpha')], { symbol: undefined, name: undefined, twitter: undefined }));
+    expect(hub.getToken('0xa')!.symbol).toBeUndefined();
+    hub.getToken('0xa')!.name = 'Mine';
+    hub.applyRemoteToken('spedly', token('0xa', [call('m1', 'Alpha')], { symbol: 'AAA', name: 'Theirs', twitter: 'https://x.com/aaa' }));
+    expect(hub.getToken('0xa')).toMatchObject({ symbol: 'AAA', name: 'Mine', twitter: 'https://x.com/aaa' });
+  });
   it('never doubles a chat we watch ourselves: same caller in the same chat is one call however it arrives', () => {
     const hub = new MessageHub(10);
     hub.applyRemoteToken('Moussa', token('0xa', [call('m1', 'Alpha', NOW - 60_000, { author: 'alice' }), call('m2', 'Alpha', NOW - 50_000, { author: 'bob' })]));
