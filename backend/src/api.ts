@@ -9,6 +9,8 @@ import type { ConfigStore } from './config.js';
 import { DEFAULT_RELAY } from './rooms/manager.js';
 import { relayHostOf, relayUrlOf } from './rooms/crypto.js';
 import { isLocalHost } from './plugins/hosts.js';
+import { safeDispatcher } from './plugins/shell.js';
+import { fetch as undiciFetch, type Dispatcher } from 'undici';
 import type { MessageHub } from './hub.js';
 import type { Services } from './services.js';
 import { IpfsCache } from './ipfs.js';
@@ -28,13 +30,21 @@ export function __resetOsmintQuoteThrottle(): void {
 /** A relay's `GET /` answer is at most a few dozen bytes; anything bigger is some other server. */
 const PROBE_BODY_MAX = 8 * 1024;
 const PROBE_TIMEOUT_MS = 4000;
+/** Built on the first wss:// probe: connections pinned to addresses the safe lookup cleared (see plugins/shell.ts). */
+let probeAgent: Dispatcher | undefined;
+/** test-only: the dispatcher wss:// probes go through, so a test can watch it (or make it refuse). */
+export function __setProbeDispatcher(d: Dispatcher | undefined): void {
+  probeAgent = d;
+}
 
 /**
  * Asks `url` (the wss:// address the user typed) for the relay's `GET /` card. The same rules as a
  * room's relay: wss:// unless loopback, and nothing else inside the user's network. A relay is on
  * the internet by definition, so a LAN or link-local address here is a URL pointed at a router's
- * admin page or a cloud metadata service, not at a relay. This is a name check; the address a public
- * name resolves to is not pinned, which is enough for a URL the user typed for themselves.
+ * admin page or a cloud metadata service, not at a relay. The name check is the cheap first pass; a
+ * public name that resolves to a local address is caught by the pinned dispatcher, whose lookup
+ * refuses every such answer before a socket is opened. Loopback goes out plain: that lookup refuses
+ * 127.0.0.1, and a relay on this machine is exactly what ws://localhost means.
  */
 export async function probeRelay(url: string): Promise<{ ok: true; v: number; rooms: number } | { ok: false; error: string }> {
   let host: string;
@@ -49,9 +59,12 @@ export async function probeRelay(url: string): Promise<{ ok: true; v: number; ro
   if (ws.startsWith('wss://') && isLocalHost(new URL(http).hostname)) {
     return { ok: false, error: 'a relay is on the internet; that address is inside your network' };
   }
-  let res: globalThis.Response;
+  let res: ProbeResponse;
   try {
-    res = await fetch(http, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS), redirect: 'manual', headers: { accept: 'application/json' } });
+    const init = { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS), redirect: 'manual' as const, headers: { accept: 'application/json' } };
+    // undici's own fetch for the pinned case: the Agent must come from the same undici as the fetch that uses it
+    // the two fetches' Response classes type their body stream from different libraries; the probe reads only this much of either
+    res = (ws.startsWith('wss://') ? await undiciFetch(http, { ...init, dispatcher: (probeAgent ??= safeDispatcher()) }) : await fetch(http, init)) as unknown as ProbeResponse;
   } catch (e: any) {
     const timeout = e?.name === 'TimeoutError' || e?.name === 'AbortError';
     return { ok: false, error: timeout ? `${host} did not answer in ${PROBE_TIMEOUT_MS / 1000} s` : `could not reach ${host}` };
@@ -78,9 +91,12 @@ export async function probeRelay(url: string): Promise<{ ok: true; v: number; ro
   return { ok: true, v: card.v, rooms: card.rooms };
 }
 
+/** What both fetches give back, as much of it as the probe reads (the two Response classes type their stream differently). */
+type ProbeResponse = { ok: boolean; status: number; body: ReadableStream<any> | null };
+
 /** The response body as text, or a throw once it passes `max` bytes (the rest is not read). */
-async function readCapped(res: globalThis.Response, max: number): Promise<string> {
-  const reader = res.body?.getReader();
+async function readCapped(res: ProbeResponse, max: number): Promise<string> {
+  const reader: ReadableStreamDefaultReader<Uint8Array> | undefined = res.body?.getReader();
   if (!reader) return '';
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -247,18 +263,26 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     hasAccess: !!room.access,
     invite: svc.rooms.invite(room.id) ?? '',
   });
-  const togetherInfo = () => ({
-    ...cfg.masked().together,
-    rooms: cfg.get().together.rooms.map(roomView),
-    defaultRelay: DEFAULT_RELAY,
-    pairings: svc.togetherPairings(),
-    status: hub.getStatus().together,
-  });
+  const togetherInfo = () => {
+    const t = cfg.masked().together;
+    return {
+      share: t.share,
+      name: t.name,
+      peers: t.peers,
+      rooms: cfg.get().together.rooms.map(roomView),
+      memberId: t.memberId,
+      relay: t.relay,
+      defaultRelay: DEFAULT_RELAY,
+      pairings: svc.togetherPairings(),
+      status: hub.getStatus().together,
+    };
+  };
   /**
    * Room routes (spec §5). What the manager throws is the user's own mistake, spelled for the screen
    * ("that is not a room invite", "you are not in that room"), so it goes back as a 400 with the
-   * message as-is; wrap's 500 stays for everything else. Mutations need the app's own header, as the
-   * plugin and market routes do: a page in a browser must not be able to join this install to a room.
+   * message as-is (logged all the same, so a real bug is not a silent 400); wrap's 500 stays for
+   * everything else. Mutations need the app's own header, as the plugin routes do: a page in a
+   * browser must not be able to join this install to a room.
    */
   const REQUESTED_WITH = 'opentrench';
   const rooms =
@@ -271,6 +295,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
         const out = await fn(req, res);
         if (!res.headersSent) res.json(out ?? { ok: true });
       } catch (e: any) {
+        console.error('[api]', req.method, req.path, e?.message ?? e);
         if (!res.headersSent) res.status(400).json({ error: e?.message ?? String(e) });
       }
     };

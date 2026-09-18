@@ -4,20 +4,22 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRelay } from 'opentrench-relay/src/relay.js';
-import { createApi } from './api.js';
+import { __setProbeDispatcher, createApi } from './api.js';
 import { ConfigStore } from './config.js';
 import { MessageHub } from './hub.js';
 import { RoomClient, type RoomClientOptions } from './rooms/client.js';
 import { decodeInvite } from './rooms/crypto.js';
 import { DEFAULT_RELAY, RoomsManager } from './rooms/manager.js';
+import { safeDispatcher } from './plugins/shell.js';
 
 const APP = { 'x-requested-with': 'opentrench' } as const;
 const JSON_ = { 'content-type': 'application/json' } as const;
 
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
+  __setProbeDispatcher(undefined);
   while (cleanups.length) await cleanups.pop()!();
 });
 
@@ -110,8 +112,12 @@ describe('rooms API', () => {
 
     // the invite carries the key on purpose (it is the whole secret); a bare `key` field is what must not show
     expect(Object.keys(room).sort()).toEqual(['hasAccess', 'id', 'invite', 'joinedAt', 'name', 'relay']);
+    const stored = cfg.get().together.rooms[0];
+    expect(stored.key).toBe(inv!.key);
+    expect(JSON.stringify({ room, status }).replace(room.invite, '')).not.toContain(stored.key);
     const list = await (await call('GET', '/together', undefined, {})).json();
     expect(list.rooms).toEqual([room]);
+    expect(JSON.stringify(list).replace(room.invite, '')).not.toContain(stored.key);
   });
 
   it('a create with no relay lands on the default one', async () => {
@@ -133,9 +139,18 @@ describe('rooms API', () => {
 
     const joined = await call('POST', '/together/rooms/join', { invite, name: 'friends', access: 'sesame' });
     expect(joined.status).toBe(200);
-    const { room } = await joined.json();
+    const joinedBody = await joined.json();
+    const { room } = joinedBody;
     expect(room).toMatchObject({ name: 'friends', relay: 'wss://relay.example', hasAccess: true, invite });
-    expect(cfg.get().together.rooms[0].access).toBe('sesame');
+    const stored = cfg.get().together.rooms[0];
+    expect(stored.access).toBe('sesame');
+    // neither secret leaves in the response: the access code never, the key only inside the invite
+    const wire = JSON.stringify(joinedBody);
+    expect(wire).not.toContain('sesame');
+    expect(wire.replace(invite, '')).not.toContain(stored.key);
+    const listed = JSON.stringify(await (await call('GET', '/together', undefined, {})).json());
+    expect(listed).not.toContain('sesame');
+    expect(listed.replace(invite, '')).not.toContain(stored.key);
 
     const again = await call('POST', '/together/rooms/join', { invite });
     expect(again.status).toBe(400);
@@ -223,6 +238,24 @@ describe('rooms API', () => {
     expect(bad).toEqual({ ok: false, error: expect.stringMatching(/wss:\/\//) });
     const none = await (await call('GET', '/together/relay/probe', undefined, {})).json();
     expect(none.ok).toBe(false);
+  });
+
+  it('a wss:// probe goes through the pinned dispatcher; a loopback ws:// one does not', async () => {
+    // a dispatcher whose lookup refuses everything: the probe must fail through it, never around it
+    const agent = safeDispatcher((_host, _opts, cb) => cb(new Error('refused by the test lookup')));
+    const dispatch = vi.spyOn(agent, 'dispatch');
+    __setProbeDispatcher(agent);
+    cleanups.push(() => agent.close());
+
+    const remote = await (await call('GET', '/together/relay/probe?url=wss://relay.example', undefined, {})).json();
+    expect(remote).toEqual({ ok: false, error: expect.stringMatching(/could not reach relay\.example/) });
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(String((dispatch.mock.calls[0][0] as { origin?: unknown }).origin)).toBe('https://relay.example');
+
+    const { url } = await startRelay();
+    const local = await (await call('GET', `/together/relay/probe?url=${encodeURIComponent(url)}`, undefined, {})).json();
+    expect(local).toEqual({ ok: true, v: 1, rooms: 0 });
+    expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
   it('probe of a server that is not a relay says so', async () => {
