@@ -26,8 +26,13 @@ export function isMemberId(s: unknown): s is string {
   return typeof s === 'string' && B64URL_22.test(s);
 }
 
+/**
+ * 43 base64url chars carry 258 bits for 256 of key, so the last character has two padding bits.
+ * Only the spelling with those bits at zero is a key; otherwise `…AAA` and `…AAB` would be two
+ * invites (and two config entries) for one room.
+ */
 export function isRoomKey(s: unknown): s is string {
-  return typeof s === 'string' && B64URL_43.test(s);
+  return typeof s === 'string' && B64URL_43.test(s) && Buffer.from(s, 'base64url').toString('base64url') === s;
 }
 
 /** 32 random bytes, base64url: 43 chars, no padding. */
@@ -65,6 +70,7 @@ export function relayHostOf(relay: string): string {
     throw new Error('relay URL has no valid host');
   }
   if (!u.hostname) throw new Error('relay URL has no host');
+  if (u.port === '0') throw new Error('relay URL port must not be 0');
   if (u.username || u.password) throw new Error('relay URL must not carry credentials');
   if (u.search || u.hash) throw new Error('relay URL must not carry a query or fragment');
   if (u.pathname !== '/' && u.pathname !== '') {
@@ -79,7 +85,9 @@ export function relayHostOf(relay: string): string {
 
 /** `host[:port]` → `wss://host[:port]`; loopback hosts get `ws://` because a local relay has no TLS. */
 export function relayUrlOf(host: string): string {
-  const name = host.startsWith('[') ? host.slice(0, host.indexOf(']') + 1) : host.split(':')[0];
+  const close = host.indexOf(']');
+  // A bracketed IPv6 literal keeps its colons; an unmatched `[` is just not loopback, never a throw.
+  const name = host.startsWith('[') ? (close === -1 ? host : host.slice(0, close + 1)) : host.split(':')[0];
   return (LOOPBACK.has(name) ? 'ws://' : 'wss://') + host;
 }
 
@@ -92,17 +100,21 @@ const INVITE = /^opentrench:\/\/room\/([^/]+)\/([A-Za-z0-9_-]{43})$/;
 /**
  * Parses an invite pasted from anywhere. Undefined for anything malformed: the caller shows
  * "not an invite" rather than a stack trace, and a link from a chat is never trusted to throw.
+ * The host is canonicalised (lower case, punycode, default port dropped) rather than compared,
+ * so `Relay.Example.COM` and `relay.example.com:443` are the same relay the invite meant.
  */
 export function decodeInvite(s: string): { relay: string; key: string; id: string } | undefined {
   if (typeof s !== 'string') return undefined;
   const m = INVITE.exec(s.trim());
   if (!m) return undefined;
   const [, host, key] = m;
+  if (!isRoomKey(key)) return undefined;
   let relay: string;
   try {
-    // Round-tripping through relayHostOf validates the host the same way the create form does.
-    relay = relayUrlOf(host);
-    if (relayHostOf(relay) !== host) return undefined;
+    // relayHostOf applies the same validation the create form gets; relayUrlOf on the canonical
+    // host picks ws:// for loopback regardless of how the invite spelled it.
+    const canon = relayHostOf(relayUrlOf(host));
+    relay = relayUrlOf(canon);
   } catch {
     return undefined;
   }
@@ -111,6 +123,9 @@ export function decodeInvite(s: string): { relay: string; key: string; id: strin
 
 /** JSON → base64url(nonce ‖ ciphertext ‖ tag) under AES-256-GCM with the room id as AAD. */
 export function seal(key: string, id: string, plain: unknown): string {
+  if (!isRoomKey(key)) throw new Error('bad room key');
+  // JSON.stringify(undefined) is undefined, which would encrypt the string "undefined" and fail to parse on the far side.
+  if (plain === undefined) throw new Error('cannot seal undefined');
   const nonce = crypto.randomBytes(NONCE_BYTES);
   const c = crypto.createCipheriv('aes-256-gcm', Buffer.from(key, 'base64url'), nonce);
   c.setAAD(Buffer.from(id, 'utf8'));
@@ -124,7 +139,10 @@ export function open(key: string, id: string, body: string): unknown | undefined
   try {
     const raw = Buffer.from(body, 'base64url');
     if (raw.length < NONCE_BYTES + TAG_BYTES) return undefined;
-    const d = crypto.createDecipheriv('aes-256-gcm', Buffer.from(key, 'base64url'), raw.subarray(0, NONCE_BYTES));
+    // authTagLength makes OpenSSL reject a tag of any other length rather than silently accepting a shorter one.
+    const d = crypto.createDecipheriv('aes-256-gcm', Buffer.from(key, 'base64url'), raw.subarray(0, NONCE_BYTES), {
+      authTagLength: TAG_BYTES,
+    });
     d.setAAD(Buffer.from(id, 'utf8'));
     d.setAuthTag(raw.subarray(raw.length - TAG_BYTES));
     const plain = Buffer.concat([d.update(raw.subarray(NONCE_BYTES, raw.length - TAG_BYTES)), d.final()]);

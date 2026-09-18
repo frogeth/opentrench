@@ -52,9 +52,20 @@ describe('keys and ids', () => {
     expect(isMemberId(undefined)).toBe(false);
     expect(isMemberId(22)).toBe(false);
     expect(isRoomKey('a'.repeat(42))).toBe(false);
-    expect(isRoomKey('a'.repeat(43))).toBe(true);
+    expect(isRoomKey('a'.repeat(42) + 'A')).toBe(true); // canonical: last char's padding bits are zero
     expect(isRoomKey('a'.repeat(43) + '=')).toBe(false);
     expect(isRoomKey(null)).toBe(false);
+  });
+  it('isRoomKey accepts only the canonical spelling of the key', () => {
+    // 43 base64url chars carry 258 bits; the last char's low two bits are padding and must be zero,
+    // otherwise …AAA / …AAB / …AAC / …AAD are four spellings of the same 32 bytes.
+    const stem = newRoomKey().slice(0, 42);
+    expect(isRoomKey(stem + 'A')).toBe(true);
+    expect(isRoomKey(stem + 'B')).toBe(false);
+    expect(isRoomKey(stem + 'C')).toBe(false);
+    expect(isRoomKey(stem + 'D')).toBe(false);
+    expect(isRoomKey(stem + 'E')).toBe(true);
+    for (let i = 0; i < 20; i++) expect(isRoomKey(newRoomKey())).toBe(true);
   });
 });
 
@@ -75,6 +86,16 @@ describe('relay host and url', () => {
     expect(() => relayHostOf('relay.example.com')).toThrow(/wss:\/\//);
     expect(() => relayHostOf('wss://x?y=1')).toThrow();
     expect(() => relayHostOf('wss://user:pw@x')).toThrow();
+    expect(() => relayHostOf('wss://x:0')).toThrow(/port/);
+    expect(() => relayHostOf('ws://not-local.example:8090')).toThrow(/localhost/);
+  });
+  it('relayHostOf canonicalises the host: lower case, punycode, default port dropped', () => {
+    expect(relayHostOf('wss://Relay.Example.COM')).toBe('relay.example.com');
+    expect(relayHostOf('ws://LOCALHOST:8090')).toBe('localhost:8090');
+    expect(relayHostOf('wss://bücher.example')).toBe('xn--bcher-kva.example');
+    expect(relayHostOf('wss://relay.example.com:443')).toBe('relay.example.com');
+    expect(relayHostOf('wss://[2001:db8::1]:443')).toBe('[2001:db8::1]');
+    expect(relayHostOf('wss://[2001:DB8::1]:8443')).toBe('[2001:db8::1]:8443');
   });
   it('relayUrlOf is the inverse, with loopback hosts on plain ws', () => {
     expect(relayUrlOf('relay.example.com')).toBe('wss://relay.example.com');
@@ -83,6 +104,8 @@ describe('relay host and url', () => {
     expect(relayUrlOf('localhost:8090')).toBe('ws://localhost:8090');
     expect(relayUrlOf('127.0.0.1:8090')).toBe('ws://127.0.0.1:8090');
     expect(relayUrlOf('[::1]:8090')).toBe('ws://[::1]:8090');
+    expect(relayUrlOf('[2001:db8::1]:8443')).toBe('wss://[2001:db8::1]:8443');
+    expect(relayUrlOf('[broken')).toBe('wss://[broken'); // unmatched bracket: not loopback, no throw
   });
 });
 
@@ -102,6 +125,28 @@ describe('invites', () => {
     const invite = encodeInvite({ relay: 'wss://relay.example.com', key });
     expect(decodeInvite(`  \n${invite}\t `)).toEqual({ relay: 'wss://relay.example.com', key, id: roomIdOf(key) });
   });
+  it('canonicalises a non-canonical host instead of rejecting it', () => {
+    expect(decodeInvite(`opentrench://room/Relay.Example.COM/${key}`)).toEqual({
+      relay: 'wss://relay.example.com', key, id: roomIdOf(key),
+    });
+    expect(decodeInvite(`opentrench://room/LOCALHOST:8090/${key}`)).toEqual({
+      relay: 'ws://localhost:8090', key, id: roomIdOf(key),
+    });
+    expect(decodeInvite(`opentrench://room/bücher.example/${key}`)).toEqual({
+      relay: 'wss://xn--bcher-kva.example', key, id: roomIdOf(key),
+    });
+    expect(decodeInvite(`opentrench://room/relay.example.com:443/${key}`)).toEqual({
+      relay: 'wss://relay.example.com', key, id: roomIdOf(key),
+    });
+    expect(decodeInvite(`opentrench://room/[2001:db8::1]:443/${key}`)).toEqual({
+      relay: 'wss://[2001:db8::1]', key, id: roomIdOf(key),
+    });
+  });
+  it('rejects a non-canonical key spelling', () => {
+    const stem = key.slice(0, 42);
+    expect(decodeInvite(`opentrench://room/relay.example.com/${stem}A`)).toBeDefined();
+    expect(decodeInvite(`opentrench://room/relay.example.com/${stem}B`)).toBeUndefined();
+  });
   it('rejects malformed invites without throwing', () => {
     expect(decodeInvite(`https://room/relay.example.com/${key}`)).toBeUndefined(); // wrong scheme
     expect(decodeInvite(`opentrench://rooms/relay.example.com/${key}`)).toBeUndefined(); // wrong kind
@@ -112,6 +157,8 @@ describe('invites', () => {
     expect(decodeInvite(`opentrench://room/relay.example.com/${key}/extra`)).toBeUndefined(); // extra segment
     expect(decodeInvite(`opentrench://room/http://relay.example.com/${key}`)).toBeUndefined(); // scheme inside
     expect(decodeInvite(`opentrench://room//${key}`)).toBeUndefined(); // no host
+    expect(decodeInvite(`opentrench://room/relay.example.com:0/${key}`)).toBeUndefined(); // port 0
+    expect(decodeInvite(`opentrench://room/user:pw@relay.example.com/${key}`)).toBeUndefined(); // credentials
     expect(decodeInvite('')).toBeUndefined();
     expect(decodeInvite('not an invite')).toBeUndefined();
   });
@@ -141,6 +188,16 @@ describe('envelopes', () => {
     raw[20] ^= 0x01; // inside the ciphertext, past the 12-byte nonce
     expect(open(key, id, raw.toString('base64url'))).toBeUndefined();
   });
+  it('rejects a tampered tag byte', () => {
+    const raw = Buffer.from(seal(key, id, plain), 'base64url');
+    raw[raw.length - 1] ^= 0x01;
+    expect(open(key, id, raw.toString('base64url'))).toBeUndefined();
+  });
+  it('rejects a tampered nonce byte', () => {
+    const raw = Buffer.from(seal(key, id, plain), 'base64url');
+    raw[0] ^= 0x01;
+    expect(open(key, id, raw.toString('base64url'))).toBeUndefined();
+  });
   it('rejects the wrong room id (AAD)', () => {
     const body = seal(key, id, plain);
     expect(open(key, roomIdOf(newRoomKey()), body)).toBeUndefined();
@@ -158,7 +215,15 @@ describe('envelopes', () => {
   it('rejects junk without throwing', () => {
     expect(open(key, id, '***not base64***')).toBeUndefined();
     expect(open('short-key', id, seal(key, id, plain))).toBeUndefined();
+    expect(open(key.slice(0, 42), id, seal(key, id, plain))).toBeUndefined(); // wrong-length key
+    expect(open(key + 'A', id, seal(key, id, plain))).toBeUndefined();
     expect(open(key, id, 12 as unknown as string)).toBeUndefined();
+  });
+  it('seal throws a readable error on a bad key or an undefined payload', () => {
+    expect(() => seal('short-key', id, plain)).toThrow(/room key/);
+    expect(() => seal(key.slice(0, 42), id, plain)).toThrow(/room key/);
+    expect(() => seal(key, id, undefined)).toThrow(/undefined/);
+    expect(() => seal(key, id, null)).not.toThrow();
   });
   it('rejects a body that authenticates but is not JSON', () => {
     // Build a valid envelope around non-JSON by hand: same layout, same key, same AAD.
