@@ -40,6 +40,12 @@ export type RelayOptions = {
   msgPerSec?: number;
   msgBurst?: number;
   helloPerMin?: number;
+  /**
+   * Take the client address from `fly-client-ip` or the last `x-forwarded-for`
+   * entry instead of the socket. Only behind a proxy that sets those itself
+   * (Fly does); otherwise a client picks its own address and the hello limiter is moot.
+   */
+  trustProxy?: boolean;
   /** Clock, injectable for tests. */
   now?: () => number;
   log?: (m: string) => void;
@@ -62,6 +68,9 @@ type Room = {
   lastSeen: number;
   buckets: Map<string, Bucket>;
   saveTimer?: NodeJS.Timeout;
+  /** A write is on its way to disk; `dirty` says whether another is owed after it. */
+  saving: boolean;
+  dirty: boolean;
 };
 
 const ID_RE = /^[A-Za-z0-9_-]{22}$/;
@@ -69,6 +78,11 @@ const BODY_RE = /^[A-Za-z0-9_-]+$/;
 const SWEEP_MS = 10 * 60_000;
 const SAVE_DEBOUNCE_MS = 2000;
 const HELLO_TIMEOUT_MS = 10_000;
+const HELLO_WINDOW_MS = 60_000;
+/** Distinct IPs the hello limiter remembers before it forgets the oldest. */
+const HELLO_IPS_MAX = 10_000;
+/** A member bucket nobody has drawn on for this long is full again anyway. */
+const BUCKET_IDLE_MS = 60_000;
 
 export function createRelay(opts: RelayOptions = {}): Relay {
   const maxRooms = opts.maxRooms ?? 1000;
@@ -80,6 +94,7 @@ export function createRelay(opts: RelayOptions = {}): Relay {
   const msgPerSec = opts.msgPerSec ?? 30;
   const msgBurst = opts.msgBurst ?? 60;
   const helloPerMin = opts.helloPerMin ?? 10;
+  const trustProxy = opts.trustProxy ?? false;
   const now = opts.now ?? Date.now;
   const log = opts.log ?? (() => {});
   // Compared as digests: equal lengths for timingSafeEqual whatever the client sends.
@@ -87,8 +102,11 @@ export function createRelay(opts: RelayOptions = {}): Relay {
   const accessCode = opts.accessCode ? digest(opts.accessCode) : undefined;
 
   const rooms = new Map<string, Room>();
-  const helloBuckets = new Map<string, Bucket>();
+  /** Per IP, the times of its hellos in the last minute, oldest first. */
+  const hellos = new Map<string, number[]>();
   const sockets = new Set<WebSocket>();
+  /** Told to go; frames that were already in flight from it are ignored. */
+  const dead = new WeakSet<WebSocket>();
   const wss = new WebSocketServer({ noServer: true, maxPayload: maxMessageBytes * 2 });
 
   // --- token buckets ---------------------------------------------------------
@@ -107,33 +125,67 @@ export function createRelay(opts: RelayOptions = {}): Relay {
     if (!b) map.set(key, (b = { tokens: burst, last: now() }));
     return b;
   };
+  // Hellos are a strict count per rolling minute: no burst on top, since a
+  // reconnecting app needs one per room and an attacker gets nothing extra.
+  const helloAllowed = (ip: string): boolean => {
+    const t = now();
+    let times = hellos.get(ip);
+    if (!times) {
+      if (hellos.size >= HELLO_IPS_MAX) hellos.delete(hellos.keys().next().value!); // oldest inserted
+      hellos.set(ip, (times = []));
+    }
+    while (times.length && t - times[0]! >= HELLO_WINDOW_MS) times.shift();
+    if (times.length >= helloPerMin) return false;
+    times.push(t);
+    return true;
+  };
 
   // --- persistence -----------------------------------------------------------
   const fileFor = (id: string) => path.join(opts.dataDir!, `${id}.json`);
-  const writeRoom = (room: Room) => {
-    if (!opts.dataDir) return;
+  const snapshot = (room: Room) => JSON.stringify({ buffer: room.buffer, lastSeen: room.lastSeen });
+  // Buffers are written off the event loop; one write in flight per room and a
+  // `dirty` flag so changes during the write get their own, later write. The
+  // tmp-then-rename keeps a crash mid-write from leaving a half file.
+  const writeRoom = async (room: Room) => {
+    room.saving = true;
+    room.dirty = false;
     const file = fileFor(room.id);
     try {
-      // Write-then-rename so a crash mid-write never leaves a half file to be skipped as corrupt.
-      fs.writeFileSync(file + '.tmp', JSON.stringify({ buffer: room.buffer, lastSeen: room.lastSeen }));
-      fs.renameSync(file + '.tmp', file);
+      await fs.promises.writeFile(file + '.tmp', snapshot(room));
+      await fs.promises.rename(file + '.tmp', file);
     } catch (e) {
       log(`relay: could not write ${file}: ${(e as Error).message}`);
+    } finally {
+      room.saving = false;
+      if (!rooms.has(room.id)) fs.rmSync(file, { force: true }); // dropped while writing
+      else if (room.dirty) scheduleSave(room);
     }
   };
   const scheduleSave = (room: Room) => {
-    if (!opts.dataDir || room.saveTimer) return;
+    if (!opts.dataDir) return;
+    room.dirty = true;
+    if (room.saveTimer || room.saving) return;
     room.saveTimer = setTimeout(() => {
       room.saveTimer = undefined;
-      writeRoom(room);
+      void writeRoom(room);
     }, SAVE_DEBOUNCE_MS);
     room.saveTimer.unref();
   };
+  // Synchronous, for the way out: the process will not wait for a promise.
+  // Sharing the tmp name with the async path means whichever rename lands
+  // last wins with the newest content, and the loser only logs an ENOENT.
   const flushSave = (room: Room) => {
-    if (!room.saveTimer) return;
-    clearTimeout(room.saveTimer);
+    if (room.saveTimer) clearTimeout(room.saveTimer);
     room.saveTimer = undefined;
-    writeRoom(room);
+    if (!room.dirty && !room.saving) return;
+    const file = fileFor(room.id);
+    try {
+      fs.writeFileSync(file + '.tmp', snapshot(room));
+      fs.renameSync(file + '.tmp', file);
+      room.dirty = false;
+    } catch (e) {
+      log(`relay: could not write ${file}: ${(e as Error).message}`);
+    }
   };
   const load = () => {
     if (!opts.dataDir) return;
@@ -147,13 +199,14 @@ export function createRelay(opts: RelayOptions = {}): Relay {
         const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as { buffer?: unknown; lastSeen?: unknown };
         if (!Array.isArray(raw.buffer) || typeof raw.lastSeen !== 'number') throw new Error('unexpected shape');
         const buffer = raw.buffer.filter((m): m is Buffered => !!m && typeof m === 'object' && ID_RE.test((m as Buffered).from) && BODY_RE.test((m as Buffered).body) && typeof (m as Buffered).ts === 'number');
-        rooms.set(id, { id, members: new Map(), buffer, lastSeen: raw.lastSeen, buckets: new Map() });
+        const room: Room = { id, members: new Map(), buffer, lastSeen: raw.lastSeen, buckets: new Map(), saving: false, dirty: false };
+        trim(room);
+        rooms.set(id, room);
       } catch (e) {
         log(`relay: skipping corrupt room file ${file}: ${(e as Error).message}`);
       }
     }
   };
-  load();
 
   // --- rooms -----------------------------------------------------------------
   const trim = (room: Room) => {
@@ -163,6 +216,7 @@ export function createRelay(opts: RelayOptions = {}): Relay {
     if (room.buffer.length - drop > bufferMax) drop = room.buffer.length - bufferMax;
     if (drop) room.buffer.splice(0, drop);
   };
+  load();
   const memberIds = (room: Room) => [...room.members.keys()];
   const send = (ws: WebSocket, frame: unknown) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(frame));
@@ -172,20 +226,27 @@ export function createRelay(opts: RelayOptions = {}): Relay {
     for (const set of room.members.values()) for (const ws of set) if (ws !== except && ws.readyState === WebSocket.OPEN) ws.send(text);
   };
   const fail = (ws: WebSocket, code: ErrorCode) => {
+    dead.add(ws);
     send(ws, { t: 'error', code });
     ws.close(CLOSE_CODES[code]);
   };
   const dropRoom = (room: Room) => {
     if (room.saveTimer) clearTimeout(room.saveTimer);
     room.saveTimer = undefined;
+    room.dirty = false;
     rooms.delete(room.id);
     if (opts.dataDir) fs.rmSync(fileFor(room.id), { force: true });
   };
   const sweep = () => {
     const t = now();
-    for (const room of rooms.values()) if (room.members.size === 0 && t - room.lastSeen > idleMs) dropRoom(room);
-    // hello buckets for IPs we have not seen in a while are dead weight
-    for (const [ip, b] of helloBuckets) if (t - b.last > 60_000) helloBuckets.delete(ip);
+    for (const room of rooms.values()) {
+      if (room.members.size === 0 && t - room.lastSeen > idleMs) {
+        dropRoom(room);
+        continue;
+      }
+      for (const [member, b] of room.buckets) if (t - b.last > BUCKET_IDLE_MS) room.buckets.delete(member);
+    }
+    for (const [ip, times] of hellos) if (!times.length || t - times[times.length - 1]! >= HELLO_WINDOW_MS) hellos.delete(ip);
   };
   const sweeper = setInterval(sweep, SWEEP_MS);
   sweeper.unref();
@@ -195,8 +256,8 @@ export function createRelay(opts: RelayOptions = {}): Relay {
     if (!set) return;
     set.delete(ws);
     if (set.size) return; // another device of the same member is still here
+    // the member's bucket stays: leaving and coming back is not a fresh burst
     room.members.delete(member);
-    room.buckets.delete(member);
     room.lastSeen = now();
     scheduleSave(room);
     broadcast(room, { t: 'presence', members: memberIds(room) });
@@ -225,14 +286,14 @@ export function createRelay(opts: RelayOptions = {}): Relay {
     helloTimer.unref();
 
     const onHello = (raw: unknown) => {
-      if (!take(bucketIn(helloBuckets, ip, helloPerMin), helloPerMin / 60, helloPerMin)) return fail(ws, 'rate');
+      if (!helloAllowed(ip)) return fail(ws, 'rate');
       const hello = parseHello(raw);
       if (typeof hello === 'string') return fail(ws, hello);
       if (!accessOk(hello.access)) return fail(ws, 'access');
       let r = rooms.get(hello.room);
       if (!r) {
         if (rooms.size >= maxRooms) return fail(ws, 'full');
-        r = { id: hello.room, members: new Map(), buffer: [], lastSeen: now(), buckets: new Map() };
+        r = { id: hello.room, members: new Map(), buffer: [], lastSeen: now(), buckets: new Map(), saving: false, dirty: false };
         rooms.set(r.id, r);
       }
       let set = r.members.get(hello.member);
@@ -266,6 +327,7 @@ export function createRelay(opts: RelayOptions = {}): Relay {
     };
 
     ws.on('message', (data, isBinary) => {
+      if (dead.has(ws)) return;
       if (isBinary) return fail(ws, 'bad');
       const text = data.toString();
       if (Buffer.byteLength(text) > maxMessageBytes) return fail(ws, 'bad');
@@ -288,17 +350,30 @@ export function createRelay(opts: RelayOptions = {}): Relay {
 
   // --- http ------------------------------------------------------------------
   const json = (res: http.ServerResponse, status: number, body: unknown) => {
-    res.writeHead(status, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
+    res.writeHead(status, { 'content-type': 'application/json' });
     res.end(JSON.stringify(body));
   };
-  const clientIp = (req: http.IncomingMessage): string => {
-    // Behind Fly's (or any) proxy the socket address is the proxy; the first
-    // x-forwarded-for entry is the client. Without a proxy the header is absent.
-    const fwd = req.headers['x-forwarded-for'];
-    const first = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(',')[0]?.trim();
-    return first || req.socket.remoteAddress || 'unknown';
+  const header = (req: http.IncomingMessage, name: string): string | undefined => {
+    const v = req.headers[name];
+    return Array.isArray(v) ? v[0] : v;
   };
-  const pathOf = (req: http.IncomingMessage) => new URL(req.url ?? '/', 'http://relay').pathname;
+  const clientIp = (req: http.IncomingMessage): string => {
+    const own = req.socket.remoteAddress || 'unknown';
+    if (!trustProxy) return own;
+    // Fly sets fly-client-ip itself. In x-forwarded-for only the LAST entry is
+    // the proxy's own observation; the earlier ones are whatever the client sent.
+    const fly = header(req, 'fly-client-ip')?.trim();
+    if (fly) return fly;
+    const last = header(req, 'x-forwarded-for')?.split(',').pop()?.trim();
+    return last || own;
+  };
+  // Only origin-form targets ("/path?query") can be ours. Absolute-form and
+  // other shapes (which `new URL` would throw on) match nothing, so they fall
+  // through to the 404 / socket close below instead of taking the process down.
+  const pathOf = (req: http.IncomingMessage): string => {
+    const u = req.url ?? '';
+    return u.startsWith('/') ? u.split('?', 1)[0]! : '';
+  };
 
   const attach = (server: http.Server) => {
     server.on('request', (req, res) => {

@@ -1,10 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
+import { readEnv } from './env.js';
 import { CLOSE_CODES, createRelay, type Relay, type RelayOptions } from './relay.js';
 
 const id = () => randomBytes(16).toString('base64url'); // 22 chars, same shape the app uses
@@ -27,13 +29,18 @@ type Harness = {
   port: number;
   relay: Relay;
   server: http.Server;
-  connect: (room: string, member: string, access?: string, hello?: Frame) => Promise<Client>;
+  connect: (room: string, member: string, access?: string, hello?: Frame, headers?: Record<string, string>) => Promise<Client>;
   /** Raw socket, nothing sent yet. */
-  open: () => Promise<Client>;
+  open: (headers?: Record<string, string>) => Promise<Client>;
   stop: () => Promise<void>;
 };
 
 const harnesses: Harness[] = [];
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** A member already in the room hears each body in turn: proves the relay has processed them, in that order. */
+const hears = async (c: Client, bodies: string[]) => {
+  for (const body of bodies) expect((await c.next()).body).toBe(body);
+};
 afterEach(async () => {
   vi.useRealTimers();
   while (harnesses.length) await harnesses.pop()!.stop();
@@ -46,9 +53,9 @@ async function start(opts: RelayOptions = {}): Promise<Harness> {
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const port = (server.address() as { port: number }).port;
   const clients: Client[] = [];
-  const open = () =>
+  const open = (headers: Record<string, string> = {}) =>
     new Promise<Client>((resolve, reject) => {
-      const ws = new WebSocket(`ws://127.0.0.1:${port}/v1`);
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/v1`, { headers });
       const queue: Frame[] = [];
       const waiters: ((f: Frame) => void)[] = [];
       ws.on('message', (d) => {
@@ -75,8 +82,8 @@ async function start(opts: RelayOptions = {}): Promise<Harness> {
         resolve(c);
       });
     });
-  const connect = async (room: string, member: string, access?: string, hello: Frame = {}) => {
-    const c = await open();
+  const connect = async (room: string, member: string, access?: string, hello: Frame = {}, headers?: Record<string, string>) => {
+    const c = await open(headers);
     c.send({ t: 'hello', v: 1, room, member, ...(access !== undefined ? { access } : {}), ...hello });
     return c;
   };
@@ -123,6 +130,17 @@ describe('hello and welcome', () => {
     const junk = await h.open();
     junk.ws.send('{nope');
     expect(await junk.next()).toEqual({ t: 'error', code: 'bad' });
+    expect(h.relay.rooms()).toBe(0);
+  });
+
+  it('ignores frames after a rejected hello: a good hello on the same socket makes no room', async () => {
+    const h = await start();
+    const c = await h.open();
+    c.send({ t: 'hello', v: 0, room: ROOM, member: A });
+    c.send({ t: 'hello', v: 1, room: ROOM, member: A });
+    expect(await c.next()).toEqual({ t: 'error', code: 'too-old' });
+    expect(await c.closed).toBe(CLOSE_CODES['too-old']);
+    await expect(c.next(100)).rejects.toThrow(/no frame/);
     expect(h.relay.rooms()).toBe(0);
   });
 
@@ -179,14 +197,16 @@ describe('messages', () => {
     const h = await start();
     const a = await h.connect(ROOM, A);
     await a.next();
+    const c = await h.connect(ROOM, C);
+    await c.next();
+    await a.next(); // presence
     a.send({ t: 'msg', body: 'one' });
     a.send({ t: 'msg', body: 'two' });
     a.send({ t: 'msg', body: 'three' });
-    // wait for the relay to have seen them: a second member echoing back proves ordering
-    await new Promise((r) => setTimeout(r, 50));
+    await hears(c, ['one', 'two', 'three']);
     const b = await h.connect(ROOM, B);
     const w = await b.next();
-    expect(w.members).toEqual([A]);
+    expect(w.members).toEqual([A, C]);
     expect(w.buffer.map((m: Frame) => m.body)).toEqual(['one', 'two', 'three']);
     expect(w.buffer.every((m: Frame) => m.from === A && typeof m.ts === 'number')).toBe(true);
   });
@@ -195,8 +215,11 @@ describe('messages', () => {
     const h = await start({ bufferMax: 2 });
     const a = await h.connect(ROOM, A);
     await a.next();
+    const c = await h.connect(ROOM, C);
+    await c.next();
+    await a.next();
     for (const body of ['one', 'two', 'three']) a.send({ t: 'msg', body });
-    await new Promise((r) => setTimeout(r, 50));
+    await hears(c, ['one', 'two', 'three']);
     const b = await h.connect(ROOM, B);
     expect((await b.next()).buffer.map((m: Frame) => m.body)).toEqual(['two', 'three']);
   });
@@ -206,11 +229,14 @@ describe('messages', () => {
     const h = await start({ bufferHours: 1, now: () => now });
     const a = await h.connect(ROOM, A);
     await a.next();
+    const c = await h.connect(ROOM, C);
+    await c.next();
+    await a.next();
     a.send({ t: 'msg', body: 'old' });
-    await new Promise((r) => setTimeout(r, 50));
+    await hears(c, ['old']);
     now += 30 * 60_000;
     a.send({ t: 'msg', body: 'fresh' });
-    await new Promise((r) => setTimeout(r, 50));
+    await hears(c, ['fresh']);
     now += 45 * 60_000; // 'old' is now 75 min old, 'fresh' 45
     const b = await h.connect(ROOM, B);
     expect((await b.next()).buffer.map((m: Frame) => m.body)).toEqual(['fresh']);
@@ -233,7 +259,7 @@ describe('messages', () => {
     expect(await a.closed).toBe(CLOSE_CODES.bad);
   });
 
-  it('rate-limits a member with a token bucket', async () => {
+  it('rate-limits a member with a token bucket that survives a reconnect', async () => {
     let now = 5_000_000;
     const h = await start({ msgPerSec: 1, msgBurst: 2, now: () => now });
     const a = await h.connect(ROOM, A);
@@ -243,19 +269,26 @@ describe('messages', () => {
     await a.next(); // presence
     a.send({ t: 'msg', body: 'x1' });
     a.send({ t: 'msg', body: 'x2' });
-    expect((await b.next()).body).toBe('x1');
-    expect((await b.next()).body).toBe('x2');
+    await hears(b, ['x1', 'x2']);
     a.send({ t: 'msg', body: 'x3' });
     expect(await a.next()).toEqual({ t: 'error', code: 'rate' });
     expect(await a.closed).toBe(CLOSE_CODES.rate);
-    // a second later the bucket has a token again
+    expect((await b.next()).t).toBe('presence');
+    // reconnecting at once does not hand out a fresh burst: the bucket lives in the room
+    const again = await h.connect(ROOM, A);
+    await again.next();
+    expect((await b.next()).t).toBe('presence');
+    again.send({ t: 'msg', body: 'x4' });
+    expect(await again.next()).toEqual({ t: 'error', code: 'rate' });
+    await again.closed;
+    expect((await b.next()).t).toBe('presence');
+    // a second later one token has refilled
     now += 1000;
-    const a2 = await h.connect(ROOM, A);
-    await a2.next();
-    a2.send({ t: 'msg', body: 'x4' });
-    // b hears A leave/rejoin presence, then the message
-    const frames = [await b.next(), await b.next(), await b.next()];
-    expect(frames.find((f) => f.t === 'msg')?.body).toBe('x4');
+    const later = await h.connect(ROOM, A);
+    await later.next();
+    expect((await b.next()).t).toBe('presence');
+    later.send({ t: 'msg', body: 'x5' });
+    expect((await b.next()).body).toBe('x5');
   });
 });
 
@@ -306,21 +339,52 @@ describe('limits', () => {
     expect((await again.next()).t).toBe('welcome');
   });
 
-  it('limits hellos per IP', async () => {
-    const h = await start({ helloPerMin: 2 });
+  it('limits hellos to helloPerMin per rolling minute per IP', async () => {
+    let now = 7_000_000;
+    const h = await start({ helloPerMin: 2, now: () => now });
     const a = await h.connect(ROOM, A);
     expect((await a.next()).t).toBe('welcome');
+    now += 30_000;
     const b = await h.connect(ROOM, B);
     expect((await b.next()).t).toBe('welcome');
     const c = await h.connect(ROOM, C);
     expect(await c.next()).toEqual({ t: 'error', code: 'rate' });
     expect(await c.closed).toBe(CLOSE_CODES.rate);
+    now += 30_001; // the first hello has left the window, one slot is free again
+    const d = await h.connect(ROOM, C);
+    expect((await d.next()).t).toBe('welcome');
+    const e = await h.connect(ROOM, id());
+    expect(await e.next()).toEqual({ t: 'error', code: 'rate' });
+  });
+
+  it('ignores forwarding headers unless trustProxy is on', async () => {
+    const h = await start({ helloPerMin: 1 });
+    const a = await h.connect(ROOM, A, undefined, {}, { 'x-forwarded-for': '1.1.1.1', 'fly-client-ip': '1.1.1.1' });
+    expect((await a.next()).t).toBe('welcome');
+    const b = await h.connect(ROOM, B, undefined, {}, { 'x-forwarded-for': '2.2.2.2', 'fly-client-ip': '2.2.2.2' });
+    expect(await b.next()).toEqual({ t: 'error', code: 'rate' });
+  });
+
+  it('with trustProxy takes fly-client-ip, else the last x-forwarded-for entry', async () => {
+    const h = await start({ helloPerMin: 1, trustProxy: true });
+    const a = await h.connect(ROOM, A, undefined, {}, { 'fly-client-ip': '1.1.1.1' });
+    expect((await a.next()).t).toBe('welcome');
+    const b = await h.connect(ROOM, B, undefined, {}, { 'fly-client-ip': '2.2.2.2' });
+    expect((await b.next()).t).toBe('welcome');
+    // the client-chosen first entry is spoofable; the proxy appends the real one last
+    const c = await h.connect(ROOM, C, undefined, {}, { 'x-forwarded-for': '9.9.9.9, 3.3.3.3' });
+    expect((await c.next()).t).toBe('welcome');
+    const d = await h.connect(ROOM, id(), undefined, {}, { 'x-forwarded-for': '8.8.8.8, 3.3.3.3' });
+    expect(await d.next()).toEqual({ t: 'error', code: 'rate' });
+    const e = await h.connect(ROOM, id(), undefined, {}, { 'x-forwarded-for': '3.3.3.3, 4.4.4.4' });
+    expect((await e.next()).t).toBe('welcome');
   });
 
   it('drops a room nobody has visited for idleDays, keeps one that was', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-    let now = 1_000_000_000;
-    const h = await start({ idleDays: 7, now: () => now });
+    const base = 1_000_000_000;
+    let offset = 0;
+    const h = await start({ idleDays: 7, now: () => base + offset });
     const a = await h.connect(ROOM, A);
     await a.next();
     const other = id();
@@ -328,10 +392,15 @@ describe('limits', () => {
     await b.next();
     a.ws.close();
     await a.closed;
-    await new Promise((r) => setTimeout(r, 30));
-    expect(h.relay.rooms()).toBe(2);
-    now += 8 * 86_400_000;
-    vi.advanceTimersByTime(10 * 60_000);
+    // The relay sees the close a beat after the client does, and its leave
+    // stamps lastSeen with now(): jump the clock only inside each sweep tick
+    // (synchronous), so the leave itself always lands at `base`.
+    for (let i = 0; i < 100 && h.relay.rooms() === 2; i++) {
+      offset = 8 * 86_400_000;
+      vi.advanceTimersByTime(10 * 60_000);
+      offset = 0;
+      if (h.relay.rooms() === 2) await sleep(5);
+    }
     expect(h.relay.rooms()).toBe(1); // the one B still sits in
   });
 });
@@ -353,7 +422,7 @@ describe('http', () => {
     const r = await get(h.port, '/');
     expect(r.status).toBe(200);
     expect(r.headers['content-type']).toBe('application/json');
-    expect(r.headers['access-control-allow-origin']).toBe('*');
+    expect(r.headers['access-control-allow-origin']).toBeUndefined();
     expect(JSON.parse(r.body)).toEqual({ name: 'opentrench-relay', v: 1, rooms: 1 });
   });
 
@@ -363,6 +432,43 @@ describe('http', () => {
     const r = await get(h.port, '/nope');
     expect(r.status).toBe(404);
     expect(r.headers['content-type']).toBe('application/json');
+  });
+});
+
+describe('http robustness', () => {
+  const raw = (port: number, request: string) =>
+    new Promise<string>((resolve, reject) => {
+      const sock = net.connect(port, '127.0.0.1', () => sock.write(request));
+      let out = '';
+      sock.on('data', (d) => (out += d));
+      sock.on('close', () => resolve(out));
+      sock.on('error', reject);
+      setTimeout(() => sock.destroy(), 500).unref();
+    });
+
+  it('survives an absolute-form request target that URL parsing would throw on', async () => {
+    const h = await start();
+    for (const target of ['http://[/', 'http://[/v1', '*', 'nonsense']) {
+      await raw(h.port, `GET ${target} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`);
+      await raw(h.port, `GET ${target} HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n`);
+    }
+    const a = await h.connect(ROOM, A);
+    expect((await a.next()).t).toBe('welcome');
+  });
+});
+
+describe('env', () => {
+  it('reads the documented variables, falls back with a warning on junk', () => {
+    const warnings: string[] = [];
+    const warn = (m: string) => warnings.push(m);
+    expect(readEnv({}, warn)).toEqual({ port: 8080, options: { trustProxy: false } });
+    const r = readEnv({ PORT: '9000', RELAY_ACCESS_CODE: 'sesame', RELAY_MAX_ROOMS: '5', RELAY_MAX_MEMBERS: '3', RELAY_DATA_DIR: '/data', RELAY_BUFFER_HOURS: '48', RELAY_TRUST_PROXY: '1' }, warn);
+    expect(r).toEqual({ port: 9000, options: { accessCode: 'sesame', maxRooms: 5, maxMembers: 3, dataDir: '/data', bufferHours: 48, trustProxy: true } });
+    expect(warnings).toEqual([]);
+    const bad = readEnv({ PORT: '0', RELAY_MAX_ROOMS: 'lots', RELAY_MAX_MEMBERS: '-1', RELAY_BUFFER_HOURS: '1.5', RELAY_TRUST_PROXY: 'yes' }, warn);
+    expect(bad).toEqual({ port: 8080, options: { trustProxy: false } });
+    expect(warnings).toHaveLength(5);
+    expect(warnings.some((w) => /PORT="0"/.test(w))).toBe(true);
   });
 });
 
@@ -376,11 +482,17 @@ describe('persistence', () => {
     await b.next();
     a.send({ t: 'msg', body: 'kept' });
     expect((await b.next()).body).toBe('kept');
-    await h.stop(); // close() flushes the debounced write
-    harnesses.pop();
     const file = path.join(dir, `${ROOM}.json`);
+    expect(fs.existsSync(file)).toBe(false); // debounced, not on every message
+    await sleep(2300);
+    const written = JSON.parse(fs.readFileSync(file, 'utf8'));
+    expect(written.buffer.map((m: Frame) => m.body)).toEqual(['kept']);
+    a.send({ t: 'msg', body: 'later' });
+    expect((await b.next()).body).toBe('later');
+    await h.stop(); // close() flushes what the debounce still holds
+    harnesses.pop();
     const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
-    expect(saved.buffer.map((m: Frame) => m.body)).toEqual(['kept']);
+    expect(saved.buffer.map((m: Frame) => m.body)).toEqual(['kept', 'later']);
     expect(typeof saved.lastSeen).toBe('number');
 
     const logs: string[] = [];
@@ -391,7 +503,18 @@ describe('persistence', () => {
     const c = await h2.connect(ROOM, C);
     const w = await c.next();
     expect(w.members).toEqual([]);
-    expect(w.buffer).toEqual([{ from: A, body: 'kept', ts: saved.buffer[0].ts }]);
+    expect(w.buffer).toEqual(saved.buffer);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }, 10_000);
+
+  it('trims a loaded buffer by count and age', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentrench-relay-'));
+    const now = 50_000_000_000;
+    const entry = (body: string, ts: number) => ({ from: A, body, ts });
+    fs.writeFileSync(path.join(dir, `${ROOM}.json`), JSON.stringify({ buffer: [entry('stale', now - 3_600_000 * 2), entry('one', now - 1000), entry('two', now - 900), entry('three', now - 800)], lastSeen: now }));
+    const h = await start({ dataDir: dir, bufferMax: 2, bufferHours: 1, now: () => now });
+    const c = await h.connect(ROOM, C);
+    expect((await c.next()).buffer.map((m: Frame) => m.body)).toEqual(['two', 'three']);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });

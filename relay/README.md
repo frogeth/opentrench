@@ -44,6 +44,7 @@ relay.example.com {
 | `RELAY_MAX_MEMBERS` | `50` | Members per room. |
 | `RELAY_DATA_DIR` | unset | Directory for one `<room>.json` per room; unset keeps buffers in memory only. |
 | `RELAY_BUFFER_HOURS` | `24` | How long a room keeps its recent messages for late joiners (also capped at 2000 messages). |
+| `RELAY_TRUST_PROXY` | `0` | `1` to take the client address from `fly-client-ip` or the last `x-forwarded-for` entry for the per-IP hello limit. Turn it on only behind a proxy that overwrites or appends that header itself (Fly does; the shipped `fly.toml` sets it). Off, the relay uses the socket address. |
 
 ## What the operator sees
 

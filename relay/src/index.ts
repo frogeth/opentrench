@@ -1,25 +1,11 @@
 // Process entry: env → options, one http server, clean exit on SIGTERM/SIGINT
 // (Fly and Docker both send SIGTERM; pending room files are flushed on the way out).
 import http from 'node:http';
+import { readEnv } from './env.js';
 import { createRelay } from './relay.js';
 
-const int = (name: string): number | undefined => {
-  const v = process.env[name];
-  if (v === undefined || v === '') return undefined;
-  const n = Number(v);
-  if (!Number.isFinite(n) || n < 0) throw new Error(`${name} must be a non-negative number, got ${JSON.stringify(v)}`);
-  return n;
-};
-
-const port = int('PORT') ?? 8080;
-const relay = createRelay({
-  accessCode: process.env.RELAY_ACCESS_CODE || undefined,
-  maxRooms: int('RELAY_MAX_ROOMS'),
-  maxMembers: int('RELAY_MAX_MEMBERS'),
-  dataDir: process.env.RELAY_DATA_DIR || undefined,
-  bufferHours: int('RELAY_BUFFER_HOURS'),
-  log: (m) => console.log(m),
-});
+const { port, options } = readEnv(process.env, (m) => console.warn(`opentrench relay: ${m}`));
+const relay = createRelay({ ...options, log: (m) => console.log(m) });
 
 const server = http.createServer();
 relay.attach(server);
