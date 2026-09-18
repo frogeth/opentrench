@@ -5,7 +5,7 @@ import { act } from 'react';
 import { Settings } from './Settings';
 import type { Status } from '../types';
 
-const together = { share: false, name: 'me', peers: [], pairings: [] };
+const together = { share: false, name: 'me', peers: [], pairings: [], rooms: [], memberId: 'm1', relay: '', defaultRelay: 'wss://relay.opentrench.app' };
 vi.mock('../api', async (real) => ({
   ...(await real<Record<string, unknown>>()),
   api: {
@@ -63,16 +63,18 @@ afterEach(async () => {
 });
 
 describe('Settings with a deep-linked invite', () => {
-  it('opens on the Together tab with the invite in an input', async () => {
+  it('opens on the Together tab with the invite in the Join field', async () => {
     await render(settings({ initialTab: 'together', initialInvite: INVITE }));
     expect(container.textContent).toContain('TrenchTogether');
-    expect(inputs().some((i) => i.value === INVITE)).toBe(true);
+    const join = inputs().find((i) => i.placeholder.startsWith('opentrench://room/'));
+    expect(join?.value).toBe(INVITE);
   });
 
-  it('leaves the Together tab as it is when there is no link', async () => {
+  it('leaves the Join field empty when there is no link', async () => {
     await render(settings({ initialTab: 'together' }));
     expect(container.textContent).toContain('TrenchTogether');
     expect(inputs().some((i) => i.value === INVITE)).toBe(false);
-    expect(inputs().some((i) => i.placeholder.startsWith('opentrench://'))).toBe(false);
+    const join = inputs().find((i) => i.placeholder.startsWith('opentrench://room/'));
+    expect(join?.value).toBe('');
   });
 });
