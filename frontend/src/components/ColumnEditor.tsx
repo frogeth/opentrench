@@ -16,7 +16,7 @@ const CHAINS: [string, string][] = [
   ['ink', 'Ink'], ['megaeth', 'MegaETH'], ['plasma', 'Plasma'], ['story', 'Story'], ['stable', 'Stable'], ['arc', 'Arc'],
 ];
 const LAUNCHPADS: [string, string][] = [
-  ['pumpfun', 'Pump.fun'], ['letsbonk', 'letsbonk'], ['bankr', 'Bankr'], ['stonks', 'Stonks'], ['pons', 'Pons'],
+  ['pumpfun', 'Pump.fun'], ['letsbonk', 'letsbonk'], ['bankr', 'Bankr'], ['stonks', 'Stonks'], ['pons', 'Pons'], ['genius', 'Genius'],
   ['o1', 'o1'], ['virtuals', 'Virtuals'], ['flap', 'Flap'], ['clanker', 'Clanker'], ['long', 'Long'],
   ['argus', 'Argus'], ['warp', 'Warp'], ['peach', 'Peach'], ['dyor', 'DYOR'], ['synthra', 'Synthra'],
 ];

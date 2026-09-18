@@ -8,6 +8,7 @@ const LOGOS: Record<string, { src: string; label: string; short: string }> = {
   bankr: { src: 'https://bankr.bot/favicon.svg', label: 'Bankr', short: 'B' },
   stonks: { src: 'https://www.thestonks.exchange/icon.png', label: 'Stonks', short: 'S' },
   pons: { src: 'https://www.ponsfamily.com/apple-icon.png', label: 'Pons', short: 'P' },
+  genius: { src: 'https://genius.fun/apple-icon.png', label: 'Genius', short: 'G' },
   o1: { src: 'https://o1.exchange/favicon.ico', label: 'o1', short: 'o1' },
   virtuals: { src: 'https://app.virtuals.io/favicon.ico', label: 'Virtuals', short: 'V' },
   flap: { src: 'https://flap.sh/favicon.ico', label: 'Flap', short: 'F' },

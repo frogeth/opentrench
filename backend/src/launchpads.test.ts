@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { __resetStonksCache, classifyBySuffix, createLaunchpadClassifier, decodeStrings, fetchPons, fetchStonks, ipfsToHttp, mapBankrLaunch, mapClanker, mapFlap, mapPumpfun, mapStonksCoin, mapVirtuals, fetchArgus, fetchWarp, mapWarp, decodeDynamicStrings, mapPeach, fetchPeach, fetchDyor, mapSynthra, fetchSynthra, SYNTHRA_CHAINS } from './launchpads.js';
+import { __resetStonksCache, classifyBySuffix, createLaunchpadClassifier, decodeStrings, fetchPons, fetchStonks, ipfsToHttp, mapBankrLaunch, mapClanker, mapFlap, mapPumpfun, mapStonksCoin, mapVirtuals, fetchArgus, fetchWarp, mapWarp, decodeDynamicStrings, mapPeach, fetchPeach, fetchDyor, mapSynthra, fetchSynthra, SYNTHRA_CHAINS, GENIUS_FACTORY, GENIUS_SEL, decodeGeniusLaunch, decodeGeniusTokenInfo, geniusNote, fetchGenius } from './launchpads.js';
 
 const A = '0xa419Bb493ed5059f28dfd84348A2F93D70ECf003';
 
@@ -382,5 +382,92 @@ describe('Synthra Launches (Arc, Robinhood)', () => {
   it('unknown to both subgraphs: not Synthra; a complete curve says so', async () => {
     expect(await fetchSynthra(BULL.id, fake({}), SYNTHRA_CHAINS, 'https://api')).toBeUndefined();
     expect(mapSynthra({ ...BULL, status: 'COMPLETE' }, SYNTHRA_CHAINS[0])?.launchpadNote).toBe('curve complete · graduating');
+  });
+});
+
+describe('genius (BNB Chain)', () => {
+  // real answers from BSC on 2026-09-18: GSTOCK (graduated, quoted in BNCB) and BNBS (on the curve, native BNB)
+  const GSTOCK = '0xcAFdBCE93477261Db8250e42BdAe6E66733F9E20';
+  const BNBS = '0xbA86f246036D381c817bD6a7dEf5B3a8376a76fB';
+  const w = (h: string) => h.replace(/^0x/, '').toLowerCase().padStart(64, '0');
+  const GSTOCK_RECORD =
+    '0x' + w(GSTOCK) + w('0xb72102ac7b63ead66ecb75d67e43f281bfea3d74') + w('0x4f9d4bfda5eebb8804d1a986b1daa5f55cffcb8d') + w('0x4f9d4bfda5eebb8804d1a986b1daa5f55cffcb8d') + w('0x4902c5ebc598265ed2212b559b042de8a5eeec3f') +
+    w('6e68557c5d0697c000') + w('0') + w('c8') + w('0') + w('1') + w('2') + w('0') + w('0') + w('0') + w('1');
+  const BNBS_RECORD =
+    '0x' + w(BNBS) + w('0x7349a6f2c41f9bf732f1667caa3f9d9a6f1c0a01') + w('0xc48080b9fd8f3413599102fafd0235b5cb2730fa') + w('0xc48080b9fd8f3413599102fafd0235b5cb2730fa') + w('0') +
+    w('d02ab486cedc0000') + w('0') + w('c8') + w('0') + w('1') + w('0') + w('0') + w('0') + w('0') + w('1');
+  const NO_RECORD = '0x' + w('0').repeat(15);
+  const BNBS_INFO =
+    '0x000000000000000000000000c48080b9fd8f3413599102fafd0235b5cb2730fa0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001a00000000000000000000000000000000000000000000000000000000000000042697066733a2f2f6261666b72656964716271367a3336356263783361636d356934647868726f6c3572366a74746a6165756b6d79763668766d7465616b76336233690000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000078546865206e657720424e42205374616e646172642e20466f6375736573206f6e205374616e64617264697a696e6720424e422065636f73797374656d20746f6f6c7320616e64207574696c697469657320616761696e2e205468697320697320746f20656e61626c65206c61746520626c6f6f6d6572732e000000000000000000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
+
+  it('decodes the launch record and rejects a missing one', () => {
+    expect(decodeGeniusLaunch(GSTOCK_RECORD)).toEqual({ curve: '0xb72102ac7b63ead66ecb75d67e43f281bfea3d74', pairToken: '0x4902c5ebc598265ed2212b559b042de8a5eeec3f', graduationThreshold: 2036659900000000000000n, phase: 2 });
+    expect(decodeGeniusLaunch(BNBS_RECORD)?.phase).toBe(0);
+    expect(decodeGeniusLaunch(NO_RECORD)).toBeUndefined();
+    expect(decodeGeniusLaunch('0x')).toBeUndefined();
+  });
+
+  it('decodes getTokenInfo: logo, description and the five socials', () => {
+    expect(decodeGeniusTokenInfo(BNBS_INFO)).toEqual({
+      logo: 'ipfs://bafkreidqbq6z365bcx3acm5i4dxhrol5r6jttjaeukmyv6hvmteakv3b3i',
+      description: 'The new BNB Standard. Focuses on Standardizing BNB ecosystem tools and utilities again. This is to enable late bloomers.',
+      socials: ['', '', '', '', ''],
+    });
+    expect(decodeGeniusTokenInfo('0x1234')).toBeUndefined();
+  });
+
+  it('describes the phase for the badge, with curve progress', () => {
+    const l = decodeGeniusLaunch(BNBS_RECORD)!;
+    expect(geniusNote(l, 15n * 10n ** 18n / 4n)).toBe('on the curve · 25.0% to graduation');
+    expect(geniusNote(l, undefined)).toBe('on the curve');
+    expect(geniusNote({ ...l, phase: 1 }, undefined)).toBe('graduating');
+    expect(geniusNote({ ...l, phase: 2 }, undefined)).toBe('graduated to PancakeSwap');
+  });
+
+  it('reads an on-curve launch: badge, metadata, and the curve as its pool quoted in BNB', async () => {
+    const fetchImpl = (async (_url: string, init: any) => {
+      const { to, data } = JSON.parse(init.body).params[0];
+      let result = '0x';
+      if (to === GENIUS_FACTORY) result = data.endsWith(w(BNBS)) ? BNBS_RECORD : NO_RECORD;
+      else if (to.toLowerCase() === BNBS.toLowerCase()) result = data === GENIUS_SEL.getTokenInfo ? BNBS_INFO : data === '0x06fdde03' ? encStrings(['BNB Standard']) : data === '0x95d89b41' ? encStrings(['BNBS']) : '0x';
+      else if (to === '0x7349a6f2c41f9bf732f1667caa3f9d9a6f1c0a01' && data === GENIUS_SEL.realQuoteReserve) result = '0x' + w((3n * 10n ** 18n).toString(16));
+      return { ok: true, json: async () => ({ result }) } as any;
+    }) as unknown as typeof fetch;
+    expect(await fetchGenius(BNBS, fetchImpl)).toEqual({
+      launchpad: 'genius',
+      launchpadUrl: `https://genius.fun/token/${BNBS}`,
+      network: 'bsc',
+      launchpadNote: 'on the curve · 20.0% to graduation',
+      imageUrl: '/api/ipfs/bafkreidqbq6z365bcx3acm5i4dxhrol5r6jttjaeukmyv6hvmteakv3b3i',
+      name: 'BNB Standard',
+      symbol: 'BNBS',
+      pairAddress: '0x7349a6f2c41f9bf732f1667caa3f9d9a6f1c0a01',
+      dex: 'genius',
+      quoteSymbol: 'BNB',
+    });
+    // a token the factory never launched
+    expect(await fetchGenius(A, fetchImpl)).toBeUndefined();
+  });
+
+  it('a graduated launch keeps its badge and note but names no pool (the Infinity pool waits for the directory)', async () => {
+    const fetchImpl = (async (_url: string, init: any) => {
+      const { to, data } = JSON.parse(init.body).params[0];
+      let result = '0x';
+      if (to === GENIUS_FACTORY) result = GSTOCK_RECORD;
+      else if (data === '0x95d89b41') result = encStrings([to.toLowerCase() === GSTOCK.toLowerCase() ? 'GSTOCK' : 'BNCB']);
+      else if (data === '0x06fdde03') result = encStrings(['Gstock']);
+      return { ok: true, json: async () => ({ result }) } as any;
+    }) as unknown as typeof fetch;
+    const out = await fetchGenius(GSTOCK, fetchImpl);
+    expect(out).toMatchObject({ launchpad: 'genius', network: 'bsc', launchpadNote: 'graduated to PancakeSwap', name: 'Gstock', symbol: 'GSTOCK' });
+    expect(out?.pairAddress).toBeUndefined();
+  });
+
+  it('sits in the probe order right after Pons', async () => {
+    const order: string[] = [];
+    const probe = (n: string) => async () => { order.push(n); return undefined; };
+    const classify = createLaunchpadClassifier({ pons: probe('pons'), genius: probe('genius'), flap: probe('flap'), log: () => {} });
+    await classify(A, 'evm');
+    expect(order).toEqual(['pons', 'genius', 'flap']);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { discoverEvm, discoverSolana, FACTORIES, QUOTES } from './discover.js';
+import { GENIUS_FACTORY, GENIUS_SEL } from '../launchpads.js';
 import { findProgramAddress, utf8 } from './pda.js';
 import { PROGRAMS, SOL_MINT } from './solana.js';
 
@@ -50,5 +51,28 @@ describe('discover', () => {
     data[48] = 1;
     const g = node({ [curve]: `${PROGRAMS.pumpfun}|${data.toString('base64')}` });
     expect(await discoverSolana(MINT, { endpoints, fetch: g as any })).toBeUndefined();
+  });
+});
+
+describe('discover: genius.fun on BNB Chain', () => {
+  const w = (h: string) => h.replace(/^0x/, '').toLowerCase().padStart(64, '0');
+  const CURVE = '0x7349a6f2c41f9bf732f1667caa3f9d9a6f1c0a01';
+  const record = (pair: string, phase: number) => '0x' + w(TOKEN) + w(CURVE) + w('0x' + 'c'.repeat(40)) + w('0x' + 'c'.repeat(40)) + w(pair) + w('d02ab486cedc0000') + w('0') + w('c8') + w('0') + w('1') + w(phase.toString(16)) + w('0') + w('0') + w('0') + w('1');
+  const ZERO = '0x0000000000000000000000000000000000000000';
+  it('a launch on its curve is the pool, quoted in BNB, before any factory is asked', async () => {
+    const f = node({ [`${GENIUS_FACTORY}:${GENIUS_SEL.getLaunchedToken}${w(TOKEN)}`]: record(ZERO, 0) });
+    expect(await discoverEvm('bsc', TOKEN, { endpoints, fetch: f as any })).toEqual([{ pairAddress: CURVE, quoteSymbol: 'BNB', quoteAddress: ZERO, dex: 'genius' }]);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+  it('an ERC-20-quoted launch carries the pair token and its symbol', async () => {
+    const USDT = '0x55d398326f99059ff775485246999027b3197955';
+    const sym = '0x' + w('20') + w('4') + '55534454'.padEnd(64, '0');
+    const f = node({ [`${GENIUS_FACTORY}:${GENIUS_SEL.getLaunchedToken}${w(TOKEN)}`]: record(USDT, 0), [`${USDT}:0x95d89b41`]: sym });
+    expect(await discoverEvm('bsc', TOKEN, { endpoints, fetch: f as any })).toEqual([{ pairAddress: CURVE, quoteSymbol: 'USDT', quoteAddress: USDT, dex: 'genius' }]);
+  });
+  it('a graduated launch falls through to the PancakeSwap factories', async () => {
+    const f = node({ [`${GENIUS_FACTORY}:${GENIUS_SEL.getLaunchedToken}${w(TOKEN)}`]: record(ZERO, 2) });
+    expect(await discoverEvm('bsc', TOKEN, { endpoints, fetch: f as any })).toEqual([]);
+    expect(f.mock.calls.length).toBeGreaterThan(1);
   });
 });

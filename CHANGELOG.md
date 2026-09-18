@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- **Genius launchpad** (genius.fun, BNB Chain). Tokens launched there get the Genius badge linking to their genius.fun page, their logo and socials straight off the token contract, and a note on where they stand: on the curve with the percentage raised toward graduation, graduating, or graduated to PancakeSwap. A token still on its bonding curve is priced live off the curve the moment it lands in the feed (native BNB or the ERC-20 the creator picked as quote), before any chart site lists it; graduated ones keep the directory price until the PancakeSwap Infinity pool is readable. Read entirely on-chain from the factory Genius documents for integrators; no API involved. Genius is also a filter under Launchpads in the column editor.
+
 ## v0.12.0 — 2026-09-18
 
 - TrenchTogether rooms: share your calls with friends anywhere, not only on the same Wi-Fi. Settings → Together → Create a room, Copy invite, and one link joins them; their calls show `via <name>` in your feed and yours in theirs. Only calls travel (the token, who called it, where and when), never chat messages or market numbers; each app prices tokens itself. Rotate makes a new invite: the other members' cards say `invite changed — ask for the new one`, and anyone with the old one is out.
