@@ -35,13 +35,13 @@ Limits (env-tunable, sensible defaults): message ≤ 64 KB; 30 messages/s per me
 
 Buffer persistence: in memory, plus an optional JSON file per room under `RELAY_DATA_DIR` written on change (debounced) so a relay restart keeps the last day of calls. Ciphertext only.
 
-Environment: `PORT` (8080), `RELAY_ACCESS_CODE` (optional; hello must carry it — for a relay you want private to your circle), `RELAY_MAX_ROOMS`, `RELAY_MAX_MEMBERS`, `RELAY_DATA_DIR`, `RELAY_BUFFER_HOURS`.
+Environment: `PORT` (8080), `RELAY_ACCESS_CODE` (optional; hello must carry it — for a relay you want private to your circle; the app stores it per room, entered when creating or joining, or later on the room card when the relay says `access`), `RELAY_MAX_ROOMS`, `RELAY_MAX_MEMBERS`, `RELAY_DATA_DIR`, `RELAY_BUFFER_HOURS`, `RELAY_TRUST_PROXY` (off by default; on, the client IP comes from `fly-client-ip` or the last `x-forwarded-for` entry — only behind a proxy that sets them). The hello limiter is a strict rolling minute per IP; a socket that never sends hello is closed after 10 s; a frame over twice the message cap is refused by the socket layer.
 
 ## 3. Encryption
 
 - Key: the 32 bytes from the invite. AES-256-GCM, 12-byte random nonce per message, AAD = room id. Wire body = base64url(nonce ‖ ciphertext ‖ tag).
 - Plaintext is JSON: `{"k":"hello","name":"<display name>","v":"<app version>"}` on join; `{"k":"token","name":"<display name>","token":<shareable TokenInfo>}` for a call; `{"k":"bye"}` on leave. `shareable()` is the same projection the LAN mode uses (no `via` chain, no chat text).
-- A message that does not decrypt (someone joined the wrong room, a key rotated) is dropped and counted; three in a row on a room turns its state to `key mismatch` in Settings.
+- A message that does not decrypt is dropped and counted **per sender**: three from one member id mutes that sender for the connection. It never changes the room's state or closes the socket, because anyone who learns a room id can join the relay and send garbage, and a client that derived the id from its key can never legitimately hold the wrong key. Settings shows "N messages from M members did not decrypt" only when a replay yielded nothing readable from two or more senders.
 - Rotating a room = a new key = a new room id = a new invite. Everyone re-joins with it. There is no revocation short of that, and the UI says so ("Rotate: makes a new invite; anyone with the old one is out").
 - Room keys are secrets: sealed on disk like the other secrets in config.json.
 
@@ -58,7 +58,7 @@ Receiving: `hub.applyRemoteToken(name, token)` exactly as the LAN guest does. Th
 Backend `backend/src/rooms.ts`:
 - `RoomClient`: one per configured room. Connects (2 s → 15 s backoff, like `TogetherGuest`), sends `hello`, handles `welcome` (members, buffer replay), `msg`, `presence`, `error`. Exposes state `connecting | connected | disconnected | key mismatch | relay too old | access denied | full`, member count, last error.
 - `Rooms` manager in `services.ts`: starts a client per room in config, stops on removal, feeds outbound calls from the hub, reports status through `Status.together.rooms`.
-- Config: `together.rooms: { id, key, relay, name, joinedAt }[]`, `together.memberId`, `together.relay` (the user's preferred relay for new rooms; empty = the default). Keys sealed.
+- Config: `together.rooms: { id, key, relay, name, joinedAt, access? }[]`, `together.memberId`, `together.relay` (the user's preferred relay for new rooms; empty = the default). Keys sealed; relay URLs canonical (the invite rule).
 - Routes: `GET /together` gains `rooms` (with each room's invite); `POST /together/rooms {name, relay?}` creates (generates key, joins); `POST /together/rooms/join {invite, name?}`; `DELETE /together/rooms/:id`; `POST /together/rooms/:id/rotate`; `GET /together/relay/probe?url=` answers `{ok, v, rooms}` for the UI's "check". Mutations need the app header.
 - Default relay: `DEFAULT_RELAY = 'wss://relay.opentrench.app'` in one place (`backend/src/rooms.ts`), shown prefilled in the UI. Not deployed yet: a create against it fails with the relay's real error ("could not reach relay.opentrench.app"), which is the honest state until it goes up.
 
@@ -73,7 +73,7 @@ Deep link: the desktop app registers the `opentrench` URL scheme (macOS `open-ur
 
 `docs/relay.md` and the site page: three routes, each complete —
 - **Fly.io**: `cd relay && fly launch --copy-config --yes && fly deploy` with the shipped `fly.toml` (256 MB, one region, a volume for `RELAY_DATA_DIR`).
-- **Docker**: `docker run -p 8080:8080 -v relay-data:/data ghcr.io/frogeth/opentrench-relay` (image built by CI on release) or `docker build -t relay ./relay`.
+- **Docker**: `docker build -t opentrench-relay ./relay && docker run -d -p 8080:8080 -v relay-data:/data opentrench-relay` (no published image yet).
 - **Any Node host**: `npm ci --workspace relay && PORT=8080 node relay/dist/index.js` behind any TLS proxy (Caddy one-liner shown).
 Plus: what the relay operator can and cannot see (IPs and traffic volume: yes; calls, names, tokens: no), the access code, and "your invite tells your friends which relay you used; nothing else to configure on their side".
 
