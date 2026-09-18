@@ -4,11 +4,11 @@ import type { BuyLinks } from '../types';
 /** App-wide buy handler: routes any bot deep link into the in-app bot pane/drawer. Set once in App. */
 export const BuyContext = createContext<((url: string) => void) | null>(null);
 
-export const PROVIDER_LABEL = { cove: 'Cove', basedbot: 'BasedBot' } as const;
+export const PROVIDER_LABEL = { cove: 'Cove', basedbot: 'BasedBot', genius: 'Genius' } as const;
 /** opentrench's own BasedBot referral; rides on every BasedBot deep link (fixed, mirrors the backend) */
 export const BASEDBOT_REFERRAL = 'frog';
 
-/** Quick buys for whichever bot is chosen. With `onBuy` they open that bot's column inside the app (the normal path); without it they fall back to plain Telegram deep links. */
+/** Quick buys for whichever provider is chosen. With `onBuy` they open that bot's column inside the app (the normal path); without it they fall back to plain Telegram deep links. Genius links are web pages and open in the browser either way. */
 export function BuyRow({ buy, compact = false, onBuy: onBuyProp }: { buy?: BuyLinks; compact?: boolean; onBuy?: (url: string) => void }) {
   const onBuy = onBuyProp ?? useContext(BuyContext) ?? undefined;
   if (!buy) return null;

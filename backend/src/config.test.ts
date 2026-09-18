@@ -496,3 +496,22 @@ describe('together rooms', () => {
     expect(lines.some((l) => /\d+ secret\(s\)/.test(l))).toBe(false);
   });
 });
+
+describe('buy provider', () => {
+  it('keeps cove, basedbot and genius, and falls back to cove for anything else', () => {
+    for (const [given, expected] of [
+      ['genius', 'genius'],
+      ['basedbot', 'basedbot'],
+      ['cove', 'cove'],
+      ['photon', 'cove'],
+      [undefined, 'cove'],
+    ] as const) {
+      const f = tmpFile();
+      fs.writeFileSync(f, JSON.stringify(given ? { buy: { provider: given } } : {}));
+      const s = new ConfigStore(f);
+      expect(s.get().buy.provider).toBe(expected);
+      expect((s.masked() as any).buy).toEqual({ provider: expected });
+      fs.unlinkSync(f);
+    }
+  });
+});

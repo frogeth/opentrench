@@ -206,8 +206,8 @@ export interface Config {
   telegram: { apiId?: number; apiHash?: string; session?: string; watch: string[]; send?: boolean };
   /** Cove one-click amounts (the affiliate is opentrench's own, fixed in code) */
   cove: { amounts: number[] };
-  /** which bot the buy buttons and right-click → Buy use */
-  buy: { provider: 'cove' | 'basedbot' };
+  /** which bot (or web terminal) the buy buttons and right-click → Buy use */
+  buy: { provider: 'cove' | 'basedbot' | 'genius' };
   /** caller names (case-insensitive, leading @ ignored) whose posts never count as calls */
   blacklist: string[];
   /** bots: hide everything except `allow`, or show everything except the blacklist */
@@ -385,7 +385,7 @@ export class ConfigStore {
         },
         telegram: { ...DEFAULT.telegram, ...raw.telegram, apiHash: this.secret(raw.telegram?.apiHash, 'telegram.apiHash'), session: this.secret(raw.telegram?.session, 'telegram.session') },
         cove: { amounts: Array.isArray(raw.cove?.amounts) ? raw.cove.amounts.map(Number) : DEFAULT.cove.amounts }, // any old affiliateId in the file is ignored
-        buy: { provider: raw.buy?.provider === 'basedbot' ? 'basedbot' : 'cove' }, // any old basedbotReferral is ignored
+        buy: { provider: raw.buy?.provider === 'basedbot' || raw.buy?.provider === 'genius' ? raw.buy.provider : 'cove' }, // any old basedbotReferral is ignored
         blacklist: Array.isArray(raw.blacklist) ? raw.blacklist.map(String) : [],
         favorites: Array.isArray(raw.favorites) ? raw.favorites.map(String) : [],
         bots: {

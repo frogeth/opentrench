@@ -161,7 +161,7 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     '/buy',
     wrap((req) => {
       cfg.update((c) => {
-        if (req.body?.provider === 'cove' || req.body?.provider === 'basedbot') c.buy.provider = req.body.provider;
+        if (req.body?.provider === 'cove' || req.body?.provider === 'basedbot' || req.body?.provider === 'genius') c.buy.provider = req.body.provider;
       });
       hub.recomputeBuyLinks();
       return cfg.masked().buy;

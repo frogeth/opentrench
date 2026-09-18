@@ -341,7 +341,7 @@ export function ColumnEditor({
             )}
             {isBot && (
               <div className="fed-bot-note hint">
-                {type === 'cove' ? 'Your buy bot — Cove or BasedBot, whichever is picked in ⚙ → Trading. Buy buttons and right-click → Buy land here.' : type === 'salpha' ? 'Your conversation with @salpha_research_bot. Right-click a contract → Research sends it here.' : type === 'tgbot' ? `Your Telegram conversation with ${botOk ? `@${cleanBot}` : 'the bot'}, live, with its buttons. Start the bot in Telegram once (press Start there) if you never have; Cielo's is @evmtrackerbot.` : 'J7Tracker’s live tweet feed, with the calls each tweet touches. Needs your J7 session id in ⚙ → Accounts.'}
+                {type === 'cove' ? 'Your buy bot — Cove or BasedBot, whichever is picked in ⚙ → Trading. Buy buttons and right-click → Buy land here. (Genius has no bot: with Genius picked, buys open tradegenius.com in your browser.)' : type === 'salpha' ? 'Your conversation with @salpha_research_bot. Right-click a contract → Research sends it here.' : type === 'tgbot' ? `Your Telegram conversation with ${botOk ? `@${cleanBot}` : 'the bot'}, live, with its buttons. Start the bot in Telegram once (press Start there) if you never have; Cielo's is @evmtrackerbot.` : 'J7Tracker’s live tweet feed, with the calls each tweet touches. Needs your J7 session id in ⚙ → Accounts.'}
               </div>
             )}
             {isNft && (

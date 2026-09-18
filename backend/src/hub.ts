@@ -8,9 +8,10 @@ import type { TokenFetcher } from './enrich.js';
 import type { SecurityBatchFetcher, SecurityFetcher } from './security.js';
 import { buildCoveLinks, type CoveOptions } from './cove.js';
 import { buildBasedBotLinks } from './basedbot.js';
+import { buildGeniusLinks } from './genius.js';
 
 export interface BuyOptions {
-  provider: 'cove' | 'basedbot';
+  provider: 'cove' | 'basedbot' | 'genius';
 }
 import type { ExtractedMeta } from './links.js';
 import type {
@@ -765,6 +766,10 @@ export class MessageHub extends EventEmitter {
       return;
     }
     const network = t.network ?? (t.chain === 'sol' ? 'solana' : undefined);
+    if (b.provider === 'genius') {
+      t.buy = buildGeniusLinks(network, t.address);
+      return;
+    }
     t.buy = buildCoveLinks(network, t.address, this.cove());
   }
 

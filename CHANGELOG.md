@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- **Genius Terminal as a buy provider** (⚙ → Trading → Buy buttons → Genius). Genius (tradegenius.com) is a web terminal with no bot, and it refuses to be embedded, so the buy button on every card and in the drill-down, right-click → Buy on Genius, and the Telegram ping line open the token's page on tradegenius.com in your browser, signed in as you. One button per token (Genius takes the amount); Solana, Ethereum, Base, BNB, Arbitrum, Avalanche, Optimism, Polygon, Sonic, HyperEVM and Robinhood Chain; a token on another chain gets no button, as with Cove. The buy pane says where buys go while Genius is picked. No referral rides on these links: Genius referrals are signup links, not token links.
+
 ## v0.12.0 — 2026-09-18
 
 - TrenchTogether rooms: share your calls with friends anywhere, not only on the same Wi-Fi. Settings → Together → Create a room, Copy invite, and one link joins them; their calls show `via <name>` in your feed and yours in theirs. Only calls travel (the token, who called it, where and when), never chat messages or market numbers; each app prices tokens itself. Rotate makes a new invite: the other members' cards say `invite changed — ask for the new one`, and anyone with the old one is out.

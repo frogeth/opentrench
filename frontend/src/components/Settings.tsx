@@ -493,13 +493,13 @@ function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
   return (
     <section>
       <h2>Buy buttons</h2>
-      <div className="hint">Which bot the buy buttons and right-click → Buy use. Either way it runs in one buy pane inside opentrench through your Telegram account.</div>
+      <div className="hint">Which bot the buy buttons and right-click → Buy use. Cove and BasedBot run in one buy pane inside opentrench through your Telegram account; Genius is a web terminal and opens in your browser.</div>
       <div className="row-inline" style={{ marginTop: 6 }}>
         <span className="muted" style={{ fontSize: 12 }}>Provider</span>
         <span className="seg">
-          {(['cove', 'basedbot'] as const).map((p) => (
+          {(['cove', 'basedbot', 'genius'] as const).map((p) => (
             <button key={p} className={provider === p ? 'active' : ''} disabled={busy} onClick={() => run(async () => { await api.setBuy(p); onChange(); })}>
-              {p === 'cove' ? 'Cove' : 'BasedBot'}
+              {p === 'cove' ? 'Cove' : p === 'basedbot' ? 'BasedBot' : 'Genius'}
             </button>
           ))}
         </span>
@@ -526,8 +526,12 @@ function CoveSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () => voi
             </button>
           </div>
         </>
-      ) : (
+      ) : provider === 'basedbot' ? (
         <div className="hint">BasedBot opens the token in @based_eth_bot and asks the amount there.</div>
+      ) : (
+        <div className="hint">
+          Genius opens the token's page on tradegenius.com in your browser, where you are signed in (Genius has no bot and does not allow embedding). Covers Solana, Ethereum, Base, BNB, Arbitrum, Avalanche, Optimism, Polygon, Sonic, HyperEVM and Robinhood Chain; tokens on other chains get no buy button.
+        </div>
       )}
       {err && <div className="err">{err}</div>}
     </section>

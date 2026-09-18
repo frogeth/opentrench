@@ -101,6 +101,38 @@ export function beep(): void {
   playSound('chirp');
 }
 
+/**
+ * Genius Terminal (tradegenius.com) token pages, keyed by Dexscreener network id → Genius network id
+ * (EVM chain ids; Solana is 1399811149). Mirrors backend/src/genius.ts for the right-click path.
+ */
+export const GENIUS_NETWORK_IDS: Record<string, string> = {
+  solana: '1399811149',
+  ethereum: '1',
+  base: '8453',
+  bsc: '56',
+  arbitrum: '42161',
+  avalanche: '43114',
+  optimism: '10',
+  polygon: '137',
+  sonic: '146',
+  hyperevm: '999',
+  robinhood: '4663',
+};
+
+export function looksLikeSolanaAddress(address: string): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
+}
+
+/** The token's page on Genius, or undefined when the chain is unknown or Genius does not trade there. */
+export function geniusAssetUrl(network: string | undefined, address: string): string | undefined {
+  if (!network) return undefined;
+  const id = GENIUS_NETWORK_IDS[network];
+  if (!id) return undefined;
+  const fits = network === 'solana' ? looksLikeSolanaAddress(address) : /^0x[0-9a-fA-F]{40}$/.test(address);
+  if (!fits) return undefined;
+  return `https://tradegenius.com/asset/${encodeURIComponent(address)}?network=${id}`;
+}
+
 export type ChartProvider = 'basedbot' | 'dexscreener' | 'birdeye' | 'gmgn';
 export const CHART_PROVIDERS: { id: ChartProvider; label: string }[] = [
   { id: 'basedbot', label: 'BasedBot' },

@@ -125,7 +125,7 @@ export interface PersonSeen {
 
 export interface BuyLinks {
   /** which bot these links open */
-  provider: 'cove' | 'basedbot';
+  provider: 'cove' | 'basedbot' | 'genius';
   amounts: { usd: number; url: string }[];
   panel: string;
   /** a browser fallback (BasedBot's web app) */

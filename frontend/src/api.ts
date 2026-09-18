@@ -165,7 +165,7 @@ export interface MaskedConfig {
   discord: { hasToken: boolean; watch: string[]; canSend: boolean };
   telegram: { apiId: number | null; hasApiHash: boolean; hasSession: boolean; watch: string[]; canSend: boolean };
   cove: { amounts: number[] };
-  buy: { provider: 'cove' | 'basedbot' };
+  buy: { provider: 'cove' | 'basedbot' | 'genius' };
   blacklist: string[];
   bots: BotPolicy;
   favorites: string[];
@@ -302,7 +302,7 @@ export const api = {
   telegramDialogs: () => req<TelegramDialog[]>('GET', '/telegram/dialogs'),
   setTelegramWatch: (ids: string[]) => req('PUT', '/telegram/watch', { ids }),
   setCove: (amounts: number[]) => req('PUT', '/cove', { amounts }),
-  setBuy: (provider: 'cove' | 'basedbot') => req<{ provider: 'cove' | 'basedbot' }>('PUT', '/buy', { provider }),
+  setBuy: (provider: 'cove' | 'basedbot' | 'genius') => req<{ provider: 'cove' | 'basedbot' | 'genius' }>('PUT', '/buy', { provider }),
   setBlacklist: (names: string[]) => req('PUT', '/blacklist', { names }),
   blacklistAdd: (name: string) => req('POST', '/blacklist/add', { name }),
   bots: () => req<BotSeen[]>('GET', '/bots'),

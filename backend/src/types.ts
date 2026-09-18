@@ -127,11 +127,11 @@ export interface PersonSeen {
 }
 
 export interface BuyLinks {
-  /** which bot these links open */
-  provider: 'cove' | 'basedbot';
+  /** which bot (or, for Genius, which web terminal) these links open */
+  provider: 'cove' | 'basedbot' | 'genius';
   amounts: { usd: number; url: string }[];
   panel: string;
-  /** a browser fallback (BasedBot's web app) */
+  /** a browser fallback (BasedBot's web app); for Genius the same page as `panel` */
   web?: string;
 }
 

@@ -33,6 +33,8 @@ import { displayChatName, normTg, platformChatNames, watchKeyOf } from './feedKe
 
 const BOTS = { cove: COVE_BOT, basedbot: 'based_eth_bot', salpha: 'salpha_research_bot' } as const;
 type BotKind = keyof typeof BOTS;
+/** what the buy buttons open: a Telegram bot in the buy pane, or Genius (a web terminal) in the browser */
+type BuyProvider = 'cove' | 'basedbot' | 'genius';
 import { VirtualItem } from './components/Virtual';
 import { Settings } from './components/Settings';
 import { desktop, hasBridge } from './desktop';
@@ -42,7 +44,7 @@ import { Logo } from './components/Logo';
 import { Icon } from './components/Icon';
 import { Avatar } from './components/Avatar';
 import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
-import { copyText, type ChartProvider } from './format';
+import { copyText, type ChartProvider, geniusAssetUrl, looksLikeSolanaAddress } from './format';
 import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, thesisFollowUps, tokenPasses } from './filters';
 import { ALERT_WINDOW_MS, alertSound } from './alerts';
@@ -359,10 +361,11 @@ export default function App() {
   const [frameNonce, setFrameNonce] = useState<Record<string, number>>({});
   const [caMenu, setCaMenu] = useState<{ address: string; x: number; y: number } | null>(null);
   const openCaMenu = (address: string, x: number, y: number) => setCaMenu({ address, x, y });
-  // The buy provider: Cove or BasedBot. There is ONE buy pane (column type 'cove', kept for old
-  // configs) and it shows whichever bot is chosen.
-  const buyProvider = cfg?.buy?.provider ?? 'cove';
-  const buyBot = BOTS[buyProvider];
+  // The buy provider: Cove, BasedBot or Genius. There is ONE buy pane (column type 'cove', kept for
+  // old configs) and it shows whichever bot is chosen. Genius is a web terminal with no bot: its
+  // buys open tradegenius.com in the browser and the pane only says so.
+  const buyProvider: BuyProvider = cfg?.buy?.provider ?? 'cove';
+  const buyBot = buyProvider === 'genius' ? undefined : BOTS[buyProvider];
   const buyLabel = PROVIDER_LABEL[buyProvider];
   /** which column type a bot lives in */
   const colTypeFor = (kind: BotKind): 'cove' | 'salpha' => (kind === 'salpha' ? 'salpha' : 'cove');
@@ -407,9 +410,21 @@ export default function App() {
     setCoveFlash('osmint');
     window.setTimeout(() => setCoveFlash(null), 1500);
   };
+  /** Buy on Genius: the token's page in the browser. Needs the chain; a Solana-looking address the app has not seen is opened as Solana. */
+  const openOnGenius = (address: string) => {
+    const t = tokens[address] ?? tokens[address.toLowerCase()];
+    const network = t?.network ?? (t?.chain === 'sol' || (!t && looksLikeSolanaAddress(address)) ? 'solana' : undefined);
+    const url = geniusAssetUrl(network, address);
+    if (!url) {
+      alert(network ? 'Genius does not trade on this chain.' : "Genius needs the token's chain, which isn't known yet. Try again once the card shows it.");
+      return;
+    }
+    window.open(url, '_blank', 'noopener');
+  };
   /** right-click → Buy (the chosen provider) or Research (Salpha) */
-  const sendToBot = (kind: BotKind, address: string) => {
+  const sendToBot = (kind: BotKind | 'genius', address: string) => {
     setCaMenu(null);
+    if (kind === 'genius') return openOnGenius(address);
     if (status.telegram !== 'connected') {
       alert('Connect Telegram in Settings → Accounts first.');
       return;
@@ -1421,7 +1436,19 @@ export default function App() {
     if (col.type === 'cove' || col.type === 'salpha') {
       const bot = col.type === 'salpha' ? BOTS.salpha : buyBot;
       // a default-titled buy pane follows the provider; a custom title is kept
-      const title = col.type === 'cove' && (col.title === 'Cove' || col.title === 'BasedBot') ? buyLabel : col.title;
+      const title = col.type === 'cove' && (col.title === 'Cove' || col.title === 'BasedBot' || col.title === 'Genius') ? buyLabel : col.title;
+      if (!bot) {
+        // Genius: no bot to talk to; the pane explains where buys go
+        return (
+          <Column key={col.id} title={title} subtitle="tradegenius.com · your browser" kind={col.type} className="col-cove" {...actions}>
+            <div className="cove">
+              <div className="cove-body">
+                <div className="empty">Genius is a web terminal: buy buttons and right-click → Buy on Genius open the token on tradegenius.com in your browser. Pick Cove or BasedBot in ⚙ → Trading for a bot that runs in this pane.</div>
+              </div>
+            </div>
+          </Column>
+        );
+      }
       return (
         <Column key={col.id} title={title} subtitle={`@${bot} · your Telegram`} kind={col.type} className={`col-cove${coveFlash === col.type ? ' col-flash' : ''}`} {...actions}>
           <CoveView bot={bot} msgs={botMsgs[bot] ?? []} connected={status.telegram === 'connected'} onLoaded={mergeBot} onForward={forwardBotMessage} />

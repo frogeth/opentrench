@@ -173,7 +173,11 @@ in settings.
   referral code, fixed in the code and not a setting: the bots' referral
   payouts help cover development costs, and they change nothing about your
   price or fees. Supported chains: Ethereum, Base, BNB, Robinhood Chain,
-  MegaETH, Solana.
+  MegaETH, Solana. **Genius Terminal** (tradegenius.com) is the third choice:
+  it has no bot and cannot be embedded, so its buy button opens the token's
+  page there in your browser, where you are signed in (Solana, Ethereum, Base,
+  BNB, Arbitrum, Avalanche, Optimism, Polygon, Sonic, HyperEVM, Robinhood
+  Chain). No referral rides on Genius links.
 - Charts come from **BasedBot** (token-address embeds on Robinhood, Base,
   Ethereum, Solana, BNB, Arbitrum); Dexscreener / GeckoTerminal is the
   fallback and can be made the default in Settings → Feed.
