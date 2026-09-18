@@ -12,3 +12,7 @@ backend/plugins/
 # and what they stored: their own data and the settings the user typed in, secrets included
 backend/plugins-state.json
 backend/plugins-state.json.tmp
+
+# Claude working files: design specs, plans and the desktop launch config stay local
+docs/superpowers/
+.claude/
