@@ -11,9 +11,10 @@ listens on the internet.
 ## Create a room
 
 1. ⚙ → **Together** → **Create a room**.
-2. Give it a name. A default relay address is prefilled; until it is up, use
-   your own or a friend's ([Host a relay](relay.md)). **Check** next to the
-   field asks that relay whether it is up; Create does not, so a relay that
+2. Give it a name and paste a relay address. There is no official relay: host
+   your own ([Host a relay](relay.md), one command) or use a friend's. The
+   field is empty the first time and remembers the last relay you used.
+   **Check** next to the field asks that relay whether it is up; Create does not, so a relay that
    does not answer shows on the room card instead.
 3. Press **Create**. The room appears as a card with a status dot and how many
    members are online.
@@ -98,7 +99,7 @@ The room card shows one of these next to its dot.
 | `connecting…` | Wait a few seconds. The app retries on its own, 2 s then up to 15 s apart. |
 | `connected` | All good. The number after it is how many members the relay sees right now. |
 | `offline · retrying` | The relay is unreachable or your network dropped, and the reason follows. Nothing to do unless it stays that way; then check the relay's address with `https://<host>/` in a browser. |
-| `offline · retrying · could not reach <host>` | The address in the invite does not answer. Check it, or ask the person who sent the invite whether the relay is up. The default relay shows this until it is brought up. |
+| `offline · retrying · could not reach <host>` | The address in the invite does not answer. Check it, or ask the person who sent the invite whether the relay is up. A relay that has not been started yet shows this too. |
 | `invite changed — ask for the new one` | Someone rotated the room. Your key no longer matches and the app stops reconnecting; press **Leave** and join with the new invite. |
 | `this relay needs updating` | The relay runs an older protocol than your app. Whoever hosts it has to pull and redeploy ([Host a relay](relay.md#updating)). |
 | `relay wants an access code` | This relay is private. Ask its operator for the code and enter it in the field that appears on the room card. |

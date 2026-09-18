@@ -42,7 +42,7 @@
 <h3>Create one</h3>
 <ol class="steps">
 <li>⚙ → <b>Together</b> → <b>Create a room</b>.</li>
-<li>Give it a name. A default relay address is prefilled; until it is up, use your own or a friend's (<a href="#relay">Host a relay</a>). <b>Check</b> next to the field asks that relay whether it is up; Create does not, so a relay that does not answer shows on the room card instead.</li>
+<li>Give it a name and paste a relay address. There is no official relay: host your own (<a href="#relay">Host a relay</a>, one command) or use a friend's. The field is empty the first time and remembers the last relay you used. <b>Check</b> next to the field asks that relay whether it is up; Create does not, so a relay that does not answer shows on the room card instead.</li>
 <li>Press <b>Create</b>. The room appears as a card with a status dot and how many members are online.</li>
 <li>Press <b>Copy invite</b> and send the link to your friends however you talk to them.</li>
 </ol>
@@ -84,7 +84,7 @@
 <p>A relay is the server side of a room. It is a dumb fan-out: it takes each message a member sends and passes it to the room's other members. It only ever carries ciphertext. Every message is encrypted on the sender's machine with the key from the invite, and that key never reaches the relay.</p>
 <p>It is one Node process with no database. Rooms live in memory, plus one JSON file per room on disk if you give it a data directory, so a restart keeps the last day of messages and a friend who joins late still catches up.</p>
 <p>Your invite carries your relay's address; friends configure nothing. Create a room with your relay in the relay field, copy the invite, and everyone who joins with it lands on your relay.</p>
-<p>A default relay address is prefilled in the create form; until it is up, use your own or a friend's. Hosting one is a few commands and means nobody but you sees your circle's traffic. The code is in <a href="https://github.com/frogeth/opentrench/tree/main/relay"><code>relay/</code></a> in the repository. Node 22.</p>
+<p>There is no official relay. The relay field in the create form is empty and remembers the last relay you used; to start a room you host your own or use a friend's. Hosting one is a few commands and means nobody but you sees your circle's traffic. The code is in <a href="https://github.com/frogeth/opentrench/tree/main/relay"><code>relay/</code></a> in the repository. Node 22.</p>
 
 <h2 id="hosting"><span class="n">08</span>Hosting</h2>
 <p>Three routes. Each ends with an address starting <code>wss://</code> that you paste in the relay field when you create a room.</p>
@@ -145,7 +145,7 @@ PORT=8080 RELAY_DATA_DIR=./data node relay/dist/index.js</code></pre>
 <tr><td><code>connecting…</code></td><td>Wait a few seconds. The app retries on its own, 2 s then up to 15 s apart.</td></tr>
 <tr><td><code>connected</code></td><td>All good. The number after it is how many members the relay sees right now.</td></tr>
 <tr><td><code>offline · retrying</code></td><td>The relay is unreachable or your network dropped, and the reason follows. Nothing to do unless it stays that way; then check the relay's address with <code>https://&lt;host&gt;/</code> in a browser.</td></tr>
-<tr><td><code>offline · retrying · could not reach &lt;host&gt;</code></td><td>The address in the invite does not answer. Check it, or ask the person who sent the invite whether the relay is up. The default relay shows this until it is brought up.</td></tr>
+<tr><td><code>offline · retrying · could not reach &lt;host&gt;</code></td><td>The address in the invite does not answer. Check it, or ask the person who sent the invite whether the relay is up. A relay that has not been started yet shows this too.</td></tr>
 <tr><td><code>invite changed — ask for the new one</code></td><td>Someone rotated the room. Your key no longer matches and the app stops reconnecting; press <b>Leave</b> and join with the new invite.</td></tr>
 <tr><td><code>this relay needs updating</code></td><td>The relay runs an older protocol than your app. Whoever hosts it has to pull and redeploy (<a href="#updating">Updating</a>).</td></tr>
 <tr><td><code>relay wants an access code</code></td><td>This relay is private. Ask its operator for the code and enter it in the field that appears on the room card.</td></tr>

@@ -82,9 +82,10 @@ A room is a private channel for calls. It lives on a relay: a small server that 
 encrypted messages between members and cannot read them. Nothing to port-forward, no IP
 handed out; friends can be anywhere.
 
-1. ⚙ → **Together** (sidebar) → **Create a room**: type a name. A default relay address is
-   prefilled; until it is up, use your own or a friend's (see Host a relay). **Check** next to
-   the field asks the relay whether it is up; Create does not probe first. "What's a relay?"
+1. ⚙ → **Together** (sidebar) → **Create a room**: type a name and paste a relay address.
+   There is no official relay: host your own (see Host a relay, one command) or use a
+   friend's. The field is empty the first time and remembers the last relay you used.
+   **Check** next to the field asks the relay whether it is up; Create does not probe first. "What's a relay?"
    under it explains the server. Create.
 2. **Copy invite** on the room card and send it to the friend (any messenger). It looks like
    `opentrench://room/<relay-host>/<key>`; whoever has it is in, so treat it like a password.
@@ -112,7 +113,7 @@ State on a room card:
 | --- | --- |
 | connecting… | First connect or a reconnect; give it 15 s. |
 | connected | Fine; `N online` is how many members the relay sees. |
-| offline · retrying | Relay unreachable or the network dropped; the reason follows, most often `could not reach <host>`. Check the host in the invite / relay field; is the relay up (`curl https://<host>/` should answer JSON)? The default relay shows this until it is brought up. |
+| offline · retrying | Relay unreachable or the network dropped; the reason follows, most often `could not reach <host>`. Check the host in the invite / relay field; is the relay up (`curl https://<host>/` should answer JSON)? A relay that has not been started yet shows this too. |
 | invite changed — ask for the new one | The room was rotated; the app stops reconnecting. Leave, join the new invite. |
 | this relay needs updating | The relay speaks an older protocol than the app. Whoever hosts it must update it (see Host a relay). Nothing to do on the client. |
 | relay wants an access code | The relay runs with `RELAY_ACCESS_CODE`; ask its operator for the code and enter it in the field on the room card (kept per room). |

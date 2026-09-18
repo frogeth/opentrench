@@ -14,7 +14,7 @@
 
 - Every app opens **one outbound websocket per room** to the room's relay. Nothing listens on the internet. The relay sees members' IPs and ciphertext; members never see each other's IPs.
 - **Invite** = `opentrench://room/<relay-host>/<key>` where `key` is 32 random bytes, base64url. The room id is `SHA-256(key)` truncated to 16 bytes, base64url; the relay only ever learns the id. The key is what the invite is *for*: whoever has it is in.
-- **The relay is a package in the repo** (`relay/`), plain Node 22 + `ws`, no database, one process. It runs on Fly, a VPS, a Docker one-liner, a Raspberry Pi. No provider-specific primitives, so no lock-in. The app ships a **default relay URL** as a prefilled value, nothing more; the protocol has no notion of an official relay.
+- **The relay is a package in the repo** (`relay/`), plain Node 22 + `ws`, no database, one process. It runs on Fly, a VPS, a Docker one-liner, a Raspberry Pi. No provider-specific primitives, so no lock-in. There is **no official or default relay**: the app never prefills a relay address, and the protocol has no notion of one.
 - The existing **same-network** mode (UDP beacons, port 3211, pairing codes) stays as it is, for people who want nothing leaving the house. Rooms sit beside it, not on top of it.
 
 ## 2. Relay protocol (v1)
@@ -58,12 +58,12 @@ Receiving: `hub.applyRemoteToken(name, token)` exactly as the LAN guest does. Th
 Backend `backend/src/rooms.ts`:
 - `RoomClient`: one per configured room. Connects (2 s → 15 s backoff, like `TogetherGuest`), sends `hello`, handles `welcome` (members, buffer replay), `msg`, `presence`, `error`. Exposes state `connecting | connected | disconnected | key mismatch | relay too old | access denied | full`, member count, last error.
 - `Rooms` manager in `services.ts`: starts a client per room in config, stops on removal, feeds outbound calls from the hub, reports status through `Status.together.rooms`.
-- Config: `together.rooms: { id, key, relay, name, joinedAt, access? }[]`, `together.memberId`, `together.relay` (the user's preferred relay for new rooms; empty = the default). Keys sealed; relay URLs canonical (the invite rule).
+- Config: `together.rooms: { id, key, relay, name, joinedAt, access? }[]`, `together.memberId`, `together.relay` (the last relay the user typed, shown again next time; empty on first use). Keys sealed; relay URLs canonical (the invite rule).
 - Routes: `GET /together` gains `rooms` (with each room's invite); `POST /together/rooms {name, relay?}` creates (generates key, joins); `POST /together/rooms/join {invite, name?}`; `DELETE /together/rooms/:id`; `POST /together/rooms/:id/rotate`; `GET /together/relay/probe?url=` answers `{ok, v, rooms}` for the UI's "check". Mutations need the app header.
-- Default relay: `DEFAULT_RELAY = 'wss://relay.opentrench.app'` in one place (`backend/src/rooms.ts`), shown prefilled in the UI. Not deployed yet: a create against it fails with the relay's real error ("could not reach relay.opentrench.app"), which is the honest state until it goes up.
+- No default relay (decision by the owner, 2026-09-17): there is no official or default relay, ever. No `DEFAULT_RELAY` constant; the app never prefills a relay address. The relay field is empty (placeholder `wss://your-relay.example`) and only remembers the last relay the user typed. To start a room you need a relay address: host your own (docs/relay.md, one command) or use a friend's. Whoever creates the room picks the relay; the invite carries its address, so people who join configure nothing.
 
 Frontend, Settings → Together, top to bottom:
-1. **Rooms** — the page's main thing. Blurb: *"A room is a private channel for your calls. Friends join with one link, from anywhere."* Then one card per room: name, relay host, a status dot, "3 members online", buttons **Copy invite**, **Rotate**, **Leave**. Below: **Create a room** (name; relay field prefilled with the default, with a one-line *"What's a relay?"* disclosure: *"The server the room lives on. It passes messages between members and can't read them: everything is encrypted on your machine with a key only the invite carries. Use the default, or host your own — it's one command."* with a docs link) and **Join a room** (paste an invite; Join).
+1. **Rooms** — the page's main thing. Blurb: *"A room is a private channel for your calls. Friends join with one link, from anywhere."* Then one card per room: name, relay host, a status dot, "3 members online", buttons **Copy invite**, **Rotate**, **Leave**. Below: **Create a room** (name; relay field empty, placeholder `wss://your-relay.example`, remembering the last relay typed, with a one-line *"What's a relay?"* disclosure: *"The server the room lives on. It passes messages between members and can't read them: everything is encrypted on your machine with a key only the invite carries. Host your own, it's one command, or use a friend's."* with a docs link) and **Join a room** (paste an invite; Join).
 2. **Same network** — the existing nearby / requests / following / pair-by-link UI, under a collapsed disclosure *"Same Wi-Fi instead (no relay, nothing leaves the network)"*.
 3. Feed: a room peer's calls show `via <name>` as today.
 
@@ -93,4 +93,4 @@ Plus: what the relay operator can and cannot see (IPs and traffic volume: yes; c
 
 ## 9. Not doing
 
-No moderation inside rooms (anyone with the invite is equal); no chat messages over rooms; no relay federation; no directory of public rooms; no deploying the default relay until the owner says go.
+No moderation inside rooms (anyone with the invite is equal); no chat messages over rooms; no relay federation; no directory of public rooms; no official or default relay (see §5).

@@ -15,9 +15,10 @@ Your invite carries your relay's address; friends configure nothing. Create a
 room with your relay in the relay field, copy the invite, and everyone who
 joins with it lands on your relay.
 
-A default relay address is prefilled in the create form; until it is up, use
-your own or a friend's. Hosting one is a few commands and means nobody but you
-sees your circle's traffic.
+There is no official relay. The relay field in the create form is empty and
+remembers the last relay you used; to start a room you host your own or use a
+friend's. Hosting one is a few commands and means nobody but you sees your
+circle's traffic.
 
 The code is in [`relay/`](../relay/) in the repo. Node 22.
 

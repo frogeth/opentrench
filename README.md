@@ -82,9 +82,11 @@ npm run dev
 ## Host a relay
 
 Rooms run through a relay, a small server in [`relay/`](relay/) that fans out
-encrypted messages and cannot read them. A default relay address is prefilled;
-until it is up, use your own or a friend's: one command puts one on Fly.io, in
-Docker, or behind Caddy on any Node host. Every route, the environment
+encrypted messages and cannot read them. There is no official relay. To start
+a room you need a relay address: host your own (one command puts one on
+Fly.io, in Docker, or behind Caddy on any Node host) or use a friend's.
+Whoever creates the room picks the relay; the invite carries its address, so
+people who join configure nothing. Every route, the environment
 variables, the access code and what the operator can see:
 [docs/relay.md](docs/relay.md).
 

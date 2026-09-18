@@ -152,8 +152,9 @@ with every caller pinned on it, and the full call list.
 
 ## 7. Share calls with friends
 
-⚙ → **Together** → **Create a room**: give it a name, pick a relay (a default
-relay address is prefilled; until it is up, use your own or a friend's), press
+⚙ → **Together** → **Create a room**: give it a name, paste a relay address
+(there is no official relay: host your own, see [Host a relay](relay.md), or
+use a friend's; the field remembers the last relay you used), press
 **Copy invite** and send the link. Your friends click it (the app opens with
 the invite filled in) or paste it under **Join a room**, and from then on each
 other's calls appear in the feed marked `via <name>`. Only calls travel, never
