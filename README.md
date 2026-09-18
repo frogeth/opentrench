@@ -22,6 +22,16 @@ every caller pinned where they called, and the full call list.
 
 ![token drill-down](docs/img/drilldown.png)
 
+Settings: a sidebar of pages, here Market data with the per-chain RPC table
+and the live-price status.
+
+![settings](docs/img/settings.png)
+
+Together: a room card with its members online, Copy invite, Rotate and Leave,
+and the create / join forms under it.
+
+![TrenchTogether rooms](docs/img/together.png)
+
 > **Discord** connects through a small [Vencord plugin](vencord/) inside your own Discord app, so there is no token and no self-bot session. From 0.8.7 the desktop app installs it for you: ⚙ → Accounts → Discord → **Set up Discord**. Discord has to be open for that side of the feed to work. A user token still works as a read-only fallback. Website and setup guides: **https://opentrench.app**
 
 > **OpenSea mint wallet**: use a dedicated wallet, not one holding real funds. The private key is stored encrypted in `config.json` with a key kept in your OS keychain, but anyone who can run code as your user on this machine can still get at it. Mint transactions are irreversible once sent. MintGo and OpenSea expose no official public API for any of this; opentrench reads their unofficial web endpoints, which can change without notice.
@@ -69,6 +79,14 @@ Dev mode with hot reload (`http://localhost:5173`):
 npm run dev
 ```
 
+## Host a relay
+
+Rooms run through a relay, a small server in [`relay/`](relay/) that fans out
+encrypted messages and cannot read them; the app ships a default address, and
+one command puts your own on Fly.io, in Docker, or behind Caddy on any Node
+host. Every route, the environment variables, the access code and what the
+operator can see: [docs/relay.md](docs/relay.md).
+
 ## What the feed does
 
 One Discord-style layout for both platforms. The rail on the far left has
@@ -88,10 +106,12 @@ its recent history without adding it (a banner offers "+ add to feed").
 Clicking a ticker under a message jumps to and flashes its card in Calls.
 The search box matches text, authors, chats, tickers and addresses.
 
-Settings (⚙) is one modal with three tabs: **Accounts** (Discord bridge status,
-Telegram login), **Feed** (favorite callers & pings, blacklist), **Trading**
-(Cove amounts, o1 key, OpenSea mint wallet and RPCs). Channels are managed in
-the sidebar, not in settings.
+Settings (⚙) is one modal with a sidebar of pages: **Accounts** (Discord bridge
+status, Telegram login), **Feed** (favorite callers & pings, blacklist, bots),
+**Market data** (RPCs, Alchemy key, live-price status per chain), **Trading**
+(Cove amounts, o1 key, OpenSea mint wallet), **Together** (rooms and the
+same-network mode) and **Plugins**. Channels are managed in the sidebar, not
+in settings.
 
 - Newest on top. Discord and Telegram merged, with each platform's logo and the
   poster's avatar.
@@ -116,12 +136,26 @@ the sidebar, not in settings.
   contract nobody has called yet: a desktop notification with a sound (enable
   with the 🔔 in the top bar) and a message to your own Telegram Saved
   Messages (toggle in Settings).
-- **Live prices from the pool.** Uniswap v2 / v3 / v4 pools and pump.fun curves
-  are read on-chain (one batched RPC per chain, every 5 s for the last hour's
-  calls); cards show a green dot when the number is live. Public RPCs work out
-  of the box; Settings → Feed → Market data takes an Alchemy key or a custom
-  RPC per chain. Dexscreener / GeckoTerminal fill in the rest and price what the
-  pools cannot.
+- **Live prices from the pool.** Every token on your screen is priced straight
+  from its pool every 3 s: Uniswap v2 / v3 / v4 and Pons curves on EVM chains,
+  pump.fun, PumpSwap, Raydium, Meteora and Orca on Solana, one batched RPC per
+  chain. Cards show a green dot when the number is live. Public RPCs work out
+  of the box; Settings → Market data takes an Alchemy key (used for every chain
+  it answers for) and a custom RPC per chain, and shows per chain which source
+  is in use and how many tokens are live. A new contract is identified from the
+  chain the moment it lands (name, ticker, decimals, supply) and its pool is
+  found on-chain too, so a launch no site has indexed yet still gets a ticker
+  and a live price. Dexscreener / GeckoTerminal fill in liquidity, volume and
+  24h change, and price what the pools cannot.
+- **TrenchTogether.** Share your calls with friends anywhere: create a room in
+  Settings → Together, send the one invite link, and their calls show in your
+  feed marked `via <name>` while yours show in theirs. Only calls travel, never
+  chat messages, and every message is encrypted on your machine with a key that
+  lives in the invite, so the relay in between sees ciphertext and nothing
+  else. Rotate makes a new invite when someone should be out. The same-network
+  mode is still there for people on one Wi-Fi who want nothing to leave the
+  house: nearby machines by name, an Allow / Ignore prompt with a four-letter
+  code, or pair by link. Docs: [docs/together.md](docs/together.md).
 - **Launchpads.** pump.fun (coin API: image + market cap while still
   bonding), Bankr, Stonks, Pons and Flap (read straight off the token contract
   on Robinhood Chain / BNB), Virtuals, Clanker and letsbonk are detected
