@@ -280,8 +280,13 @@ export class MessageHub extends EventEmitter {
       }
     }
     for (const k of ['firstCallMarketCap', 'athMarketCap', 'security'] as const) if (t[k] === undefined && incoming[k] !== undefined) ((t as any)[k] = incoming[k]), (changed = true);
+    // identity (ticker, name, socials): a later share fills what is still missing, never what this machine found
+    for (const k of META_KEYS) if (t[k] === undefined && incoming[k]) ((t as any)[k] = incoming[k]), (changed = true);
     if (t.via && incoming.athMarketCap !== undefined) t.athMarketCap = Math.max(t.athMarketCap ?? 0, incoming.athMarketCap);
     if (fresh) this.applyBuy(t);
+    // shared the instant the call landed, before the friend's own enrichment answered: the chain
+    // names it in one call, so ask here rather than show a bare address until they call it again
+    if (fresh && !this.hasIdentity(t)) this.enrich(t);
     if (!changed) return;
     this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
     this.changed();
@@ -539,6 +544,7 @@ export class MessageHub extends EventEmitter {
     let anyNew = false;
     for (const c of msg.contracts) {
       let t = this.tokens.get(c.address);
+      const existed = !!t;
       if (!t) {
         if (blocked) continue;
         t = {
@@ -576,6 +582,8 @@ export class MessageHub extends EventEmitter {
           }
         }
       }
+      // a token that arrived via a friend without a ticker or chain (or whose earlier fetch failed): our own call is the moment to ask
+      if (live && existed && !t.enrichedAt && !this.hasIdentity(t)) this.enrich(t);
       const chats = this.tokenChats.get(c.address)!;
       // one call per caller per chat: the same person re-posting a contract in the same chat is a
       // repeat, a different person in that chat is a new call. A friend's copy of this very chat
@@ -889,7 +897,7 @@ export class MessageHub extends EventEmitter {
       if (t.lastCallTs === undefined) t.lastCallTs = t.firstSeenTs;
       if (!Array.isArray(t.calls)) t.calls = t.firstCaller ? [{ ...t.firstCaller }] : [];
       this.applyBuy(t);
-      if (t.priceUsd === undefined && now - t.firstSeenTs < REENRICH_MAX_AGE_MS) this.enrich(t);
+      if ((t.priceUsd === undefined || !this.hasIdentity(t)) && now - t.firstSeenTs < REENRICH_MAX_AGE_MS) this.enrich(t);
     }
   }
 
@@ -899,9 +907,19 @@ export class MessageHub extends EventEmitter {
 
   // ---------- enrichment ----------
 
+  /** a ticker and a chain: what a card needs to be more than an address */
+  private hasIdentity(t: TokenInfo): boolean {
+    return !!t.symbol && !!t.network;
+  }
+
+  private enrichInFlight = new Set<string>();
+
   private enrich(t: TokenInfo, attempt = 0): void {
     if (!this.fetcher) return;
+    if (this.enrichInFlight.has(t.address)) return; // two calls seconds apart share one fetch
+    this.enrichInFlight.add(t.address);
     this.fetcher(t.address, t.chain)
+      .finally(() => this.enrichInFlight.delete(t.address))
       .then((info) => {
         const live = this.tokens.get(t.address);
         if (!live) return;

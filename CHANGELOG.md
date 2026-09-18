@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Fix: calls shared through a room could show up as a bare address (`0x50…6d3d`, chain unknown, no pair) and stay that way. The sender shared the token the instant the call landed, before its own lookup had answered, and only a newer call would have sent it again; the receiver never asked for itself. Now a token that arrives without a ticker or chain is identified by the receiver's own RPC and directory lookups, a later share fills what is still missing (never what this machine found), a call of your own on such a token asks too, and the sender re-sends once when the ticker and chain land, with no new call needed. Two calls seconds apart share one lookup.
+
 - **Genius launchpad** (genius.fun, BNB Chain). Tokens launched there get the Genius badge linking to their genius.fun page, their logo and socials straight off the token contract, and a note on where they stand: on the curve with the percentage raised toward graduation, graduating, or graduated to PancakeSwap. A token still on its bonding curve is priced live off the curve the moment it lands in the feed (native BNB or the ERC-20 the creator picked as quote), before any chart site lists it; graduated ones keep the directory price until the PancakeSwap Infinity pool is readable. Read entirely on-chain from the factory Genius documents for integrators; no API involved. Genius is also a filter under Launchpads in the column editor.
 
 ## v0.12.0 — 2026-09-18

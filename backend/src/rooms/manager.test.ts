@@ -53,9 +53,9 @@ type Peer = {
  * `inert`: clients that never dial, for tests about config and validation on relays that do not exist.
  * `live`: the real clock instead of the frozen one (`clock.now`), for the throttle's timers.
  */
-function peer(name: string, opts: { inert?: boolean; live?: boolean; sendGapMs?: number } = {}): Peer {
+function peer(name: string, opts: { inert?: boolean; live?: boolean; sendGapMs?: number; fetcher?: (address: string) => Promise<Partial<TokenInfo> | undefined> } = {}): Peer {
   const cfg = new ConfigStore(tmpFile());
-  const hub = new MessageHub(10);
+  const hub = new MessageHub(10, opts.fetcher as any);
   const p: Peer = { name, cfg, hub, sends: [], clients: [], statuses: 0, clock: { now: Date.now() }, mgr: undefined as unknown as RoomsManager };
   p.mgr = new RoomsManager({
     cfg,
@@ -365,6 +365,33 @@ describe('RoomsManager', () => {
     a.mgr.setAccess(a.cfg.get().together.rooms[0]!.id, '');
     expect(a.cfg.get().together.rooms[0]!.access).toBeUndefined();
     await until(() => a.mgr.status()[0]!.state === 'access-denied', 3000, 'denied again');
+  });
+
+  it('a token shared before its own enrichment answered is sent once more when the ticker and chain land, with no newer call', async () => {
+    const h = await startRelay();
+    let answer: ((info: Partial<TokenInfo>) => void) | undefined;
+    const a = peer('A', { fetcher: () => new Promise((r) => (answer = r)) });
+    const b = peer('B');
+    const room = a.mgr.create('r', h.url);
+    await connected(a);
+    b.mgr.join(room.invite);
+    await connected(b);
+    await until(() => a.mgr.status()[0]!.members === 1, 3000, 'A sees B');
+    const t0 = Date.now();
+    a.hub.push(call(EVM, 'alice', t0));
+    await until(() => tokenSends(a, EVM).length === 1, 3000, 'first send');
+    expect(tokenSends(a, EVM)[0]!.plain.token.symbol).toBeUndefined(); // went out bare
+    await until(() => !!answer, 3000, 'enrichment asked');
+    a.clock.now += 60_000; // past the send gap
+    answer!({ symbol: 'TINDER', name: 'Tinder', network: 'robinhood', priceUsd: 1 });
+    await until(() => tokenSends(a, EVM).length === 2, 3000, 'catch-up send');
+    expect(tokenSends(a, EVM)[1]!.plain.token).toMatchObject({ symbol: 'TINDER', network: 'robinhood' });
+    await until(() => b.hub.getToken(EVM)?.symbol === 'TINDER', 3000, 'B has the ticker');
+    // more market ticks do not send again: identity travels once
+    a.clock.now += 60_000;
+    a.hub.updateMarket(EVM, { marketCap: 5 });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(tokenSends(a, EVM)).toHaveLength(2);
   });
 
   it('only identity and calls travel: market numbers never reach the room, so a peer keeps pricing on its own', async () => {
