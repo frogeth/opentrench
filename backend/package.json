@@ -23,6 +23,7 @@
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.0",
     "@types/ws": "^8.5.13",
+    "opentrench-relay": "*",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^5.0.0"
