@@ -32,5 +32,7 @@ export function readEnv(env: Env, warn: (m: string) => void): { port: number; op
   if (env.RELAY_DATA_DIR) options.dataDir = env.RELAY_DATA_DIR;
   const bufferHours = int('RELAY_BUFFER_HOURS');
   if (bufferHours !== undefined) options.bufferHours = bufferHours;
+  const bufferBytes = int('RELAY_BUFFER_BYTES');
+  if (bufferBytes !== undefined) options.bufferBytes = bufferBytes;
   return { port: int('PORT') ?? 8080, options };
 }

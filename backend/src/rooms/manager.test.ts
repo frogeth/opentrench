@@ -367,6 +367,67 @@ describe('RoomsManager', () => {
     await until(() => a.mgr.status()[0]!.state === 'access-denied', 3000, 'denied again');
   });
 
+  it('only identity and calls travel: market numbers never reach the room, so a peer keeps pricing on its own', async () => {
+    const h = await startRelay();
+    const a = peer('A');
+    const b = peer('B');
+    const room = a.mgr.create('r', h.url);
+    await connected(a);
+    b.mgr.join(room.invite);
+    await connected(b);
+    await until(() => a.mgr.status()[0]!.members === 1, 3000, 'A sees B');
+    // explicit, distinct call times: two pushes in the same millisecond would be "nothing newer" to the throttle
+    const t0 = Date.now();
+    a.hub.push(call(SOL, 'alice', t0));
+    a.hub.updateMarket(SOL, { priceUsd: 1.5, marketCap: 7, liquidity: 3, change24h: 2, volume24h: 9, buys24h: 1, sells24h: 1, priceSource: 'chain', priceAt: 5, imageUrl: 'https://img', pairAddress: 'pair', dex: 'raydium' });
+    expect(a.hub.getToken(SOL)!.priceUsd).toBe(1.5);
+    a.clock.now += 60_000;
+    a.hub.push(call(SOL, 'anna', t0 + 1)); // a second own call after the numbers landed: this send carries the enriched token
+    await until(() => b.hub.getToken(SOL)?.calls.length === 2, 3000, 'B has both calls');
+    const dropped = ['priceUsd', 'marketCap', 'liquidity', 'change24h', 'volume24h', 'buys24h', 'sells24h', 'priceSource', 'priceAt', 'security', 'via'] as const;
+    const sent = tokenSends(a, SOL).at(-1)!.plain.token;
+    expect(sent).toMatchObject({ address: SOL, chain: 'sol', dex: 'raydium', imageUrl: 'https://img', pairAddress: 'pair', athMarketCap: 7 });
+    for (const k of dropped) expect(k in sent, k).toBe(false);
+    const got = b.hub.getToken(SOL)!;
+    expect(got.dex).toBe('raydium');
+    expect(got.via).toBe('A');
+    for (const k of dropped) if (k !== 'via') expect(got[k], k).toBeUndefined();
+    // B prices it locally; the next call from A does not overwrite that
+    b.hub.updateMarket(SOL, { priceUsd: 9, marketCap: 99 });
+    a.clock.now += 60_000;
+    a.hub.push(call(SOL, 'arthur', t0 + 2));
+    await until(() => b.hub.getToken(SOL)?.calls.length === 3, 3000, 'B has the third call');
+    expect(b.hub.getToken(SOL)!.marketCap).toBe(99);
+    expect(b.hub.getToken(SOL)!.priceUsd).toBe(9);
+  });
+
+  it('rotate tells the old room first: a member still in it lands in key-mismatch and stays there across sync(), until it leaves and re-joins', async () => {
+    const h = await startRelay();
+    const a = peer('A');
+    const b = peer('B');
+    const room = a.mgr.create('r', h.url);
+    await connected(a);
+    b.mgr.join(room.invite, 'theirs');
+    await connected(b);
+    await until(() => a.mgr.status()[0]!.members === 1, 3000, 'A sees B');
+    const next = a.mgr.rotate(room.id);
+    await until(() => b.mgr.status()[0]!.state === 'key-mismatch', 3000, 'B told');
+    expect(b.mgr.status()[0]).toMatchObject({ id: room.id, name: 'theirs', members: 0, error: expect.stringMatching(/new invite/) });
+    expect(b.cfg.get().together.rooms.map((r) => r.id)).toEqual([room.id]); // still in config: the card shows the message and offers Leave
+    await connected(a, next.id);
+    // a later sync() (the settings screen saved something else) does not dial the dead room again
+    b.mgr.sync();
+    await sleep(FAST.max + 100);
+    expect(b.mgr.status()[0]!.state).toBe('key-mismatch');
+    expect(b.clients).toHaveLength(1);
+    // leaving and joining the new invite is the way back in
+    b.mgr.leave(room.id);
+    expect(b.mgr.status()).toEqual([]);
+    b.mgr.join(next.invite, 'theirs');
+    await connected(b, next.id);
+    await until(() => a.mgr.status()[0]!.members === 1, 3000, 'A sees B again');
+  });
+
   it('stop() stops every client and stops listening to the hub', async () => {
     const h = await startRelay();
     const a = peer('A');

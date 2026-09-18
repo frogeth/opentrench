@@ -498,6 +498,62 @@ describe('RoomClient', () => {
     await until(b.client, () => b.client.members === 1);
   });
 
+  describe('rotated', () => {
+    it('a member announcing a rotation puts every other member in key-mismatch, for good', async () => {
+      const h = await startRelay();
+      const key = newRoomKey();
+      const a = make(h, key, 'A');
+      const b = make(h, key, 'B');
+      a.client.start();
+      b.client.start();
+      await connected(a);
+      await connected(b);
+      await until(a.client, () => a.client.members === 1);
+      expect(a.client.announceRotation()).toBe(true);
+      await until(b.client, () => b.client.state === 'key-mismatch');
+      expect(b.client.lastError).toMatch(/rotated|new invite/);
+      expect(b.client.members).toBe(0);
+      expect(b.client.peers.size).toBe(0);
+      expect(b.client.send({ k: 'token' })).toBe(false);
+      // the sender itself is untouched: the manager stops it a moment later
+      expect(a.client.state).toBe('connected');
+      // terminal: no reconnect on the backoff, and neither reconnect() nor start() brings it back
+      b.client.reconnect();
+      b.client.start();
+      await sleep(FAST.max + 100);
+      expect(b.client.state).toBe('key-mismatch');
+      expect(b.states).toEqual(['connecting', 'connected', 'key-mismatch']);
+      // the relay saw B go
+      await until(a.client, () => a.client.members === 0);
+      // stop() (the user pressed Leave) still works
+      b.client.stop();
+      expect(b.client.state).toBe('disconnected');
+    });
+
+    it('a rotation replayed from the buffer counts the same: a member who was away never reaches connected', async () => {
+      const h = await startRelay();
+      const key = newRoomKey();
+      const id = roomIdOf(key);
+      const raw = await rawMember(h.port, id);
+      const watcher = await rawMember(h.port, id);
+      raw.send(seal(key, id, { k: 'token', name: 'X', token: token('So8') }));
+      raw.send(seal(key, id, { k: 'rotated' }));
+      await poll(() => msgsSeen(watcher) === 2);
+      const b = make(h, key, 'B');
+      b.client.start();
+      await until(b.client, () => b.client.state === 'key-mismatch');
+      await sleep(FAST.max + 100);
+      expect(b.states).toEqual(['connecting', 'key-mismatch']);
+      expect(b.tokens.map((t) => t.token.address)).toEqual(['So8']); // what came before it still counts
+    });
+
+    it('announceRotation() is a no-op when not connected', async () => {
+      const h = await startRelay();
+      const a = make(h, newRoomKey(), 'A');
+      expect(a.client.announceRotation()).toBe(false);
+    });
+  });
+
   it('reconnect() drops the current socket and dials again', async () => {
     const h = await startRelay();
     const a = make(h, newRoomKey(), 'A');

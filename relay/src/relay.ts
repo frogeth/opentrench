@@ -30,8 +30,10 @@ export type RelayOptions = {
   maxMembers?: number;
   /** Buffer keeps at most this many messages per room... */
   bufferMax?: number;
-  /** ...and none older than this. */
+  /** ...and none older than this... */
   bufferHours?: number;
+  /** ...and no more than this many bytes of body per room (default 4 MB): a member at the message cap must not own the relay's memory. */
+  bufferBytes?: number;
   /** A room nobody has been in for this long is forgotten, buffer included. */
   idleDays?: number;
   /** Directory for one JSON file per room; omitted = memory only. */
@@ -65,6 +67,8 @@ type Room = {
   id: string;
   members: Map<string, Set<WebSocket>>;
   buffer: Buffered[];
+  /** Sum of `body.length` over `buffer`, kept in step so trim() need not re-add it per message. */
+  bytes: number;
   lastSeen: number;
   buckets: Map<string, Bucket>;
   saveTimer?: NodeJS.Timeout;
@@ -83,12 +87,20 @@ const HELLO_WINDOW_MS = 60_000;
 const HELLO_IPS_MAX = 10_000;
 /** A member bucket nobody has drawn on for this long is full again anyway. */
 const BUCKET_IDLE_MS = 60_000;
+/**
+ * Sockets that have connected but not yet said hello, per IP and in all. The hello limiter only
+ * counts hellos, so without these a client could hold thousands of silent sockets for the 10 s
+ * each is allowed; past the cap a newcomer is refused at once with `rate`.
+ */
+const PENDING_PER_IP = 16;
+const PENDING_TOTAL = 4096;
 
 export function createRelay(opts: RelayOptions = {}): Relay {
   const maxRooms = opts.maxRooms ?? 1000;
   const maxMembers = opts.maxMembers ?? 50;
   const bufferMax = opts.bufferMax ?? 2000;
   const bufferMs = (opts.bufferHours ?? 24) * 3_600_000;
+  const bufferBytes = opts.bufferBytes ?? 4 * 1024 * 1024;
   const idleMs = (opts.idleDays ?? 7) * 86_400_000;
   const maxMessageBytes = opts.maxMessageBytes ?? 65_536;
   const msgPerSec = opts.msgPerSec ?? 30;
@@ -105,6 +117,9 @@ export function createRelay(opts: RelayOptions = {}): Relay {
   /** Per IP, the times of its hellos in the last minute, oldest first. */
   const hellos = new Map<string, number[]>();
   const sockets = new Set<WebSocket>();
+  /** Per IP, how many of its sockets have yet to say hello; `pendingTotal` is the sum. */
+  const pendingByIp = new Map<string, number>();
+  let pendingTotal = 0;
   /** Told to go; frames that were already in flight from it are ignored. */
   const dead = new WeakSet<WebSocket>();
   const wss = new WebSocketServer({ noServer: true, maxPayload: maxMessageBytes * 2 });
@@ -199,7 +214,8 @@ export function createRelay(opts: RelayOptions = {}): Relay {
         const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as { buffer?: unknown; lastSeen?: unknown };
         if (!Array.isArray(raw.buffer) || typeof raw.lastSeen !== 'number') throw new Error('unexpected shape');
         const buffer = raw.buffer.filter((m): m is Buffered => !!m && typeof m === 'object' && ID_RE.test((m as Buffered).from) && BODY_RE.test((m as Buffered).body) && typeof (m as Buffered).ts === 'number');
-        const room: Room = { id, members: new Map(), buffer, lastSeen: raw.lastSeen, buckets: new Map(), saving: false, dirty: false };
+        const bytes = buffer.reduce((n, m) => n + m.body.length, 0);
+        const room: Room = { id, members: new Map(), buffer, bytes, lastSeen: raw.lastSeen, buckets: new Map(), saving: false, dirty: false };
         trim(room);
         rooms.set(id, room);
       } catch (e) {
@@ -209,12 +225,19 @@ export function createRelay(opts: RelayOptions = {}): Relay {
   };
 
   // --- rooms -----------------------------------------------------------------
+  // Oldest first, until the buffer is within age, count and bytes at once. A body
+  // that is over the byte cap on its own goes out to the room like any other but
+  // is not kept: the cap is on what the relay holds, not on what it carries.
   const trim = (room: Room) => {
     const cutoff = now() - bufferMs;
     let drop = 0;
     while (drop < room.buffer.length && room.buffer[drop]!.ts < cutoff) drop++;
     if (room.buffer.length - drop > bufferMax) drop = room.buffer.length - bufferMax;
+    let bytes = room.bytes;
+    for (let i = 0; i < drop; i++) bytes -= room.buffer[i]!.body.length;
+    while (drop < room.buffer.length && bytes > bufferBytes) bytes -= room.buffer[drop++]!.body.length;
     if (drop) room.buffer.splice(0, drop);
+    room.bytes = bytes;
   };
   load();
   const memberIds = (room: Room) => [...room.members.keys()];
@@ -268,8 +291,11 @@ export function createRelay(opts: RelayOptions = {}): Relay {
     if (!raw || typeof raw !== 'object') return 'bad';
     const f = raw as Record<string, unknown>;
     if (f.t !== 'hello' || typeof f.v !== 'number') return 'bad';
-    if (f.v < PROTOCOL_VERSION) return 'too-old';
-    if (f.v > PROTOCOL_VERSION) return 'too-new';
+    // The code names the relay's side of the gap (spec §2): an app speaking a newer protocol than
+    // this relay is told the relay is `too-old` (it needs updating); an app behind the relay is
+    // told the relay is `too-new` (the app does).
+    if (f.v > PROTOCOL_VERSION) return 'too-old';
+    if (f.v < PROTOCOL_VERSION) return 'too-new';
     if (typeof f.room !== 'string' || !ID_RE.test(f.room) || typeof f.member !== 'string' || !ID_RE.test(f.member)) return 'bad';
     if (f.access !== undefined && typeof f.access !== 'string') return 'bad';
     return { t: 'hello', v: f.v, room: f.room, member: f.member, access: f.access as string | undefined };
@@ -277,6 +303,21 @@ export function createRelay(opts: RelayOptions = {}): Relay {
   const accessOk = (given: string | undefined): boolean => !accessCode || timingSafeEqual(digest(given ?? ''), accessCode);
 
   const onConnection = (ws: WebSocket, ip: string) => {
+    ws.on('error', () => ws.terminate());
+    const pendingHere = pendingByIp.get(ip) ?? 0;
+    if (pendingHere >= PENDING_PER_IP || pendingTotal >= PENDING_TOTAL) return fail(ws, 'rate');
+    pendingByIp.set(ip, pendingHere + 1);
+    pendingTotal++;
+    let pending = true;
+    /** The socket said hello or went away: it no longer holds a pre-hello slot. */
+    const settle = () => {
+      if (!pending) return;
+      pending = false;
+      pendingTotal--;
+      const n = (pendingByIp.get(ip) ?? 1) - 1;
+      if (n > 0) pendingByIp.set(ip, n);
+      else pendingByIp.delete(ip);
+    };
     sockets.add(ws);
     let room: Room | undefined;
     let member = '';
@@ -293,7 +334,7 @@ export function createRelay(opts: RelayOptions = {}): Relay {
       let r = rooms.get(hello.room);
       if (!r) {
         if (rooms.size >= maxRooms) return fail(ws, 'full');
-        r = { id: hello.room, members: new Map(), buffer: [], lastSeen: now(), buckets: new Map(), saving: false, dirty: false };
+        r = { id: hello.room, members: new Map(), buffer: [], bytes: 0, lastSeen: now(), buckets: new Map(), saving: false, dirty: false };
         rooms.set(r.id, r);
       }
       let set = r.members.get(hello.member);
@@ -306,6 +347,7 @@ export function createRelay(opts: RelayOptions = {}): Relay {
       else r.members.set(hello.member, (set = new Set([ws])));
       room = r;
       member = hello.member;
+      settle();
       r.lastSeen = now();
       scheduleSave(r);
       send(ws, { t: 'welcome', v: PROTOCOL_VERSION, members: others, buffer: r.buffer });
@@ -320,6 +362,7 @@ export function createRelay(opts: RelayOptions = {}): Relay {
       if (!take(bucketIn(r.buckets, member, msgBurst), msgPerSec, msgBurst)) return fail(ws, 'rate');
       const entry: Buffered = { from: member, body: f.body, ts: now() };
       r.buffer.push(entry);
+      r.bytes += entry.body.length;
       trim(r);
       r.lastSeen = entry.ts;
       scheduleSave(r);
@@ -340,9 +383,9 @@ export function createRelay(opts: RelayOptions = {}): Relay {
       if (room) onMsg(raw);
       else onHello(raw);
     });
-    ws.on('error', () => ws.terminate());
     ws.on('close', () => {
       clearTimeout(helloTimer);
+      settle();
       sockets.delete(ws);
       if (room) leave(room, member, ws);
     });

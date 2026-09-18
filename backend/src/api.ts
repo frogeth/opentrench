@@ -299,7 +299,11 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
         if (!res.headersSent) res.status(400).json({ error: e?.message ?? String(e) });
       }
     };
-  r.get('/together', wrap(() => togetherInfo()));
+  // The listing carries every room's invite, which is the room key: app-only, like the mutations.
+  r.get(
+    '/together',
+    rooms(true, () => togetherInfo()),
+  );
   r.put(
     '/together',
     wrap(async (req) => {

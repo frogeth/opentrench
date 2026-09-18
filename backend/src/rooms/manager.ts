@@ -1,6 +1,5 @@
 import { MAX_ROOMS, type ConfigStore, type Room } from '../config.js';
 import type { MessageHub } from '../hub.js';
-import { shareable } from '../together.js';
 import type { ServerEvent, TokenInfo } from '../types.js';
 import { RoomClient, type RoomClientOptions, type RoomState } from './client.js';
 import { decodeInvite, encodeInvite, newRoomKey, relayHostOf, relayUrlOf, roomIdOf } from './crypto.js';
@@ -10,11 +9,11 @@ import { decodeInvite, encodeInvite, newRoomKey, relayHostOf, relayUrlOf, roomId
  * with the config by sync(); the hub's own calls go out to every connected room, and what comes
  * in is applied to the hub exactly like a LAN friend's calls.
  *
- * Only calls travel. Every app prices what is on its own screen from the chain, so market numbers
- * are never sent and `hub.remoteLive` is left alone for room peers. Only this machine's own calls
- * (those without `via`) ever trigger a send: rooms overlap, and re-sending a friend's call under
- * this name would loop for ever. The message still carries the token's full call list; peers
- * dedupe by message id.
+ * Only calls travel (`roomShareable`). Every app prices what is on its own screen from the chain,
+ * so market numbers are never sent and `hub.remoteLive` is left alone for room peers. Only this
+ * machine's own calls (those without `via`) ever trigger a send: rooms overlap, and re-sending a
+ * friend's call under this name would loop for ever. The message still carries the token's full
+ * call list; peers dedupe by message id.
  */
 
 /** The relay new rooms land on when the user has no preference. The only place this URL is spelled. */
@@ -161,9 +160,14 @@ export class RoomsManager {
     this.sync();
   }
 
-  /** A fresh key (so a fresh id and invite) under the same name, relay and access code; whoever has the old invite is out. */
+  /**
+   * A fresh key (so a fresh id and invite) under the same name, relay and access code; whoever has
+   * the old invite is out. The old room hears about it first (best effort), so members still in it
+   * show "invite changed" instead of a room that went quiet.
+   */
   rotate(id: string): Room & { invite: string } {
     const old = this.require(id);
+    this.running.get(id)?.client.announceRotation();
     const key = newRoomKey();
     const next: Room = { ...old, id: roomIdOf(key), key, joinedAt: this.now() };
     this.deps.cfg.update((c) => (c.together.rooms = c.together.rooms.map((r) => (r.id === id ? next : r))));
@@ -213,7 +217,7 @@ export class RoomsManager {
       return;
     }
     let sent = false;
-    for (const { client } of this.running.values()) if (client.send({ k: 'token', name: this.deps.name(), token: shareable(t) })) sent = true;
+    for (const { client } of this.running.values()) if (client.send({ k: 'token', name: this.deps.name(), token: roomShareable(t) })) sent = true;
     if (sent) this.record(t.address, newest, now);
   }
 
@@ -239,7 +243,7 @@ export class RoomsManager {
     const name = this.deps.name();
     for (const { t, newest } of own) {
       // counts as sent: the first market tick after a reconnect must not send it all over again
-      if (client.send({ k: 'token', name, token: shareable(t) })) this.record(t.address, newest, now);
+      if (client.send({ k: 'token', name, token: roomShareable(t) })) this.record(t.address, newest, now);
     }
     if (own.length) this.log(`rooms: ${client.id} replaying ${own.length} calls`);
   }
@@ -272,6 +276,49 @@ export class RoomsManager {
     this.sync();
     return { ...room, invite: encodeInvite({ relay: room.relay, key: room.key }) };
   }
+}
+
+/** What a room message carries of a token: who it is and who called it. */
+const ROOM_KEYS = [
+  'address',
+  'chain',
+  'network',
+  'name',
+  'symbol',
+  'imageUrl',
+  'pairAddress',
+  'quoteSymbol',
+  'quoteAddress',
+  'dex',
+  'launchpad',
+  'launchpadUrl',
+  'launchpadNote',
+  'chartUrl',
+  'embedUrl',
+  'explorerUrl',
+  'website',
+  'twitter',
+  'telegram',
+  'firstSeenTs',
+  'lastCallTs',
+  'calls',
+  'firstCaller',
+  'firstCallMarketCap',
+  'athMarketCap',
+] as const satisfies readonly (keyof TokenInfo)[];
+
+export type RoomToken = Pick<TokenInfo, (typeof ROOM_KEYS)[number]>;
+
+/**
+ * The room's projection of a token: identity, links and calls, nothing that moves. Price, cap,
+ * liquidity, volume and the like are what every app reads from the chain for itself; sending them
+ * would have `applyRemoteToken` overwrite a peer's own numbers on every call. `via` stays home too
+ * (the receiver tags the token with the sender's name), as does `security`.
+ */
+export function roomShareable(t: TokenInfo): RoomToken {
+  const out: Partial<TokenInfo> = {};
+  for (const k of ROOM_KEYS) if (t[k] !== undefined) (out as Record<string, unknown>)[k] = t[k];
+  return out as RoomToken;
 }
 
 /** The ts of the newest call from this machine's own chats, or undefined when every call came via a friend. Calls are not kept sorted, so a max, not the tail. */

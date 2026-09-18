@@ -88,7 +88,7 @@ describe('rooms API', () => {
     fetch(`${base}${p}`, { method, headers: body === undefined ? headers : { ...headers, ...JSON_ }, body: body === undefined ? undefined : JSON.stringify(body) });
 
   it('GET /together carries rooms, memberId, the relay preference and the default relay', async () => {
-    const res = await call('GET', '/together', undefined, {});
+    const res = await call('GET', '/together');
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.rooms).toEqual([]);
@@ -115,7 +115,7 @@ describe('rooms API', () => {
     const stored = cfg.get().together.rooms[0];
     expect(stored.key).toBe(inv!.key);
     expect(JSON.stringify({ room, status }).replace(room.invite, '')).not.toContain(stored.key);
-    const list = await (await call('GET', '/together', undefined, {})).json();
+    const list = await (await call('GET', '/together')).json();
     expect(list.rooms).toEqual([room]);
     expect(JSON.stringify(list).replace(room.invite, '')).not.toContain(stored.key);
   });
@@ -148,7 +148,7 @@ describe('rooms API', () => {
     const wire = JSON.stringify(joinedBody);
     expect(wire).not.toContain('sesame');
     expect(wire.replace(invite, '')).not.toContain(stored.key);
-    const listed = JSON.stringify(await (await call('GET', '/together', undefined, {})).json());
+    const listed = JSON.stringify(await (await call('GET', '/together')).json());
     expect(listed).not.toContain('sesame');
     expect(listed.replace(invite, '')).not.toContain(stored.key);
 
@@ -197,8 +197,11 @@ describe('rooms API', () => {
     expect(cfg.get().together.rooms.map((r) => r.id)).toEqual([room.id]);
     expect(cfg.get().together.rooms[0].access).toBeUndefined();
     expect(cfg.get().together.relay).toBe('');
-    // the GETs are open
-    expect((await call('GET', '/together', undefined, {})).status).toBe(200);
+    // the listing carries every invite (the room keys), so it is app-only too; the probe stays open
+    const listing = await call('GET', '/together', undefined, {});
+    expect(listing.status).toBe(403);
+    expect(JSON.stringify(await listing.json())).not.toContain(room.invite);
+    expect((await call('GET', '/together')).status).toBe(200);
     expect((await call('GET', '/together/relay/probe?url=wss://10.0.0.1', undefined, {})).status).toBe(200);
   });
 
@@ -212,7 +215,7 @@ describe('rooms API', () => {
     expect(good.status).toBe(200);
     expect(await good.json()).toEqual({ relay: 'wss://relay.example:8443' });
     expect(cfg.get().together.relay).toBe('wss://relay.example:8443');
-    expect((await (await call('GET', '/together', undefined, {})).json()).relay).toBe('wss://relay.example:8443');
+    expect((await (await call('GET', '/together')).json()).relay).toBe('wss://relay.example:8443');
 
     const clear = await call('PUT', '/together/relay', { relay: '' });
     expect(await clear.json()).toEqual({ relay: '' });

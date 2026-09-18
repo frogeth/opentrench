@@ -15,6 +15,12 @@ import { open, roomIdOf, seal } from './crypto.js';
  * the wrong key for a room it computed the id of: a message that does not open is the sender's
  * doing (a copied id and a made-up key, or plain garbage), never ours. Three such messages mute
  * that sender for the rest of the connection; the socket stays up and everyone else is heard.
+ *
+ * The one plaintext that does change state is `{k:'rotated'}`: a member made a new invite, so this
+ * room is dead. The client goes to `key-mismatch` and stays there (no retry, ever) until the user
+ * leaves; the card reads "invite changed — ask for the new one". Anyone holding the invite can say
+ * it, and that is the trust model: whoever has the key already reads every call in the room, so
+ * letting them end it is nothing they could not do by handing the invite around.
  */
 
 export type RoomState = 'connecting' | 'connected' | 'disconnected' | 'key-mismatch' | 'relay-too-old' | 'access-denied' | 'full' | 'rate-limited';
@@ -46,6 +52,8 @@ const SLOW_RETRY_MS = 60_000;
 /** The relay's hello limit is per minute; half of that is enough to get back under it. */
 const RATE_RETRY_MS = 30_000;
 const HANDSHAKE_TIMEOUT_MS = 8_000;
+/** The largest frame taken from a relay: a welcome with a full buffer (2000 × 64 KB bodies is the relay's own cap) fits well inside; a hostile relay gets no more. */
+const MAX_PAYLOAD_BYTES = 16 * 1024 * 1024;
 /** 20 messages a second: under the relay's 30/s so a join burst (up to 200 calls) never trips its limit. */
 const PACE_MS = 50;
 /** Outbound backlog past which the oldest messages are dropped: 25 s of sending is more than any burst needs. */
@@ -75,6 +83,8 @@ export class RoomClient extends EventEmitter {
   private timer?: NodeJS.Timeout;
   private backoff: number;
   private stopped = true;
+  /** A member rotated the room: terminal until the user leaves (start() and reconnect() are no-ops). */
+  private rotated = false;
   /** Undecryptable messages per sender on this connection; at STRIKES the sender is muted. */
   private readonly strikes = new Map<string, number>();
   /** Set when the current socket hit a relay error, so its close is not mistaken for a plain drop. */
@@ -107,14 +117,14 @@ export class RoomClient extends EventEmitter {
   }
 
   start(): void {
-    if (!this.stopped) return;
+    if (!this.stopped || this.rotated) return;
     this.stopped = false;
     this.connect();
   }
 
-  /** Drop whatever is there and dial again now (the user pressed reconnect); the backoff starts over. A stopped client stays stopped. */
+  /** Drop whatever is there and dial again now (the user pressed reconnect); the backoff starts over. A stopped or rotated client stays put. */
   reconnect(): void {
-    if (this.stopped) return;
+    if (this.stopped || this.rotated) return;
     clearTimeout(this.timer);
     this.backoff = this.minBackoff;
     this.abandon();
@@ -152,6 +162,16 @@ export class RoomClient extends EventEmitter {
     return true;
   }
 
+  /**
+   * Tells the room this member just rotated it, so every other member shows "invite changed" rather
+   * than sitting in a room nobody posts to any more. Straight onto the wire, ahead of the paced
+   * queue: the caller stops this client next, and stop() drops that queue. Best effort, like bye.
+   */
+  announceRotation(): boolean {
+    if (this.state !== 'connected' || !this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    return this.sendFrame({ t: 'msg', body: seal(this.opts.key, this.id, { k: 'rotated' }) });
+  }
+
   // --- connection --------------------------------------------------------------
 
   private connect(): void {
@@ -162,7 +182,7 @@ export class RoomClient extends EventEmitter {
     this.setState('connecting');
     let ws: WebSocket;
     try {
-      ws = new this.WS(`${this.opts.relay}/v1`, { handshakeTimeout: HANDSHAKE_TIMEOUT_MS });
+      ws = new this.WS(`${this.opts.relay}/v1`, { handshakeTimeout: HANDSHAKE_TIMEOUT_MS, maxPayload: MAX_PAYLOAD_BYTES });
     } catch (e) {
       // A relay URL that does not parse throws here, before any socket exists; treat it like a failed dial.
       this.lastError = (e as Error).message;
@@ -311,6 +331,8 @@ export class RoomClient extends EventEmitter {
         unreadable++;
         unreadableFrom.add(m.from);
       }
+      // A rotation in the replay ends this room like a live one would; nothing after it matters.
+      if (this.rotated) return;
     }
     // Names replayed from the buffer belong to whoever spoke in the last day; keep only those still here.
     for (const id of [...this.peers.keys()]) if (!others.includes(id)) this.peers.delete(id);
@@ -354,9 +376,30 @@ export class RoomClient extends EventEmitter {
       case 'bye':
         if (this.peers.delete(from)) this.emit('peers');
         return true;
+      case 'rotated':
+        this.onRotated();
+        return true;
       default:
         return true;
     }
+  }
+
+  /** The room is over: hang up, forget everyone, and sit in key-mismatch until the user leaves (see the class comment for who may say this). */
+  private onRotated(): void {
+    if (this.rotated) return;
+    this.rotated = true;
+    this.stopped = true;
+    clearTimeout(this.timer);
+    this.dropQueue();
+    this.abandon();
+    this.lastError = 'the room was rotated; ask a member for the new invite';
+    this.log(`rooms: ${this.id} rotated by a member; ask for the new invite`);
+    if (this.members) this.emit('members', (this.members = 0));
+    if (this.peers.size) {
+      this.peers.clear();
+      this.emit('peers');
+    }
+    this.setState('key-mismatch');
   }
 
   private onPresence(list: string[]): void {

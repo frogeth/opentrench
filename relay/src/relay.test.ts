@@ -107,14 +107,14 @@ describe('hello and welcome', () => {
     expect(await b.next()).toEqual({ t: 'welcome', v: 1, members: [A], buffer: [] });
   });
 
-  it('rejects v below 1 as too-old and above 1 as too-new', async () => {
+  it('names the side that is behind: an app above the relay gets too-old (the relay is), one below it too-new (the relay is)', async () => {
     const h = await start();
-    const old = await h.connect(ROOM, A, undefined, { v: 0 });
-    expect(await old.next()).toEqual({ t: 'error', code: 'too-old' });
-    expect(await old.closed).toBe(CLOSE_CODES['too-old']);
-    const young = await h.connect(ROOM, A, undefined, { v: 2 });
-    expect(await young.next()).toEqual({ t: 'error', code: 'too-new' });
-    expect(await young.closed).toBe(CLOSE_CODES['too-new']);
+    const newerApp = await h.connect(ROOM, A, undefined, { v: 2 });
+    expect(await newerApp.next()).toEqual({ t: 'error', code: 'too-old' });
+    expect(await newerApp.closed).toBe(CLOSE_CODES['too-old']);
+    const olderApp = await h.connect(ROOM, A, undefined, { v: 0 });
+    expect(await olderApp.next()).toEqual({ t: 'error', code: 'too-new' });
+    expect(await olderApp.closed).toBe(CLOSE_CODES['too-new']);
   });
 
   it('rejects a bad first frame: not hello, malformed ids, not JSON', async () => {
@@ -136,7 +136,7 @@ describe('hello and welcome', () => {
   it('ignores frames after a rejected hello: a good hello on the same socket makes no room', async () => {
     const h = await start();
     const c = await h.open();
-    c.send({ t: 'hello', v: 0, room: ROOM, member: A });
+    c.send({ t: 'hello', v: 2, room: ROOM, member: A });
     c.send({ t: 'hello', v: 1, room: ROOM, member: A });
     expect(await c.next()).toEqual({ t: 'error', code: 'too-old' });
     expect(await c.closed).toBe(CLOSE_CODES['too-old']);
@@ -240,6 +240,26 @@ describe('messages', () => {
     now += 45 * 60_000; // 'old' is now 75 min old, 'fresh' 45
     const b = await h.connect(ROOM, B);
     expect((await b.next()).buffer.map((m: Frame) => m.body)).toEqual(['fresh']);
+  });
+
+  it('trims the buffer by bytes, oldest first; a body over the cap on its own is fanned out but not kept', async () => {
+    const h = await start({ bufferBytes: 10 });
+    const a = await h.connect(ROOM, A);
+    await a.next();
+    const c = await h.connect(ROOM, C);
+    await c.next();
+    await a.next();
+    for (const body of ['aaaa', 'bbbb', 'cccc']) a.send({ t: 'msg', body });
+    await hears(c, ['aaaa', 'bbbb', 'cccc']);
+    const b = await h.connect(ROOM, B);
+    expect((await b.next()).buffer.map((m: Frame) => m.body)).toEqual(['bbbb', 'cccc']);
+    await a.next(); // presence: B joined
+    await c.next();
+    a.send({ t: 'msg', body: 'x'.repeat(11) });
+    await hears(c, ['x'.repeat(11)]);
+    expect((await b.next()).body).toBe('x'.repeat(11));
+    const d = await h.connect(ROOM, id());
+    expect((await d.next()).buffer).toEqual([]);
   });
 
   it('rejects a body that is not base64url', async () => {
@@ -357,6 +377,26 @@ describe('limits', () => {
     expect(await e.next()).toEqual({ t: 'error', code: 'rate' });
   });
 
+  it('caps sockets that have not said hello at 16 per IP, and frees the slot once one does or closes', async () => {
+    const h = await start({ helloPerMin: 100 });
+    const idle: Client[] = [];
+    for (let i = 0; i < 16; i++) idle.push(await h.open());
+    const over = await h.open();
+    expect(await over.next()).toEqual({ t: 'error', code: 'rate' });
+    expect(await over.closed).toBe(CLOSE_CODES.rate);
+    // one of them joins a room: it no longer counts, so the next newcomer is let in and left to say hello
+    idle[0]!.send({ t: 'hello', v: 1, room: ROOM, member: A });
+    expect((await idle[0]!.next()).t).toBe('welcome');
+    const next = await h.open();
+    await expect(next.next(100)).rejects.toThrow(/no frame/);
+    // ...and a closed one frees its slot too
+    idle[1]!.ws.close();
+    await idle[1]!.closed;
+    await sleep(20);
+    const another = await h.open();
+    await expect(another.next(100)).rejects.toThrow(/no frame/);
+  });
+
   it('ignores forwarding headers unless trustProxy is on', async () => {
     const h = await start({ helloPerMin: 1 });
     const a = await h.connect(ROOM, A, undefined, {}, { 'x-forwarded-for': '1.1.1.1', 'fly-client-ip': '1.1.1.1' });
@@ -462,12 +502,12 @@ describe('env', () => {
     const warnings: string[] = [];
     const warn = (m: string) => warnings.push(m);
     expect(readEnv({}, warn)).toEqual({ port: 8080, options: { trustProxy: false } });
-    const r = readEnv({ PORT: '9000', RELAY_ACCESS_CODE: 'sesame', RELAY_MAX_ROOMS: '5', RELAY_MAX_MEMBERS: '3', RELAY_DATA_DIR: '/data', RELAY_BUFFER_HOURS: '48', RELAY_TRUST_PROXY: '1' }, warn);
-    expect(r).toEqual({ port: 9000, options: { accessCode: 'sesame', maxRooms: 5, maxMembers: 3, dataDir: '/data', bufferHours: 48, trustProxy: true } });
+    const r = readEnv({ PORT: '9000', RELAY_ACCESS_CODE: 'sesame', RELAY_MAX_ROOMS: '5', RELAY_MAX_MEMBERS: '3', RELAY_DATA_DIR: '/data', RELAY_BUFFER_HOURS: '48', RELAY_BUFFER_BYTES: '1048576', RELAY_TRUST_PROXY: '1' }, warn);
+    expect(r).toEqual({ port: 9000, options: { accessCode: 'sesame', maxRooms: 5, maxMembers: 3, dataDir: '/data', bufferHours: 48, bufferBytes: 1048576, trustProxy: true } });
     expect(warnings).toEqual([]);
-    const bad = readEnv({ PORT: '0', RELAY_MAX_ROOMS: 'lots', RELAY_MAX_MEMBERS: '-1', RELAY_BUFFER_HOURS: '1.5', RELAY_TRUST_PROXY: 'yes' }, warn);
+    const bad = readEnv({ PORT: '0', RELAY_MAX_ROOMS: 'lots', RELAY_MAX_MEMBERS: '-1', RELAY_BUFFER_HOURS: '1.5', RELAY_BUFFER_BYTES: '4MB', RELAY_TRUST_PROXY: 'yes' }, warn);
     expect(bad).toEqual({ port: 8080, options: { trustProxy: false } });
-    expect(warnings).toHaveLength(5);
+    expect(warnings).toHaveLength(6);
     expect(warnings.some((w) => /PORT="0"/.test(w))).toBe(true);
   });
 });
