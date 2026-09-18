@@ -7,7 +7,7 @@ import type { Chain, TokenInfo } from './types.js';
  * the launchpad itself becomes a badge on the card.
  */
 
-export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long' | 'argus' | 'warp' | 'peach' | 'dyor' | 'synthra';
+export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'genius' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long' | 'argus' | 'warp' | 'peach' | 'dyor' | 'synthra';
 
 export interface LaunchpadInfo extends Partial<TokenInfo> {
   launchpad: Launchpad;
@@ -387,6 +387,8 @@ export interface LaunchpadProbes {
   bankr?: (a: string) => Promise<LaunchpadInfo | undefined>;
   stonks?: (a: string) => Promise<LaunchpadInfo | undefined>;
   pons?: (a: string) => Promise<LaunchpadInfo | undefined>;
+  /** Genius (BNB Chain): one factory call says whether the token is a launch */
+  genius?: (a: string) => Promise<LaunchpadInfo | undefined>;
   flap?: (a: string) => Promise<LaunchpadInfo | undefined>;
   virtuals?: (a: string) => Promise<LaunchpadInfo | undefined>;
   clanker?: (a: string) => Promise<LaunchpadInfo | undefined>;
@@ -442,6 +444,7 @@ export function createLaunchpadClassifier(p: LaunchpadProbes): (address: string,
       ['bankr', p.bankr],
       ['stonks', p.stonks],
       ['pons', p.pons],
+      ['genius', p.genius],
       ['flap', p.flap],
       ['virtuals', p.virtuals],
       ['clanker', p.clanker],
@@ -813,4 +816,124 @@ export async function fetchSynthra(address: string, fetchImpl: typeof fetch = fe
     return out;
   }
   return undefined;
+}
+
+// ---------- Genius (BNB Chain): the factory's launch record and the token's own metadata; no API ----------
+
+/**
+ * genius.fun is a Pons v2 stack on BNB Chain (release prod-foundation-20260916, ABI 4.1.0) with a
+ * documented on-chain surface and, by design, no public API. One factory call says whether a
+ * token is a launch and where it trades; the token itself carries logo, description and socials.
+ * Graduated tokens move to a PancakeSwap Infinity pool the live pricer does not read yet, so
+ * they keep the directory price; on-curve ones are priced off the curve like Pons.
+ */
+export const GENIUS_FACTORY = '0x78EAE9537C0ef90DFe9B7ae964682Fe8138afe31';
+export const GENIUS_SEL = { getLaunchedToken: '0x3cf28b5a', getTokenInfo: '0xabb1dc44', realQuoteReserve: '0x4f1f58fd' };
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+export interface GeniusLaunch {
+  curve: string;
+  /** address(0) = native BNB */
+  pairToken: string;
+  graduationThreshold: bigint;
+  /** 0 on the curve · 1 swept (graduating) · 2 pool live · 3 rescued */
+  phase: 0 | 1 | 2 | 3;
+}
+
+/** getLaunchedToken's static struct: 15 words, `exists` last; undefined when the factory has no record. */
+export function decodeGeniusLaunch(hex: string): GeniusLaunch | undefined {
+  const data = hex.startsWith('0x') ? hex.slice(2) : hex;
+  if (data.length < 64 * 15) return undefined;
+  const word = (i: number) => data.slice(i * 64, i * 64 + 64);
+  if (BigInt('0x' + word(14)) !== 1n) return undefined;
+  const phase = Number(BigInt('0x' + word(10)));
+  if (phase < 0 || phase > 3) return undefined;
+  return { curve: '0x' + word(1).slice(24), pairToken: '0x' + word(4).slice(24), graduationThreshold: BigInt('0x' + word(5)), phase: phase as 0 | 1 | 2 | 3 };
+}
+
+/** getTokenInfo(): (address deployer, string logo, string description, (string twitter, telegram, discord, website, farcaster)). */
+export function decodeGeniusTokenInfo(hex: string): { logo: string; description: string; socials: string[] } | undefined {
+  const data = hex.startsWith('0x') ? hex.slice(2) : hex;
+  if (data.length < 64 * 4) return undefined;
+  const wordAt = (byteOff: number): number | undefined => {
+    const h = data.slice(byteOff * 2, byteOff * 2 + 64);
+    if (h.length < 64) return undefined;
+    const n = parseInt(h, 16);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const strAt = (byteOff: number): string | undefined => {
+    const len = wordAt(byteOff);
+    if (len === undefined) return undefined;
+    const start = byteOff * 2 + 64;
+    if (start + len * 2 > data.length) return undefined;
+    return Buffer.from(data.slice(start, start + len * 2), 'hex').toString('utf8');
+  };
+  const [logoOff, descOff, socOff] = [wordAt(32), wordAt(64), wordAt(96)];
+  if (logoOff === undefined || descOff === undefined || socOff === undefined) return undefined;
+  const logo = strAt(logoOff);
+  const description = strAt(descOff);
+  if (logo === undefined || description === undefined) return undefined;
+  const socials: string[] = [];
+  for (let i = 0; i < 5; i++) {
+    const rel = wordAt(socOff + i * 32);
+    const s = rel === undefined ? undefined : strAt(socOff + rel);
+    if (s === undefined) return undefined;
+    socials.push(s);
+  }
+  return { logo, description, socials };
+}
+
+/** Where a launch stands, for the badge: on the curve with its progress, graduating, graduated, or rescued. */
+export function geniusNote(launch: GeniusLaunch, realQuote: bigint | undefined): string {
+  if (launch.phase === 1) return 'graduating';
+  if (launch.phase === 2) return 'graduated to PancakeSwap';
+  if (launch.phase === 3) return 'rescued (delisted)';
+  if (realQuote === undefined || launch.graduationThreshold <= 0n) return 'on the curve';
+  const pct = Number((realQuote * 1000n) / launch.graduationThreshold) / 10;
+  return `on the curve · ${Math.min(100, pct).toFixed(1)}% to graduation`;
+}
+
+export async function fetchGenius(address: string, fetchImpl: typeof fetch = fetch, rpc = BSC_RPC): Promise<LaunchpadInfo | undefined> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return undefined;
+  const rec = await ethCall(rpc, GENIUS_FACTORY, GENIUS_SEL.getLaunchedToken + address.slice(2).toLowerCase().padStart(64, '0'), fetchImpl).catch(() => undefined);
+  const launch = rec ? decodeGeniusLaunch(rec) : undefined;
+  if (!launch) return undefined; // not a Genius launch (or the factory did not answer)
+  const native = launch.pairToken.toLowerCase() === ZERO_ADDRESS;
+  const [info, name, symbol, real, pairSym] = await Promise.all([
+    ethCall(rpc, address, GENIUS_SEL.getTokenInfo, fetchImpl).catch(() => undefined),
+    ethCall(rpc, address, SEL.name, fetchImpl).catch(() => undefined),
+    ethCall(rpc, address, SEL.symbol, fetchImpl).catch(() => undefined),
+    launch.phase === 0 ? ethCall(rpc, launch.curve, GENIUS_SEL.realQuoteReserve, fetchImpl).catch(() => undefined) : undefined,
+    native ? undefined : ethCall(rpc, launch.pairToken, SEL.symbol, fetchImpl).catch(() => undefined),
+  ]);
+  const out: LaunchpadInfo = { launchpad: 'genius', launchpadUrl: `https://genius.fun/token/${address}`, network: 'bsc' };
+  const realQuote = real && real.length >= 66 ? BigInt(real.slice(0, 66)) : undefined;
+  out.launchpadNote = geniusNote(launch, realQuote);
+  const meta = info ? decodeGeniusTokenInfo(info) : undefined;
+  if (meta) {
+    const img = ipfsToHttp(meta.logo);
+    if (img) out.imageUrl = img;
+    const [twitter, telegram, , website] = meta.socials;
+    const x = xUrl(twitter);
+    if (x) out.twitter = x;
+    const tg = tgUrl(telegram);
+    if (tg) out.telegram = tg;
+    if (website?.trim()) out.website = website.trim();
+  }
+  const nameStr = name ? decodeStrings(name, 1)?.[0] : undefined;
+  if (nameStr) out.name = nameStr;
+  const symStr = symbol ? decodeStrings(symbol, 1)?.[0] : undefined;
+  if (symStr) out.symbol = symStr;
+  if (launch.phase === 0) {
+    // still on the curve: that is its pool, and the live pricer reads getReserves off it like a Pons curve
+    out.pairAddress = launch.curve;
+    out.dex = 'genius';
+    if (native) out.quoteSymbol = 'BNB';
+    else {
+      out.quoteAddress = launch.pairToken;
+      const ps = pairSym ? decodeStrings(pairSym, 1)?.[0] : undefined;
+      if (ps) out.quoteSymbol = ps;
+    }
+  }
+  return out;
 }

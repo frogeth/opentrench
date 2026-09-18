@@ -162,7 +162,10 @@ in settings.
   code, or pair by link. Docs: [docs/together.md](docs/together.md).
 - **Launchpads.** pump.fun (coin API: image + market cap while still
   bonding), Bankr, Stonks, Pons and Flap (read straight off the token contract
-  on Robinhood Chain / BNB), Virtuals, Clanker and letsbonk are detected
+  on Robinhood Chain / BNB), Genius (genius.fun on BNB Chain: the launch record
+  off its factory, logo and socials off the token, and while a token is still
+  on its curve the curve is priced live like a Pons curve), Virtuals, Clanker
+  and letsbonk are detected
   automatically; o1 needs an API key (Settings → Trading). The launchpad's logo sits on the
   token image and links to the launch page, and the launchpad's own token
   image and socials fill in when no chart site has them yet. IPFS images go

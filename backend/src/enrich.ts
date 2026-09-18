@@ -2,7 +2,7 @@ import type { Chain, TokenInfo } from './types.js';
 import { fetchDexscreener } from './dexscreener.js';
 import { fetchGeckoTerminal, gtThrottled } from './geckoterminal.js';
 import { probeChains } from './rpcprobe.js';
-import { createLaunchpadClassifier, fetchBankrLaunch, fetchClanker, fetchFlap, fetchO1, fetchPons, fetchPumpfun, fetchStonks, fetchVirtuals, type LaunchpadInfo, fetchArgus, fetchWarp, fetchPeach, fetchDyor, fetchSynthra } from './launchpads.js';
+import { createLaunchpadClassifier, fetchBankrLaunch, fetchClanker, fetchFlap, fetchO1, fetchPons, fetchGenius, fetchPumpfun, fetchStonks, fetchVirtuals, type LaunchpadInfo, fetchArgus, fetchWarp, fetchPeach, fetchDyor, fetchSynthra } from './launchpads.js';
 import { fetchLong } from './long.js';
 
 export type TokenFetcher = (address: string, chain: Chain) => Promise<Partial<TokenInfo> | undefined>;
@@ -46,7 +46,8 @@ export interface EnrichSources {
   log?: (msg: string) => void;
 }
 
-const FILL_KEYS = ['imageUrl', 'name', 'symbol', 'website', 'twitter', 'telegram', 'network', 'pairCreatedAt', 'marketCap'] as const;
+// a launchpad that knows the token's curve (Genius) also fills the pool, so the live pricer can read it before any directory lists it
+const FILL_KEYS = ['imageUrl', 'name', 'symbol', 'website', 'twitter', 'telegram', 'network', 'pairCreatedAt', 'marketCap', 'pairAddress', 'quoteSymbol', 'quoteAddress', 'dex'] as const;
 /** what the chain itself can say about a token (see onchain/firstsight.ts) */
 const CHAIN_KEYS = ['network', 'name', 'symbol', 'pairAddress', 'quoteSymbol', 'quoteAddress', 'dex'] as const;
 
@@ -138,6 +139,7 @@ export function createDefaultEnricher(opts: { o1ApiKey?: () => string | undefine
       bankr: (a) => fetchBankrLaunch(a),
       stonks: (a) => fetchStonks(a),
       pons: (a) => fetchPons(a),
+      genius: (a) => fetchGenius(a),
       long: (a) => fetchLong(a),
       argus: (a) => fetchArgus(a),
       warp: (a) => fetchWarp(a),

@@ -691,7 +691,7 @@ function LaunchpadSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () =
     <section>
       <h2>Launchpads</h2>
       <div className="hint">
-        Bankr, Stonks, Pons, pump.fun and letsbonk are detected automatically. o1.exchange needs an API key (starts with
+        Bankr, Stonks, Pons, Genius (genius.fun), pump.fun and letsbonk are detected automatically. o1.exchange needs an API key (starts with
         o1_launch_).
       </div>
       <div className="row-inline">
