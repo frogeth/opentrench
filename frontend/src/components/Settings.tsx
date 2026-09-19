@@ -22,7 +22,7 @@ const onEnter = (enabled: boolean, fn: () => void) => (e: React.KeyboardEvent<HT
 
 type Tab = 'accounts' | 'feed' | 'market' | 'trading' | 'together' | 'plugins';
 const TABS: { id: Tab; label: string; icon: IconName; title: string; blurb: string }[] = [
-  { id: 'accounts', label: 'Accounts', icon: 'people', title: 'Accounts', blurb: 'Discord, Telegram and J7: what the feed reads from' },
+  { id: 'accounts', label: 'Accounts', icon: 'people', title: 'Accounts', blurb: 'Discord, Telegram, J7 and Vampy: what the feed reads from' },
   { id: 'feed', label: 'Feed', icon: 'chat', title: 'Feed', blurb: 'How chats and calls are shown, who pings you, which bots count' },
   { id: 'market', label: 'Market data', icon: 'live', title: 'Market data', blurb: 'Live on-chain prices: your RPCs and Alchemy key' },
   { id: 'trading', label: 'Trading', icon: 'wallet', title: 'Trading', blurb: 'Buy buttons, the mint wallet and launchpad keys' },
@@ -133,6 +133,7 @@ export function Settings({
               <DiscordAccount cfg={cfg} status={status} onChange={reload} />
               <TelegramAccount cfg={cfg} status={status} onChange={reload} />
               <J7Section cfg={cfg} status={status} onChange={reload} />
+              <VampySection cfg={cfg} status={status} onChange={reload} />
             </>
           )}
           {cfg && tab === 'feed' && (
@@ -1024,6 +1025,75 @@ function J7Section({ cfg, status, onChange }: { cfg: MaskedConfig; status: Statu
             Save &amp; connect
           </button>
           {cfg.j7?.hasToken && <button onClick={() => setEdit(false)}>Cancel</button>}
+        </div>
+      )}
+      {err && <div className="err">{err}</div>}
+    </section>
+  );
+}
+
+/** Vampy: the API key from vampy.app (Settings → API there); every feed built there becomes a chat here. */
+function VampySection({ cfg, status, onChange }: { cfg: MaskedConfig; status: Status; onChange: () => void }) {
+  const [key, setKey] = useState('');
+  const [edit, setEdit] = useState(!cfg.vampy?.hasKey);
+  const { busy, err, run } = useAsync();
+  const st = status.vampy ?? 'disconnected';
+  const plan = status.vampyPlan;
+  const days = plan?.daysRemaining;
+  return (
+    <section>
+      <h2>
+        Vampy <span className={`pill pill-${st}`}>{st.replace('_', ' ')}</span>
+      </h2>
+      <div className="hint">
+        Mirrors the feeds you built on vampy.app: each call feed and message feed becomes a chat here, live, with its calls counted like any other chat, and a Vampy column shows one feed on its own.
+        Read-only. On vampy.app: Settings → API → generate a key (it is shown once; rotate it there if you lose it). Needs an active Vampy subscription.
+      </div>
+      {status.error.vampy && <div className="err">{status.error.vampy}</div>}
+      {cfg.vampy?.hasKey && !edit ? (
+        <div className="row-inline">
+          <span className="muted">
+            key saved
+            {plan && (
+              <>
+                {' '}
+                · {plan.name}
+                {days !== undefined && ` · ${days} day${days === 1 ? '' : 's'} left`}
+                {' '}· {plan.feeds} feed{plan.feeds === 1 ? '' : 's'}
+              </>
+            )}
+          </span>
+          <button onClick={() => setEdit(true)}>Replace</button>
+          <button
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                await api.setVampyKey('');
+                onChange();
+              })
+            }
+          >
+            Disconnect
+          </button>
+        </div>
+      ) : (
+        <div className="row-inline">
+          <input type="password" placeholder="vmp_…" value={key} onChange={(e) => setKey(e.target.value)} spellCheck={false} />
+          <button
+            className="primary"
+            disabled={busy || !key.trim()}
+            onClick={() =>
+              run(async () => {
+                await api.setVampyKey(key.trim());
+                setKey('');
+                setEdit(false);
+                onChange();
+              })
+            }
+          >
+            Save &amp; connect
+          </button>
+          {cfg.vampy?.hasKey && <button onClick={() => setEdit(false)}>Cancel</button>}
         </div>
       )}
       {err && <div className="err">{err}</div>}

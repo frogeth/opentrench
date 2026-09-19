@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WatchedChat } from './api';
 import { chatKey } from './components/ColumnEditor';
-import { displayChatName, normTg, platformChatNames, watchKeyOf } from './feedKeys';
+import { canWrite, displayChatName, normTg, platformChatNames, watchKeyOf } from './feedKeys';
 
 const chat = (source: WatchedChat['source'], id: string, name: string): WatchedChat => ({ id, name, source });
 
@@ -25,6 +25,19 @@ describe('watchKeyOf', () => {
   });
   it('prefixes a discord id as it stands', () => {
     expect(watchKeyOf({ source: 'discord', chatId: '987' })).toBe('discord:987');
+  });
+  it('keys a Vampy feed by its feed id', () => {
+    expect(watchKeyOf({ source: 'vampy', chatId: '7c4e1f2a' })).toBe('vampy:7c4e1f2a');
+    expect(chatKey(chat('vampy', '7c4e1f2a', 'Alpha calls (Vampy)'))).toBe('vampy:7c4e1f2a');
+  });
+});
+
+describe('canWrite', () => {
+  it('is the platforms only: plugin and Vampy chats are read-only copies', () => {
+    expect(canWrite('discord')).toBe(true);
+    expect(canWrite('telegram')).toBe(true);
+    expect(canWrite('plugin')).toBe(false);
+    expect(canWrite('vampy')).toBe(false);
   });
 });
 

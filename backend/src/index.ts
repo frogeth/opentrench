@@ -165,6 +165,7 @@ const svc: Services = new Services(cfg, hub);
 // the minter signs against the same RPCs the live pricer reads from (custom > Alchemy > public)
 svc.rpcOverrides = () => Object.fromEntries(Object.keys(CHAINS).map((n) => [n, endpoints.urlFor(n)?.url]).filter((e): e is [string, string] => !!e[1]));
 svc.startJ7();
+svc.startVampy();
 svc.syncColumnFeeds();
 void svc.syncTogether();
 // Plugins: one-file, sandboxed feeds the user drops in the plugins folder next to config.json.

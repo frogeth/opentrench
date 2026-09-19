@@ -69,11 +69,19 @@ hash, which take a minute:
 Failure modes: "PHONE_NUMBER_INVALID" (missing country code), "FLOOD_WAIT" (too many
 attempts, wait the stated seconds), a code typed with spaces.
 
+## 3b. Vampy (optional)
+
+A vampy.app subscriber can mirror the feeds built there. On vampy.app: Settings → API → generate a
+key (shown once). In opentrench: ⚙ → Accounts → Vampy → paste it → **Save & connect**; the card
+shows the plan, days left and the number of feeds. Each Vampy feed is then a chat (rail group
+"Vampy", channel picker of any column); a call feed's calls count as calls. A **Vampy** column shows
+one feed on its own. `auth error` on the card: the key was rejected (rotated) or the plan lapsed.
+
 ## 4. Add channels and columns
 
 The **+** in the left rail lists every Discord server/channel and Telegram chat; **+ add**
 puts it in the feed, the eye previews it. The search box narrows servers, channels and chats.
-Columns (All Calls, All Chats, Trending, Top Callers, Website, bots…) are added with the + in
+Columns (All Calls, All Chats, Trending, Top Callers, Website, bots, Vampy…) are added with the + in
 the column header row; each column has its own channel scope and filters.
 
 ## 5. Share calls with friends (rooms)

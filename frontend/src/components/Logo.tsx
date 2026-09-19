@@ -10,8 +10,12 @@ const TELEGRAM =
 const PLUG =
   'M8 2a1 1 0 0 1 1 1v3h6V3a1 1 0 1 1 2 0v3h1a1 1 0 0 1 1 1v3a6 6 0 0 1-5 5.917V21a1 1 0 1 1-2 0v-5.083A6 6 0 0 1 7 10V7a1 1 0 0 1 1-1h1V3a1 1 0 0 1 1-1z';
 
+// Vampy: the app's own mark for it, a V with two fangs.
+export const VAMPY =
+  'M3 4h5l4 10 4-10h5l-6.5 16h-5L3 4zm4.6 2H5.9l3.6 8.9L11 11.2 7.6 6zm8.8 0h-1.7L13 11.2l1.5 3.7L16.4 6z';
+
 export function Logo({ source, size = 14 }: { source: Source; size?: number }) {
-  const path = source === 'discord' ? DISCORD : source === 'telegram' ? TELEGRAM : PLUG;
+  const path = source === 'discord' ? DISCORD : source === 'telegram' ? TELEGRAM : source === 'vampy' ? VAMPY : PLUG;
   return (
     <svg
       className={`logo logo-${source}`}

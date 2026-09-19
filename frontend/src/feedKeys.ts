@@ -1,5 +1,8 @@
 import type { WatchedChat } from './api';
-import type { FeedMessage } from './types';
+import type { FeedMessage, Source } from './types';
+
+/** The sources the app can post, react and reply on: the platforms it is signed in to. Plugin and Vampy chats are read-only copies. */
+export const canWrite = (s: Source): s is 'discord' | 'telegram' => s === 'discord' || s === 'telegram';
 
 /** Telegram chat id in one shape: strip '-', then a '100' supergroup marker only when a real (long) channel id follows. */
 export const normTg = (id: string) => {
@@ -9,11 +12,11 @@ export const normTg = (id: string) => {
 };
 
 /**
- * The watch-list key a message answers to: `<source>:<id>` for the platforms, and for a plugin the
- * chat id itself — that already is the whole key, `plugin:<plugin>:<chat>`.
+ * The watch-list key a message answers to: `<source>:<id>` for the platforms, `vampy:<feed>` for a
+ * Vampy feed, and for a plugin the chat id itself — that already is the whole key, `plugin:<plugin>:<chat>`.
  */
 export const watchKeyOf = (m: Pick<FeedMessage, 'source' | 'chatId'>): string =>
-  m.source === 'plugin' ? m.chatId : m.source === 'telegram' ? `telegram:${normTg(m.chatId)}` : `discord:${m.chatId}`;
+  m.source === 'plugin' ? m.chatId : m.source === 'vampy' ? `vampy:${m.chatId}` : m.source === 'telegram' ? `telegram:${normTg(m.chatId)}` : `discord:${m.chatId}`;
 
 /** The names the platforms have taken, for `displayChatName`; build it once per list, not per chat. */
 export const platformChatNames = (all: WatchedChat[]): Set<string> => new Set(all.filter((w) => w.source !== 'plugin').map((w) => w.name));

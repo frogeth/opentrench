@@ -29,7 +29,7 @@ import { PluginHost } from './plugins/PluginHost';
 import { SlotContext, SlotStore, usePluginSlot } from './plugins/slots';
 import type { PluginContext, SettingField } from './plugins/route';
 import type { ShareItem } from './components/ShareModal';
-import { displayChatName, normTg, platformChatNames, watchKeyOf } from './feedKeys';
+import { canWrite, displayChatName, normTg, platformChatNames, watchKeyOf } from './feedKeys';
 
 const BOTS = { cove: COVE_BOT, basedbot: 'based_eth_bot', salpha: 'salpha_research_bot' } as const;
 type BotKind = keyof typeof BOTS;
@@ -41,7 +41,7 @@ import { AddChatsModal } from './components/AddChatsModal';
 import { Logo } from './components/Logo';
 import { Icon } from './components/Icon';
 import { Avatar } from './components/Avatar';
-import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type TelegramDialog, type WatchedChat } from './api';
+import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type TelegramDialog, type VampyFeedInfo, type WatchedChat } from './api';
 import { copyText, type ChartProvider } from './format';
 import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, thesisFollowUps, tokenPasses } from './filters';
@@ -49,7 +49,7 @@ import { ALERT_WINDOW_MS, alertSound } from './alerts';
 import type { BotMessage, FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
 
 /** Header status: the platform's logo, coloured by its connection state; the words live in the tooltip. */
-function Pill({ label, state }: { label: 'discord' | 'telegram'; state: string }) {
+function Pill({ label, state }: { label: 'discord' | 'telegram' | 'vampy'; state: string }) {
   return (
     <span className={`pill pill-icon pill-${state}`} title={`${label}: ${state.replace('_', ' ')}`} role="status" aria-label={`${label} ${state.replace('_', ' ')}`}>
       <Logo source={label} size={14} />
@@ -532,7 +532,7 @@ export default function App() {
     return s;
   }, [messages, reactOverride, now]);
   const react = (m: FeedMessage, key: string, name: string, on: boolean) => {
-    if (m.source === 'plugin' || !canSend[m.source]) return; // plugin chats are read-only
+    if (!canWrite(m.source) || !canSend[m.source]) return; // plugin and Vampy chats are read-only
     const msgId = m.id.split(':').pop()!;
     const k = `${m.id}:${key}`;
     setReactOverride((o) => new Map(o).set(k, { on, at: Date.now() }));
@@ -548,8 +548,8 @@ export default function App() {
   const [replyByCol, setReplyByCol] = useState<Record<string, FeedMessage | undefined>>({});
   // Discord is writable only through the Vencord bridge; a legacy token reads and nothing more
   const canSend = { discord: !!cfg?.discord.canSend && status.discordMode === 'bridge', telegram: !!cfg?.telegram.canSend } as const;
-  // composing is platform-only: a plugin chat is never a send target
-  const sendableChat = (w: WatchedChat): w is WatchedChat & { source: SendTarget['source'] } => w.source !== 'plugin';
+  // composing is platform-only: a plugin or Vampy chat is never a send target
+  const sendableChat = (w: WatchedChat): w is WatchedChat & { source: SendTarget['source'] } => canWrite(w.source);
   const targetsFor = (names: Set<string> | null): SendTarget[] =>
     watched
       .filter(sendableChat)
@@ -715,9 +715,12 @@ export default function App() {
   }, [cfg, status, watched]);
   useEffect(() => setMuted(!sound), [sound]);
 
+  /** the feeds built on vampy.app, for the Vampy columns' type and subtitle; follows the Vampy connection like the watched list */
+  const [vampyFeeds, setVampyFeeds] = useState<VampyFeedInfo[]>([]);
   const reloadLists = () => {
     api.watched().then(setWatched).catch(() => {});
     api.config().then(setCfg).catch(() => {});
+    api.vampyFeeds().then(setVampyFeeds).catch(() => {});
   };
   // The plugin list keeps itself current from the `plugins` event; this is the first read, and again
   // whenever the socket comes back (whatever changed while it was down came with no event). A drop
@@ -728,7 +731,7 @@ export default function App() {
     pluginsAsked.current = true;
     api.plugins().then(setPlugins).catch(() => {});
   }, [wsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(reloadLists, [status.discord, status.telegram]);
+  useEffect(reloadLists, [status.discord, status.telegram, status.vampy, status.vampyPlan?.feedIds?.join(',')]);
   // A plugin's first post into a chat adds a watch key and a watched chat that only the `plugins`
   // event carries; keyed on the chat set, so the other reasons that event fires (a sign-in, a log)
   // do not storm the two endpoints.
@@ -1034,7 +1037,7 @@ export default function App() {
       if (!m.hidden && !m.repeat && m.contracts.length > 0) st.pending.set(m.id, m);
     }
     const now = Date.now();
-    const cols = flatColumns.map((c) => ({ type: c.type, alert: c.alert, filters: c.filters, names: namesFor(c) }));
+    const cols = flatColumns.map((c) => ({ type: c.type === 'vampy' ? vampyKind(c) : c.type, alert: c.alert, filters: c.filters, names: namesFor(c) }));
     for (const m of st.pending.values()) {
       if (now - m.ts > ALERT_WINDOW_MS) {
         st.pending.delete(m.id);
@@ -1210,8 +1213,8 @@ export default function App() {
     if (view.preview) return new Set([view.preview.name]);
     if (view.chat) return new Set([view.chat.name]);
     if (view.rail === 'all') return null;
-    if (view.rail.startsWith('t:') || view.rail.startsWith('p:')) {
-      const source = view.rail.startsWith('t:') ? 'telegram' : 'plugin';
+    if (view.rail.startsWith('t:') || view.rail.startsWith('p:') || view.rail.startsWith('v:')) {
+      const source = view.rail.startsWith('t:') ? 'telegram' : view.rail.startsWith('p:') ? 'plugin' : 'vampy';
       const id = view.rail.slice(2);
       const name = watched.find((w) => w.source === source && w.id === id)?.name;
       return name ? new Set([name]) : new Set<string>();
@@ -1221,6 +1224,14 @@ export default function App() {
   }, [view, channels, cfg, watched]);
 
   /** A column's chat names (null = every watched chat), from its `<source>:<id>` keys. */
+  /** a Vampy column shows its feed the way that feed is built: calls or messages; a feed not (yet) known renders as messages */
+  const vampyKind = (col: ColumnDef): 'calls' | 'chat' => (vampyFeeds.find((f) => f.id === col.feed)?.type === 'call' ? 'calls' : 'chat');
+  const vampySubtitle = (col: ColumnDef): string => {
+    if (view.rail !== 'all' || view.chat) return scopeLabel;
+    const st = status.vampy ?? 'disconnected';
+    const feed = vampyFeeds.find((f) => f.id === col.feed);
+    return `vampy.app · ${!cfg?.vampy?.hasKey ? 'no key' : st === 'connected' ? (feed ? (feed.type === 'call' ? 'calls' : 'messages') : 'feed not found') : st.replace('_', ' ')}`;
+  };
   const namesFor = (col: ColumnDef): Set<string> | null => {
     if (col.chats.length === 0) return null;
     if (col.chats.includes('none')) return new Set<string>();
@@ -1272,7 +1283,7 @@ export default function App() {
       return;
     }
     const ch = source === 'discord' ? channels.find((c) => c.id === id) : undefined;
-    const rail = source === 'telegram' ? `t:${id}` : source === 'plugin' ? `p:${id}` : ch ? `g:${ch.guildId}` : 'all';
+    const rail = source === 'telegram' ? `t:${id}` : source === 'plugin' ? `p:${id}` : source === 'vampy' ? `v:${id}` : ch ? `g:${ch.guildId}` : 'all';
     setView({ rail, chat: { name, id, source } });
   };
 
@@ -1314,7 +1325,7 @@ export default function App() {
   const actionsFor = (col: ColumnDef, parentId?: string): ColumnActions => ({
     onEdit: () => setEditing({ col, parentId }),
     onRemove: () => setConfirmRemove(col.id),
-    ...(col.type === 'chat' || col.type === 'calls' || col.type === 'j7'
+    ...(col.type === 'chat' || col.type === 'calls' || col.type === 'j7' || col.type === 'vampy'
       ? {
           alertOn: !!col.alert?.on,
           onAlert: () => {
@@ -1499,7 +1510,7 @@ export default function App() {
         </Column>
       );
     }
-    if (col.type === 'calls') {
+    if (col.type === 'calls' || (col.type === 'vampy' && vampyKind(col) === 'calls')) {
       const all = callsFor(names, col.filters);
       const hiddenHere = all.filter((t) => hidden.has(t.address)).length;
       const list = revealHidden[col.id] ? all : all.filter((t) => !hidden.has(t.address));
@@ -1508,8 +1519,8 @@ export default function App() {
         <Column
           key={col.id}
           title={col.title}
-          subtitle={subtitleFor(col)}
-          kind="calls"
+          subtitle={col.type === 'vampy' ? vampySubtitle(col) : subtitleFor(col)}
+          kind={col.type}
           count={list.length}
           className="col-calls"
           extra={
@@ -1579,8 +1590,8 @@ export default function App() {
         render={(body, bodyRef, onScroll, footer) => (
           <Column
             title={col.title}
-            subtitle={subtitleFor(col)}
-            kind="chat"
+            subtitle={col.type === 'vampy' ? vampySubtitle(col) : subtitleFor(col)}
+            kind={col.type === 'vampy' ? 'vampy' : 'chat'}
             count={msgs.length}
             className="col-chats"
             bodyRef={bodyRef}
@@ -1615,6 +1626,7 @@ export default function App() {
         <div className="pills">
           <Pill label="discord" state={status.discord} />
           <Pill label="telegram" state={status.telegram} />
+          {cfg?.vampy?.hasKey && <Pill label="vampy" state={status.vampy ?? 'disconnected'} />}
           {!wsOpen && <span className="pill pill-disconnected">server: offline</span>}
         </div>
         <button
@@ -1732,7 +1744,7 @@ export default function App() {
           collapsed={paneHidden}
           onView={setView}
           // the + opens the picker on the source the rail is already showing
-          onAdd={() => setAddOpen(view.rail.startsWith('p:') ? 'plugin' : view.rail.startsWith('t:') ? 'telegram' : 'discord')}
+          onAdd={() => setAddOpen(view.rail.startsWith('p:') ? 'plugin' : view.rail.startsWith('t:') ? 'telegram' : 'discord')} // a v: rail has nothing to add: feeds are built on vampy.app
           onReorder={reorderRail}
           onCollapse={setPane}
         />
@@ -1854,6 +1866,8 @@ export default function App() {
           channels={channels}
           callers={knownCallers}
           plugins={plugins}
+          vampyFeeds={vampyFeeds}
+          vampyKey={!!cfg?.vampy?.hasKey}
           onClose={() => setEditing(null)}
           onSave={(c) => {
             if (c.type === 'osmint' && flatColumns.some((x) => x.type === 'osmint' && x.id !== c.id)) {

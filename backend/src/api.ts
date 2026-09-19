@@ -799,6 +799,24 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
       return { hasToken: !!token };
     }),
   );
+  // Vampy: the vampy.app API key in, the feeds built there mirrored as chats.
+  r.put(
+    '/vampy/key',
+    wrap((req) => {
+      const key = String(req.body?.key ?? '').trim();
+      if (key && !/^[A-Za-z0-9_-]{16,200}$/.test(key)) throw new Error('that does not look like a Vampy API key');
+      cfg.update((c) => {
+        c.vampy.apiKey = key || undefined;
+      });
+      svc.startVampy();
+      return { hasKey: !!key };
+    }),
+  );
+  // The feeds the key holder built on vampy.app, for the column editor: id, title, call or message, and the channels behind it.
+  r.get(
+    '/vampy/feeds',
+    wrap(() => svc.vampyFeeds().map((f) => ({ id: f.id, title: f.title, type: f.type, channels: f.channels.map((c) => ({ name: c.channelName, server: c.serverName })) }))),
+  );
   // Any contract, called or not: enrichment + security for the drill-down
   r.get(
     '/token/:address',

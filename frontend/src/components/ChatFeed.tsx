@@ -5,6 +5,7 @@ import type { ChartProvider } from '../format';
 import { MessageRow } from './MessageRow';
 import { VirtualItem } from './Virtual';
 import { useScrollAnchor } from '../useScrollAnchor';
+import { canWrite } from '../feedKeys';
 
 /**
  * Discord-style grouping: hide the header when the message just above (in display order) is the
@@ -78,7 +79,7 @@ export function ChatFeed({
   pluginNames?: Record<string, string>;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
-  const canReactTo = (m: FeedMessage) => !m.id.startsWith('preview') && m.source !== 'plugin' && (!canReact || canReact[m.source]);
+  const canReactTo = (m: FeedMessage) => !m.id.startsWith('preview') && canWrite(m.source) && (!canReact || canReact[m.source]);
   const [atEnd, setAtEnd] = useState(true);
   const shown = useMemo(() => (order === 'bottom' ? [...msgs].reverse() : msgs), [msgs, order]);
   const atEndRef = useRef(true);

@@ -1,4 +1,4 @@
-export type Source = 'discord' | 'telegram' | 'plugin';
+export type Source = 'discord' | 'telegram' | 'plugin' | 'vampy';
 export type Chain = 'sol' | 'evm';
 
 export interface Contract {
@@ -154,7 +154,7 @@ export interface CallRecord {
   /** market cap when the call was registered (first call: the first enrichment after it) */
   marketCap?: number;
   /** 'candle': corrected from the 1-minute candle of the call's minute; 'cached': checked, no candle, registration number kept */
-  mcSource?: 'candle' | 'cached' | 'scan' | 'chain';
+  mcSource?: 'candle' | 'cached' | 'scan' | 'chain' | 'vampy';
   /** TrenchTogether: the friend this call arrived from (absent for calls from this machine's own chats) */
   via?: string;
 }
@@ -409,11 +409,15 @@ export interface Status {
   discord: DiscordState;
   telegram: TelegramState;
   loginStep: LoginStep;
-  error: { discord?: string; telegram?: string; j7?: string; mintgo?: string };
+  error: { discord?: string; telegram?: string; j7?: string; mintgo?: string; vampy?: string };
   /** J7Tracker stream */
   j7?: 'disconnected' | 'connecting' | 'connected' | 'auth_error';
   /** MintGo realtime socket */
   mintgo?: 'disconnected' | 'connecting' | 'connected' | 'error';
+  /** Vampy feeds (vampy.app API key) */
+  vampy?: 'disconnected' | 'connecting' | 'connected' | 'auth_error';
+  /** the plan behind the Vampy key, once it answered */
+  vampyPlan?: { name: string; expiresAt?: number; daysRemaining?: number; feeds: number; feedIds: string[] };
   /** favorite callers (crown + pings) */
   favorites: string[];
   /** who the Discord plugin is signed in as */

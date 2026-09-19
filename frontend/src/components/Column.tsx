@@ -174,8 +174,8 @@ export function Column({
           </span>
         )}
         {kind && (
-          <span className="col-kind" title={kind === 'plugin' ? 'plugin column — runs code you installed' : `${kind} column`}>
-            <Icon name={kind === 'mints' ? 'mint' : kind === 'nftvol' ? 'sea' : kind === 'osmint' ? 'wallet' : kind === 'calls' ? 'calls' : kind === 'callers' ? 'people' : kind === 'trending' ? 'top' : kind === 'cove' || kind === 'tgbot' ? 'send' : kind === 'salpha' ? 'search' : kind === 'j7' ? 'x' : kind === 'web' ? 'globe' : kind === 'plugin' ? 'plug' : 'chat'} size={14} />
+          <span className="col-kind" title={kind === 'plugin' ? 'plugin column — runs code you installed' : kind === 'vampy' ? 'Vampy column — a feed built on vampy.app' : `${kind} column`}>
+            <Icon name={kind === 'mints' ? 'mint' : kind === 'nftvol' ? 'sea' : kind === 'osmint' ? 'wallet' : kind === 'calls' ? 'calls' : kind === 'callers' ? 'people' : kind === 'trending' ? 'top' : kind === 'cove' || kind === 'tgbot' ? 'send' : kind === 'salpha' ? 'search' : kind === 'j7' ? 'x' : kind === 'web' ? 'globe' : kind === 'plugin' ? 'plug' : kind === 'vampy' ? 'vampy' : 'chat'} size={14} />
           </span>
         )}
         <div className="col-title">
