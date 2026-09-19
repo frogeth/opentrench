@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- **Vampy.** Paste your vampy.app API key (Settings → API there; needs an active Vampy subscription) in ⚙ → Accounts → Vampy, and every feed you built on Vampy is mirrored here: each call feed and message feed is one chat, live over Vampy's socket, with its recent rows loaded first. Calls land as calls: the card is priced live like any other, shows the market cap Vampy recorded at the call, and counts in All Calls, Trending, Top Callers, favorites pings and column alerts. Messages keep their Discord markdown, replies, images and embeds, and link back to the original on Discord or Telegram. A **Vampy** column type shows one feed on its own (a calls column for a call feed, a messages column for a message feed, with the matching filters), and Vampy feeds sit in the channel picker of any Messages or Calls column and in the rail under Vampy. Read-only. Feeds added or removed on vampy.app follow within the hour; a lapsed plan shows on the card.
+
 ## v0.13.0 — 2026-09-18
 
 - Fix: calls shared through a room could show up as a bare address (`0x50…6d3d`, chain unknown, no pair) and stay that way. The sender shared the token the instant the call landed, before its own lookup had answered, and only a newer call would have sent it again; the receiver never asked for itself. Now a token that arrives without a ticker or chain is identified by the receiver's own RPC and directory lookups, a later share fills what is still missing (never what this machine found), a call of your own on such a token asks too, and the sender re-sends once when the ticker and chain land, with no new call needed. Two calls seconds apart share one lookup.

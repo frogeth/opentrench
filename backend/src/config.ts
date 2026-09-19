@@ -8,9 +8,11 @@ import { isMemberId, isRoomId, isRoomKey, newMemberId, relayHostOf, relayUrlOf, 
 /** One column of the terminal. `chats` are `<source>:<id>` keys of watched chats; empty = every watched chat. */
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot' | 'plugin';
+  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot' | 'plugin' | 'vampy';
   title: string;
   chats: string[];
+  /** vampy columns: the Vampy feed id this column mirrors (`chats` is then exactly `vampy:<feed>`) */
+  feed?: string;
   /** web columns: the page to embed (http/https only) */
   url?: string;
   /** tgbot columns: the bot's username (no @) whose conversation this column shows */
@@ -39,7 +41,7 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
   { id: 'chats', type: 'chat', title: 'All Chats', chats: [] },
 ];
 
-const TYPES = ['calls', 'callers', 'trending', 'cove', 'salpha', 'j7', 'web', 'chat', 'mints', 'nftvol', 'osmint', 'tgbot', 'plugin'] as const;
+const TYPES = ['calls', 'callers', 'trending', 'cove', 'salpha', 'j7', 'web', 'chat', 'mints', 'nftvol', 'osmint', 'tgbot', 'plugin', 'vampy'] as const;
 const DEFAULT_TITLE: Record<ColumnDef['type'], string> = {
   calls: 'Calls',
   callers: 'Top Callers',
@@ -54,7 +56,10 @@ const DEFAULT_TITLE: Record<ColumnDef['type'], string> = {
   osmint: 'NFT Mint',
   tgbot: 'Telegram bot',
   plugin: 'Plugin',
+  vampy: 'Vampy',
 };
+/** A Vampy feed id as the API hands it out (an opaque token; UUIDs and short ids alike). */
+export const VAMPY_FEED_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 export const MINT_CHAINS = ['ethereum', 'robinhood', 'ink'] as const;
 
 /** One column definition from untrusted input; `allowSplit` is false for a stacked bottom (one level only). */
@@ -70,7 +75,7 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
   const chats = Array.isArray(raw.chats)
     ? raw.chats
         .map(String)
-        .filter((k: string) => /^(discord|telegram):/.test(k) || /^plugin:[a-z0-9-]+:[a-z0-9-]+$/.test(k) || k === 'none')
+        .filter((k: string) => /^(discord|telegram):/.test(k) || /^plugin:[a-z0-9-]+:[a-z0-9-]+$/.test(k) || /^vampy:[A-Za-z0-9_-]{1,64}$/.test(k) || k === 'none')
         .slice(0, 200)
     : [];
   if (!id || seen.has(id)) return undefined;
@@ -95,6 +100,16 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
   if (type === 'plugin') {
     const p = String(raw.plugin ?? '').trim();
     if (PLUGIN_ID_RE.test(p)) col.plugin = p;
+  }
+  if (type === 'vampy') {
+    // the column mirrors one feed: its chat list is that feed and nothing else, so every view that
+    // scopes by chats (messages, calls, alerts) treats it like a one-chat column
+    const f = String(raw.feed ?? '').trim();
+    if (VAMPY_FEED_ID_RE.test(f)) {
+      col.feed = f;
+      col.chats = [`vampy:${f}`];
+    } else col.chats = ['none']; // no feed picked yet: an empty column, never "every chat"
+
   }
   if (type === 'nftvol') {
     col.ranking = raw.ranking === 'top' ? 'top' : 'trending';
@@ -121,8 +136,8 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
       }
     } else {
       delete out.minQty;
-      // chains is also a valid token-network filter for calls/chat columns; only the others lose it
-      if (type !== 'calls' && type !== 'chat') delete out.chains;
+      // chains is also a valid token-network filter for calls/chat columns (and a Vampy column, which is one of the two); only the others lose it
+      if (type !== 'calls' && type !== 'chat' && type !== 'vampy') delete out.chains;
     }
     if (Object.keys(out).length) col.filters = out;
   }
@@ -230,6 +245,8 @@ export interface Config {
   hiddenTokens: string[];
   /** J7Tracker: the account's session id (from its web app), read-only tweet stream */
   j7: { token?: string; /** X handles (no @) whose tweets ping you */ favorites: string[] };
+  /** Vampy (vampy.app): the account's API key (Settings → API there); every feed built there is mirrored */
+  vampy: { apiKey?: string };
   /** OpenSea mint window: one wallet key (0x + 64 hex). */
   opensea: { walletKey?: string };
   /** The one RPC table for everything on-chain (live prices, minting, launchpad reads), by network
@@ -273,6 +290,7 @@ const DEFAULT: Config = {
   seenTokens: [],
   hiddenTokens: [],
   j7: { favorites: [] },
+  vampy: {},
   opensea: {},
   rpc: {},
   marketData: {},
@@ -282,7 +300,7 @@ const DEFAULT: Config = {
 };
 
 /** The fields that are sealed on disk when a key is available (see secrets.ts). A room key is addressed by its room id. */
-type SecretPath = 'discord.token' | 'telegram.apiHash' | 'telegram.session' | 'o1ApiKey' | 'j7.token' | 'opensea.walletKey' | 'marketData.alchemyKey' | `together.rooms.${string}`;
+type SecretPath = 'discord.token' | 'telegram.apiHash' | 'telegram.session' | 'o1ApiKey' | 'j7.token' | 'vampy.apiKey' | 'opensea.walletKey' | 'marketData.alchemyKey' | `together.rooms.${string}`;
 
 export class ConfigStore {
   private cfg: Config;
@@ -356,6 +374,7 @@ export class ConfigStore {
       columns: this.cfg.columns,
       layouts: this.cfg.layouts,
       j7: { hasToken: !!this.cfg.j7.token, favorites: this.cfg.j7.favorites },
+      vampy: { hasKey: !!this.cfg.vampy.apiKey },
       seenTokens: this.cfg.seenTokens,
       hiddenTokens: this.cfg.hiddenTokens,
       opensea: { hasWallet: !!this.cfg.opensea.walletKey },
@@ -405,6 +424,7 @@ export class ConfigStore {
           token: this.secret(raw.j7?.token, 'j7.token'),
           favorites: Array.isArray(raw.j7?.favorites) ? [...new Set((raw.j7.favorites as unknown[]).map((h) => String(h).replace(/^@/, '').trim().toLowerCase()).filter((h) => h.length > 0))].slice(0, 500) : [],
         },
+        vampy: { apiKey: this.secret(raw.vampy?.apiKey, 'vampy.apiKey') },
         seenTokens: Array.isArray(raw.seenTokens) ? raw.seenTokens.map(String).slice(-3000) : [],
         hiddenTokens: Array.isArray(raw.hiddenTokens) ? raw.hiddenTokens.map(String).slice(-3000) : [],
         opensea: {
@@ -531,6 +551,7 @@ export class ConfigStore {
       telegram: { ...c.telegram, apiHash: put(c.telegram.apiHash, 'telegram.apiHash'), session: put(c.telegram.session, 'telegram.session') },
       o1ApiKey: put(c.o1ApiKey, 'o1ApiKey'),
       j7: { ...c.j7, token: put(c.j7.token, 'j7.token') },
+      vampy: { ...c.vampy, apiKey: put(c.vampy.apiKey, 'vampy.apiKey') },
       opensea: { ...c.opensea, walletKey: put(c.opensea.walletKey, 'opensea.walletKey') },
       marketData: { ...c.marketData, alchemyKey: put(c.marketData.alchemyKey, 'marketData.alchemyKey') },
     };

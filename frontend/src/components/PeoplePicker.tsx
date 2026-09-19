@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type WatchedChat } from '../api';
 import type { PersonSeen } from '../types';
+import { canWrite } from '../feedKeys';
 import { Avatar } from './Avatar';
 
 type Row = PersonSeen & { favorite?: boolean };
@@ -33,7 +34,8 @@ export function PeoplePicker({ favorites, onToggle }: { favorites: string[]; onT
 
   useEffect(() => {
     // plugin chats have no member list: they are not a scope you can pick here
-    api.watched().then((w) => setChats(w.filter((c) => c.source !== 'plugin'))).catch(() => {});
+    // member lists come from the platforms; a plugin or Vampy chat has none to browse
+    api.watched().then((w) => setChats(w.filter((c) => canWrite(c.source)))).catch(() => {});
   }, []);
 
   // a chat's member list loads once per chat; the search box then filters it locally

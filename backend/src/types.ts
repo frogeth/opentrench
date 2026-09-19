@@ -1,6 +1,6 @@
 import type { RoomStatus } from './rooms/manager.js';
 
-export type Source = 'discord' | 'telegram' | 'plugin';
+export type Source = 'discord' | 'telegram' | 'plugin' | 'vampy';
 export type Chain = 'sol' | 'evm';
 
 export interface Contract {
@@ -156,8 +156,8 @@ export interface CallRecord {
   ts: number;
   /** market cap when the call was registered (first call: the first enrichment after it) */
   marketCap?: number;
-  /** set once the backfill ran: 'candle' = read from the 1-minute candle of the call's minute (exact), 'cached' = no candle for that minute, the registration number stays */
-  mcSource?: 'candle' | 'cached' | 'scan' | 'chain';
+  /** set once the backfill ran: 'candle' = read from the 1-minute candle of the call's minute (exact), 'cached' = no candle for that minute, the registration number stays; 'vampy' = the market cap Vampy recorded at the call */
+  mcSource?: 'candle' | 'cached' | 'scan' | 'chain' | 'vampy';
   /** posted by a bot (an alert bot that called first); a friend's copy uses it to drop bot echoes */
   bot?: true;
   /** TrenchTogether: the friend this call arrived from (absent for calls from this machine's own chats) */
@@ -250,6 +250,17 @@ export interface TokenInfo {
 }
 
 export type DiscordState = 'disconnected' | 'connecting' | 'connected' | 'auth_error';
+export type VampyState = 'disconnected' | 'connecting' | 'connected' | 'auth_error';
+/** The Vampy subscription behind the key, from GET /me. */
+export interface VampyPlan {
+  name: string;
+  expiresAt?: number;
+  daysRemaining?: number;
+  /** feeds the key holder built on vampy.app */
+  feeds: number;
+  /** their ids, so a same-count swap still reads as a change */
+  feedIds: string[];
+}
 export type TelegramState = 'disconnected' | 'connecting' | 'connected' | 'needs_login' | 'auth_error';
 export type LoginStep = 'idle' | 'code' | 'password' | 'done';
 
@@ -442,11 +453,15 @@ export interface Status {
   discord: DiscordState;
   telegram: TelegramState;
   loginStep: LoginStep;
-  error: { discord?: string; telegram?: string; j7?: string; mintgo?: string };
+  error: { discord?: string; telegram?: string; j7?: string; mintgo?: string; vampy?: string };
   /** J7Tracker stream */
   j7?: 'disconnected' | 'connecting' | 'connected' | 'auth_error';
   /** MintGo realtime socket */
   mintgo?: 'disconnected' | 'connecting' | 'connected' | 'error';
+  /** Vampy feeds (vampy.app API key) */
+  vampy?: VampyState;
+  /** the plan behind the Vampy key, once GET /me answered */
+  vampyPlan?: VampyPlan;
   /** favorite callers (crown + pings) */
   favorites: string[];
   /** who the Discord plugin is signed in as */

@@ -18,6 +18,16 @@ describe('columns', () => {
     ]);
     expect(sanitizeColumns([{ id: 'n', type: 'chat', chats: ['none'] }])).toEqual([{ id: 'n', type: 'chat', title: 'Chats', chats: ['none'] },
     ]);
+  });
+  it('pins a Vampy column to its feed and keeps vampy chat keys on any column', () => {
+    // the feed decides the chat list, whatever the client sent
+    expect(sanitizeColumns([{ id: 'v', type: 'vampy', feed: '7c4e1f2a', chats: ['discord:1'], filters: { chains: ['solana'] } }])).toEqual([
+      { id: 'v', type: 'vampy', title: 'Vampy', feed: '7c4e1f2a', chats: ['vampy:7c4e1f2a'], filters: { chains: ['solana'] } },
+    ]);
+    // a feed id that is not one leaves the column without a feed (the editor asks for one)
+    expect(sanitizeColumns([{ id: 'v', type: 'vampy', feed: 'no way!', chats: ['vampy:x'] }])).toEqual([{ id: 'v', type: 'vampy', title: 'Vampy', chats: ['none'] }]);
+    // a Vampy feed is a chat like any other in a Messages or Calls column
+    expect(sanitizeColumns([{ id: 'c', type: 'calls', chats: ['vampy:7c4e1f2a', 'vampy:bad id', 'telegram:1'] }])[0].chats).toEqual(['vampy:7c4e1f2a', 'telegram:1']);
     expect(sanitizeColumns([{ id: 'c', type: 'weird' }])).toEqual([{ id: 'c', type: 'chat', title: 'Chats', chats: [] }]);
     expect(sanitizeColumns([{ id: 't', type: 'trending', window: '5m' }, { id: 'u', type: 'trending', window: 'never' }])).toEqual([
       { id: 't', type: 'trending', title: 'Trending', chats: [], window: '5m' },
@@ -148,7 +158,7 @@ describe('tgbot columns', () => {
 
 describe('secrets at rest', () => {
   const KEY = Buffer.alloc(32, 7);
-  const SECRETS = { discord: { token: 'dtok' }, telegram: { apiId: 1, apiHash: 'hash', session: 'sess' }, o1ApiKey: 'o1_launch_x', j7: { token: 'j7' }, opensea: { walletKey: '0x' + 'ab'.repeat(32) } };
+  const SECRETS = { discord: { token: 'dtok' }, telegram: { apiId: 1, apiHash: 'hash', session: 'sess' }, o1ApiKey: 'o1_launch_x', j7: { token: 'j7' }, vampy: { apiKey: 'vmp_abc' }, opensea: { walletKey: '0x' + 'ab'.repeat(32) } };
   it('seals every token on save and opens them on load', () => {
     const file = tmpFile();
     const a = new ConfigStore(file, new SecretBox(KEY));
@@ -158,10 +168,11 @@ describe('secrets at rest', () => {
       c.telegram.session = 'sess';
       c.o1ApiKey = 'o1_launch_x';
       c.j7.token = 'j7';
+      c.vampy.apiKey = 'vmp_abc';
       c.opensea.walletKey = SECRETS.opensea.walletKey;
     });
     const disk = JSON.parse(fs.readFileSync(file, 'utf8'));
-    for (const v of [disk.discord.token, disk.telegram.apiHash, disk.telegram.session, disk.o1ApiKey, disk.j7.token, disk.opensea.walletKey]) {
+    for (const v of [disk.discord.token, disk.telegram.apiHash, disk.telegram.session, disk.o1ApiKey, disk.j7.token, disk.vampy.apiKey, disk.opensea.walletKey]) {
       expect(isSealed(v)).toBe(true);
     }
     expect(fs.readFileSync(file, 'utf8')).not.toContain('dtok');
@@ -170,6 +181,7 @@ describe('secrets at rest', () => {
     expect(b.telegram).toMatchObject({ apiHash: 'hash', session: 'sess' });
     expect(b.o1ApiKey).toBe('o1_launch_x');
     expect(b.j7.token).toBe('j7');
+    expect(b.vampy.apiKey).toBe('vmp_abc');
     expect(b.opensea.walletKey).toBe(SECRETS.opensea.walletKey);
   });
 

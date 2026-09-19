@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import type { Reaction, FeedMessage, LinkPreview, MediaItem, TokenInfo } from '../types';
+import { canWrite } from '../feedKeys';
 import { fmtTime, isFavorite } from '../format';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
@@ -166,8 +167,9 @@ export function MessageRow({
     return () => document.removeEventListener('keydown', onKey);
   }, [menu]);
   const closeMenu = () => setMenu(null);
-  // a plugin's link is its own (an article, a dashboard): it opens in the browser, not in a platform
-  const platform = m.source === 'discord' ? 'Discord' : m.source === 'plugin' ? 'the browser' : 'Telegram';
+  // a plugin's link is its own (an article, a dashboard): it opens in the browser, not in a platform;
+  // a Vampy row links back to the platform message it mirrors
+  const platform = m.source === 'discord' ? 'Discord' : m.source === 'plugin' ? 'the browser' : m.source === 'vampy' ? (m.link?.includes('t.me/') ? 'Telegram' : 'Discord') : 'Telegram';
   const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
   const contextMenu =
     menu &&
@@ -186,7 +188,7 @@ export function MessageRow({
               })}
             </div>
           )}
-          {onReply && m.source !== 'plugin' && (
+          {onReply && canWrite(m.source) && (
             <button onClick={() => { closeMenu(); onReply(m); }}>
               <Icon name="reply" size={12} /> Reply
             </button>
@@ -272,7 +274,7 @@ export function MessageRow({
           )}
           {m.hidden && <span className="bot-tag hidden-tag">hidden</span>}
           <AuthorMenu author={m.author} link={m.link} favorite={fav} bot={m.isBot} hidden={!!m.hidden} onChanged={onAuthorChanged} />
-          {onReply && m.source !== 'plugin' && (
+          {onReply && canWrite(m.source) && (
             <button className="row-reply" onClick={() => onReply(m)} title="reply" aria-label="reply">
               <Icon name="reply" size={12} />
             </button>

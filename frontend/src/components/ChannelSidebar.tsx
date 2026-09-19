@@ -95,7 +95,10 @@ export function ChannelSidebar({
     .filter((w) => w.source === 'plugin')
     // the label tells a plugin chat from a platform chat of the same name; the name stays the name
     .map((w) => ({ key: `p:${w.id}`, source: 'plugin' as const, id: w.id, name: w.name, label: displayChatName(w, taken), count: counts.get(w.name) ?? 0 }));
-  const unordered = [...guilds.values(), ...tg, ...plugs];
+  const vamps: RailItem[] = watched
+    .filter((w) => w.source === 'vampy')
+    .map((w) => ({ key: `v:${w.id}`, source: 'vampy' as const, id: w.id, name: w.name, label: w.name.replace(/\s*\(Vampy\)\s*$/, ''), count: counts.get(w.name) ?? 0 }));
+  const unordered = [...guilds.values(), ...tg, ...plugs, ...vamps];
   const order = cfg?.railOrder ?? [];
   const items = [
     ...order.map((k) => unordered.find((i) => i.key === k)).filter((i): i is RailItem => !!i),
@@ -239,6 +242,16 @@ export function ChannelSidebar({
             )}
           </div>
         )}
+        {vamps.length > 0 && (
+          <div>
+            <div className="chan-cat">
+              <Logo source="vampy" size={9} /> Vampy
+            </div>
+            {vamps.map((v) =>
+              row(v.id, view.chat?.id === v.id, () => onView({ rail: 'all', chat: { name: v.name, id: v.id, source: 'vampy' } }), <Logo source="vampy" size={14} />, v.label, v.count),
+            )}
+          </div>
+        )}
         {dc.length === 0 && tg.length === 0 && watched.length === 0 && (
           <div className="empty">
             Nothing in your feed yet.
@@ -251,7 +264,7 @@ export function ChannelSidebar({
       </>
     );
   } else if (active && active.source !== 'discord') {
-    const glyph = active.source === 'plugin' ? <Logo source="plugin" size={16} /> : <Avatar src={active.icon} name={active.label} size={20} />;
+    const glyph = active.source === 'plugin' || active.source === 'vampy' ? <Logo source={active.source} size={16} /> : <Avatar src={active.icon} name={active.label} size={20} />;
     head = (
       <>
         {glyph} <b>{active.label}</b>
@@ -262,7 +275,7 @@ export function ChannelSidebar({
       <>
         {row(active.id, true, () => onView({ rail: active.key, chat: { name: active.name, id: active.id, source: active.source } }), glyph, active.label, active.count)}
         <div className="hint" style={{ padding: '10px 8px' }}>
-          {active.source === 'plugin' ? 'A plugin chat has no channels.' : 'Telegram chats have no channels.'} Other chats sit on the rail on the left.
+          {active.source === 'plugin' ? 'A plugin chat has no channels.' : active.source === 'vampy' ? 'A Vampy feed is one chat: its channels are picked on vampy.app.' : 'Telegram chats have no channels.'} Other chats sit on the rail on the left.
         </div>
       </>
     );

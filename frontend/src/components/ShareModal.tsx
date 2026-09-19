@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { canWrite } from '../feedKeys';
 import type { DiscordChannel, WatchedChat } from '../api';
 import { api } from '../api';
 import { telegramShareUrl } from '../format';
@@ -49,7 +50,7 @@ export function ShareModal({
 }) {
   const { text, title, preview, hint, onSent, send, verb = 'Share' } = item;
   // plugin chats are not somewhere you can post: they never show up as a share target
-  const sendable = useMemo(() => watched.filter((w): w is SendableChat => w.source !== 'plugin'), [watched]);
+  const sendable = useMemo(() => watched.filter((w): w is SendableChat => canWrite(w.source)), [watched]);
   const [picked, setPicked] = useState<string[]>(() => {
     try {
       const saved: string[] = JSON.parse(localStorage.getItem('trenchfeed.shareTargets') ?? '[]');
