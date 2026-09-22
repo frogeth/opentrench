@@ -7,7 +7,11 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.14.0 — 2026-09-22
+
 - **Vampy.** Paste your vampy.app API key (Settings → API there; needs an active Vampy subscription) in ⚙ → Accounts → Vampy, and every feed you built on Vampy is mirrored here: each call feed and message feed is one chat, live over Vampy's socket, with its recent rows loaded first. Calls land as calls: the card is priced live like any other, shows the market cap Vampy recorded at the call, and counts in All Calls, Trending, Top Callers, favorites pings and column alerts. Messages keep their Discord markdown, replies, images and embeds, and link back to the original on Discord or Telegram. A **Vampy** column type shows one feed on its own (a calls column for a call feed, a messages column for a message feed, with the matching filters), and Vampy feeds sit in the channel picker of any Messages or Calls column and in the rail under Vampy. Read-only. Feeds added or removed on vampy.app follow within the hour; a lapsed plan shows on the card.
+- A column added at the end of a row that already overflows is no longer crushed to the 320px minimum with its header clipped: the last column starts at 420px and grows into whatever room there is.
+- Fix (checkout backends): a keychain lookup that failed for any reason other than "not found" (a locked keychain, a denied or timed-out prompt) used to store a fresh key in its place, and every token, session and wallet key sealed in config.json became unreadable for good. The key is now created only when there is none, never replaced, and two backends racing agree on the one that landed first.
 
 ## v0.13.0 — 2026-09-18
 
