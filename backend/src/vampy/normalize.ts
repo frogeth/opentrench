@@ -139,6 +139,13 @@ const safeEmbeds = (v: unknown): any[] =>
       };
     });
 
+/**
+ * Vampy delivers mentions resolved but still wrapped: `<@id:name>`, `<@&id:name>` (a role), `<#id:name>`
+ * (a channel). The renderer knows Discord's bare `<@id>` (it shows "@user"); a resolved one shows its name.
+ */
+export const resolveMentions = (text: string): string =>
+  text.replace(/<(@!?|@&|#)(\d{1,25}):([^<>\n]{1,100})>/g, (_m, kind: string, _id: string, label: string) => `${kind.startsWith('#') ? '#' : '@'}${label.trim()}`);
+
 /** What a feed is called in the app: its Vampy title, marked the way a Discord channel carries its server. */
 export function chatNameOf(feed: Pick<VampyFeed, 'title'>): string {
   return `${feed.title} (Vampy)`;
@@ -202,7 +209,7 @@ function replyContext(feedId: string, channel: string, r: unknown): ReplyContext
   if (!r || typeof r !== 'object') return undefined;
   const raw = r as any;
   const author = name(raw.author_display_name, AUTHOR_MAX) || name(raw.author_username, AUTHOR_MAX);
-  const text = cleanText(raw.content ?? '').replace(/\s+/g, ' ').trim();
+  const text = resolveMentions(cleanText(raw.content ?? '')).replace(/\s+/g, ' ').trim();
   if (!author && !text) return undefined;
   const ext = idOf(raw.external_id);
   return { author: author || 'unknown', text, ...(ext ? { id: `vampy:${feedId}:${channel}:${ext}` } : {}) };
@@ -217,7 +224,7 @@ export function messageToFeed(feed: VampyFeed, raw: any): FeedMessage | undefine
   const ext = idOf(raw.external_id) ?? idOf(raw.db_id) ?? idOf(raw.id);
   if (!ext) return undefined;
   const channel = idOf(raw.channel_external_id) ?? '';
-  const content = cleanText(raw.content ?? '');
+  const content = resolveMentions(cleanText(raw.content ?? ''));
   // Discord-shaped attachments and embeds (the platforms' own objects, sometimes as JSON strings), with
   // every url checked first: the renderer loads these without a click, and Vampy is a party of its own
   const d = { content, attachments: safeAttachments(raw.attachments), embeds: safeEmbeds(raw.embeds) };

@@ -46,6 +46,7 @@ import { copyText, type ChartProvider } from './format';
 import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, thesisFollowUps, tokenPasses } from './filters';
 import { ALERT_WINDOW_MS, alertSound } from './alerts';
+import { FILL_BASIS } from './components/Column';
 import type { BotMessage, FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
 
 /** Header status: the platform's logo, coloured by its connection state; the words live in the tooltip. */
@@ -1201,8 +1202,10 @@ export default function App() {
     for (const id of cfg?.telegram.watch ?? []) s.add(`telegram:${normTg(id)}`);
     // a plugin chat's key is its whole chat id, `plugin:<plugin>:<chat>`
     for (const k of cfg?.pluginWatch ?? []) s.add(k);
+    // Vampy feeds are in the feed for as long as the key is: the backend lists them, not the config
+    for (const f of vampyFeeds) s.add(`vampy:${f.id}`);
     return s;
-  }, [cfg?.discord.watch, cfg?.telegram.watch, cfg?.pluginWatch]);
+  }, [cfg?.discord.watch, cfg?.telegram.watch, cfg?.pluginWatch, vampyFeeds]);
   const inWatch = (m: FeedMessage) => {
     if (watchedKeys.size === 0) return true;
     return watchedKeys.has(watchKeyOf(m));
@@ -1844,7 +1847,7 @@ export default function App() {
                 // a stacked pair: the wrapper owns the width, resize handle and drag target; the divider sets the top's share
                 const share = liveRatios[col.id] ?? col.split.ratio ?? 0.5;
                 return (
-                  <div key={col.id} className={`col-stack${layout.width ? ' col-fixed' : ''}`} style={layout.fill ? { flex: `1 1 ${layout.width ?? 380}px` } : layout.width ? { flex: `0 0 ${layout.width}px` } : undefined}>
+                  <div key={col.id} className={`col-stack${layout.width ? ' col-fixed' : ''}`} style={layout.fill ? { flex: `1 0 ${layout.width ?? FILL_BASIS}px` } : layout.width ? { flex: `0 0 ${layout.width}px` } : undefined}>
                     {renderColumn(col, { ...actionsFor(col), stacked: true, stackShare: share })}
                     <SplitHandle onRatio={ratioFor(col.id)} />
                     {renderColumn(col.split.bottom, { ...actionsFor(col.split.bottom, col.id), stacked: true, stackShare: 1 - share })}

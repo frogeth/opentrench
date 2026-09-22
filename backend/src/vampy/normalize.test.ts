@@ -196,6 +196,14 @@ describe('rowToFeed / names', () => {
   });
 });
 
+describe('mentions', () => {
+  it('shows resolved mentions by name and leaves bare Discord mentions to the renderer', () => {
+    const m = messageToFeed(CHAT, { ...MESSAGE, content: 'Wyt <@1197230335902097491:shaams> and <@&12345:mods> in <#67890:alpha-chat>, cc <@813244144335716363> <@!5:x y>', reply_to: { external_id: '1', content: '<@1:Bob> hi', author_display_name: 'Bob' } })!;
+    expect(m.text).toBe('Wyt @shaams and @mods in #alpha-chat, cc <@813244144335716363> @x y');
+    expect(m.replyTo?.text).toBe('@Bob hi');
+  });
+});
+
 describe('untrusted fields', () => {
   it('drops attachment and embed urls that are not https before the Discord normalizer sees them', () => {
     const m = messageToFeed(CHAT, {

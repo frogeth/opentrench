@@ -34,17 +34,31 @@ export function keychainKey(opts: { platform?: NodeJS.Platform; run?: Runner; bl
 const fresh = () => crypto.randomBytes(32).toString('hex');
 const parse = (hex: string): Buffer | undefined => (HEX.test(hex.trim()) ? Buffer.from(hex.trim(), 'hex') : undefined);
 
+/** `security` exit codes: errSecItemNotFound and errSecDuplicateItem; the message is the fallback for a runner without a status */
+const notFound = (e: unknown): boolean => (e as { status?: number })?.status === 44 || /could not be found/i.test(String((e as Error)?.message));
+const duplicate = (e: unknown): boolean => (e as { status?: number })?.status === 45 || /already exists/i.test(String((e as Error)?.message));
+
 function macKey(r: Runner): Buffer | undefined {
+  const find = () => parse(r('security', ['find-generic-password', '-s', SERVICE, '-a', ACCOUNT, '-w']));
   try {
-    const got = parse(r('security', ['find-generic-password', '-s', SERVICE, '-a', ACCOUNT, '-w']));
+    const got = find();
     if (got) return got;
-  } catch {
-    /* not there yet */
+    // something is there but it is not a key of ours: leave it be rather than replace it
+    throw new Error('the keychain item is not a 32-byte hex key');
+  } catch (e) {
+    // Only "not found" means there is nothing to read yet. Anything else (a locked keychain, a denied
+    // or timed-out prompt, a sandbox) must never end in a fresh key: every sealed secret depends on
+    // the one that is there, and replacing it would orphan them all for good.
+    if (!notFound(e)) throw e;
   }
   const hex = fresh();
-  // -U updates an item that appeared between the lookup and now, so two backends racing agree on one key
-  r('security', ['add-generic-password', '-s', SERVICE, '-a', ACCOUNT, '-l', SERVICE, '-U', '-w', hex]);
-  return parse(r('security', ['find-generic-password', '-s', SERVICE, '-a', ACCOUNT, '-w']));
+  try {
+    // no -U: an item that appeared between the lookup and now (two backends racing) is kept, and read below
+    r('security', ['add-generic-password', '-s', SERVICE, '-a', ACCOUNT, '-l', SERVICE, '-w', hex]);
+  } catch (e) {
+    if (!duplicate(e)) throw e;
+  }
+  return find();
 }
 
 function linuxKey(r: Runner): Buffer | undefined {
