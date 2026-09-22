@@ -74,6 +74,13 @@ export function SplitHandle({ onRatio }: { onRatio: (ratio: number, done: boolea
 }
 
 /**
+ * The width a column without one of its own starts from: the last column grows over whatever the row
+ * leaves, but never shrinks below this. When the row already overflows, shrinking would only crush the
+ * newest column to the 320px minimum with its header clipped, for nothing: the row scrolls either way.
+ */
+export const FILL_BASIS = 420;
+
+/**
  * A terminal column: 48px header (grip · type icon · title/subtitle · count · actions) over a scrolling body.
  * Drag the grip onto another column to reorder; pencil edits, × removes (after a confirm).
  */
@@ -163,7 +170,7 @@ export function Column({
     <section
       ref={section}
       className={`col ${className}${drag?.dragging ? ' col-dragging' : ''}${width ? ' col-fixed' : ''}${stacked ? ' col-stacked' : ''}`}
-      style={stacked ? { flex: `${stackShare} 1 0px` } : fill ? { flex: `1 1 ${width ?? 380}px` } : width ? { flex: `0 0 ${width}px` } : undefined}
+      style={stacked ? { flex: `${stackShare} 1 0px` } : fill ? { flex: `1 0 ${width ?? FILL_BASIS}px` } : width ? { flex: `0 0 ${width}px` } : undefined}
       onDragOver={drag?.onDragOver}
       onDrop={drag?.onDrop}
     >
@@ -174,8 +181,8 @@ export function Column({
           </span>
         )}
         {kind && (
-          <span className="col-kind" title={kind === 'plugin' ? 'plugin column — runs code you installed' : `${kind} column`}>
-            <Icon name={kind === 'mints' ? 'mint' : kind === 'nftvol' ? 'sea' : kind === 'osmint' ? 'wallet' : kind === 'calls' ? 'calls' : kind === 'callers' ? 'people' : kind === 'trending' ? 'top' : kind === 'cove' || kind === 'tgbot' ? 'send' : kind === 'salpha' ? 'search' : kind === 'j7' ? 'x' : kind === 'web' ? 'globe' : kind === 'plugin' ? 'plug' : 'chat'} size={14} />
+          <span className="col-kind" title={kind === 'plugin' ? 'plugin column — runs code you installed' : kind === 'vampy' ? 'Vampy column — a feed built on vampy.app' : `${kind} column`}>
+            <Icon name={kind === 'mints' ? 'mint' : kind === 'nftvol' ? 'sea' : kind === 'osmint' ? 'wallet' : kind === 'calls' ? 'calls' : kind === 'callers' ? 'people' : kind === 'trending' ? 'top' : kind === 'cove' || kind === 'tgbot' ? 'send' : kind === 'salpha' ? 'search' : kind === 'j7' ? 'x' : kind === 'web' ? 'globe' : kind === 'plugin' ? 'plug' : kind === 'vampy' ? 'vampy' : 'chat'} size={14} />
           </span>
         )}
         <div className="col-title">

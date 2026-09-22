@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FeedMessage, Mention } from '../types';
+import { canWrite } from '../feedKeys';
 import { timeAgo } from '../format';
 import { Avatar } from './Avatar';
 import { Composer } from './Composer';
@@ -116,13 +117,13 @@ export function PingsPanel({
                   jump to chat
                 </button>
                 {/* plugin chats are read-only: nothing to reply to */}
-                {m.source !== 'plugin' && (
+                {canWrite(m.source) && (
                   <button className={`hdr-toggle${replying === p.id ? ' on' : ''}`} onClick={() => setReplying((r) => (r === p.id ? null : p.id))}>
                     reply
                   </button>
                 )}
               </div>
-              {replying === p.id && m.source !== 'plugin' && (
+              {replying === p.id && canWrite(m.source) && (
                 <div className="ping-reply">
                   <Composer targets={[{ id: m.chatId, name: m.chatName, source: m.source }]} canSend={canSend} reply={m} onCancelReply={() => setReplying(null)} onSent={() => setReplying(null)} />
                 </div>

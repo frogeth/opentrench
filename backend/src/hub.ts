@@ -30,6 +30,8 @@ import type {
   Status,
   TelegramState,
   TokenInfo,
+  VampyPlan,
+  VampyState,
   Mention,
   PersonSeen,
   CallRecord,
@@ -209,7 +211,7 @@ export class MessageHub extends EventEmitter {
   }
 
   /** Market caps read back from the calls' own minute candles (backfill.ts); the first call's value is the entry. */
-  applyCallMarketCaps(address: string, updates: { msgId: string; marketCap?: number; source: 'candle' | 'cached' | 'chain' }[]): void {
+  applyCallMarketCaps(address: string, updates: { msgId: string; marketCap?: number; source: 'candle' | 'cached' | 'chain' | 'vampy' }[]): void {
     const t = this.tokens.get(address);
     if (!t) return;
     let changed = false;
@@ -348,17 +350,24 @@ export class MessageHub extends EventEmitter {
     this.perChat = counts;
   }
 
-  push(msg: FeedMessage, meta?: ExtractedMeta): void {
-    if (this.buffer.some((m) => m.id === msg.id)) return; // already have it (e.g. our own send echoed twice)
+  /**
+   * Adds a message to the feed; false when it was already there (our own send echoed twice, a history
+   * row read again). `history`: a row read back from a source's past (a Vampy feed at boot), so it
+   * never pings as a favorite's call and only a young token is enriched right away.
+   */
+  push(msg: FeedMessage, meta?: ExtractedMeta, opts?: { history?: boolean }): boolean {
+    if (this.buffer.some((m) => m.id === msg.id)) return false;
     // a plugin writes its own messages, so it could claim the user was pinged; only the platforms may say that
-    if (msg.source === 'plugin') msg.mention = undefined;
+    // (a Vampy row is a third party's copy of a platform message: same rule)
+    if (msg.source === 'plugin' || msg.source === 'vampy') msg.mention = undefined;
     msg.contracts = contractsOf(msg.text, msg.isBot);
-    this.register(msg, meta, true);
+    this.register(msg, meta, true, !!opts?.history);
     this.buffer.push(msg);
     this.retain(msg);
     this.emit('event', { type: 'message', msg } satisfies ServerEvent);
     this.trackMention(msg);
     this.changed();
+    return true;
   }
 
   // ---------- pings ----------
@@ -537,7 +546,7 @@ export class MessageHub extends EventEmitter {
     }
   }
 
-  private register(msg: FeedMessage, meta: ExtractedMeta | undefined, live: boolean): void {
+  private register(msg: FeedMessage, meta: ExtractedMeta | undefined, live: boolean, history = false): void {
     msg.hidden = this.isHidden(msg);
     const blocked = msg.hidden || this.isCallMuted(msg);
     if (live && msg.isBot) this.applyScanPost(msg);
@@ -574,9 +583,11 @@ export class MessageHub extends EventEmitter {
           this.tokenChats.delete(oldest);
         }
         if (live) {
-          this.enrich(t);
-          // …but a plugin picks its own author name, so it must not be able to ping as someone's favorite
-          if (msg.source !== 'plugin' && this.isFavorite(msg.author)) {
+          // a history row's token is asked about now only while it is young; the refresh loops cover the rest
+          if (!history || Date.now() - msg.ts < REENRICH_MAX_AGE_MS) this.enrich(t);
+          // …but a plugin picks its own author name, so it must not be able to ping as someone's favorite,
+          // and a call read back from the past is not news
+          if (!history && msg.source !== 'plugin' && this.isFavorite(msg.author)) {
             this.emit('event', { type: 'ping', token: { ...t }, msg } satisfies ServerEvent);
             this.trackFavoriteCall(msg, t);
           }
@@ -729,6 +740,19 @@ export class MessageHub extends EventEmitter {
     this.status.mintgo = state;
     if (error) this.status.error.mintgo = error;
     else delete this.status.error.mintgo;
+    this.emitStatus();
+  }
+
+  setVampy(state: VampyState, error?: string): void {
+    this.status.vampy = state;
+    if (error) this.status.error.vampy = error;
+    else delete this.status.error.vampy;
+    this.emitStatus();
+  }
+
+  setVampyPlan(plan?: VampyPlan): void {
+    if (plan) this.status.vampyPlan = plan;
+    else delete this.status.vampyPlan;
     this.emitStatus();
   }
 

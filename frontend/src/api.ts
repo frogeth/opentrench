@@ -130,10 +130,12 @@ export interface ColumnFilters {
 }
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot' | 'plugin';
+  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot' | 'plugin' | 'vampy';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
+  /** vampy columns: the Vampy feed this column mirrors (`chats` is then exactly `vampy:<feed>`) */
+  feed?: string;
   /** web columns: the page to embed */
   url?: string;
   /** tgbot columns: the bot's username (no @) */
@@ -172,6 +174,7 @@ export interface MaskedConfig {
   pingTelegram: boolean;
   hasO1Key: boolean;
   j7: { hasToken: boolean; favorites: string[] };
+  vampy: { hasKey: boolean };
   railOrder: string[];
   columns: ColumnDef[];
   layouts: Layout[];
@@ -217,8 +220,15 @@ export interface MarketStatus {
     lastError?: string;
   }[];
 }
+/** A feed built on vampy.app, as the column editor lists it. */
+export interface VampyFeedInfo {
+  id: string;
+  title: string;
+  type: 'call' | 'message';
+  channels: { name?: string; server?: string }[];
+}
 export interface WatchedChat {
-  /** a plugin chat's id is its whole watch key, `plugin:<plugin>:<chat>` */
+  /** a plugin chat's id is its whole watch key, `plugin:<plugin>:<chat>`; a Vampy chat's is the feed id */
   id: string;
   name: string;
   source: Source;
@@ -319,6 +329,8 @@ export const api = {
   forward: (fromChat: string, msgId: number, source: 'discord' | 'telegram', chatId: string, note = '') => req<{ ok: true }>('POST', '/forward', { fromChat, msgId, source, chatId, note }),
   send: (source: 'discord' | 'telegram', chatId: string, text: string, replyTo?: string) => req<{ ok: true }>('POST', '/send', { source, chatId, text, replyTo }),
   setJ7Token: (token: string) => req<{ hasToken: boolean }>('PUT', '/j7/token', { token }),
+  setVampyKey: (key: string) => req<{ hasKey: boolean }>('PUT', '/vampy/key', { key }),
+  vampyFeeds: () => req<VampyFeedInfo[]>('GET', '/vampy/feeds'),
   lookupToken: (address: string) => req<import('./types').TokenInfo>('GET', `/token/${encodeURIComponent(address)}`),
   /** send one image (raw body) with an optional caption */
   sendFile: async (source: 'discord' | 'telegram', chatId: string, file: File, text = '', replyTo?: string) => {

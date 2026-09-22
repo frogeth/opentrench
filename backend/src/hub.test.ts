@@ -554,3 +554,33 @@ describe('MessageHub', () => {
     expect(hub.hello().tokens[0].seen).toBe(1);
   });
 });
+
+describe('history rows (a feed read back from its past)', () => {
+  it('register calls and tokens but never ping, and only a young token is enriched on the spot', async () => {
+    const fetched: string[] = [];
+    const fetcher = async (address: string) => {
+      fetched.push(address);
+      return undefined;
+    };
+    const hub = new MessageHub(500, fetcher, { favorites: () => ['Alpha_Andy'], retryDelaysMs: [] });
+    const pings: any[] = [];
+    hub.on('event', (e) => e.type === 'ping' && pings.push(e));
+    const old = Date.now() - 2 * 60 * 60 * 1000;
+    expect(hub.push(msg(1, EVM, { author: 'Alpha_Andy', chatId: 'a', ts: old }), undefined, { history: true })).toBe(true);
+    expect(hub.push(msg(2, SOL, { author: 'Alpha_Andy', chatId: 'a', ts: Date.now() }), undefined, { history: true })).toBe(true);
+    expect(pings).toEqual([]);
+    expect(hub.mentions()).toEqual([]);
+    expect(hub.hello().tokens.map((t) => t.address).sort()).toEqual([EVM, SOL].sort());
+    expect(hub.hello().tokens.find((t) => t.address === EVM)?.calls).toHaveLength(1);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetched).toEqual([SOL]); // the two-hour-old one waits for the refresh loops
+    // the same row read back again (a reconnect) is a no-op
+    expect(hub.push(msg(2, SOL, { author: 'Alpha_Andy', chatId: 'a', ts: Date.now() }), undefined, { history: true })).toBe(false);
+    // a live first call by the favorite on a new token still pings and is enriched
+    const OTHER = '0x6982508145454ce325ddbe47a25d4ec3d2311933';
+    expect(hub.push(msg(3, OTHER, { author: 'Alpha_Andy', chatId: 'a', ts: Date.now() }))).toBe(true);
+    expect(pings.map((p) => p.token.address)).toEqual([OTHER]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetched).toEqual([SOL, OTHER]);
+  });
+});

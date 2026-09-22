@@ -97,6 +97,24 @@ Telegram needs an API ID and hash for your account, which takes a minute:
 The `telegram` pill turns green and stays logged in across restarts. **Log out**
 in the same tab ends the session.
 
+### Optional: Vampy
+
+If you build feeds on **vampy.app** (Discord and Telegram call feeds and
+message feeds), opentrench can mirror them, live:
+
+1. On vampy.app, open **Settings → API** and generate a key. It is shown
+   once; rotate it there if you lose it. The key works while your Vampy
+   subscription is active.
+2. In opentrench, **⚙ → Accounts → Vampy**: paste the key and click **Save &
+   connect**. The card shows your plan, the days left and how many feeds it
+   found.
+
+Every feed then appears in the rail under **Vampy** and in the channel picker
+of any column. A call feed's calls are real calls here (priced live, with the
+market cap Vampy recorded at the call), a message feed's messages are chat.
+Add a **Vampy** column to show one feed on its own. Vampy chats are read-only:
+the link on each row opens the original message on Discord or Telegram.
+
 ---
 
 ## 4. Add the channels you want

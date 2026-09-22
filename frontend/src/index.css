@@ -22,6 +22,7 @@
   --sol: #9945ff;
   --evm: #627eea;
   --accent: #41c892;
+  --vampy: #e0405a;
   --hover: rgba(255, 255, 255, 0.03);
 }
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #1c2a30 transparent; }
@@ -305,6 +306,7 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .logo-discord { color: var(--dc); }
 .logo-telegram { color: var(--tg); }
 .logo-plugin { color: var(--accent); }
+.logo-vampy { color: var(--vampy); }
 
 /* ---------- compact token chip in chat ---------- */
 .chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }

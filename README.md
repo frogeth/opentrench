@@ -192,6 +192,15 @@ in settings.
   Settings → Trading, one mint in flight per wallet).
 - A **Plugin** column type: the body is a column drawn by a plugin you
   installed, inside its own sandbox ([docs/plugins.md](docs/plugins.md)).
+- **Vampy.** With a [vampy.app](https://vampy.app) API key (⚙ → Accounts →
+  Vampy; needs an active Vampy subscription), every feed you built there is
+  mirrored as a chat: call feeds become calls (priced live, with the market
+  cap Vampy recorded at the call, counted in All Calls, Trending and Top
+  Callers), message feeds become chats with their markdown, replies, images
+  and embeds, each row linking back to the original on Discord or Telegram.
+  A **Vampy** column type shows one feed on its own, and the feeds sit in the
+  channel picker of any Messages or Calls column. Read-only, live over
+  Vampy's socket.
 - **Plugins.** Drop a single JavaScript file into your `plugins` folder (or
   ⚙ → Plugins → add a file / paste a link), read the warning, approve it, and
   it can post a website's feed into opentrench as a chat, fetch that site

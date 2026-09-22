@@ -1,5 +1,5 @@
 export type IconName = 'chart' | 'live' | 'globe' | 'x' | 'telegram' | 'explorer' | 'copy' | 'search' | 'people' | 'top' | 'dev' | 'insider' | 'sniper' | 'bundle' | 'lock' | 'chat' | 'grip' | 'calls' | 'pencil' | 'close' | 'bell' | 'play' | 'filter' | 'send' | 'reply'
-  | 'forward' | 'trash' | 'mint' | 'sea' | 'wallet' | 'eyeoff' | 'chevron' | 'plug';
+  | 'forward' | 'trash' | 'mint' | 'sea' | 'wallet' | 'eyeoff' | 'chevron' | 'plug' | 'vampy';
 
 // Small inline glyphs. X and Telegram from Simple Icons (CC0); the rest hand-drawn.
 const PATHS: Record<IconName, string> = {
@@ -64,6 +64,8 @@ const PATHS: Record<IconName, string> = {
   sea: 'M4 15c1.5 0 1.5-1 3-1s1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1v2c-1.5 0-1.5 1-3 1s-1.5-1-3-1-1.5 1-3 1-1.5-1-3-1-1.5 1-3 1v-2zm8-11a5 5 0 0 1 5 5v2h-2V9a3 3 0 0 0-6 0v2H7V9a5 5 0 0 1 5-5z',
   // a plug = plugin
   plug: 'M8 2a1 1 0 0 1 1 1v3h6V3a1 1 0 1 1 2 0v3h1a1 1 0 0 1 1 1v3a6 6 0 0 1-5 5.917V21a1 1 0 1 1-2 0v-5.083A6 6 0 0 1 7 10V7a1 1 0 0 1 1-1h1V3a1 1 0 0 1 1-1z',
+  // a V with two fangs = Vampy (the app's own mark; same path as Logo's)
+  vampy: 'M3 4h5l4 10 4-10h5l-6.5 16h-5L3 4zm4.6 2H5.9l3.6 8.9L11 11.2 7.6 6zm8.8 0h-1.7L13 11.2l1.5 3.7L16.4 6z',
   // wallet = OpenSea Mint
   wallet: 'M3 6a2 2 0 0 1 2-2h13v3H5a1 1 0 0 0 0 2h15a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6zm13 8a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z',
 };

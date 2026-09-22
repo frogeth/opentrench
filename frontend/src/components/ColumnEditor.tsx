@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { ColumnDef, ColumnFilters, DiscordChannel, WatchedChat } from '../api';
+import type { ColumnDef, ColumnFilters, DiscordChannel, VampyFeedInfo, WatchedChat } from '../api';
 import type { PluginInfo, Source } from '../types';
 import { Avatar } from './Avatar';
 import { Logo } from './Logo';
@@ -37,6 +37,7 @@ const TYPE_CARDS: { t: ColumnDef['type']; icon: import('./Icon').IconName; name:
   { t: 'nftvol', icon: 'sea', name: 'NFT Volume', blurb: 'trending & top collections' },
   { t: 'osmint', icon: 'wallet', name: 'NFT Mint', blurb: 'mint an OpenSea drop with your wallet' },
   { t: 'plugin', icon: 'plug', name: 'Plugin', blurb: 'a custom column from a plugin you installed' },
+  { t: 'vampy', icon: 'vampy', name: 'Vampy', blurb: 'a feed you built on vampy.app' },
 ];
 
 /** Ready-made Website columns; "Custom" takes any address. */
@@ -121,6 +122,8 @@ export function ColumnEditor({
   channels = [],
   callers = [],
   plugins = [],
+  vampyFeeds = [],
+  vampyKey = false,
   onSave,
   onClose,
 }: {
@@ -131,6 +134,10 @@ export function ColumnEditor({
   callers?: string[];
   /** every plugin the app knows about; the ones with a column of their own can fill a Plugin column */
   plugins?: PluginInfo[];
+  /** the feeds built on vampy.app; one fills a Vampy column */
+  vampyFeeds?: VampyFeedInfo[];
+  /** a Vampy key is saved (the feeds list is empty until it connects) */
+  vampyKey?: boolean;
   onSave: (c: ColumnDef) => void;
   onClose: () => void;
 }) {
@@ -183,6 +190,14 @@ export function ColumnEditor({
     // a blank title, or another plugin's name, follows the pick; a typed one stays
     if (!title.trim() || uiPlugins.some((q) => (q.manifest?.name ?? q.id) === title.trim())) setTitle(name);
   };
+  // a Vampy column mirrors one feed; a feed removed on vampy.app since is still the column's feed
+  const [feed, setFeed] = useState(col?.feed ?? '');
+  const pickedFeed = vampyFeeds.find((x) => x.id === feed);
+  const pickFeed = (x: VampyFeedInfo) => {
+    setFeed(x.id);
+    // a blank title, or another feed's title, follows the pick; a typed one stays
+    if (!title.trim() || vampyFeeds.some((q) => q.title === title.trim())) setTitle(x.title);
+  };
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [ranking, setRanking] = useState<NonNullable<ColumnDef['ranking']>>(col?.ranking ?? 'trending');
   const [timeframe, setTimeframe] = useState<NonNullable<ColumnDef['timeframe']>>(col?.timeframe ?? '1h');
@@ -192,6 +207,9 @@ export function ColumnEditor({
   const isWeb = type === 'web';
   const isNft = type === 'mints' || type === 'nftvol' || type === 'osmint';
   const isPlugin = type === 'plugin';
+  const isVampy = type === 'vampy';
+  /** what the column renders as: a Vampy column is a calls column for a call feed and a messages column for a message feed */
+  const view: ColumnDef['type'] = isVampy ? (pickedFeed?.type === 'call' ? 'calls' : 'chat') : type;
   const all = chats.length === 0;
   const none = chats.includes('none');
   // "All channels" is stored as an empty list and shows as every box ticked; "none" is a
@@ -211,7 +229,7 @@ export function ColumnEditor({
     const m = new Map<string, { source: Source; label: string; avatar?: string; items: { w: WatchedChat; category?: string }[] }>();
     for (const w of watched) {
       const tail = w.source === 'discord' ? /\(([^)]*)\)\s*$/.exec(w.name)?.[1] : undefined;
-      const server = w.source === 'discord' ? (tail === 'DM' ? 'Direct Messages' : tail ?? 'Discord') : w.source === 'plugin' ? 'Plugins' : 'Telegram';
+      const server = w.source === 'discord' ? (tail === 'DM' ? 'Direct Messages' : tail ?? 'Discord') : w.source === 'plugin' ? 'Plugins' : w.source === 'vampy' ? 'Vampy' : 'Telegram';
       // keyed by source for the non-Discord groups, so a server actually named "Plugins" stays its own group
       const key = w.source === 'discord' ? `discord:${server}` : `${w.source}:`;
       const g = m.get(key) ?? { source: w.source, label: server, avatar: undefined, items: [] };
@@ -219,10 +237,10 @@ export function ColumnEditor({
       g.items.push({ w, category: w.source === 'discord' ? cat.get(w.id) : undefined });
       m.set(key, g);
     }
-    const rank = (k: string) => (k === 'plugin:' ? 2 : k === 'telegram:' ? 1 : 0);
+    const rank = (k: string) => (k === 'vampy:' ? 3 : k === 'plugin:' ? 2 : k === 'telegram:' ? 1 : 0);
     return [...m.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[1].label.localeCompare(b[1].label));
   }, [watched, channels]);
-  const shortName = (w: WatchedChat) => (w.source === 'discord' ? w.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '') : w.name);
+  const shortName = (w: WatchedChat) => (w.source === 'discord' || w.source === 'vampy' ? w.name.replace(/\s*\([^)]*\)\s*$/, '').replace(/^#/, '') : w.name);
   const groupState = (items: { w: WatchedChat }[]) => {
     const n = items.filter(({ w }) => selected.includes(chatKey(w))).length;
     return n === 0 ? 'none' : n === items.length ? 'all' : 'some';
@@ -240,7 +258,7 @@ export function ColumnEditor({
   })();
   const urlOk = /^https?:\/\/[^\s/]+/i.test(cleanUrl);
   const save = () => {
-    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : type === 'plugin' ? (pickedPlugin?.manifest?.name || pluginId || 'Plugin') : all ? 'All Chats' : 'Chats');
+    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : type === 'plugin' ? (pickedPlugin?.manifest?.name || pluginId || 'Plugin') : type === 'vampy' ? (pickedFeed?.title || 'Vampy') : all ? 'All Chats' : 'Chats');
     if (isWeb && !urlOk) {
       window.alert('Paste the address of the page to show (http:// or https://).');
       return;
@@ -249,7 +267,11 @@ export function ColumnEditor({
       window.alert('Enter the bot\'s username (letters, digits and _, like evmtrackerbot).');
       return;
     }
-    if (!isWeb && !isNft && !isPlugin && none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
+    if (isVampy && !feed) {
+      window.alert('Pick the Vampy feed this column shows.');
+      return;
+    }
+    if (!isWeb && !isNft && !isPlugin && !isVampy && none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
     const clean: ColumnFilters = {};
     for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== false && !(Array.isArray(v) && v.length === 0) && !(typeof v === 'string' && !v.trim())) (clean as any)[k] = v;
     // filters don't carry across a type change when their vocabulary differs: minQty is mints-only,
@@ -261,13 +283,14 @@ export function ColumnEditor({
       id: col?.id ?? `c${Date.now().toString(36)}`,
       type,
       title: t,
-      chats: isWeb || isNft || isPlugin ? [] : chats,
+      chats: isWeb || isNft || isPlugin ? [] : isVampy ? [`vampy:${feed}`] : chats,
       ...(isWeb ? { url: cleanUrl } : {}),
       ...(isPlugin ? { plugin: pluginId } : {}),
+      ...(isVampy ? { feed } : {}),
       ...(type === 'tgbot' ? { bot: cleanBot } : {}),
       ...(type === 'callers' ? { window: (['24h', '7d', '30d'] as const).includes(win as any) ? win : '7d' } : type === 'trending' ? { window: (['5m', '1h', '6h', '24h'] as const).includes(win as any) ? win : '1h' } : {}),
       ...(type === 'nftvol' ? { ranking, timeframe } : {}),
-      ...(type === 'calls' || type === 'chat' || type === 'j7' ? { alert: { on: alertOn, sound } } : {}),
+      ...(type === 'calls' || type === 'chat' || type === 'j7' || type === 'vampy' ? { alert: { on: alertOn, sound } } : {}),
       filters: Object.keys(clean).length ? clean : undefined,
     });
   };
@@ -295,7 +318,7 @@ export function ColumnEditor({
               ))}
             </div>
             <div className="fed-label">Feed name</div>
-            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : type === 'plugin' ? (pickedPlugin?.manifest?.name ?? 'Plugin') : 'All Chats'} maxLength={40} />
+            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : type === 'plugin' ? (pickedPlugin?.manifest?.name ?? 'Plugin') : type === 'vampy' ? (pickedFeed?.title ?? 'Vampy') : 'All Chats'} maxLength={40} />
             {isWeb && (
               <>
                 <div className="fed-label">Site</div>
@@ -369,7 +392,29 @@ export function ColumnEditor({
                 <div className="fed-bot-note hint">The plugin draws this column itself, inside its own sandbox. Add, approve and remove plugins in ⚙ → Plugins.</div>
               </>
             )}
-            {!isBot && !isWeb && !isNft && !isPlugin && (
+            {isVampy && (
+              <>
+                <div className="fed-label">Feed</div>
+                {!vampyKey ? (
+                  <div className="hint">No Vampy key yet. Paste your vampy.app API key in ⚙ → Accounts → Vampy, and your feeds show up here.</div>
+                ) : vampyFeeds.length === 0 ? (
+                  <div className="hint">No feeds yet: either Vampy is still connecting, or nothing is built on vampy.app under this key.</div>
+                ) : (
+                  <div className="fchips fed-sites">
+                    {vampyFeeds.map((x) => (
+                      <button key={x.id} className={`fchip${feed === x.id ? ' on' : ''}`} onClick={() => pickFeed(x)} title={x.channels.map((c) => [c.name, c.server].filter(Boolean).join(' · ')).join('\n') || undefined}>
+                        <Icon name={x.type === 'call' ? 'calls' : 'chat'} size={11} /> {x.title} <span className="muted">· {x.type === 'call' ? 'calls' : 'messages'}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {feed && vampyKey && vampyFeeds.length > 0 && !pickedFeed && <div className="hint">This column's feed is not on vampy.app any more, so it stays empty until you pick another.</div>}
+                <div className="fed-bot-note hint">
+                  {view === 'calls' ? 'Every call of this feed as a call card, priced live, with the market cap Vampy recorded at the call. The same calls also count in All Calls, Trending and Top Callers.' : 'The messages of this feed, live, with contracts detected. The feed is also in the channel picker of any Messages or Calls column.'}
+                </div>
+              </>
+            )}
+            {!isBot && !isWeb && !isNft && !isPlugin && !isVampy && (
             <>
             <div className="fed-label">
               Channels <span className="muted">({all ? 'all' : none ? 'none' : `${chats.length} of ${allKeys.length}`})</span>
@@ -432,6 +477,7 @@ export function ColumnEditor({
             {isBot && type !== 'j7' && <div className="hint">Nothing to filter here — this column shows one bot conversation.</div>}
             {isWeb && <div className="hint">Nothing to filter here — this column shows a web page.</div>}
             {isPlugin && <div className="hint">Nothing to filter here — the plugin decides what its own column shows.</div>}
+            {isVampy && !pickedFeed && <div className="hint">Pick a feed on the left: a call feed gets the calls filters, a message feed the message filters.</div>}
             {type === 'mints' && (
               <>
                 <Chips title="Chains" options={[['ethereum', 'Ethereum'], ['robinhood', 'Robinhood'], ['ink', 'Ink']]} value={f.chains ?? []} onChange={(v) => set('chains', v)} all="all chains" />
@@ -474,7 +520,7 @@ export function ColumnEditor({
                 </div>
               </div>
             )}
-            {type === 'chat' && (
+            {view === 'chat' && (
               <>
                 <div className="fsec">
                   <div className="fsec-title">Search (optional)</div>
@@ -513,13 +559,13 @@ export function ColumnEditor({
                 </div>
               </>
             )}
-            {(type === 'calls' || type === 'chat') && (
+            {(view === 'calls' || view === 'chat') && (
               <>
-                <NameList title="Show only" hint={type === 'calls' ? 'Only calls by these callers' : 'Only messages from these callers'} value={f.showOnly ?? []} onChange={(v) => set('showOnly', v)} suggestions={callers} />
-                <NameList title="Muted callers" hint={type === 'calls' ? 'Hide calls by these callers' : 'Hide messages from these callers'} value={f.muted ?? []} onChange={(v) => set('muted', v)} suggestions={callers} />
+                <NameList title="Show only" hint={view === 'calls' ? 'Only calls by these callers' : 'Only messages from these callers'} value={f.showOnly ?? []} onChange={(v) => set('showOnly', v)} suggestions={callers} />
+                <NameList title="Muted callers" hint={view === 'calls' ? 'Hide calls by these callers' : 'Hide messages from these callers'} value={f.muted ?? []} onChange={(v) => set('muted', v)} suggestions={callers} />
               </>
             )}
-            {type === 'calls' && (
+            {view === 'calls' && (
               <>
                 <div className="fed-cols">
                   <div>
@@ -568,7 +614,7 @@ export function ColumnEditor({
                 {type === 'trending' && <div className="hint">The column header switches windows too; this is the one it opens on.</div>}
               </div>
             )}
-            {(type === 'calls' || type === 'chat') && (
+            {(view === 'calls' || view === 'chat') && (
               <div className="fsec">
                 <div className="fsec-title">Alert</div>
                 <label className="check">
@@ -592,7 +638,7 @@ export function ColumnEditor({
             </button>
           )}
           <button onClick={onClose}>Cancel</button>
-          <button className="primary" disabled={isPlugin && !pluginId} title={isPlugin && !pluginId ? 'pick a plugin first' : undefined} onClick={save}>
+          <button className="primary" disabled={(isPlugin && !pluginId) || (isVampy && !feed)} title={isPlugin && !pluginId ? 'pick a plugin first' : isVampy && !feed ? 'pick a feed first' : undefined} onClick={save}>
             {col ? 'Update column' : 'Add column'}
           </button>
         </div>

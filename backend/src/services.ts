@@ -11,6 +11,8 @@ import { extractLinks, type ExtractedMeta } from './links.js';
 import { createPreviewer, type Previewer } from './previews.js';
 import { J7Client } from './j7.js';
 import { MintGoClient } from './mintgo.js';
+import { VampyClient } from './vampy/client.js';
+import { chatNameOf, type VampyFeed, type VampyRow } from './vampy/normalize.js';
 import os from 'node:os';
 import { RankingsPoller, keyFor } from './opensea/rankings.js';
 import { TOGETHER_PORT, TogetherDiscovery, TogetherGuest, TogetherHost, encodePairing, lanAddresses, newCode, newToken, pollPairing, requestPairing } from './together.js';
@@ -63,6 +65,8 @@ export class Services {
   telegram?: TelegramWrapper;
   j7?: J7Client;
   mintgo?: MintGoClient;
+  /** the feeds the user built on vampy.app, mirrored with their API key */
+  vampy?: VampyClient;
   readonly rankings = new RankingsPoller();
   /** the plugin folder registry; index.ts hands it over once it is built */
   plugins?: PluginRegistry;
@@ -410,6 +414,34 @@ export class Services {
     return (this.j7?.recent ?? []).map((t) => ({ ...t, contracts: detectContracts(t.text) }));
   }
 
+  /** Vampy: every feed built on vampy.app becomes a chat here, live over its socket. Restarted when the key changes. */
+  startVampy(): void {
+    this.vampy?.stop();
+    this.vampy = undefined;
+    this.hub.setVampyPlan(undefined);
+    const apiKey = this.cfg.get().vampy.apiKey;
+    if (!apiKey) {
+      this.hub.setVampy('disconnected');
+      return;
+    }
+    // TRENCHFEED_VAMPY_BASE / TRENCHFEED_VAMPY_WS: a stand-in Vampy for a test bench; never set in normal use
+    const c = new VampyClient({ apiKey, base: process.env.TRENCHFEED_VAMPY_BASE || undefined, wsUrl: process.env.TRENCHFEED_VAMPY_WS || undefined, log: (m) => console.warn('[vampy]', m) });
+    c.on('state', (s: import('./types.js').VampyState, err?: string) => this.hub.setVampy(s, err));
+    c.on('plan', (p?: import('./types.js').VampyPlan) => this.hub.setVampyPlan(p));
+    c.on('row', ({ msg, meta, marketCap, history }: VampyRow) => {
+      // a history row read back after a reconnect is one the hub already holds: nothing more to do
+      if (!this.hub.push(msg, meta ?? extractLinks(msg.text, []), history ? { history: true } : undefined)) return;
+      // the market cap Vampy recorded at the call, on the call record the push just registered
+      if (marketCap !== undefined) for (const ct of msg.contracts) this.hub.applyCallMarketCaps(ct.address, [{ msgId: msg.id, marketCap, source: 'vampy' }]);
+      if (msg.source === 'vampy' && !msg.contracts.length) this.addPreviews(msg);
+    });
+    this.vampy = c;
+    c.start();
+  }
+  vampyFeeds(): VampyFeed[] {
+    return this.vampy?.feeds ?? [];
+  }
+
   /** MintGo live mints (no account needed). Started when a MintGo or mint-window column exists, stopped when none does. */
   startMintGo(): void {
     const wanted = this.cfg.get().columns.flatMap((c) => (c.split ? [c, c.split.bottom] : [c])).some((c) => c.type === 'mints' || c.type === 'osmint');
@@ -736,6 +768,8 @@ export class Services {
       // to show, so it is skipped rather than listed as a blank row; iterating pluginWatch keeps its order
       if (name !== undefined) out.push({ id: chatId, name, source: 'plugin' });
     }
+    // Vampy feeds: one chat per feed built on vampy.app, for as long as the key is set
+    for (const f of this.vampy?.feeds ?? []) out.push({ id: f.id, name: chatNameOf(f), source: 'vampy' });
     return out;
   }
 }
