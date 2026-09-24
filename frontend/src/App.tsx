@@ -223,6 +223,21 @@ export default function App() {
       /* ignore */
     }
   };
+  const [chainTint, setChainTintState] = useState(() => {
+    try {
+      return localStorage.getItem('trenchfeed.chainTint') !== 'off';
+    } catch {
+      return true;
+    }
+  });
+  const setChainTint = (on: boolean) => {
+    setChainTintState(on);
+    try {
+      localStorage.setItem('trenchfeed.chainTint', on ? 'on' : 'off');
+    } catch {
+      /* ignore */
+    }
+  };
   const [compactEmbeds, setCompactEmbedsState] = useState(() => {
     try {
       return localStorage.getItem('trenchfeed.embeds') !== 'full';
@@ -1616,7 +1631,7 @@ export default function App() {
     <LinkInterceptContext.Provider value={openLink}>
     <CaMenuContext.Provider value={openCaMenu}>
     <SlotContext.Provider value={slots}>
-    <div className={`app${dragCol ? ' col-drag' : ''}`}>
+    <div className={`app${dragCol ? ' col-drag' : ''}${chainTint ? ' chain-tint' : ''}`}>
       <header className="top">
         <div className="brand">opentrench</div>
         <Tickers />
@@ -2055,6 +2070,8 @@ export default function App() {
           onAutoChart={setAutoChart}
           compactEmbeds={compactEmbeds}
           onCompactEmbeds={setCompactEmbeds}
+          chainTint={chainTint}
+          onChainTint={setChainTint}
           chartProvider={chartProvider}
           onChartProvider={setChartProvider}
           plugins={plugins}

@@ -48,6 +48,8 @@ const render = async (status: Status, initialInvite?: string) => {
         onAutoChart={() => {}}
         compactEmbeds={false}
         onCompactEmbeds={() => {}}
+        chainTint={false}
+        onChainTint={() => {}}
         chartProvider="dexscreener"
         onChartProvider={() => {}}
         plugins={[]}

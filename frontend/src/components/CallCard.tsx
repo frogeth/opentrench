@@ -125,6 +125,9 @@ export function CallCard({
     c ? ` · called by ${c.author} in ${c.chatName}` : ''
   }`.trim();
   const hot = t.seen >= 3 ? ' call-hot-3' : t.seen === 2 ? ' call-hot-2' : '';
+  // the chain's tint on the card (drawn only while the chain-tint setting is on)
+  const net = t.network ?? (t.chain === 'sol' ? 'solana' : t.chain);
+  const tint = ` call-net-${net}`;
   const isNew = now - t.firstSeenTs < 8000;
   // the entry: market cap at the first call; the multiple is measured from there (each later call's own MC is in the hover list)
   const mcAt = t.firstCallMarketCap ?? t.calls[0]?.marketCap ?? c?.marketCap;
@@ -143,7 +146,7 @@ export function CallCard({
       <div
         ref={rowRef}
         id={`call-${t.address}`}
-        className={`call call-row${selected ? ' call-selected' : ''}${hidden ? ' call-hidden' : ''}${hot}`}
+        className={`call call-row${selected ? ' call-selected' : ''}${hidden ? ' call-hidden' : ''}${hot}${tint}`}
         title="click to unfold"
         onClick={(e) => {
           // the row itself unfolds; its own controls (check, copy, hide, chevron, image) keep their jobs
@@ -187,7 +190,7 @@ export function CallCard({
   }
 
   return (
-    <div ref={cardRef} id={`call-${t.address}`} className={`call${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${isNew ? ' call-new' : ''}${onSeen && !seen ? ' call-unseen' : ''}${hidden ? ' call-hidden' : ''}${hot}`}>
+    <div ref={cardRef} id={`call-${t.address}`} className={`call${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${isNew ? ' call-new' : ''}${onSeen && !seen ? ' call-unseen' : ''}${hidden ? ' call-hidden' : ''}${hot}${tint}`}>
       {t.seen >= 2 && <span key={t.lastCallTs} className="call-pulse" />}
 
       {/* 1 · caller meta */}

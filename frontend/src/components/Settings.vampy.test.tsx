@@ -37,6 +37,8 @@ const settings = (st: Status) => (
     onAutoChart={() => {}}
     compactEmbeds={false}
     onCompactEmbeds={() => {}}
+    chainTint={false}
+    onChainTint={() => {}}
     chartProvider="dexscreener"
     onChartProvider={() => {}}
     plugins={[]}
