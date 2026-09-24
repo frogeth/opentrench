@@ -1410,6 +1410,8 @@ export default function App() {
       const key = `${ranking === 'top' ? 'TOP' : 'TRENDING'}:${timeframe === '1d' ? 'ONE_DAY' : 'ONE_HOUR'}` as RankingKey;
       const hit = rankings[key];
       const setTf = (tf: '1h' | '1d') => saveColumnsDebounced(updateColumn(col.id, (c) => ({ ...c, timeframe: tf })));
+      const currency = col.currency ?? 'native';
+      const setCurrency = (cur: 'native' | 'usd') => saveColumnsDebounced(updateColumn(col.id, (c) => ({ ...c, currency: cur })));
       return (
         <Column
           key={col.id}
@@ -1418,17 +1420,26 @@ export default function App() {
           kind="nftvol"
           className="col-nftvol"
           extra={
-            <span className="seg seg-sm">
-              {(['1h', '1d'] as const).map((tf) => (
-                <button key={tf} className={timeframe === tf ? 'active' : ''} onClick={() => setTf(tf)}>
-                  {tf.toUpperCase()}
-                </button>
-              ))}
-            </span>
+            <>
+              <span className="seg seg-sm" title="show floor and volume in the chain's coin or in dollars">
+                {(['native', 'usd'] as const).map((cur) => (
+                  <button key={cur} className={currency === cur ? 'active' : ''} onClick={() => setCurrency(cur)}>
+                    {cur === 'usd' ? 'USD' : 'COIN'}
+                  </button>
+                ))}
+              </span>
+              <span className="seg seg-sm">
+                {(['1h', '1d'] as const).map((tf) => (
+                  <button key={tf} className={timeframe === tf ? 'active' : ''} onClick={() => setTf(tf)}>
+                    {tf.toUpperCase()}
+                  </button>
+                ))}
+              </span>
+            </>
           }
           {...actions}
         >
-          <NftRankings rows={hit?.rows} at={hit?.at} now={now} timeframe={timeframe} onMint={(r) => mintFrom({ locator: r.slug, chain: r.chain })} />
+          <NftRankings rows={hit?.rows} at={hit?.at} now={now} timeframe={timeframe} currency={currency} onMint={(r) => mintFrom({ locator: r.slug, chain: r.chain })} />
         </Column>
       );
     }
