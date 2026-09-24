@@ -92,8 +92,6 @@ function Link({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
-let key = 0;
-
 function render(text: string, contracts: string[], re: RegExp, size: number, jumbo: boolean, depth: number): ReactNode[] {
   const out: ReactNode[] = [];
   let last = 0;
@@ -103,7 +101,9 @@ function render(text: string, contracts: string[], re: RegExp, size: number, jum
     const i = m.index ?? 0;
     if (i > last) out.push(text.slice(last, i));
     const g = m.groups ?? {};
-    const k = key++;
+    // keyed by where the match sits in the text, so a re-render (the live feed does many) keeps the same
+    // elements: a fresh key each time remounted every address, dropping clicks that spanned an update
+    const k = i;
     if (g.code) {
       const s = m[0].slice(1, -1);
       out.push(isCa(s) ? <CA key={k} text={s} /> : <code key={k} className="md-code">{s}</code>);
