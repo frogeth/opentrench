@@ -198,3 +198,43 @@ describe('resolveDiscordMentions', () => {
     expect(m.replyTo?.text).toBe('ping @Degens');
   });
 });
+
+describe('forwarded messages', () => {
+  // A Discord forward has no content of its own: the original rides in message_snapshots (no author there).
+  const fwd = {
+    id: '900',
+    channel_id: '222',
+    guild_id: '333',
+    author: { id: '444', username: 'degen' },
+    content: '',
+    timestamp: '2026-09-24T12:00:00.000Z',
+    attachments: [],
+    embeds: [],
+    message_reference: { type: 1, guild_id: '555', channel_id: '666', message_id: '777' },
+    message_snapshots: [
+      {
+        message: {
+          content: 'ape this 7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr <@1>',
+          mentions: [{ id: '1', username: 'rick' }],
+          embeds: [{ title: 'Chart', description: 'up only' }],
+          attachments: [{ id: '2', url: 'https://cdn.discordapp.com/a/pic.png', content_type: 'image/png' }],
+          timestamp: '2026-09-24T11:00:00.000Z',
+        },
+      },
+    ],
+  };
+  it('shows the forwarded message: its text, embeds and media, marked as forwarded with a link to the original', () => {
+    const m = normalizeDiscord(fwd, { name: 'alpha', guildName: 'Trenches' });
+    expect(m.text).toBe('ape this 7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr @rick\nChart\nup only');
+    expect(m.body).toBe('ape this 7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr @rick');
+    expect(m.embeds).toEqual([{ title: 'Chart', description: 'up only', fields: [] }]);
+    expect(m.media).toEqual([{ kind: 'image', url: 'https://cdn.discordapp.com/a/pic.png', mime: 'image/png' }]);
+    expect(m.hasAttachment).toBe(true);
+    expect(m.forwarded).toEqual({ link: 'https://discord.com/channels/555/666/777' });
+  });
+  it('leaves a reply (message_reference type 0) and a plain message unmarked', () => {
+    const reply = { ...fwd, content: 'hi', message_reference: { type: 0, channel_id: '222', message_id: '1' }, message_snapshots: undefined };
+    expect(normalizeDiscord(reply, { name: 'a', guildName: 'g' }).forwarded).toBeUndefined();
+    expect(normalizeDiscord(payload, { name: 'a', guildName: 'g' }).forwarded).toBeUndefined();
+  });
+});

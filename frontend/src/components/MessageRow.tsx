@@ -349,8 +349,20 @@ export function MessageRow({
             <span className="reply-arrow">↩</span> <b>{m.replyTo.author}</b> <RichText text={m.replyTo.text} />
           </div>
         )}
+        {m.forwarded && (
+          <div className="fwd-tag muted">
+            <Icon name="forward" size={11} />
+            {m.forwarded.link ? (
+              <a href={m.forwarded.link} target="_blank" rel="noreferrer" title="open the original message" onClick={(e) => e.stopPropagation()}>
+                Forwarded
+              </a>
+            ) : (
+              'Forwarded'
+            )}
+          </div>
+        )}
         {(m.embeds?.length ? m.body : m.text) && (
-          <div className="row-text">
+          <div className={`row-text${m.forwarded ? ' row-fwd' : ''}`}>
             <RichText text={m.embeds?.length ? m.body ?? '' : m.text} contracts={m.contracts.map((c) => c.address)} />
             {m.hasAttachment && !m.media?.length && (
               <span className="attach" title="has attachment">

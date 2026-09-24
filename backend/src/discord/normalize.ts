@@ -182,7 +182,29 @@ export function resolveDiscordMentions(text: string, d: any, names?: DiscordName
     .replace(/<#(\d+)>/g, (m, id) => (names?.channels?.has(id) ? `#${names.channels.get(id)}` : m));
 }
 
-export function normalizeDiscord(d: any, ch: DiscordChannelInfo, me?: DiscordMe, names?: DiscordNames): FeedMessage {
+/**
+ * A forward (message_reference type 1) arrives empty: the original's content, embeds, attachments and
+ * stickers ride in message_snapshots. Read it as one message: the snapshot's parts after any of its own.
+ */
+function withSnapshot(d: any): { d: any; forwarded?: FeedMessage['forwarded'] } {
+  const snap = d?.message_snapshots?.[0]?.message;
+  if (!snap || typeof snap !== 'object') return { d };
+  const ref = d.message_reference ?? {};
+  const both = (k: string) => [...(Array.isArray(d[k]) ? d[k] : []), ...(Array.isArray(snap[k]) ? snap[k] : [])];
+  const merged = {
+    ...d,
+    content: [d.content, snap.content].filter((s) => typeof s === 'string' && s.trim()).join('\n'),
+    embeds: both('embeds'),
+    attachments: both('attachments'),
+    sticker_items: both('sticker_items'),
+    mentions: both('mentions'),
+  };
+  const link = ref.channel_id && ref.message_id ? `https://discord.com/channels/${ref.guild_id ?? '@me'}/${ref.channel_id}/${ref.message_id}` : undefined;
+  return { d: merged, forwarded: link ? { link } : {} };
+}
+
+export function normalizeDiscord(raw: any, ch: DiscordChannelInfo, me?: DiscordMe, names?: DiscordNames): FeedMessage {
+  const { d, forwarded } = withSnapshot(raw);
   const fix = (s: unknown) => resolveDiscordMentions(String(s ?? ''), d, names);
   const parts: string[] = [fix(d.content)];
   for (const e of d.embeds ?? []) {
@@ -209,7 +231,8 @@ export function normalizeDiscord(d: any, ch: DiscordChannelInfo, me?: DiscordMe,
     link: d.guild_id ? `https://discord.com/channels/${d.guild_id}/${d.channel_id}/${d.id}` : undefined,
     hasAttachment: (d.attachments?.length ?? 0) > 0,
     replyTo: replyContext(d, names),
-    mention: discordMention(d, me),
+    ...(forwarded ? { forwarded } : {}),
+    mention: discordMention(raw, me), // a forward pings for who forwarded it, not for the original's mentions
     chatAvatar: ch.dm ? ch.avatar : ch.guildIcon,
     media: discordMedia(d),
     previews: discordPreviews(d),
