@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.15.0 — 2026-09-24
+
 - **Chain colours on call cards.** Every call card carries its chain's colour as a soft wash from the left edge: Solana purple, Base blue, BNB gold, Robinhood green, Ethereum, Arc and Ink in theirs. It sits under the card, so the hot-call bars, the unseen highlight and the new-call flash read as before. On by default; ⚙ → Feed → Chain colours turns it off.
 - **NFT Volume in dollars.** A COIN | USD toggle beside 1H | 1D, remembered per column. USD shows floor and volume in dollars with the coin amount underneath, so collections priced in ETH, HYPE, RON and stablecoins compare at a glance.
 - Fix: clicking a contract address in a chat did not always copy it. The feed redraws several times a second and each redraw rebuilt the address, so a click that spanned one never landed and the "copied" tip vanished at once. Every click copies now, and the tip stays up.
