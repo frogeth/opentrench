@@ -63,6 +63,15 @@ describe('nft column types', () => {
     const [c] = sanitizeColumns([{ id: 'b', type: 'nftvol', title: 'V', chats: [], ranking: 'nope', timeframe: '7d' }]);
     expect(c.ranking).toBe('trending');
     expect(c.timeframe).toBe('1h');
+    expect(c.currency).toBe('native');
+  });
+  it('keeps a volume column in USD when asked, native for anything else', () => {
+    const [a, b] = sanitizeColumns([
+      { id: 'a', type: 'nftvol', title: 'V', chats: [], currency: 'usd' },
+      { id: 'b', type: 'nftvol', title: 'V', chats: [], currency: 'eur' },
+    ]);
+    expect(a.currency).toBe('usd');
+    expect(b.currency).toBe('native');
   });
   it('drops a non-array chains filter and rounds minQty into range', () => {
     const [c] = sanitizeColumns([{ id: 'a', type: 'mints', title: '', chats: [], filters: { chains: 'ethereum', minQty: 2.6 } }]);

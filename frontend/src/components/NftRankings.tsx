@@ -6,9 +6,12 @@ const smallFmt = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 3 })
 const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : n >= 100 ? n.toFixed(0) : n >= 1 ? n.toFixed(2) : smallFmt.format(n));
 const usd = (n: number) => `$${fmt(n)}`;
 const native = (p?: { unit: number; symbol: string }) => (p ? `${fmt(p.unit)} ${p.symbol}` : '—');
+type Currency = 'native' | 'usd';
+/** a price in the column's currency; a floor OpenSea gave no dollar figure for falls back to its coin */
+const amount = (p: { unit: number; symbol: string; usd?: number } | undefined, cur: Currency) => (cur === 'usd' && p?.usd !== undefined ? usd(p.usd) : native(p));
 
 /** One collection row: opens the collection, shows a Mint pill while a mint is live. */
-function Row({ r, onMint }: { r: NftRanking; onMint: (r: NftRanking) => void }) {
+function Row({ r, currency, onMint }: { r: NftRanking; currency: Currency; onMint: (r: NftRanking) => void }) {
   const [imgBroken, setImgBroken] = useState(false);
   const url = `https://opensea.io/collection/${r.slug}`;
   return (
@@ -44,10 +47,10 @@ function Row({ r, onMint }: { r: NftRanking; onMint: (r: NftRanking) => void }) 
           </button>
         )}
       </span>
-      <span className="nftv-num">{native(r.floor)}</span>
+      <span className="nftv-num">{amount(r.floor, currency)}</span>
       <span className="nftv-num">
-        <b>{native(r.volume)}</b>
-        <small className="muted">{usd(r.volume.usd)}</small>
+        <b>{amount(r.volume, currency)}</b>
+        <small className="muted">{currency === 'usd' ? native(r.volume) : usd(r.volume.usd)}</small>
       </span>
       <span className="nftv-num">{fmt(r.sales)}</span>
       <span className={`nftv-num ${r.floorChange === undefined ? 'muted' : r.floorChange >= 0 ? 'up' : 'down'}`}>
@@ -58,7 +61,21 @@ function Row({ r, onMint }: { r: NftRanking; onMint: (r: NftRanking) => void }) 
 }
 
 /** OpenSea's ranking table for one (list, window) pair. Rows open the collection; minting rows get a Mint pill. */
-export function NftRankings({ rows, at, now, timeframe, onMint }: { rows?: NftRanking[]; at?: number; now: number; timeframe: '1h' | '1d'; onMint: (r: NftRanking) => void }) {
+export function NftRankings({
+  rows,
+  at,
+  now,
+  timeframe,
+  currency = 'native',
+  onMint,
+}: {
+  rows?: NftRanking[];
+  at?: number;
+  now: number;
+  timeframe: '1h' | '1d';
+  currency?: Currency;
+  onMint: (r: NftRanking) => void;
+}) {
   if (!rows) return <div className="empty">Loading OpenSea rankings…</div>;
   if (rows.length === 0) return <div className="empty">OpenSea returned no collections for this window.</div>;
   const secs = at !== undefined ? Math.max(0, Math.round((now - at) / 1000)) : 0;
@@ -75,7 +92,7 @@ export function NftRankings({ rows, at, now, timeframe, onMint }: { rows?: NftRa
         <span>Δ floor</span>
       </div>
       {rows.map((r) => (
-        <Row key={r.slug} r={r} onMint={onMint} />
+        <Row key={r.slug} r={r} currency={currency} onMint={onMint} />
       ))}
       {at !== undefined &&
         (stale ? (

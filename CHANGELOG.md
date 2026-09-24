@@ -7,6 +7,11 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- **Chain colours on call cards.** Every call card carries its chain's colour as a soft wash from the left edge: Solana purple, Base blue, BNB gold, Robinhood green, Ethereum, Arc and Ink in theirs. It sits under the card, so the hot-call bars, the unseen highlight and the new-call flash read as before. On by default; ⚙ → Feed → Chain colours turns it off.
+- **NFT Volume in dollars.** A COIN | USD toggle beside 1H | 1D, remembered per column. USD shows floor and volume in dollars with the coin amount underneath, so collections priced in ETH, HYPE, RON and stablecoins compare at a glance.
+- Fix: clicking a contract address in a chat did not always copy it. The feed redraws several times a second and each redraw rebuilt the address, so a click that spanned one never landed and the "copied" tip vanished at once. Every click copies now, and the tip stays up.
+- Fix: a message forwarded from another Discord chat showed as a blank row. Forwards now show the forwarded text, embeds and images under a small "Forwarded" label that opens the original, and a contract in one counts as a call. A forward pings you only if the person forwarding it mentions you, not because the original did.
+
 ## v0.14.0 — 2026-09-22
 
 - **Vampy.** Paste your vampy.app API key (Settings → API there; needs an active Vampy subscription) in ⚙ → Accounts → Vampy, and every feed you built on Vampy is mirrored here: each call feed and message feed is one chat, live over Vampy's socket, with its recent rows loaded first. Calls land as calls: the card is priced live like any other, shows the market cap Vampy recorded at the call, and counts in All Calls, Trending, Top Callers, favorites pings and column alerts. Messages keep their Discord markdown, replies, images and embeds, and link back to the original on Discord or Telegram. A **Vampy** column type shows one feed on its own (a calls column for a call feed, a messages column for a message feed, with the matching filters), and Vampy feeds sit in the channel picker of any Messages or Calls column and in the rail under Vampy. Read-only. Feeds added or removed on vampy.app follow within the hour; a lapsed plan shows on the card.

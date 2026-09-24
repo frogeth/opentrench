@@ -87,6 +87,8 @@ export interface FeedMessage {
   link?: string;
   hasAttachment: boolean;
   replyTo?: ReplyContext;
+  /** a Discord forward: the text, embeds and media are the forwarded message's; link opens the original when known */
+  forwarded?: { link?: string };
   /** this message pinged you: a direct mention or reply, @everyone/@here, or one of your roles */
   mention?: 'user' | 'everyone' | 'role';
   reactions?: Reaction[];

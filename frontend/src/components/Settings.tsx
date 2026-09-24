@@ -40,6 +40,8 @@ export function Settings({
   onAutoChart,
   compactEmbeds,
   onCompactEmbeds,
+  chainTint,
+  onChainTint,
   chartProvider,
   onChartProvider,
   onShowSetup,
@@ -58,6 +60,8 @@ export function Settings({
   onAutoChart: (on: boolean) => void;
   compactEmbeds: boolean;
   onCompactEmbeds: (on: boolean) => void;
+  chainTint: boolean;
+  onChainTint: (on: boolean) => void;
   chartProvider: ChartProvider;
   onChartProvider: (p: ChartProvider) => void;
   /** reopen the first-run checklist */
@@ -172,6 +176,14 @@ export function Settings({
                   call-bot cards (Captain Hook, Rick…) to one line; click the chevron to expand one
                 </label>
                 <div className="hint">The call card under the message already shows the token's numbers and holder data.</div>
+              </section>
+              <section>
+                <h2>Chain colours</h2>
+                <label className="check">
+                  <input type="checkbox" checked={chainTint} onChange={(e) => onChainTint(e.target.checked)} /> Tint call cards
+                  by chain
+                </label>
+                <div className="hint">Solana purple, Base blue, BNB gold, Robinhood green and so on, as a wash from the card's left edge.</div>
               </section>
               <FavoritesSection cfg={cfg} onChange={reload} />
               <BotsSection cfg={cfg} onChange={reload} />

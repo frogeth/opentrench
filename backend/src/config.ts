@@ -22,6 +22,8 @@ export interface ColumnDef {
   /** nftvol: which OpenSea list, and which rolling window */
   ranking?: 'trending' | 'top';
   timeframe?: '1h' | '1d';
+  /** nftvol: lead floor and volume with the chain's coin (ETH…) or with dollars */
+  currency?: 'native' | 'usd';
   /** a second column stacked under this one (one level only), sharing its width */
   split?: { bottom: ColumnDef; ratio?: number };
   /** fixed width in px (drag-resized); unset = share the space */
@@ -114,6 +116,7 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
   if (type === 'nftvol') {
     col.ranking = raw.ranking === 'top' ? 'top' : 'trending';
     col.timeframe = raw.timeframe === '1d' ? '1d' : '1h';
+    col.currency = raw.currency === 'usd' ? 'usd' : 'native';
   }
   const f = raw.filters;
   if (f && typeof f === 'object' && !Array.isArray(f)) {

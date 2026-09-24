@@ -173,6 +173,21 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 .call-selected { animation: flash 2.4s ease-out; }
 @keyframes flash { 0% { background: rgba(65, 200, 146, 0.18); } 100% { background: var(--bg); } }
 
+/* chain tint: a wash of the chain's colour from the card's left edge, under the content (Settings → Tint call cards by chain) */
+.call-net-solana, .call-net-sol { --chain-rgb: 153, 69, 255; }
+.call-net-ethereum, .call-net-evm { --chain-rgb: 98, 126, 234; }
+.call-net-base { --chain-rgb: 59, 123, 255; }
+.call-net-bsc { --chain-rgb: 240, 185, 11; }
+.call-net-robinhood { --chain-rgb: 61, 220, 132; }
+.call-net-arc { --chain-rgb: 74, 118, 210; }
+.call-net-ink { --chain-rgb: 125, 82, 245; }
+.chain-tint .call { isolation: isolate; }
+.chain-tint .call::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(100deg, rgba(var(--chain-rgb, 0, 0, 0), 0.2) 0%, rgba(var(--chain-rgb, 0, 0, 0), 0.07) 45%, transparent 85%);
+}
+.chain-tint .call-row::before { background: linear-gradient(90deg, rgba(var(--chain-rgb, 0, 0, 0), 0.17) 0%, transparent 60%); }
+
 /* row 1: caller meta */
 .call-top { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); height: 18px; margin-bottom: 8px; min-width: 0; }
 .call-who { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
@@ -292,6 +307,11 @@ input[type='number'] { font-variant-numeric: tabular-nums; }
 }
 .reply b { color: var(--text); }
 .reply-arrow { color: var(--muted); }
+/* a Discord forward: a small label, then the forwarded text set off by a rule like Discord's own */
+.fwd-tag { display: flex; align-items: center; gap: 4px; font-size: 11px; font-style: italic; margin-top: 2px; }
+.fwd-tag a { color: inherit; text-decoration: none; }
+.fwd-tag a:hover { color: var(--text); text-decoration: underline; }
+.row-fwd { border-left: 2px solid var(--line-strong); padding-left: 8px; }
 .reactions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 5px; }
 .reaction {
   display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 1px 7px; border-radius: 999px;
