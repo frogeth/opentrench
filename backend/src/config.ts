@@ -1,14 +1,15 @@
 import fs from 'node:fs';
 import { SecretBox, isSealed } from './secrets.js';
 import path from 'node:path';
-import type { BotPolicy } from './types.js';
+import type { BotPolicy, WatchAlerts, WatchEntry } from './types.js';
+import { detectContracts } from './contracts.js';
 import { PLUGIN_ID_RE } from './plugins/manifest.js';
 import { isMemberId, isRoomId, isRoomKey, newMemberId, relayHostOf, relayUrlOf, roomIdOf } from './rooms/crypto.js';
 
 /** One column of the terminal. `chats` are `<source>:<id>` keys of watched chats; empty = every watched chat. */
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot' | 'plugin' | 'vampy';
+  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot' | 'plugin' | 'vampy' | 'watchlist';
   title: string;
   chats: string[];
   /** vampy columns: the Vampy feed id this column mirrors (`chats` is then exactly `vampy:<feed>`) */
@@ -34,6 +35,8 @@ export interface ColumnDef {
   zoom?: number;
   /** play a sound when a new call lands in this column */
   alert?: { on: boolean; sound: string };
+  /** watchlist columns: which header the rows are sorted by (each column sorts the one shared list its own way) */
+  watchSort?: { key: WatchSortKey; dir: 'asc' | 'desc' };
   /** per-column filters (shape owned by the UI; values are strings, numbers, booleans or string arrays) */
   filters?: Record<string, string | number | boolean | string[]>;
 }
@@ -43,7 +46,7 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
   { id: 'chats', type: 'chat', title: 'All Chats', chats: [] },
 ];
 
-const TYPES = ['calls', 'callers', 'trending', 'cove', 'salpha', 'j7', 'web', 'chat', 'mints', 'nftvol', 'osmint', 'tgbot', 'plugin', 'vampy'] as const;
+const TYPES = ['calls', 'callers', 'trending', 'cove', 'salpha', 'j7', 'web', 'chat', 'mints', 'nftvol', 'osmint', 'tgbot', 'plugin', 'vampy', 'watchlist'] as const;
 const DEFAULT_TITLE: Record<ColumnDef['type'], string> = {
   calls: 'Calls',
   callers: 'Top Callers',
@@ -59,7 +62,12 @@ const DEFAULT_TITLE: Record<ColumnDef['type'], string> = {
   tgbot: 'Telegram bot',
   plugin: 'Plugin',
   vampy: 'Vampy',
+  watchlist: 'Watchlist',
 };
+export const WATCH_SORT_KEYS = ['added', 'symbol', 'price', 'marketCap', 'change1h', 'sinceAdded', 'lastCall'] as const;
+export type WatchSortKey = (typeof WATCH_SORT_KEYS)[number];
+/** watchlist entries kept; also what keeps the hub from ever being all watched tokens */
+export const WATCHLIST_MAX = 200;
 /** A Vampy feed id as the API hands it out (an opaque token; UUIDs and short ids alike). */
 export const VAMPY_FEED_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 export const MINT_CHAINS = ['ethereum', 'robinhood', 'ink'] as const;
@@ -112,6 +120,10 @@ function parseColumn(r: unknown, seen: Set<string>, allowSplit: boolean): Column
       col.chats = [`vampy:${f}`];
     } else col.chats = ['none']; // no feed picked yet: an empty column, never "every chat"
 
+  }
+  if (type === 'watchlist') {
+    const ws = raw.watchSort;
+    if (ws && (WATCH_SORT_KEYS as readonly string[]).includes(ws.key) && (ws.dir === 'asc' || ws.dir === 'desc')) col.watchSort = { key: ws.key, dir: ws.dir };
   }
   if (type === 'nftvol') {
     col.ranking = raw.ranking === 'top' ? 'top' : 'trending';
@@ -190,6 +202,53 @@ export function sanitizeColumns(raw: unknown): ColumnDef[] {
   return out;
 }
 
+const positive = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined);
+
+/** A watchlist entry's alerts from untrusted input; undefined when none is set. */
+export function sanitizeWatchAlerts(raw: unknown): WatchAlerts | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as any;
+  const out: WatchAlerts = {};
+  const above = positive(r.above);
+  const below = positive(r.below);
+  const move = positive(r.movePct);
+  if (above !== undefined) out.above = above;
+  if (below !== undefined) out.below = below;
+  if (move !== undefined) out.movePct = Math.min(move, 10_000);
+  if (out.above === undefined && out.below === undefined && out.movePct === undefined) return undefined;
+  if (r.telegram) out.telegram = true;
+  const f = r.fired;
+  if (f && typeof f === 'object') {
+    const fired: NonNullable<WatchAlerts['fired']> = {};
+    for (const k of ['above', 'below', 'move'] as const) if (f[k] === true) fired[k] = true;
+    if (Object.keys(fired).length) out.fired = fired;
+  }
+  return out;
+}
+
+/** The watchlist from untrusted input: real contract addresses only (EVM lowercased), no repeats, newest first as given, capped. */
+export function sanitizeWatchlist(raw: unknown): WatchEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: WatchEntry[] = [];
+  const seen = new Set<string>();
+  for (const r of raw) {
+    if (out.length >= WATCHLIST_MAX) break;
+    if (!r || typeof r !== 'object') continue;
+    const e = r as any;
+    const c = detectContracts(String(e.address ?? ''))[0];
+    if (!c || c.chain !== e.chain || (c.chain === 'sol' && c.address !== e.address) || seen.has(c.address)) continue;
+    seen.add(c.address);
+    const entry: WatchEntry = { address: c.address, chain: c.chain, addedAt: Number.isFinite(e.addedAt) ? e.addedAt : 0 };
+    if (typeof e.network === 'string' && /^[a-z0-9-]{1,40}$/.test(e.network)) entry.network = e.network;
+    const mc = positive(e.addedMarketCap);
+    if (mc !== undefined) entry.addedMarketCap = mc;
+    const alerts = sanitizeWatchAlerts(e.alerts);
+    if (alerts) entry.alerts = alerts;
+    out.push(entry);
+  }
+  return out;
+}
+
 /** One relay room (spec §5). `relay` is a ws(s):// URL; `name` is what the user calls it, `joinedAt` ms since epoch. */
 export interface Room {
   id: string;
@@ -246,6 +305,8 @@ export interface Config {
   seenTokens: string[];
   /** call cards hidden from the calls columns; the token keeps being tracked (calls, trending, callers) */
   hiddenTokens: string[];
+  /** the one shared watchlist, newest first */
+  watchlist: WatchEntry[];
   /** J7Tracker: the account's session id (from its web app), read-only tweet stream */
   j7: { token?: string; /** X handles (no @) whose tweets ping you */ favorites: string[] };
   /** Vampy (vampy.app): the account's API key (Settings → API there); every feed built there is mirrored */
@@ -292,6 +353,7 @@ const DEFAULT: Config = {
   layouts: [],
   seenTokens: [],
   hiddenTokens: [],
+  watchlist: [],
   j7: { favorites: [] },
   vampy: {},
   opensea: {},
@@ -380,6 +442,7 @@ export class ConfigStore {
       vampy: { hasKey: !!this.cfg.vampy.apiKey },
       seenTokens: this.cfg.seenTokens,
       hiddenTokens: this.cfg.hiddenTokens,
+      watchlist: this.cfg.watchlist,
       opensea: { hasWallet: !!this.cfg.opensea.walletKey },
       rpc: this.cfg.rpc,
       marketData: { hasAlchemyKey: !!this.cfg.marketData.alchemyKey },
@@ -430,6 +493,7 @@ export class ConfigStore {
         vampy: { apiKey: this.secret(raw.vampy?.apiKey, 'vampy.apiKey') },
         seenTokens: Array.isArray(raw.seenTokens) ? raw.seenTokens.map(String).slice(-3000) : [],
         hiddenTokens: Array.isArray(raw.hiddenTokens) ? raw.hiddenTokens.map(String).slice(-3000) : [],
+        watchlist: sanitizeWatchlist(raw.watchlist),
         opensea: {
           walletKey: (() => {
             const wk = this.secret(raw.opensea?.walletKey, 'opensea.walletKey');

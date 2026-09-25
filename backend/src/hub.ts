@@ -35,6 +35,7 @@ import type {
   Mention,
   PersonSeen,
   CallRecord,
+  WatchEntry,
 } from './types.js';
 
 /** Identifies this server process; the UI reloads when it changes so a restart with a new build never leaves stale assets. */
@@ -55,6 +56,7 @@ const DATA_KEYS = [
   'marketCap',
   'liquidity',
   'change24h',
+  'change1h',
   'volume24h',
   'buys24h',
   'sells24h',
@@ -112,6 +114,8 @@ export interface HubOptions {
   /** bot policy: hide all bots except `allow`, or show all bots except the blacklist */
   bots?: () => BotPolicy;
   favorites?: () => string[];
+  /** the watchlist: watched tokens are never evicted, and `hello` carries the list */
+  watchlist?: () => WatchEntry[];
 }
 
 function normName(n: string): string {
@@ -146,6 +150,7 @@ export class MessageHub extends EventEmitter {
   private securityBatch?: SecurityBatchFetcher;
   private botPolicy: () => BotPolicy;
   private favorites: () => string[];
+  private watchlist: () => WatchEntry[];
 
   /** messages kept in all: a safety net over the per-chat cap */
   private total: number;
@@ -167,6 +172,7 @@ export class MessageHub extends EventEmitter {
     this.securityBatch = opts.securityBatch;
     this.botPolicy = opts.bots ?? (() => ({ default: 'hide', allow: [] }));
     this.favorites = opts.favorites ?? (() => []);
+    this.watchlist = opts.watchlist ?? (() => []);
   }
 
   isFavorite(author: string): boolean {
@@ -776,6 +782,7 @@ export class MessageHub extends EventEmitter {
       rankings: this.nftState.rankings(),
       mintJobs: this.nftState.mintJobs(),
       boot: BOOT_ID,
+      watchlist: this.watchlist(),
     };
   }
 

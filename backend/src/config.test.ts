@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ConfigStore, DEFAULT_COLUMNS, sanitizeColumns, sanitizeLayouts } from './config.js';
+import { ConfigStore, DEFAULT_COLUMNS, sanitizeColumns, sanitizeLayouts, sanitizeWatchlist } from './config.js';
 import { SecretBox, isSealed } from './secrets.js';
 import { isMemberId, newRoomKey, roomIdOf } from './rooms/crypto.js';
 
@@ -515,5 +515,61 @@ describe('together rooms', () => {
     const lines = warn.mock.calls.map(([m]) => String(m));
     expect(lines.filter((l) => l.includes('degens'))).toHaveLength(1);
     expect(lines.some((l) => /\d+ secret\(s\)/.test(l))).toBe(false);
+  });
+});
+
+describe('watchlist', () => {
+  const EVM = '0x' + 'ab'.repeat(20);
+  const SOL = 'So11111111111111111111111111111111111111112';
+
+  it('keeps valid entries, lowercases EVM, drops junk and duplicates', () => {
+    const out = sanitizeWatchlist([
+      { address: EVM.toUpperCase().replace('0X', '0x'), chain: 'evm', network: 'base', addedAt: 5, addedMarketCap: 1000 },
+      { address: EVM, chain: 'evm', addedAt: 6 },
+      { address: SOL, chain: 'sol', addedAt: 7 },
+      { address: 'nope', chain: 'evm', addedAt: 1 },
+      { address: SOL, chain: 'ton', addedAt: 1 },
+      'x',
+    ]);
+    expect(out).toEqual([
+      { address: EVM, chain: 'evm', network: 'base', addedAt: 5, addedMarketCap: 1000 },
+      { address: SOL, chain: 'sol', addedAt: 7 },
+    ]);
+    expect(sanitizeWatchlist(undefined)).toEqual([]);
+  });
+
+  it('keeps only sane alerts', () => {
+    const [e] = sanitizeWatchlist([
+      { address: SOL, chain: 'sol', addedAt: 1, alerts: { above: 2e6, below: -5, movePct: 30, telegram: 1, fired: { above: true, below: 'x' } } },
+    ]);
+    expect(e.alerts).toEqual({ above: 2e6, movePct: 30, telegram: true, fired: { above: true } });
+    const [bare] = sanitizeWatchlist([{ address: SOL, chain: 'sol', addedAt: 1, alerts: { above: 'lots' } }]);
+    expect(bare.alerts).toBeUndefined();
+  });
+
+  it('caps the list at 200', () => {
+    const many = Array.from({ length: 250 }, (_, i) => ({ address: '0x' + i.toString(16).padStart(40, '0'), chain: 'evm', addedAt: i }));
+    expect(sanitizeWatchlist(many)).toHaveLength(200);
+  });
+
+  it('loads, persists and masks the list', () => {
+    const file = tmpFile();
+    fs.writeFileSync(file, JSON.stringify({ watchlist: [{ address: SOL, chain: 'sol', addedAt: 3 }] }));
+    const store = new ConfigStore(file);
+    expect(store.masked().watchlist).toEqual([{ address: SOL, chain: 'sol', addedAt: 3 }]);
+    store.update((c) => {
+      c.watchlist.unshift({ address: EVM, chain: 'evm', addedAt: 4 });
+    });
+    expect(new ConfigStore(file).get().watchlist.map((e) => e.address)).toEqual([EVM, SOL]);
+    expect(new ConfigStore(tmpFile()).get().watchlist).toEqual([]);
+  });
+
+  it('a watchlist column keeps its sort', () => {
+    expect(sanitizeColumns([{ id: 'w', type: 'watchlist', watchSort: { key: 'change1h', dir: 'asc' } }])).toEqual([
+      { id: 'w', type: 'watchlist', title: 'Watchlist', chats: [], watchSort: { key: 'change1h', dir: 'asc' } },
+    ]);
+    expect(sanitizeColumns([{ id: 'w', type: 'watchlist', watchSort: { key: 'evil', dir: 'up' } }])).toEqual([
+      { id: 'w', type: 'watchlist', title: 'Watchlist', chats: [] },
+    ]);
   });
 });

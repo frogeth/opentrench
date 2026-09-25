@@ -69,6 +69,7 @@ const hub: MessageHub = new MessageHub(150, createDefaultEnricher({ o1ApiKey: ()
   blacklist: () => cfg.get().blacklist,
   bots: () => cfg.get().bots,
   favorites: () => cfg.get().favorites,
+  watchlist: () => cfg.get().watchlist,
 });
 
 // Live market numbers, two loops. Fast: every 10s, tokens called in the last hour, Dexscreener

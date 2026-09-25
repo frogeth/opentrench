@@ -1,4 +1,4 @@
-import type { PluginInfo, Source } from './types';
+import type { PluginInfo, Source, WatchEntry } from './types';
 
 /** what a plugin's log lines are tagged with (the backend keeps these three) */
 export type PluginLogLevel = 'info' | 'warn' | 'error';
@@ -128,9 +128,12 @@ export interface ColumnFilters {
   // mints column
   minQty?: number;
 }
+export const WATCH_SORT_KEYS = ['added', 'symbol', 'price', 'marketCap', 'change1h', 'sinceAdded', 'lastCall'] as const;
+export type WatchSortKey = (typeof WATCH_SORT_KEYS)[number];
+
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot' | 'plugin' | 'vampy';
+  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot' | 'plugin' | 'vampy' | 'watchlist';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
@@ -158,6 +161,8 @@ export interface ColumnDef {
   /** play a sound when a new call lands in this column */
   alert?: { on: boolean; sound: string };
   filters?: ColumnFilters;
+  /** watchlist columns: the header the rows are sorted by */
+  watchSort?: { key: WatchSortKey; dir: 'asc' | 'desc' };
 }
 /** A saved arrangement of the column terminal (header → Layouts). */
 export interface Layout {
@@ -182,6 +187,7 @@ export interface MaskedConfig {
   layouts: Layout[];
   seenTokens: string[];
   hiddenTokens: string[];
+  watchlist: WatchEntry[];
   together: {
     share: boolean;
     name: string;
