@@ -10,6 +10,7 @@ import type { BotMessage, FeedMessage, LoginStep, TelegramState } from '../types
 import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, type TelegramPlain, entitiesToMarkdown, entitiesToDiscord } from './normalize.js';
 import { extractLinks, type ExtractedMeta, type LinkIn } from '../links.js';
 import { canonicalChatId } from './ids.js';
+import { detectContracts } from '../contracts.js';
 
 export interface TelegramDialog {
   id: string;
@@ -424,7 +425,9 @@ export class TelegramWrapper extends EventEmitter {
         ...(b.url ? { url: String(b.url) } : {}),
       })),
     );
-    return { id: Number(m.id), ts: Number(m.date) * 1000, out: !!m.out, text: entitiesToMarkdown(String(m.message ?? ''), m.entities), buttons, hasMedia: !!m.media };
+    const raw = String(m.message ?? '');
+    const contracts = detectContracts(raw).map((c) => c.address);
+    return { id: Number(m.id), ts: Number(m.date) * 1000, out: !!m.out, text: entitiesToMarkdown(raw, m.entities), buttons, hasMedia: !!m.media, ...(contracts.length ? { contracts } : {}) };
   }
 
   /** Is this update about a bot conversation we relay? Returns the bot username. */

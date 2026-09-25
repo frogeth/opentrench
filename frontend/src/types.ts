@@ -266,6 +266,8 @@ export interface BotMessage {
   buttons: { text: string; data?: string; url?: string }[][];
   edited?: boolean;
   hasMedia?: boolean;
+  /** contract addresses in the text, highlighted click-to-copy like in the feed */
+  contracts?: string[];
 }
 
 /** A tweet from J7Tracker's stream, trimmed to what the column renders. */

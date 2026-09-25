@@ -119,7 +119,7 @@ export function CoveView({
         {msgs.map((m) => (
           <div key={m.id} className={`bmsg${m.out ? ' bmsg-out' : ''}`}>
             <div className="bmsg-text">
-              {m.text ? <RichText text={m.text} /> : m.hasMedia ? <span className="muted">📎 media</span> : null}
+              {m.text ? <RichText text={m.text} contracts={m.contracts} /> : m.hasMedia ? <span className="muted">📎 media</span> : null}
             </div>
             {m.buttons.length > 0 && (
               <div className="bkeys">
