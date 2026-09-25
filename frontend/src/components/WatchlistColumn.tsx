@@ -15,7 +15,7 @@ const HEADERS: { key: WatchSortKey; label: string; cls: string; title: string }[
   { key: 'price', label: 'price', cls: 'wl-price', title: 'price' },
   { key: 'marketCap', label: 'mcap', cls: 'wl-num', title: 'market cap' },
   { key: 'change1h', label: '1h', cls: 'wl-num', title: 'market cap change over the last hour' },
-  { key: 'sinceAdded', label: 'since add', cls: 'wl-num', title: 'market cap change since you added it' },
+  { key: 'sinceAdded', label: 'added', cls: 'wl-num', title: 'market cap change since you added it' },
   { key: 'lastCall', label: 'last call', cls: 'wl-call', title: 'the latest call in your chats' },
 ];
 
@@ -238,8 +238,7 @@ function Row({
       <div className="wl-row" onClick={(ev) => !(ev.target as HTMLElement).closest('button, a') && onToggle()}>
         <span className="wl-tok">
           {t?.imageUrl && !imgBroken ? <img src={t.imageUrl} alt="" loading="lazy" onError={() => setImgBroken(true)} /> : <ChainBadge network={net} chain={e.chain} size={14} className="net-plain wl-noimg" />}
-          <b title={e.address}>{t?.symbol ?? shortAddr(e.address)}</b>
-          <ChainBadge network={net} chain={e.chain} size={9} />
+          <b title={`${e.address} · ${net}`}>{t?.symbol ?? shortAddr(e.address)}</b>
           {t?.security?.honeypot && (
             <span className="wl-warn" title="security check failed: honeypot">
               ⚠
@@ -260,8 +259,8 @@ function Row({
             <>
               <span className="wl-who">{call.author}</span>
               <span className="muted">
-                {' '}
-                · {timeAgo(call.ts, now)}
+                <span className="wl-sep"> · </span>
+                {timeAgo(call.ts, now)}
                 {t!.calls.length > 1 ? ` · ×${t!.calls.length}` : ''}
               </span>
             </>
@@ -303,7 +302,7 @@ function Row({
             added {timeAgo(e.addedAt, now)} ago{e.addedMarketCap ? ` at ${money(e.addedMarketCap)}` : ''}
             {t?.athMarketCap ? ` · ATH ${money(t.athMarketCap)}` : ''}
           </div>
-          <AlertsEditor e={e} marketCap={t?.marketCap} telegramConnected={telegramConnected} onSave={onAlerts} />
+          <AlertsEditor key={`${e.alerts?.above}|${e.alerts?.below}|${e.alerts?.movePct}|${!!e.alerts?.telegram}`} e={e} marketCap={t?.marketCap} telegramConnected={telegramConnected} onSave={onAlerts} />
         </div>
       )}
     </div>
