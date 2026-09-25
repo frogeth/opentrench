@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.16.1 — 2026-09-25
+
 - Fix (Cove): a link whose text has its own brackets, like "[cancel all]" on the Active Orders line, showed as raw `[[cancel all]](https://…)` text; it is a link now. The contract address on a Cove panel is highlighted like everywhere else: click to copy, right-click for buy / research.
 
 ## v0.16.0 — 2026-09-25
