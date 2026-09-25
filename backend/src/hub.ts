@@ -35,8 +35,10 @@ import type {
   Mention,
   PersonSeen,
   CallRecord,
+  WatchAlertHit,
   WatchEntry,
 } from './types.js';
+import { alertText } from './watchlist.js';
 
 /** Identifies this server process; the UI reloads when it changes so a restart with a new build never leaves stale assets. */
 const BOOT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -45,6 +47,8 @@ const MENTION_CTX = 4;
 const MENTION_MAX = 100;
 const MENTION_AFTER_MS = 30 * 60_000;
 const MAX_CALLS = 50;
+/** calls of one watched token within this long fold into one ping */
+const WATCH_PING_GROUP_MS = 5 * 60_000;
 const normAuthor = (a: string) => a.replace(/^@/, '').trim().toLowerCase();
 /** what makes a call count once: this caller, in this chat */
 const callKey = (chatId: string, author: string) => `${chatId}|${normAuthor(author)}`;
@@ -190,6 +194,39 @@ export class MessageHub extends EventEmitter {
     return [...this.tokens.values()].filter((t) => now - t.lastCallTs < windowMs);
   }
 
+  isWatched(address: string): boolean {
+    return this.watchlist().some((e) => e.address === address);
+  }
+
+  /** Drop the oldest token nobody is watching (Map order = insertion order). */
+  private evictOne(): void {
+    const watched = new Set(this.watchlist().map((e) => e.address));
+    for (const addr of this.tokens.keys()) {
+      if (watched.has(addr)) continue;
+      this.tokens.delete(addr);
+      this.tokenChats.delete(addr);
+      return;
+    }
+  }
+
+  /**
+   * Track a token nobody has called (a watchlist add): it gets market updates and events like any other,
+   * and a later call finds it here and records normally. A token the hub already has is left alone.
+   */
+  adopt(info: TokenInfo): TokenInfo {
+    const known = this.tokens.get(info.address);
+    if (known) return known;
+    const t: TokenInfo = { ...info, seen: 0, calledIn: [], calls: [], lastCallTs: 0, firstSeenTs: info.firstSeenTs || Date.now() };
+    delete t.firstCaller;
+    this.applyBuy(t);
+    this.tokens.set(t.address, t);
+    this.tokenChats.set(t.address, new Set());
+    if (this.tokens.size > MAX_TOKENS) this.evictOne();
+    this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
+    this.changed();
+    return t;
+  }
+
   getToken(address: string): TokenInfo | undefined {
     return this.tokens.get(address) ?? this.tokens.get(address.toLowerCase());
   }
@@ -254,11 +291,7 @@ export class MessageHub extends EventEmitter {
       t = { ...incoming, calls: [], seen: 0, calledIn: [], via: peer };
       this.tokens.set(t.address, t);
       this.tokenChats.set(t.address, new Set());
-      if (this.tokens.size > MAX_TOKENS) {
-        const oldest = this.tokens.keys().next().value!;
-        this.tokens.delete(oldest);
-        this.tokenChats.delete(oldest);
-      }
+      if (this.tokens.size > MAX_TOKENS) this.evictOne();
     }
     const chats = this.tokenChats.get(t.address)!;
     let changed = fresh;
@@ -381,8 +414,8 @@ export class MessageHub extends EventEmitter {
 
   /** A ping gets the 4 messages before it from the same chat; later messages there fill in `after`. */
   /** A ping with the chat's messages either side of it, added to the list and announced. */
-  private addPing(msg: FeedMessage, call?: Mention['call'], emit = true): void {
-    if (this.mentionList.some((m) => m.id === msg.id)) return;
+  private addPing(msg: FeedMessage, call?: Mention['call'], emit = true, extra: Pick<Mention, 'watched' | 'count' | 'alert'> = {}): Mention | undefined {
+    if (this.mentionList.some((m) => m.id === msg.id)) return undefined;
     const same = this.buffer.filter((m) => m.chatId === msg.chatId && m.source === msg.source && m.id !== msg.id).sort((a, b) => a.ts - b.ts);
     const mention: Mention = {
       id: msg.id,
@@ -391,14 +424,57 @@ export class MessageHub extends EventEmitter {
       after: same.filter((m) => m.ts > msg.ts).slice(0, MENTION_CTX),
       read: false,
       ...(call ? { call } : {}),
+      ...extra,
     };
     this.mentionList.push(mention);
     if (this.mentionList.length > MENTION_MAX) this.mentionList.splice(0, this.mentionList.length - MENTION_MAX);
     if (emit) this.emit('event', { type: 'mention', mention } satisfies ServerEvent);
+    return mention;
   }
   /** A favorite's first call lands in the pings list too, so the sound it makes has something on screen to match. */
-  private trackFavoriteCall(msg: FeedMessage, t: TokenInfo): void {
-    this.addPing(msg, { address: t.address, symbol: t.symbol });
+  private trackFavoriteCall(msg: FeedMessage, t: TokenInfo, watched = false): void {
+    const m = this.addPing(msg, { address: t.address, symbol: t.symbol }, true, watched ? { watched: true, count: 1 } : {});
+    if (m && watched) this.watchPings.set(t.address, { id: m.id, ts: msg.ts });
+  }
+
+  /** address → the ping that calls of this watched token are folding into, and when it started */
+  private watchPings = new Map<string, { id: string; ts: number }>();
+
+  /** A new call on a watched token: a ping, or one more on the ping from the last few minutes. */
+  private trackWatchedCall(msg: FeedMessage, t: TokenInfo): void {
+    const open = this.watchPings.get(t.address);
+    const grouped = open && msg.ts - open.ts < WATCH_PING_GROUP_MS ? this.mentionList.find((m) => m.id === open.id) : undefined;
+    if (grouped) {
+      grouped.count = (grouped.count ?? 1) + 1;
+      this.emit('event', { type: 'mention', mention: grouped } satisfies ServerEvent);
+      return;
+    }
+    const m = this.addPing(msg, { address: t.address, symbol: t.symbol }, true, { watched: true, count: 1 });
+    if (m) this.watchPings.set(t.address, { id: m.id, ts: msg.ts });
+  }
+
+  /** A watchlist price alert, as a ping of its own (a made-up message from "Watchlist"). */
+  addAlertPing(hit: WatchAlertHit, now = Date.now()): Mention {
+    const t = this.tokens.get(hit.address);
+    const msg: FeedMessage = {
+      id: `alert:${hit.address}:${hit.kind}:${now}`,
+      source: 'plugin',
+      chatId: 'watchlist',
+      chatName: 'Watchlist',
+      author: 'Watchlist',
+      avatar: t?.imageUrl,
+      isBot: true,
+      text: alertText(hit),
+      ts: now,
+      contracts: [{ chain: t?.chain ?? (hit.address.startsWith('0x') ? 'evm' : 'sol'), address: hit.address }],
+      repeat: false,
+      hasAttachment: false,
+    };
+    const mention: Mention = { id: msg.id, msg, before: [], after: [], read: false, alert: hit };
+    this.mentionList.push(mention);
+    if (this.mentionList.length > MENTION_MAX) this.mentionList.splice(0, this.mentionList.length - MENTION_MAX);
+    this.emit('event', { type: 'mention', mention } satisfies ServerEvent);
+    return mention;
   }
 
   private trackMention(msg: FeedMessage, emit = true): void {
@@ -583,20 +659,10 @@ export class MessageHub extends EventEmitter {
         this.applyBuy(t);
         this.tokens.set(c.address, t);
         this.tokenChats.set(c.address, new Set());
-        if (this.tokens.size > MAX_TOKENS) {
-          const oldest = this.tokens.keys().next().value!;
-          this.tokens.delete(oldest);
-          this.tokenChats.delete(oldest);
-        }
+        if (this.tokens.size > MAX_TOKENS) this.evictOne();
         if (live) {
           // a history row's token is asked about now only while it is young; the refresh loops cover the rest
           if (!history || Date.now() - msg.ts < REENRICH_MAX_AGE_MS) this.enrich(t);
-          // …but a plugin picks its own author name, so it must not be able to ping as someone's favorite,
-          // and a call read back from the past is not news
-          if (!history && msg.source !== 'plugin' && this.isFavorite(msg.author)) {
-            this.emit('event', { type: 'ping', token: { ...t }, msg } satisfies ServerEvent);
-            this.trackFavoriteCall(msg, t);
-          }
         }
       }
       // a token that arrived via a friend without a ticker or chain (or whose earlier fetch failed): our own call is the moment to ask
@@ -617,6 +683,12 @@ export class MessageHub extends EventEmitter {
       // echo of that call, not a caller; a bot that posts first (an alert bot) is the call
       const echoed = msg.isBot && t.calls.some((x) => x.source === msg.source && x.chatName === msg.chatName);
       if (!blocked && !echoed && !chats.has(key) && !already) {
+        // the token's first call: new to the hub, or a watched token adopted before anyone called it
+        const firstCall = !existed || (t.calls.length === 0 && !t.firstCaller);
+        if (firstCall && existed) {
+          t.firstSeenTs = msg.ts;
+          t.firstCaller = { author: msg.author, avatar: msg.avatar, chatName: msg.chatName, source: msg.source, msgId: msg.id, link: msg.link, ts: msg.ts };
+        }
         chats.add(key);
         t.seen = chats.size;
         if (!t.calledIn.includes(msg.chatName)) t.calledIn.push(msg.chatName);
@@ -634,6 +706,15 @@ export class MessageHub extends EventEmitter {
         });
         if (t.calls.length > MAX_CALLS) t.calls.splice(0, t.calls.length - MAX_CALLS);
         anyNew = true;
+        if (live && !history) {
+          const watched = this.isWatched(t.address);
+          // a plugin picks its own author name, so it must not be able to ping as someone's favorite,
+          // and a call read back from the past is not news
+          if (firstCall && msg.source !== 'plugin' && this.isFavorite(msg.author)) {
+            this.emit('event', { type: 'ping', token: { ...t }, msg } satisfies ServerEvent);
+            this.trackFavoriteCall(msg, t, watched);
+          } else if (watched) this.trackWatchedCall(msg, t);
+        }
       }
       if (meta) applyMeta(t, meta, blocked);
       if (live) this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
@@ -652,6 +733,15 @@ export class MessageHub extends EventEmitter {
     this.tokens = new Map();
     this.tokenChats = new Map();
     for (const m of this.buffer) this.register(m, undefined, false);
+    // a watched token nobody called has no message to rebuild it from: carry it over as it was
+    for (const e of this.watchlist()) {
+      const o = old.get(e.address);
+      if (o && !this.tokens.has(e.address)) {
+        const { firstCaller: _f, ...rest } = o;
+        this.tokens.set(e.address, { ...rest, seen: 0, calledIn: [], calls: [], lastCallTs: 0 });
+        this.tokenChats.set(e.address, new Set());
+      }
+    }
     for (const [addr, t] of this.tokens) {
       const o = old.get(addr);
       if (!o) continue;

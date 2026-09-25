@@ -584,3 +584,82 @@ describe('history rows (a feed read back from its past)', () => {
     expect(fetched).toEqual([SOL, OTHER]);
   });
 });
+
+describe('watchlist in the hub', () => {
+  const W = '0x' + '11'.repeat(20);
+  const watchOf = (...addrs: string[]) => () => addrs.map((address) => ({ address, chain: 'evm' as const, addedAt: 0 }));
+  const looked = (address: string): TokenInfo => ({ chain: 'evm', address, symbol: 'WAT', seen: 0, calledIn: [], calls: [], firstSeenTs: 0, lastCallTs: 0, marketCap: 1000 });
+
+  it('adopts a looked-up token without inventing a call, and a later call records normally', () => {
+    const hub = new MessageHub(500, undefined, { watchlist: watchOf(W) });
+    const events: ServerEvent[] = [];
+    hub.on('event', (e) => events.push(e));
+    hub.adopt(looked(W));
+    const t = hub.getToken(W)!;
+    expect(t.calls).toEqual([]);
+    expect(t.firstCaller).toBeUndefined();
+    expect(tokensOf(events).map((x) => x.address)).toEqual([W]);
+    // adopting what the hub already has changes nothing
+    hub.adopt({ ...looked(W), symbol: 'OTHER' });
+    expect(hub.getToken(W)!.symbol).toBe('WAT');
+    hub.push(msg(1000, W, { author: 'bob' }));
+    const called = hub.getToken(W)!;
+    expect(called.calls.map((c) => c.author)).toEqual(['bob']);
+    expect(called.firstCaller?.author).toBe('bob');
+    expect(called.lastCallTs).toBe(1000);
+  });
+
+  it('never evicts a watched token', () => {
+    const addr = (i: number) => '0x' + i.toString(16).padStart(40, '0');
+    const hub = new MessageHub(5000, undefined, { watchlist: watchOf(W), totalMessages: 5000 });
+    hub.adopt(looked(W));
+    for (let i = 1; i <= 2000; i++) hub.push(msg(i, addr(i), { chatId: `c${i % 50}` }));
+    expect(hub.getToken(W)).toBeDefined();
+    expect(hub.getToken(addr(1))).toBeUndefined();
+    expect(hub.getToken(addr(2))).toBeDefined();
+  });
+
+  it('keeps adopted tokens through a rebuild', () => {
+    const hub = new MessageHub(500, undefined, { watchlist: watchOf(W) });
+    hub.adopt(looked(W));
+    hub.rebuild();
+    expect(hub.getToken(W)?.symbol).toBe('WAT');
+  });
+
+  it('pings on calls of a watched token, grouping calls within 5 minutes', () => {
+    const hub = new MessageHub(500, undefined, { watchlist: watchOf(W) });
+    hub.adopt(looked(W));
+    hub.push(msg(1_000, W, { author: 'bob' }));
+    hub.push(msg(61_000, W, { author: 'amy', chatId: 'd', chatName: '#d' }));
+    expect(hub.mentions()).toHaveLength(1);
+    expect(hub.mentions()[0]).toMatchObject({ id: 'discord:1000', watched: true, count: 2, call: { address: W, symbol: 'WAT' } });
+    hub.push(msg(400_000, W, { author: 'cat', chatId: 'e', chatName: '#e' }));
+    expect(hub.mentions().map((m) => [m.id, m.count])).toEqual([
+      ['discord:1000', 2],
+      ['discord:400000', 1],
+    ]);
+    // an unwatched token's calls ping nobody
+    hub.push(msg(500_000, EVM));
+    expect(hub.mentions()).toHaveLength(2);
+  });
+
+  it("a favorite's first call on a watched token is one ping, marked watched", () => {
+    const hub = new MessageHub(500, undefined, { watchlist: watchOf(W), favorites: () => ['bob'] });
+    const events: ServerEvent[] = [];
+    hub.on('event', (e) => events.push(e));
+    hub.adopt(looked(W));
+    hub.push(msg(1_000, W, { author: 'bob' }));
+    expect(hub.mentions()).toHaveLength(1);
+    expect(hub.mentions()[0]).toMatchObject({ watched: true, count: 1 });
+    expect(events.filter((e) => e.type === 'ping')).toHaveLength(1);
+  });
+
+  it('adds an alert ping', () => {
+    const hub = new MessageHub(500, undefined, { watchlist: watchOf(W) });
+    hub.adopt(looked(W));
+    const m = hub.addAlertPing({ address: W, symbol: 'WAT', kind: 'above', threshold: 1_000_000, marketCap: 1_200_000, pct: 38 }, 5_000);
+    expect(m.id).toBe(`alert:${W}:above:5000`);
+    expect(m.msg.text).toBe('$WAT crossed above $1M (+38% 1h)');
+    expect(hub.mentions()[0].alert?.kind).toBe('above');
+  });
+});
