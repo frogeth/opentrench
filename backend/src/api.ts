@@ -12,6 +12,8 @@ import { safeDispatcher } from './plugins/shell.js';
 import { fetch as undiciFetch, type Dispatcher } from 'undici';
 import type { MessageHub } from './hub.js';
 import type { Services } from './services.js';
+import type { WatchlistService } from './watchlist.js';
+import { detectContracts } from './contracts.js';
 import { IpfsCache } from './ipfs.js';
 import { createDeployFinder } from './deploys.js';
 
@@ -112,7 +114,7 @@ async function readCapped(res: ProbeResponse, max: number): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hover?: HoverFetchers, refreshToken?: (t: TokenInfo) => Promise<void>): Router {
+export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hover?: HoverFetchers, refreshToken?: (t: TokenInfo) => Promise<void>, watch?: WatchlistService): Router {
   const r = Router();
   r.use(json({ limit: '64kb' }));
   const ipfs = new IpfsCache();
@@ -486,6 +488,27 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
         c.seenTokens = next.slice(-3000);
       });
       return { count: cfg.get().seenTokens.length };
+    }),
+  );
+  // The watchlist: add takes any text (every contract in it is added), remove takes addresses.
+  r.post(
+    '/watchlist',
+    wrap(async (req, res) => {
+      if (!watch) return res.status(404).end();
+      const add: string[] = Array.isArray(req.body?.add) ? req.body.add.map(String).slice(0, 200) : [];
+      const remove: string[] = Array.isArray(req.body?.remove) ? req.body.remove.map(String).slice(0, 200) : [];
+      if (remove.length) watch.remove(remove);
+      const { rejected } = add.length ? await watch.add(add) : { rejected: [] as string[] };
+      return { watchlist: watch.entries(), rejected };
+    }),
+  );
+  r.put(
+    '/watchlist/:address/alerts',
+    wrap((req, res) => {
+      const address = detectContracts(String(req.params.address ?? ''))[0]?.address;
+      const entry = watch && address ? watch.setAlerts(address, req.body) : undefined;
+      if (!entry) return res.status(404).json({ error: 'not on the watchlist' });
+      return entry;
     }),
   );
   // Hidden call cards: gone from the calls columns, still tracked. Same shape as /seen.
