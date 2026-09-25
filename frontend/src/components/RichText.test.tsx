@@ -37,3 +37,14 @@ describe('contract addresses in chat text', () => {
     expect(after.querySelector('.ca-tip')?.textContent).toBe('copied');
   });
 });
+
+describe('bot panel links', () => {
+  it('render a link whose text is itself bracketed, as bots write [[cancel all]](url)', () => {
+    const url = 'https://t.me/cove_trading_bot?start=locx_1_2yyQGySj9G17M8G8maRTmahcnf6MxkdJYe5SdyRapump';
+    act(() => root.render(<RichText text={`**Active Orders** (2) [[cancel all]](${url})`} />));
+    const a = container.querySelector('a.md-link')!;
+    expect(a.getAttribute('href')).toBe(url);
+    expect(a.textContent).toBe('[cancel all]');
+    expect(container.textContent).not.toContain('](');
+  });
+});

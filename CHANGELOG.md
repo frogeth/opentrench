@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Fix (Cove): a link whose text has its own brackets, like "[cancel all]" on the Active Orders line, showed as raw `[[cancel all]](https://…)` text; it is a link now. The contract address on a Cove panel is highlighted like everywhere else: click to copy, right-click for buy / research.
+
 ## v0.16.0 — 2026-09-25
 
 - **Watchlist.** A Watchlist column type holds one shared list of tokens: every watchlist column shows the same list, each sorted its own way. Star a token (☆) on a call card, a chat's token strip or the token window, right-click any contract → Add to watchlist, paste addresses in the column, or drag a call card onto it. One compact row per token: price (when the column is wide), market cap, 1h change, change since you added it, and the last call in your chats. Headers sort, and rows hold still while your pointer is over them. Click a row for its chart, buy buttons and alerts. Watched tokens stay priced (about every 30 seconds off screen, every 3 on screen) and are never dropped from the token list however busy the feed gets.

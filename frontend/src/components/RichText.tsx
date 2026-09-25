@@ -69,7 +69,8 @@ function CA({ text }: { text: string }) {
 function buildRe(contracts: string[]): RegExp {
   const parts = [
     '(?<code>`[^`\\n]+`)',
-    '(?<link>\\[[^\\]\\n]+\\]\\(https?:\\/\\/[^\\s)]+\\))',
+    // link text may hold one level of brackets: bots write [[cancel all]](url)
+    '(?<link>\\[(?:[^[\\]\\n]|\\[[^[\\]\\n]*\\])+\\]\\(https?:\\/\\/[^\\s)]+\\))',
     '(?<bold>\\*\\*[^\\n]+?\\*\\*)',
     '(?<under>__[^\\n]+?__)',
     '(?<strike>~~[^\\n]+?~~)',
@@ -108,7 +109,7 @@ function render(text: string, contracts: string[], re: RegExp, size: number, jum
       const s = m[0].slice(1, -1);
       out.push(isCa(s) ? <CA key={k} text={s} /> : <code key={k} className="md-code">{s}</code>);
     } else if (g.link) {
-      const lm = /^\[([^\]]+)\]\((.+)\)$/.exec(m[0])!;
+      const lm = /^\[(.+)\]\((https?:\/\/[^\s)]+)\)$/.exec(m[0])!;
       out.push(<Link key={k} href={lm[2]}>{inner(lm[1])}</Link>);
     } else if (g.bold) out.push(<b key={k}>{inner(m[0].slice(2, -2))}</b>);
     else if (g.under) out.push(<u key={k}>{inner(m[0].slice(2, -2))}</u>);
