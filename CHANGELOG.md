@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.15.1 — 2026-09-25
+
 - Fix: Telegram chats could stop loading in the rail and the tab row while messages kept arriving. The connection to Telegram could get stuck in a way where updates still came in but no request was ever answered, and the request for your chat list waited forever, holding every later one behind it. A stuck connection is now rebuilt from the saved session after about a minute (no re-login), and the chat list gives up after 20 seconds, falling back to the last list it had.
 
 ## v0.15.0 — 2026-09-24
