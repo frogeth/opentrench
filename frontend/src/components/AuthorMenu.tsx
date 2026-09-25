@@ -4,7 +4,7 @@ import { copyText } from '../format';
 
 /**
  * "⋯" next to a name. People: favorite, copy, open, and (behind a confirm) blacklist.
- * Bots: show/hide this bot (the bot policy in settings decides the default).
+ * Bots: favorite too, plus show/hide this bot (the bot policy in settings decides the default).
  * Anyone hidden: unhide.
  */
 export function AuthorMenu({
@@ -60,7 +60,7 @@ export function AuthorMenu({
       </button>
       {open && (
         <div className="amenu-pop">
-          {bot ? (
+          {bot && (
             <button
               onClick={() => {
                 void api.botShow(author, hidden).then(onChanged).catch(() => {});
@@ -69,15 +69,18 @@ export function AuthorMenu({
             >
               {hidden ? '🤖 Show this bot (counts its calls)' : '🤖 Hide this bot'}
             </button>
-          ) : hidden ? (
-            <button
-              onClick={() => {
-                void api.botShow(author, true).then(onChanged).catch(() => {});
-                close();
-              }}
-            >
-              Unblock caller
-            </button>
+          )}
+          {hidden ? (
+            !bot && (
+              <button
+                onClick={() => {
+                  void api.botShow(author, true).then(onChanged).catch(() => {});
+                  close();
+                }}
+              >
+                Unblock caller
+              </button>
+            )
           ) : (
             <button
               onClick={() => {
