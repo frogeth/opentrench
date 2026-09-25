@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Fix: Telegram chats could stop loading in the rail and the tab row while messages kept arriving. The connection to Telegram could get stuck in a way where updates still came in but no request was ever answered, and the request for your chat list waited forever, holding every later one behind it. A stuck connection is now rebuilt from the saved session after about a minute (no re-login), and the chat list gives up after 20 seconds, falling back to the last list it had.
+
 ## v0.15.0 — 2026-09-24
 
 - **Chain colours on call cards.** Every call card carries its chain's colour as a soft wash from the left edge: Solana purple, Base blue, BNB gold, Robinhood green, Ethereum, Arc and Ink in theirs. It sits under the card, so the hot-call bars, the unseen highlight and the new-call flash read as before. On by default; ⚙ → Feed → Chain colours turns it off.

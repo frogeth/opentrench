@@ -39,6 +39,15 @@ const FATAL_AUTH = [
   'USER_DEACTIVATED',
 ];
 const HEALTH_INTERVAL_MS = 30_000;
+const HEALTH_PROBE_MS = 15_000;
+const HEALTH_FAILURES_BEFORE_REBUILD = 2;
+const DIALOGS_TIMEOUT_MS = 20_000;
+
+/** `p`, or a rejection with `label` after `ms` (the underlying call is left to finish or not). */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([p, new Promise<never>((_, rej) => (timer = setTimeout(() => rej(new Error(label)), ms)))]).finally(() => clearTimeout(timer));
+}
 /**
  * Telegram does not push a big supergroup's messages to a session (thousands of members: only
  * mentions, replies to you and your own messages arrive); its own apps poll such a chat's
@@ -207,7 +216,15 @@ export class TelegramWrapper extends EventEmitter {
     if (!this.client || this.state !== 'connected') return [];
     if (this.dialogsCache && Date.now() - this.dialogsCache.at < 60_000) return this.dialogsCache.list;
     if (this.dialogsInFlight) return this.dialogsInFlight;
-    this.dialogsInFlight = this.fetchDialogs().finally(() => (this.dialogsInFlight = undefined));
+    // A wedged connection never answers: without a cap the one in-flight fetch held every later
+    // caller (the rail, the tab row) forever. Past the cap the last good list stands in, if any.
+    const stale = this.dialogsCache?.list;
+    this.dialogsInFlight = withTimeout(this.fetchDialogs(), DIALOGS_TIMEOUT_MS, 'dialogs timeout')
+      .catch((e) => {
+        if (stale) return stale;
+        throw e;
+      })
+      .finally(() => (this.dialogsInFlight = undefined));
     return this.dialogsInFlight;
   }
   private async fetchDialogs(): Promise<TelegramDialog[]> {
@@ -861,14 +878,16 @@ export class TelegramWrapper extends EventEmitter {
     return { msg: normalizeTelegram(plain), meta };
   }
 
+  private healthChecking = false;
+  private healthFailures = 0;
+
   private async healthCheck(): Promise<void> {
     const client = this.client;
-    if (!client) return;
+    if (!client || this.healthChecking) return;
+    this.healthChecking = true;
     try {
-      await Promise.race([
-        client.getMe(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('health probe timeout')), 15_000)),
-      ]);
+      await withTimeout(client.getMe(), HEALTH_PROBE_MS, 'health probe timeout');
+      this.healthFailures = 0;
       if (this.state !== 'connected') this.setState('connected');
     } catch (e: any) {
       console.warn('[telegram] health check failed', e?.message);
@@ -878,11 +897,16 @@ export class TelegramWrapper extends EventEmitter {
         return;
       }
       this.setState('connecting');
-      try {
-        await client.connect();
-      } catch {
-        /* next tick retries */
+      // client.connect() on a client that still believes it is connected does nothing, and a
+      // wedged one (updates arriving, no request ever answered) stayed wedged for 19 hours that
+      // way. Twice in a row is past a blip: rebuild the client from the saved session.
+      if (++this.healthFailures >= HEALTH_FAILURES_BEFORE_REBUILD) {
+        this.healthFailures = 0;
+        console.warn('[telegram] connection wedged; reconnecting from the saved session');
+        await this.connect();
       }
+    } finally {
+      this.healthChecking = false;
     }
   }
 
