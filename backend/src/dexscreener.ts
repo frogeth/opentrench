@@ -34,6 +34,8 @@ export function mapDexscreener(json: any, address: string): Partial<TokenInfo> |
   if (liq !== undefined) out.liquidity = liq;
   const ch = num(best.priceChange?.h24);
   if (ch !== undefined) out.change24h = ch;
+  const ch1 = num(best.priceChange?.h1);
+  if (ch1 !== undefined) out.change1h = ch1;
   const vol = num(best.volume?.h24);
   if (vol !== undefined) out.volume24h = vol;
   const buys = num(best.txns?.h24?.buys);
