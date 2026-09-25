@@ -1,4 +1,5 @@
-import type { WatchAlerts } from './types.js';
+import type { WatchAlertHit, WatchAlerts } from './types.js';
+import { compactUsd } from './vampy/normalize.js';
 
 const HOUR_MS = 60 * 60_000;
 /** one sample per this long: the 3s live ticks would otherwise fill the ring for nothing */
@@ -96,4 +97,12 @@ export function initialFired(alerts: WatchAlerts, marketCap: number | undefined,
   }
   if (alerts.movePct !== undefined && change1h !== undefined && Math.abs(change1h) >= alerts.movePct) fired.move = true;
   return fired;
+}
+
+/** "$PEPE crossed above $1.2M (+38% 1h)" — the line a watchlist alert shows in pings and on Telegram. */
+export function alertText(hit: WatchAlertHit): string {
+  const name = hit.symbol ? `$${hit.symbol}` : `${hit.address.slice(0, 6)}…`;
+  const pct = hit.pct !== undefined && Number.isFinite(hit.pct) ? `${hit.pct >= 0 ? '+' : ''}${Math.round(hit.pct)}% 1h` : undefined;
+  if (hit.kind === 'move') return `${name} moved ${pct ?? `${hit.threshold}%`} (${compactUsd(hit.marketCap)})`;
+  return `${name} crossed ${hit.kind} ${compactUsd(hit.threshold)}${pct ? ` (${pct})` : ''}`;
 }

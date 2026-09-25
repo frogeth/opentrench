@@ -196,7 +196,7 @@ export function feedLink(platform: unknown, server: unknown, channel: unknown, m
 }
 
 /** `$1.2M`, `$840K`, `$12` */
-const compactUsd = (n: number): string => {
+export const compactUsd = (n: number): string => {
   const abs = Math.abs(n);
   const f = (v: number, unit: string) => `$${(v >= 100 ? Math.round(v) : Math.round(v * 10) / 10).toString()}${unit}`;
   if (abs >= 1e9) return f(n / 1e9, 'B');
