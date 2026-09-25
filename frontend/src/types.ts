@@ -106,6 +106,11 @@ export interface Mention {
   read: boolean;
   /** a favorite caller's first call rather than a mention: the token they called */
   call?: { address: string; symbol?: string };
+  /** a call on a watched token (or a favorite's call that is also watched); `count` = calls grouped into this ping */
+  watched?: boolean;
+  count?: number;
+  /** a watchlist price alert rather than a message */
+  alert?: WatchAlertHit;
 }
 
 /** Someone you could favorite: seen posting in the feed, or found in a chat's member list. */
@@ -209,6 +214,8 @@ export interface TokenInfo {
   athMarketCap?: number;
   liquidity?: number;
   change24h?: number;
+  /** market cap change over the last hour, percent (watched tokens only) */
+  change1h?: number;
   volume24h?: number;
   buys24h?: number;
   sells24h?: number;
@@ -466,6 +473,7 @@ export type ServerEvent =
       rankings: Partial<Record<RankingKey, { rows: NftRanking[]; at: number }>>;
       mintJobs: MintJob[];
       boot: string;
+      watchlist: WatchEntry[];
     }
   | { type: 'message'; msg: FeedMessage }
   | { type: 'token'; token: TokenInfo }
@@ -482,7 +490,8 @@ export type ServerEvent =
   | { type: 'nftRankings'; key: RankingKey; rows: NftRanking[]; at: number }
   | { type: 'mintJob'; job: MintJob }
   | { type: 'mintJobGone'; id: string }
-  | { type: 'plugins'; plugins: PluginInfo[] };
+  | { type: 'plugins'; plugins: PluginInfo[] }
+  | { type: 'watchlist'; entries: WatchEntry[] };
 
 /** A plugin as the app lists it: manifest plus install state. */
 export interface PluginInfo {
@@ -501,3 +510,38 @@ export interface PluginInfo {
   signedIn: string[];
 }
 
+/** Per-token watchlist alerts; `fired` remembers which ones went off so they fire once and re-arm on the way back. */
+export interface WatchAlerts {
+  /** market cap in USD: alert when it reaches this or more */
+  above?: number;
+  /** market cap in USD: alert when it falls to this or less */
+  below?: number;
+  /** percent: alert when the market cap moves this much either way within an hour */
+  movePct?: number;
+  /** also DM yourself on Telegram */
+  telegram?: boolean;
+  fired?: { above?: boolean; below?: boolean; move?: boolean };
+}
+
+/** One token on the watchlist (one shared list; named lists later wrap these as the default list). */
+export interface WatchEntry {
+  address: string;
+  chain: Chain;
+  network?: string;
+  addedAt: number;
+  /** market cap when it was added, for "since added" */
+  addedMarketCap?: number;
+  alerts?: WatchAlerts;
+}
+
+/** A watchlist alert as it lands in the pings list. */
+export interface WatchAlertHit {
+  address: string;
+  symbol?: string;
+  kind: 'above' | 'below' | 'move';
+  /** the threshold crossed: a market cap for above/below, a percent for move */
+  threshold: number;
+  marketCap: number;
+  /** the 1h change when it fired */
+  pct?: number;
+}
