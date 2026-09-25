@@ -224,6 +224,8 @@ export class MessageHub extends EventEmitter {
     if (this.tokens.size > MAX_TOKENS) this.evictOne();
     this.emit('event', { type: 'token', token: { ...t } } satisfies ServerEvent);
     this.changed();
+    // a lookup that came back empty (or a bare boot-time adopt) is asked again, with the usual retries
+    if (t.priceUsd === undefined) this.enrich(t);
     return t;
   }
 
