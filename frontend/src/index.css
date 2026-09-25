@@ -1585,10 +1585,15 @@ button.col-open { background: none; border: none; padding: 0; font: inherit; fon
 .wl-paste:focus { outline: none; border-color: var(--line-strong); }
 .wl-empty { line-height: 1.5; }
 /* narrow: token · mcap · 1h · since · last call · actions; the price column joins when there is room */
-.wl-head, .wl-row { display: grid; grid-template-columns: minmax(0, 1.3fr) 0 62px 50px 58px minmax(0, 1fr) 44px; gap: 4px; align-items: center; padding: 5px 8px; }
+.wl-head, .wl-row { display: grid; grid-template-columns: minmax(0, 1.7fr) 0 58px 46px 50px minmax(0, 1fr) 40px; column-gap: 4px; align-items: center; padding: 5px 8px; }
 .wl-price { overflow: hidden; visibility: hidden; }
-@container (min-width: 520px) {
-  .wl-head, .wl-row { grid-template-columns: minmax(0, 1.3fr) 70px 62px 50px 58px minmax(0, 1fr) 44px; }
+/* narrow: the last call is its age and count; the caller's name joins when there is room */
+.wl-call .wl-who, .wl-call .wl-sep { display: none; }
+@container (min-width: 440px) {
+  .wl-call .wl-who, .wl-call .wl-sep { display: inline; }
+}
+@container (min-width: 540px) {
+  .wl-head, .wl-row { grid-template-columns: minmax(0, 1.7fr) 70px 62px 50px 56px minmax(0, 1fr) 44px; }
   .wl-price { visibility: visible; text-align: right; }
 }
 .wl-head { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--line); z-index: 1; }

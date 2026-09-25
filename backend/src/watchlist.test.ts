@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConfigStore } from './config.js';
 import { MessageHub } from './hub.js';
 import type { ServerEvent, TokenInfo } from './types.js';
-import { MarketHistory, WatchlistService, checkAlerts, initialFired } from './watchlist.js';
+import { MarketHistory, WatchlistService, checkAlerts, initialFired, usd3 } from './watchlist.js';
 
 const MIN = 60_000;
 const A = 'tok';
@@ -87,6 +87,12 @@ describe('checkAlerts', () => {
     expect(checkAlerts(a, { marketCap: 5 }, now).hits).toEqual([]);
     expect(checkAlerts(a, { priceAt: now }, now).hits).toEqual([]);
     expect(checkAlerts({ above: 1, fired: { above: true } }, { marketCap: 0.5, priceAt: now - 3 * MIN }, now).fired).toEqual({ above: true });
+  });
+});
+
+describe('usd3', () => {
+  it('keeps three significant figures', () => {
+    expect([usd3(1_828_568_033), usd3(1_827_836_752), usd3(1_000_000), usd3(842_400), usd3(12.34)]).toEqual(['$1.83B', '$1.83B', '$1M', '$842K', '$12.3']);
   });
 });
 

@@ -3,7 +3,6 @@ import type { ConfigStore } from './config.js';
 import { WATCHLIST_MAX, sanitizeWatchAlerts } from './config.js';
 import { detectContracts } from './contracts.js';
 import type { MessageHub } from './hub.js';
-import { compactUsd } from './vampy/normalize.js';
 
 const HOUR_MS = 60 * 60_000;
 /** one sample per this long: the 3s live ticks would otherwise fill the ring for nothing */
@@ -103,12 +102,22 @@ export function initialFired(alerts: WatchAlerts, marketCap: number | undefined,
   return fired;
 }
 
+/** `$1.83B`, `$842K`, `$12`: three significant figures, enough to tell a $1.8B line from a $1.85B one */
+export function usd3(n: number): string {
+  const abs = Math.abs(n);
+  const f = (v: number, unit: string) => `$${Number(v.toPrecision(3))}${unit}`;
+  if (abs >= 1e9) return f(n / 1e9, 'B');
+  if (abs >= 1e6) return f(n / 1e6, 'M');
+  if (abs >= 1e3) return f(n / 1e3, 'K');
+  return `$${Number(n.toPrecision(3))}`;
+}
+
 /** "$PEPE crossed above $1.2M (+38% 1h)" — the line a watchlist alert shows in pings and on Telegram. */
 export function alertText(hit: WatchAlertHit): string {
   const name = hit.symbol ? `$${hit.symbol}` : `${hit.address.slice(0, 6)}…`;
   const pct = hit.pct !== undefined && Number.isFinite(hit.pct) ? `${hit.pct >= 0 ? '+' : ''}${Math.round(hit.pct)}% 1h` : undefined;
-  if (hit.kind === 'move') return `${name} moved ${pct ?? `${hit.threshold}%`} (${compactUsd(hit.marketCap)})`;
-  return `${name} crossed ${hit.kind} ${compactUsd(hit.threshold)}${pct ? ` (${pct})` : ''}`;
+  if (hit.kind === 'move') return `${name} moved ${pct ?? `${hit.threshold}%`} (${usd3(hit.marketCap)})`;
+  return `${name} crossed ${hit.kind} ${usd3(hit.threshold)}${pct ? ` (${pct})` : ''}`;
 }
 
 // ---------- the service: the list itself, prices for it, and its alerts ----------
@@ -283,7 +292,7 @@ export class WatchlistService {
       const hit: WatchAlertHit = { address: t.address, kind: h.kind, threshold: h.threshold, marketCap: t.marketCap!, ...(t.symbol ? { symbol: t.symbol } : {}), ...(change1h !== undefined ? { pct: change1h } : {}) };
       this.deps.hub.addAlertPing(hit, now);
       if (e.alerts.telegram && this.deps.sendSelf) {
-        const lines = [`🔔 ${alertText(hit)}`, `MC ${compactUsd(hit.marketCap)}`, t.address, ...(t.buy?.panel ? [`${t.buy.provider === 'basedbot' ? 'BasedBot' : 'Cove'}: ${t.buy.panel}`] : [])];
+        const lines = [`🔔 ${alertText(hit)}`, `MC ${usd3(hit.marketCap)}`, t.address, ...(t.buy?.panel ? [`${t.buy.provider === 'basedbot' ? 'BasedBot' : 'Cove'}: ${t.buy.panel}`] : [])];
         this.deps.sendSelf(lines.join('\n')).catch((err) => this.log(`telegram alert failed: ${err?.message ?? err}`));
       }
     }
