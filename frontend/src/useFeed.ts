@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BotMessage, FeedMessage, J7Tweet, Mention, MintEvent, MintJob, NftRanking, PluginInfo, RankingKey, ServerEvent, Status, TokenInfo } from './types';
+import type { BotMessage, FeedMessage, J7Tweet, Mention, MintEvent, MintJob, NftRanking, PluginInfo, RankingKey, ServerEvent, Status, TokenInfo, WatchEntry } from './types';
 
 /** messages kept per chat (matches the backend), and in all: a busy chat never pushes a quiet one's history out */
 const PER_CHAT = 150;
@@ -34,6 +34,8 @@ export function useFeed() {
   const [ping, setPing] = useState<Extract<ServerEvent, { type: 'ping' }> | null>(null);
   /** pings: people who mentioned you, with context that keeps filling in */
   const [mentions, setMentions] = useState<Mention[]>([]);
+  /** the shared watchlist, newest first; undefined until the server says */
+  const [watchlist, setWatchlist] = useState<WatchEntry[] | undefined>(undefined);
   const markRead = (ids?: string[]) => setMentions((cur) => cur.map((m) => (m.read || (ids && !ids.includes(m.id)) ? m : { ...m, read: true })));
   /** J7Tracker tweets, newest first; updates replace in place */
   const [j7, setJ7] = useState<J7Tweet[]>([]);
@@ -101,6 +103,7 @@ export function useFeed() {
           boot.current = ev.boot ?? boot.current;
           setMessages([...ev.messages].reverse());
           setMentions(ev.mentions ?? []);
+          if (ev.watchlist) setWatchlist(ev.watchlist);
           setTokens(Object.fromEntries(ev.tokens.map((t) => [t.address, t])));
           setStatus(ev.status);
           mintBuffer.current = [];
@@ -126,6 +129,7 @@ export function useFeed() {
             const next = { ...ev.mention, read: ev.mention.read || !!old?.read };
             return old ? cur.map((m) => (m.id === next.id ? next : m)) : [...cur, next].slice(-100);
           });
+        else if (ev.type === 'watchlist') setWatchlist(ev.entries);
         else if (ev.type === 'bot') mergeBot(ev.bot, [ev.msg]);
         else if (ev.type === 'botDelete') {
           const gone = new Set(ev.ids);
@@ -157,5 +161,5 @@ export function useFeed() {
     };
   }, []);
 
-  return { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs, plugins, setPlugins };
+  return { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs, plugins, setPlugins, watchlist, setWatchlist };
 }

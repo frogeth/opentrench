@@ -1,4 +1,4 @@
-import type { PluginInfo, Source, WatchEntry } from './types';
+import type { PluginInfo, Source, WatchAlerts, WatchEntry } from './types';
 
 /** what a plugin's log lines are tagged with (the backend keeps these three) */
 export type PluginLogLevel = 'info' | 'warn' | 'error';
@@ -370,6 +370,9 @@ export const api = {
   react: (source: 'discord' | 'telegram', chatId: string, msgId: string, key: string, name: string, on: boolean) =>
     req<{ ok: true }>('POST', '/react', { source, chatId, msgId, key, name, on }),
   markSeen: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/seen', { add, remove }),
+  /** the watchlist: `add` takes any text (every contract in it); the answer is the whole list */
+  watchlist: (add: string[], remove: string[] = []) => req<{ watchlist: WatchEntry[]; rejected: string[] }>('POST', '/watchlist', { add, remove }),
+  setWatchAlerts: (address: string, alerts: Omit<WatchAlerts, 'fired'>) => req<WatchEntry>('PUT', `/watchlist/${encodeURIComponent(address)}/alerts`, alerts),
   /** TrenchTogether: share calls with a friend on the same network */
   together: () => req<TogetherInfo>('GET', '/together'),
   setTogether: (patch: { share?: boolean; name?: string }) => req<TogetherInfo>('PUT', '/together', patch),

@@ -42,6 +42,7 @@ export function PingsPanel({
   onOpen,
   onRead,
   onJump,
+  onOpenToken,
 }: {
   mentions: Mention[];
   now: number;
@@ -50,6 +51,8 @@ export function PingsPanel({
   onOpen: (open: boolean) => void;
   onRead: (ids?: string[]) => void;
   onJump: (id: string) => void;
+  /** a watchlist alert opens its token instead of jumping to a chat */
+  onOpenToken?: (address: string) => void;
 }) {
   const [replying, setReplying] = useState<string | null>(null);
   const list = useMemo(() => [...mentions].sort((a, b) => b.msg.ts - a.msg.ts), [mentions]);
@@ -82,9 +85,31 @@ export function PingsPanel({
         </button>
       </div>
       <div className="pings-body">
-        {list.length === 0 && <div className="empty">Nobody has pinged you yet. Mentions, replies to you, @everyone, your roles and your favorites' first calls land here.</div>}
+        {list.length === 0 && <div className="empty">Nobody has pinged you yet. Mentions, replies to you, @everyone, your roles, your favorites' first calls, calls on tokens you watch and watchlist alerts land here.</div>}
         {list.map((p) => {
           const m = p.msg;
+          if (p.alert) {
+            const a = p.alert;
+            return (
+              <div key={p.id} className={`ping ping-alert${p.read ? '' : ' ping-unread'}`} onMouseEnter={() => !p.read && onRead([p.id])}>
+                <div className="ping-head">
+                  <Avatar src={m.avatar} name={a.symbol ?? '★'} size={22} />
+                  <span className="ping-who">
+                    <b>{m.text}</b>
+                    <span className="muted">Watchlist</span>
+                  </span>
+                  <span className="ping-kind ping-kind-alert">🚨 alert</span>
+                  <span className="ping-time muted">{timeAgo(m.ts, now)}</span>
+                  {!p.read && <span className="ping-dot" />}
+                </div>
+                <div className="ping-actions">
+                  <button className="hdr-toggle" onClick={() => onOpenToken?.(a.address)}>
+                    open token
+                  </button>
+                </div>
+              </div>
+            );
+          }
           const waiting = p.after.length < 4 && now - m.ts < 30 * 60_000;
           return (
             <div key={p.id} className={`ping${p.read ? '' : ' ping-unread'}`} onMouseEnter={() => !p.read && onRead([p.id])}>
@@ -96,8 +121,8 @@ export function PingsPanel({
                     <span className={`src-dot ${m.source}`} /> {chatShort(m.chatName)}
                   </span>
                 </span>
-                <span className={`ping-kind${p.call ? ' ping-kind-call' : ''}`} title={p.call ? `a favorite's first call: ${p.call.address}` : undefined}>
-                  {p.call ? `👑 called ${p.call.symbol ? `$${p.call.symbol}` : 'a token'}` : KIND[m.mention ?? 'user']}
+                <span className={`ping-kind${p.call ? ' ping-kind-call' : ''}`} title={p.call ? `${p.watched ? 'a call on a token you watch' : "a favorite's first call"}: ${p.call.address}` : undefined}>
+                  {p.call ? `${p.watched ? '★' : '👑'} called ${p.call.symbol ? `$${p.call.symbol}` : 'a token'}${(p.count ?? 1) > 1 ? ` · ${p.count}× in 5m` : ''}` : KIND[m.mention ?? 'user']}
                 </span>
                 <span className="ping-time muted">{timeAgo(m.ts, now)}</span>
                 {!p.read && <span className="ping-dot" />}

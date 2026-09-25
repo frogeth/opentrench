@@ -4,6 +4,7 @@ import { LiveDot } from './LiveDot';
 import type { CallRecord, TokenInfo } from '../types';
 import { chartEmbedUrl, copyText, isFavorite, money, price, shortAddr, telegramShareUrl, timeAgo, type ChartProvider } from '../format';
 import { Avatar } from './Avatar';
+import { WatchContext, WatchStar, TOKEN_DRAG_TYPE } from '../watch';
 import { CaMenuContext } from './RichText';
 import { Logo } from './Logo';
 import { Icon } from './Icon';
@@ -102,6 +103,17 @@ export function CallCard({
 }) {
   const [peek, setPeek] = useState(false);
   const caMenu = useContext(CaMenuContext);
+  const watchApi = useContext(WatchContext);
+  const watched = !!watchApi?.has(t.address);
+  // drag the card onto a watchlist column to watch it (and into a text box for its address)
+  const drag = {
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => {
+      e.dataTransfer.setData(TOKEN_DRAG_TYPE, t.address);
+      e.dataTransfer.setData('text/plain', t.address);
+      e.dataTransfer.effectAllowed = 'copy';
+    },
+  };
   const embed = chartEmbedUrl(t, chartProvider);
   const [copied, setCopied] = useState(false);
   const [showChart, setShowChart] = useState(false);
@@ -146,7 +158,8 @@ export function CallCard({
       <div
         ref={rowRef}
         id={`call-${t.address}`}
-        className={`call call-row${selected ? ' call-selected' : ''}${hidden ? ' call-hidden' : ''}${hot}${tint}`}
+        className={`call call-row${selected ? ' call-selected' : ''}${hidden ? ' call-hidden' : ''}${watched ? ' call-watched' : ''}${hot}${tint}`}
+        {...drag}
         title="click to unfold"
         onClick={(e) => {
           // the row itself unfolds; its own controls (check, copy, hide, chevron, image) keep their jobs
@@ -167,6 +180,7 @@ export function CallCard({
         <button className="call-sym" onClick={copy} title={`${t.address}\nclick to copy`}>
           {copied ? 'copied' : (t.symbol ?? shortAddr(t.address))}
         </button>
+        <WatchStar address={t.address} />
         <ChainBadge network={t.network} chain={t.chain} size={10} />
         <PairChip t={t} />
         {isFirst ? <span className="first-badge">1st</span> : <span className={`call-seen${t.seen >= 2 ? ' call-seen-hot' : ''}`}>🔥{t.seen}×</span>}
@@ -190,7 +204,7 @@ export function CallCard({
   }
 
   return (
-    <div ref={cardRef} id={`call-${t.address}`} className={`call${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${isNew ? ' call-new' : ''}${onSeen && !seen ? ' call-unseen' : ''}${hidden ? ' call-hidden' : ''}${hot}${tint}`}>
+    <div ref={cardRef} id={`call-${t.address}`} className={`call${showChart ? ' call-open' : ''}${selected ? ' call-selected' : ''}${isNew ? ' call-new' : ''}${onSeen && !seen ? ' call-unseen' : ''}${hidden ? ' call-hidden' : ''}${watched ? ' call-watched' : ''}${hot}${tint}`} {...drag}>
       {t.seen >= 2 && <span key={t.lastCallTs} className="call-pulse" />}
 
       {/* 1 · caller meta */}
@@ -275,6 +289,7 @@ export function CallCard({
             <button className="call-sym" onClick={copy} title={`${t.address}\nclick to copy`}>
               {copied ? 'copied' : (t.symbol ?? shortAddr(t.address))}
             </button>
+            <WatchStar address={t.address} />
             {t.name && t.name !== t.symbol && <span className="call-name">{t.name}</span>}
             <span className="call-line-r">
               {hasPrice && money(t.volume24h) && (
