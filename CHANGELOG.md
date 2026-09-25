@@ -7,6 +7,10 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- **Watchlist.** A Watchlist column type holds one shared list of tokens: every watchlist column shows the same list, each sorted its own way. Star a token (☆) on a call card, a chat's token strip or the token window, right-click any contract → Add to watchlist, paste addresses in the column, or drag a call card onto it. One compact row per token: price (when the column is wide), market cap, 1h change, change since you added it, and the last call in your chats. Headers sort, and rows hold still while your pointer is over them. Click a row for its chart, buy buttons and alerts. Watched tokens stay priced (about every 30 seconds off screen, every 3 on screen) and are never dropped from the token list however busy the feed gets.
+- **Watchlist alerts.** Per token: market cap above or below a line, and a ±% move within an hour. Each fires once and re-arms after the market cap crosses back. They arrive in Pings with an alarm sound and a desktop notification, and optionally as a Telegram message to yourself. A call on a watched token pings too (one ping per token every 5 minutes, with a count). Alerts are checked while the app runs, including with the window closed on macOS.
+- Fix (TrenchTogether): tokens nobody has called are never sent to friends on your network, so your watchlist stays yours.
+
 ## v0.15.1 — 2026-09-25
 
 - Fix: Telegram chats could stop loading in the rail and the tab row while messages kept arriving. The connection to Telegram could get stuck in a way where updates still came in but no request was ever answered, and the request for your chat list waited forever, holding every later one behind it. A stuck connection is now rebuilt from the saved session after about a minute (no re-login), and the chat list gives up after 20 seconds, falling back to the last list it had.

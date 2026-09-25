@@ -29,6 +29,7 @@ const TYPE_CARDS: { t: ColumnDef['type']; icon: import('./Icon').IconName; name:
   { t: 'calls', icon: 'calls', name: 'Calls', blurb: 'every contract as it gets called' },
   { t: 'callers', icon: 'people', name: 'Top Callers', blurb: 'who calls best, over a window' },
   { t: 'trending', icon: 'top', name: 'Trending', blurb: 'most-called tokens, 5m to 24h' },
+  { t: 'watchlist', icon: 'star', name: 'Watchlist', blurb: 'tokens you star, live, with alerts' },
   { t: 'cove', icon: 'send', name: 'Buy bot', blurb: 'Cove or BasedBot, one pane' },
   { t: 'tgbot', icon: 'telegram', name: 'Telegram bot', blurb: 'Cielo alerts, or any bot you talk to' },
   { t: 'j7', icon: 'x', name: 'J7', blurb: 'J7Tracker’s tweet stream' },
@@ -208,6 +209,7 @@ export function ColumnEditor({
   const isNft = type === 'mints' || type === 'nftvol' || type === 'osmint';
   const isPlugin = type === 'plugin';
   const isVampy = type === 'vampy';
+  const isWatch = type === 'watchlist';
   /** what the column renders as: a Vampy column is a calls column for a call feed and a messages column for a message feed */
   const view: ColumnDef['type'] = isVampy ? (pickedFeed?.type === 'call' ? 'calls' : 'chat') : type;
   const all = chats.length === 0;
@@ -258,7 +260,7 @@ export function ColumnEditor({
   })();
   const urlOk = /^https?:\/\/[^\s/]+/i.test(cleanUrl);
   const save = () => {
-    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : type === 'plugin' ? (pickedPlugin?.manifest?.name || pluginId || 'Plugin') : type === 'vampy' ? (pickedFeed?.title || 'Vampy') : all ? 'All Chats' : 'Chats');
+    const t = title.trim() || (type === 'calls' ? (all ? 'All Calls' : 'Calls') : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : type === 'plugin' ? (pickedPlugin?.manifest?.name || pluginId || 'Plugin') : type === 'vampy' ? (pickedFeed?.title || 'Vampy') : type === 'watchlist' ? 'Watchlist' : all ? 'All Chats' : 'Chats');
     if (isWeb && !urlOk) {
       window.alert('Paste the address of the page to show (http:// or https://).');
       return;
@@ -271,7 +273,7 @@ export function ColumnEditor({
       window.alert('Pick the Vampy feed this column shows.');
       return;
     }
-    if (!isWeb && !isNft && !isPlugin && !isVampy && none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
+    if (!isWeb && !isNft && !isPlugin && !isVampy && !isWatch && none && watched.length > 0 && !window.confirm('No channels are selected, so this column will stay empty. Save anyway?')) return;
     const clean: ColumnFilters = {};
     for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== false && !(Array.isArray(v) && v.length === 0) && !(typeof v === 'string' && !v.trim())) (clean as any)[k] = v;
     // filters don't carry across a type change when their vocabulary differs: minQty is mints-only,
@@ -283,7 +285,7 @@ export function ColumnEditor({
       id: col?.id ?? `c${Date.now().toString(36)}`,
       type,
       title: t,
-      chats: isWeb || isNft || isPlugin ? [] : isVampy ? [`vampy:${feed}`] : chats,
+      chats: isWeb || isNft || isPlugin || isWatch ? [] : isVampy ? [`vampy:${feed}`] : chats,
       ...(isWeb ? { url: cleanUrl } : {}),
       ...(isPlugin ? { plugin: pluginId } : {}),
       ...(isVampy ? { feed } : {}),
@@ -318,7 +320,7 @@ export function ColumnEditor({
               ))}
             </div>
             <div className="fed-label">Feed name</div>
-            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : type === 'plugin' ? (pickedPlugin?.manifest?.name ?? 'Plugin') : type === 'vampy' ? (pickedFeed?.title ?? 'Vampy') : 'All Chats'} maxLength={40} />
+            <input className="fed-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={type === 'calls' ? 'All Calls' : type === 'callers' ? 'Top Callers' : type === 'trending' ? 'Trending' : type === 'cove' ? 'Cove' : type === 'salpha' ? 'Salpha' : type === 'j7' ? 'J7' : type === 'tgbot' ? (botPreset?.name ?? (botOk ? `@${cleanBot}` : 'Telegram bot')) : type === 'web' ? (preset?.name ?? (urlOk ? new URL(cleanUrl).hostname.replace(/^www\./, '') : 'Website')) : type === 'mints' ? 'MintGo' : type === 'nftvol' ? 'NFT Volume' : type === 'osmint' ? 'NFT Mint' : type === 'plugin' ? (pickedPlugin?.manifest?.name ?? 'Plugin') : type === 'vampy' ? (pickedFeed?.title ?? 'Vampy') : type === 'watchlist' ? 'Watchlist' : 'All Chats'} maxLength={40} />
             {isWeb && (
               <>
                 <div className="fed-label">Site</div>
@@ -372,6 +374,11 @@ export function ColumnEditor({
                 {type === 'mints' ? 'Every mint MintGo sees on Ethereum, Robinhood Chain and Ink. Click a mint for its X, OpenSea and website links, and a Mint button.' : type === 'nftvol' ? "OpenSea's trending or top collections with floor, volume and sales. Switch 1H / 1D in the column header." : 'Paste a collection (slug, OpenSea link or address), see the open stage and price, and mint with the wallet from ⚙ → Trading.'}
               </div>
             )}
+            {isWatch && (
+              <div className="fed-bot-note hint">
+                Your one watchlist: every watchlist column shows the same tokens, each sorted its own way. Star a token (☆) anywhere, right-click a contract, paste addresses, or drag a call card onto the column. Click a row for its chart, buy buttons and alerts.
+              </div>
+            )}
             {isPlugin && (
               <>
                 <div className="fed-label">Plugin</div>
@@ -414,7 +421,7 @@ export function ColumnEditor({
                 </div>
               </>
             )}
-            {!isBot && !isWeb && !isNft && !isPlugin && !isVampy && (
+            {!isBot && !isWeb && !isNft && !isPlugin && !isVampy && !isWatch && (
             <>
             <div className="fed-label">
               Channels <span className="muted">({all ? 'all' : none ? 'none' : `${chats.length} of ${allKeys.length}`})</span>

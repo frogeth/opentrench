@@ -47,6 +47,8 @@ import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, thesisFollowUps, tokenPasses } from './filters';
 import { ALERT_WINDOW_MS, alertSound } from './alerts';
 import { FILL_BASIS } from './components/Column';
+import { WatchlistColumn } from './components/WatchlistColumn';
+import { WatchContext, type WatchApi } from './watch';
 import type { BotMessage, FeedMessage, RankingKey, Source, Status, TokenInfo } from './types';
 
 /** Header status: the platform's logo, coloured by its connection state; the words live in the tooltip. */
@@ -109,7 +111,7 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 export type ChatOrder = 'bottom' | 'top';
 
 export default function App() {
-  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs, plugins, setPlugins } = useFeed();
+  const { messages, tokens, status, wsOpen, ping, botMsgs, mergeBot, j7, mergeJ7, mentions, markRead, mints, rankings, mintJobs, plugins, setPlugins, watchlist, setWatchlist } = useFeed();
   const [settingsOpen, setSettingsOpen] = useState(false);
   // an invite link (opentrench://room/…) clicked outside the app: Settings → Together opens with it filled in
   const [pendingInvite, setPendingInvite] = useState<string | null>(null);
@@ -360,6 +362,38 @@ export default function App() {
     void api.markHidden(on ? addresses : [], on ? [] : addresses).catch(() => {});
   };
   const [revealHidden, setRevealHidden] = useState<Record<string, boolean>>({});
+  // The one shared watchlist: the server's live copy (hello + watchlist events), else what config said
+  const watchEntries = watchlist ?? cfg?.watchlist ?? [];
+  /** addresses being added (lookup in flight), shown as placeholders and already starred */
+  const [watchPending, setWatchPending] = useState<string[]>([]);
+  const watchSet = useMemo(() => new Set([...watchEntries.map((e) => e.address), ...watchPending]), [watchEntries, watchPending]);
+  const watchKey = (a: string) => (/^0x[0-9a-fA-F]{40}$/.test(a) ? a.toLowerCase() : a);
+  const addToWatch = (text: string) => {
+    const found = [...new Set((text.match(/0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44}/g) ?? []).map(watchKey))].filter((a) => !watchSet.has(a));
+    if (found.length === 0 && !text.trim()) return;
+    setWatchPending((p) => [...p, ...found]);
+    void api
+      .watchlist([text])
+      .then((r) => setWatchlist(r.watchlist))
+      .catch((e) => alert(`Watchlist: ${e?.message ?? e}`))
+      .finally(() => setWatchPending((p) => p.filter((a) => !found.includes(a))));
+  };
+  const removeFromWatch = (address: string) => {
+    setWatchlist(watchEntries.filter((e) => e.address !== address));
+    void api
+      .watchlist([], [address])
+      .then((r) => setWatchlist(r.watchlist))
+      .catch(() => {});
+  };
+  const setWatchAlerts = (address: string, alerts: Parameters<typeof api.setWatchAlerts>[1]) =>
+    void api
+      .setWatchAlerts(address, alerts)
+      .then((entry) => setWatchlist(watchEntries.map((e) => (e.address === entry.address ? entry : e))))
+      .catch((e) => alert(`Alerts: ${e?.message ?? e}`));
+  const watchApi: WatchApi = {
+    has: (a) => watchSet.has(watchKey(a)),
+    toggle: (a, on) => (on ? addToWatch(a) : removeFromWatch(watchKey(a))),
+  };
   // Messages revealed by "jump to reply" even though they are hidden or filtered out
   const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
   const revealMessage = (id: string): boolean => {
@@ -934,15 +968,19 @@ export default function App() {
       if (mentionSeen.current.has(p.id)) continue;
       mentionSeen.current.add(p.id);
       if (p.read || nowMs - p.msg.ts > 120_000) continue;
-      // a favorite's call has its own sound, and its desktop notification comes from the ping event
-      if (sound) playSound(p.call ? 'coin' : 'chirp');
+      // a favorite's call has its own sound, and its desktop notification comes from the ping event;
+      // a watched token's call just chimes; a watchlist alert rings and notifies
+      if (sound) playSound(p.alert ? 'alarm' : p.call ? 'coin' : 'chirp');
       if (p.call) continue;
       if (notify === 'granted') {
         try {
-          const n = new Notification(`${p.msg.author} pinged you`, { body: `${p.msg.chatName}\n${(p.msg.body ?? p.msg.text).slice(0, 140)}`, icon: p.msg.avatar, tag: `ping:${p.id}` });
+          const n = p.alert
+            ? new Notification('Watchlist alert', { body: p.msg.text, icon: p.msg.avatar, tag: `ping:${p.id}` })
+            : new Notification(`${p.msg.author} pinged you`, { body: `${p.msg.chatName}\n${(p.msg.body ?? p.msg.text).slice(0, 140)}`, icon: p.msg.avatar, tag: `ping:${p.id}` });
           n.onclick = () => {
             window.focus();
-            openPings(true);
+            if (p.alert) openAnyToken(p.alert.address);
+            else openPings(true);
             n.close();
           };
         } catch {
@@ -1368,6 +1406,27 @@ export default function App() {
   /** One column of any type. `actions` carries the header buttons plus either the row layout (width/fill/resize) or the stack share. */
   const renderColumn = (col: ColumnDef, actions: ColumnActions) => {
     const names = namesFor(col);
+    if (col.type === 'watchlist') {
+      return (
+        <Column key={col.id} title={col.title} subtitle="one list · every watchlist column" kind="watchlist" count={watchEntries.length} className="col-watchlist" {...actions}>
+          <WatchlistColumn
+            entries={watchEntries}
+            pending={watchPending}
+            tokens={tokens}
+            now={now}
+            sort={col.watchSort}
+            chartProvider={chartProvider}
+            telegramConnected={status.telegram === 'connected'}
+            onSort={(s) => saveColumns(updateColumn(col.id, (c) => ({ ...c, watchSort: s })))}
+            onAdd={addToWatch}
+            onRemove={removeFromWatch}
+            onOpen={openAnyToken}
+            onBuy={onBuy}
+            onAlerts={setWatchAlerts}
+          />
+        </Column>
+      );
+    }
     if (col.type === 'web') {
       let host = '';
       try {
@@ -1641,6 +1700,7 @@ export default function App() {
     <BuyContext.Provider value={onBuy}>
     <LinkInterceptContext.Provider value={openLink}>
     <CaMenuContext.Provider value={openCaMenu}>
+    <WatchContext.Provider value={watchApi}>
     <SlotContext.Provider value={slots}>
     <div className={`app${dragCol ? ' col-drag' : ''}${chainTint ? ' chain-tint' : ''}`}>
       <header className="top">
@@ -1718,7 +1778,7 @@ export default function App() {
           }}
         />
       )}
-      <PingsPanel mentions={mentions} now={now} open={pingsOpen} canSend={canSend} onOpen={openPings} onRead={readMentions} onJump={jumpToMessage} />
+      <PingsPanel mentions={mentions} now={now} open={pingsOpen} canSend={canSend} onOpen={openPings} onRead={readMentions} onJump={jumpToMessage} onOpenToken={openAnyToken} />
       <div
         className="tabs"
         ref={tabsRef}
@@ -2000,6 +2060,14 @@ export default function App() {
             <button onClick={() => openAnyToken(caMenu.address)}>
               <Icon name="chart" size={12} /> Open token
             </button>
+            <button
+              onClick={() => {
+                watchApi.toggle(caMenu.address, !watchApi.has(caMenu.address));
+                setCaMenu(null);
+              }}
+            >
+              <Icon name="star" size={12} /> {watchApi.has(caMenu.address) ? 'Remove from watchlist' : 'Add to watchlist'}
+            </button>
             <button onClick={() => sendToBot(buyProvider, caMenu.address)}>
               <Icon name="send" size={12} /> Buy on {buyLabel}
             </button>
@@ -2108,6 +2176,7 @@ export default function App() {
       )}
     </div>
     </SlotContext.Provider>
+    </WatchContext.Provider>
     </CaMenuContext.Provider>
     </LinkInterceptContext.Provider>
     </BuyContext.Provider>

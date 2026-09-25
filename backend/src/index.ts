@@ -18,6 +18,7 @@ import type { TokenInfo } from './types.js';
 import { DEFAULT_COVE_AFFILIATE, type CoveOptions } from './cove.js';
 import { Services } from './services.js';
 import { createApi } from './api.js';
+import { WatchlistService } from './watchlist.js';
 import { allowLocalOrigin, createFeedWss, isLoopbackHost, routeUpgrades } from './ws.js';
 import { DiscordBridge } from './discord/bridge.js';
 import { StateStore } from './store.js';
@@ -69,6 +70,7 @@ const hub: MessageHub = new MessageHub(150, createDefaultEnricher({ o1ApiKey: ()
   blacklist: () => cfg.get().blacklist,
   bots: () => cfg.get().bots,
   favorites: () => cfg.get().favorites,
+  watchlist: () => cfg.get().watchlist,
 });
 
 // Live market numbers, two loops. Fast: every 10s, tokens called in the last hour, Dexscreener
@@ -95,19 +97,40 @@ const pricer = createLivePricer({
 void endpoints.probeAlchemy(cfg.get().marketData.alchemyKey).then((st) => {
   if (st.hasKey) console.log(`[market] alchemy serves ${st.chains.length ? st.chains.join(', ') : 'nothing'}${st.error ? ` (${st.error})` : ''}`);
 });
+// Watched tokens off screen ride along every 10th tick (~30s): one caller keeps the pricer's single
+// in-flight guard and its per-chain status honest.
+const WATCH_EVERY_TICKS = 10;
+let liveTick = 0;
 setInterval(() => {
   const want = pricer.visible();
-  if (!want.size) return;
+  const watchedToo = ++liveTick % WATCH_EVERY_TICKS === 0;
+  if (!want.size && !watchedToo) return;
   const list: TokenInfo[] = [];
   for (const a of want) {
     const t = hub.getToken(a);
     if (t && t.network && t.pairAddress) list.push(t);
   }
-  void pricer.refresh(list);
+  if (watchedToo) {
+    const remote = hub.remoteLive();
+    const noPool: TokenInfo[] = [];
+    for (const t of watch.tokens()) {
+      if (want.has(t.address) || remote.has(t.address)) continue;
+      if (t.network && t.pairAddress) list.push(t);
+      else noPool.push(t);
+    }
+    // no pool known yet: the APIs find one (and price it meanwhile)
+    if (noPool.length) void refreshMarket(noPool);
+  }
+  if (list.length) void pricer.refresh(list);
 }, LIVE_TICK_MS).unref();
 // An API answer with a price marks the price as the API's, so the live pricer knows the market cap
 // it sees next is theirs (it keeps its own caps on that source's supply).
 const applyMarket = (addr: string, info: Partial<TokenInfo>) => {
+  // a watched token's 1h change is our own once we have an hour of it; the API's figure only stands in until then
+  if (info.change1h !== undefined && watch.ownsChange1h(addr)) {
+    const { change1h: _c, ...rest } = info;
+    info = rest;
+  }
   // a token the pools are answering for keeps the on-chain price; the API still fills in the rest
   if (pricer.isLive(addr)) {
     const { priceUsd: _p, marketCap: _m, ...rest } = info;
@@ -127,6 +150,8 @@ const mine = (list: TokenInfo[]) => {
 };
 setInterval(() => void refreshHot(byNewest(mine(hub.activeTokens(HOT_WINDOW_MS).filter((t) => t.network)))), HOT_REFRESH_MS).unref();
 setInterval(() => void refreshMarket(byNewest(mine(hub.activeTokens(ACTIVE_WINDOW_MS)))), REFRESH_MS).unref();
+// watched tokens nobody calls are outside those windows: liquidity, volume and the rest every 5 minutes
+setInterval(() => void refreshMarket(mine(watch.tokens().filter((t) => Date.now() - t.lastCallTs >= ACTIVE_WINDOW_MS))), 5 * 60_000).unref();
 // Exact market caps at call time: a call lands with the cached number; once its minute candle has
 // closed, the real value is read from the pool's 1-minute candles (a few tokens per pass, see backfill.ts).
 const backfill = createBackfiller({
@@ -162,6 +187,7 @@ setInterval(() => {
   if (due.length) void hub.refreshSecurity(due);
 }, 60 * 1000).unref();
 const svc: Services = new Services(cfg, hub);
+const watch = new WatchlistService({ cfg, hub, sendSelf: (text) => svc.telegram?.sendSelf(text) ?? Promise.resolve() });
 // the minter signs against the same RPCs the live pricer reads from (custom > Alchemy > public)
 svc.rpcOverrides = () => Object.fromEntries(Object.keys(CHAINS).map((n) => [n, endpoints.urlFor(n)?.url]).filter((e): e is [string, string] => !!e[1]));
 svc.startJ7();
@@ -179,6 +205,7 @@ const shell = new ShellLink();
 const hover = createHoverFetchers();
 const store = new StateStore(process.env.TRENCHFEED_STATE ?? path.join(root, 'state.json'));
 hub.load(store.load());
+watch.start();
 // A mint that was in flight when the process died is still in flight on the chain: take those jobs
 // back so their receipts are still watched and the one-mint-per-wallet guard still holds.
 void svc.minter.restore(hub.restoredMintJobs);
@@ -257,7 +284,7 @@ app.use(
   }),
 );
 app.use('/api', createMarketApi(cfg, endpoints, pricer));
-app.use('/api', createApi(cfg, hub, svc, hover, (t) => refreshMarket([t])));
+app.use('/api', createApi(cfg, hub, svc, hover, (t) => refreshMarket([t]), watch));
 
 const dist = path.resolve(root, '..', 'frontend', 'dist');
 if (fs.existsSync(dist)) {

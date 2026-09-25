@@ -1,3 +1,4 @@
+import { WatchStar } from '../watch';
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAlwaysVisible } from '../visible';
 import { LiveDot } from './LiveDot';
@@ -166,6 +167,7 @@ export function TokenModal({ t, now, favorites, me = [], onClose, onShare, onBuy
               <button className="call-sym" onClick={copy} title={`${t.address}\nclick to copy`}>
                 {copied ? 'copied' : (t.symbol ?? shortAddr(t.address))}
               </button>
+              <WatchStar address={t.address} className="watch-star-lg" />
               {t.name && t.name !== t.symbol && <span className="call-name">{t.name}</span>}
               {mult !== undefined && <span className={`call-mult${mult >= 1 ? ' up' : ' down'}`}>{mult >= 10 ? mult.toFixed(0) : mult.toFixed(1)}×</span>}
             </div>

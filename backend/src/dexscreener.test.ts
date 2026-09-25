@@ -19,6 +19,11 @@ const pair = (liq: number, extra: Record<string, unknown> = {}) => ({
 });
 
 describe('mapDexscreener', () => {
+  it('maps the 1h price change when there is one', () => {
+    expect(mapDexscreener({ pairs: [pair(100, { priceChange: { h1: 12.5, h24: -2.9 } })] }, ADDR)?.change1h).toBe(12.5);
+    expect(mapDexscreener({ pairs: [pair(100)] }, ADDR)).not.toHaveProperty('change1h');
+  });
+
   it('picks the pair with the most liquidity and maps fields', () => {
     const json = {
       pairs: [

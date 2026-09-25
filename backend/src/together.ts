@@ -211,7 +211,8 @@ export class TogetherHost extends EventEmitter {
       });
     });
     const onEvent = (ev: ServerEvent) => {
-      if (ev.type !== 'token') return;
+      // a token with no calls is one this machine only watches: the watchlist is not shared
+      if (ev.type !== 'token' || ev.token.calls.length === 0) return;
       const data = JSON.stringify({ type: 'token', token: shareable(ev.token) });
       for (const c of wss.clients) if (c.readyState === WebSocket.OPEN) c.send(data);
     };

@@ -1,3 +1,4 @@
+import { WatchContext, WatchStar } from '../watch';
 import { CaMenuContext } from './RichText';
 import { useContext, useState } from 'react';
 import type { Contract, TokenInfo } from '../types';
@@ -28,6 +29,7 @@ export function TokenChip({
 }) {
   const embed = chartEmbedUrl(t, chartProvider);
   const caMenu = useContext(CaMenuContext);
+  const watched = !!useContext(WatchContext)?.has(c.address);
   const [copied, setCopied] = useState(false);
   const [manual, setManual] = useState<boolean | null>(null);
   const showChart = manual ?? autoChart;
@@ -42,7 +44,7 @@ export function TokenChip({
   const hasPrice = t?.priceUsd !== undefined || t?.marketCap !== undefined;
   const hot = (t?.seen ?? 1) >= 2;
   return (
-    <div ref={ref} className={`chip${showChart ? ' chip-open' : ''}${hot ? ' chip-hot' : ''}`}>
+    <div ref={ref} className={`chip${showChart ? ' chip-open' : ''}${hot ? ' chip-hot' : ''}${watched ? ' chip-watched' : ''}`}>
       <div className="chip-row">
         <div className="chip-imgwrap" onClick={() => onSelect?.(c.address)} title="show in Calls">
           {t?.imageUrl && !imgBroken ? (
@@ -64,6 +66,7 @@ export function TokenChip({
             <button className="chip-sym" onClick={() => onSelect?.(c.address)} title={`${c.address}\nclick to show in Calls`}>
               {t?.symbol ?? shortAddr(c.address)}
             </button>
+            <WatchStar address={c.address} />
             {t?.name && t.name !== t.symbol && <span className="chip-name">{t.name}</span>}
             <PairChip t={t} />
             {repeat && (

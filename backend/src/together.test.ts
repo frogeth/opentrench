@@ -129,8 +129,11 @@ describe('host and guest', () => {
       expect(guest.name).toBe('Moussa');
       expect(guestHub.getToken('0xs')!.via).toBe('Moussa');
       expect(guest.live.has('0xs')).toBe(true);
+      // a watched token nobody called is the host's own business: it never goes out (sent before 0xn, so 0xn arriving proves it was skipped)
+      hostHub.adopt(token('0xw', []));
       hostHub.applyRemoteToken('seed', token('0xn', [call('n1', 'New')]));
       await waitFor(() => !!guestHub.getToken('0xn'));
+      expect(guestHub.getToken('0xw')).toBeUndefined();
       expect(host.clients).toBe(1);
       guest.stop();
       await waitFor(() => host.clients === 0);

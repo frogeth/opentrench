@@ -1,4 +1,4 @@
-import type { PluginInfo, Source } from './types';
+import type { PluginInfo, Source, WatchAlerts, WatchEntry } from './types';
 
 /** what a plugin's log lines are tagged with (the backend keeps these three) */
 export type PluginLogLevel = 'info' | 'warn' | 'error';
@@ -128,9 +128,12 @@ export interface ColumnFilters {
   // mints column
   minQty?: number;
 }
+export const WATCH_SORT_KEYS = ['added', 'symbol', 'price', 'marketCap', 'change1h', 'sinceAdded', 'lastCall'] as const;
+export type WatchSortKey = (typeof WATCH_SORT_KEYS)[number];
+
 export interface ColumnDef {
   id: string;
-  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot' | 'plugin' | 'vampy';
+  type: 'calls' | 'chat' | 'callers' | 'trending' | 'cove' | 'salpha' | 'j7' | 'web' | 'mints' | 'nftvol' | 'osmint' | 'tgbot' | 'plugin' | 'vampy' | 'watchlist';
   title: string;
   /** `<source>:<id>` keys of watched chats; empty = all */
   chats: string[];
@@ -158,6 +161,8 @@ export interface ColumnDef {
   /** play a sound when a new call lands in this column */
   alert?: { on: boolean; sound: string };
   filters?: ColumnFilters;
+  /** watchlist columns: the header the rows are sorted by */
+  watchSort?: { key: WatchSortKey; dir: 'asc' | 'desc' };
 }
 /** A saved arrangement of the column terminal (header → Layouts). */
 export interface Layout {
@@ -182,6 +187,7 @@ export interface MaskedConfig {
   layouts: Layout[];
   seenTokens: string[];
   hiddenTokens: string[];
+  watchlist: WatchEntry[];
   together: {
     share: boolean;
     name: string;
@@ -364,6 +370,9 @@ export const api = {
   react: (source: 'discord' | 'telegram', chatId: string, msgId: string, key: string, name: string, on: boolean) =>
     req<{ ok: true }>('POST', '/react', { source, chatId, msgId, key, name, on }),
   markSeen: (add: string[], remove: string[] = []) => req<{ count: number }>('POST', '/seen', { add, remove }),
+  /** the watchlist: `add` takes any text (every contract in it); the answer is the whole list */
+  watchlist: (add: string[], remove: string[] = []) => req<{ watchlist: WatchEntry[]; rejected: string[] }>('POST', '/watchlist', { add, remove }),
+  setWatchAlerts: (address: string, alerts: Omit<WatchAlerts, 'fired'>) => req<WatchEntry>('PUT', `/watchlist/${encodeURIComponent(address)}/alerts`, alerts),
   /** TrenchTogether: share calls with a friend on the same network */
   together: () => req<TogetherInfo>('GET', '/together'),
   setTogether: (patch: { share?: boolean; name?: string }) => req<TogetherInfo>('PUT', '/together', patch),
