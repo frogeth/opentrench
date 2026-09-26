@@ -1172,6 +1172,7 @@ button.buy-btn { font: inherit; font-size: 11px; font-weight: 700; cursor: point
 .ping-time { font-size: 11px; white-space: nowrap; }
 .ping-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--err); flex: 0 0 auto; }
 .ping-ctx { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.ping-bot-text { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow-y: auto; }
 .ping-row { display: grid; grid-template-columns: 34px minmax(50px, 90px) 1fr; gap: 8px; align-items: baseline; padding: 4px 8px; font-size: 11.5px; color: var(--muted); cursor: pointer; border-left: 2px solid transparent; }
 .ping-row:hover { background: rgba(255, 255, 255, 0.03); color: var(--text); }
 .ping-row-time { font-size: 10px; color: var(--dim); white-space: nowrap; }

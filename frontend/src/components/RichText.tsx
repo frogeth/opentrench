@@ -70,13 +70,14 @@ function buildRe(contracts: string[]): RegExp {
   const parts = [
     '(?<code>`[^`\\n]+`)',
     // link text may hold one level of brackets: bots write [[cancel all]](url)
-    '(?<link>\\[(?:[^[\\]\\n]|\\[[^[\\]\\n]*\\])+\\]\\(https?:\\/\\/[^\\s)]+\\))',
+    '(?<link>\\[(?:[^[\\]\\n]|\\[[^[\\]\\n]*\\])+\\]\\((?:https?:\\/\\/|opentrench:\\/\\/room\\/)[^\\s)]+\\))',
     '(?<bold>\\*\\*[^\\n]+?\\*\\*)',
     '(?<under>__[^\\n]+?__)',
     '(?<strike>~~[^\\n]+?~~)',
     '(?<ital>\\*[^*\\n]+\\*)',
-    '(?<angle><https?:\\/\\/[^\\s>]+>)',
-    '(?<url>https?:\\/\\/[^\\s<>)]+)',
+    '(?<angle><(?:https?:\\/\\/|opentrench:\\/\\/room\\/)[^\\s>]+>)',
+    // a TrenchTogether room invite pasted in a chat: the app routes the click to Join
+    '(?<url>(?:https?:\\/\\/|opentrench:\\/\\/room\\/)[^\\s<>)]+)',
     '(?<emoji><a?:[A-Za-z0-9_~]+:\\d{10,25}>)',
     '(?<mention><(?:@!?|@&|#)\\d{10,25}>)',
   ];
@@ -107,9 +108,11 @@ function render(text: string, contracts: string[], re: RegExp, size: number, jum
     const k = i;
     if (g.code) {
       const s = m[0].slice(1, -1);
-      out.push(isCa(s) ? <CA key={k} text={s} /> : <code key={k} className="md-code">{s}</code>);
+      // an invite shared as `code` is still an invite
+      if (/^opentrench:\/\/room\/\S+$/i.test(s)) out.push(<Link key={k} href={s}>{s}</Link>);
+      else out.push(isCa(s) ? <CA key={k} text={s} /> : <code key={k} className="md-code">{s}</code>);
     } else if (g.link) {
-      const lm = /^\[(.+)\]\((https?:\/\/[^\s)]+)\)$/.exec(m[0])!;
+      const lm = /^\[(.+)\]\(((?:https?:\/\/|opentrench:\/\/room\/)[^\s)]+)\)$/.exec(m[0])!;
       out.push(<Link key={k} href={lm[2]}>{inner(lm[1])}</Link>);
     } else if (g.bold) out.push(<b key={k}>{inner(m[0].slice(2, -2))}</b>);
     else if (g.under) out.push(<u key={k}>{inner(m[0].slice(2, -2))}</u>);

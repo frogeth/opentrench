@@ -114,6 +114,8 @@ export interface Mention {
   count?: number;
   /** a watchlist price alert rather than a message */
   alert?: WatchAlertHit;
+  /** a message from a Telegram bot whose column has its bell on: the bot's username, lowercase */
+  bot?: string;
 }
 
 /** Someone you could favorite: seen posting in the feed, or found in a chat's member list. */

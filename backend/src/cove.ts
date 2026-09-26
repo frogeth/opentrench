@@ -9,7 +9,7 @@ import type { BuyLinks } from './types.js';
  * 32-byte Solana). Amounts: integer or "1d5" for 1.5, max 9999.
  */
 
-const COVE_BOT = 'cove_trading_bot';
+export const COVE_BOT = 'cove_trading_bot';
 /** opentrench's own Cove affiliate (the author's Telegram user id): every buy credits it unless the user sets another */
 export const DEFAULT_COVE_AFFILIATE = '876274588';
 const PAYLOAD_MAX = 64;

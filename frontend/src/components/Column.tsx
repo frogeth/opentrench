@@ -101,6 +101,7 @@ export function Column({
   width,
   onResize,
   alertOn,
+  alertHint,
   onAlert,
   fill = false,
   filtered = false,
@@ -130,6 +131,8 @@ export function Column({
   onResize?: (width: number, done: boolean) => void;
   /** per-column sound alert state; the bell toggles it */
   alertOn?: boolean;
+  /** what the bell does here, when it is not "a sound on new calls" */
+  alertHint?: string;
   onAlert?: () => void;
   /** the last column: stretches over whatever the others leave */
   fill?: boolean;
@@ -199,7 +202,7 @@ export function Column({
         {(onEdit || onRemove || onAlert) && (
           <div className="col-actions">
             {onAlert && (
-              <button className={`col-btn${alertOn ? ' col-btn-on' : ''}`} onClick={onAlert} title={alertOn ? 'Alerts on — click to mute (sound in ✎)' : 'Alert on new calls here'} aria-label="Edit alerts">
+              <button className={`col-btn${alertOn ? ' col-btn-on' : ''}`} onClick={onAlert} title={alertOn ? `Alerts on — click to mute (sound in ✎)${alertHint ? ` · ${alertHint}` : ''}` : (alertHint ?? 'Alert on new calls here')} aria-label="Edit alerts">
                 <Icon name="bell" size={14} />
               </button>
             )}

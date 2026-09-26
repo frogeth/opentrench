@@ -33,6 +33,8 @@ import { canWrite, displayChatName, normTg, platformChatNames, watchKeyOf } from
 
 const BOTS = { cove: COVE_BOT, basedbot: 'based_eth_bot', salpha: 'salpha_research_bot' } as const;
 type BotKind = keyof typeof BOTS;
+/** columns showing a Telegram bot conversation; their bell sends the bot's new messages to Pings */
+const isBotColumn = (col: ColumnDef) => col.type === 'tgbot' || col.type === 'cove' || col.type === 'salpha';
 import { VirtualItem } from './components/Virtual';
 import { Settings } from './components/Settings';
 import { desktop, hasBridge } from './desktop';
@@ -42,7 +44,7 @@ import { Logo } from './components/Logo';
 import { Icon } from './components/Icon';
 import { Avatar } from './components/Avatar';
 import { api, type ColumnDef, type DiscordChannel, type MaskedConfig, type TelegramDialog, type VampyFeedInfo, type WatchedChat } from './api';
-import { copyText, type ChartProvider } from './format';
+import { copyText, plainText, type ChartProvider } from './format';
 import { playSound, setMuted } from './sounds';
 import { filtersActive, messagePasses, thesisFollowUps, tokenPasses } from './filters';
 import { ALERT_WINDOW_MS, alertSound } from './alerts';
@@ -492,6 +494,17 @@ export default function App() {
     if (status.telegram !== 'connected') return; // the column shows the "connect Telegram" prompt
     api.botStart(BOTS[hit.kind], hit.payload).catch((e) => alert(`${hit.kind === 'salpha' ? 'Salpha' : PROVIDER_LABEL[hit.kind]}: ${e?.message ?? e}`));
   };
+  /** The bot a column shows (lowercase), for matching a bot ping to its column. */
+  const botOfColumn = (c: ColumnDef): string | undefined =>
+    c.type === 'tgbot' ? c.bot?.replace(/^@/, '').toLowerCase() : c.type === 'cove' ? buyBot : c.type === 'salpha' ? BOTS.salpha : undefined;
+  /** A bot ping's "open": the column showing that bot, flashed (or created, for a bot with none). */
+  const openBotColumn = (bot: string) => {
+    const b = bot.toLowerCase();
+    const col = flatColumns.find((c) => botOfColumn(c) === b);
+    if (col?.type === 'cove') ensureBotColumn(buyProvider);
+    else if (col?.type === 'salpha' || (!col && b === BOTS.salpha)) ensureBotColumn('salpha');
+    else openTgBot(b);
+  };
   /** Any other bot (a t.me/<x>?start= link, or a @…bot link): its own Telegram bot column, created on first use. */
   const openTgBot = (bot: string, start?: string, title?: string) => {
     const b = bot.toLowerCase();
@@ -503,10 +516,17 @@ export default function App() {
   /**
    * Every Discord, Telegram and bot link stays in the app: a message link scrolls the chat to that
    * message (or opens the chat when the message is not in the feed), a chat link opens the chat
-   * (watched: focused; otherwise a preview), a bot link drives that bot's column. Returns false for
+   * (watched: focused; otherwise a preview), a bot link drives that bot's column, a room invite opens
+   * Join. Returns false for
    * anything else (X, charts, explorers, invites), which then opens in the browser.
    */
   const openLink = (href: string): boolean => {
+    // a room invite posted in a chat: Settings → Together opens with it filled in, one press to join
+    if (/^opentrench:\/\/room\//i.test(href)) {
+      setPendingInvite(href);
+      setSettingsOpen(true);
+      return true;
+    }
     const l = parseChatLink(href);
     if (!l) return false;
     if (l.kind === 'bot') {
@@ -968,6 +988,24 @@ export default function App() {
       if (mentionSeen.current.has(p.id)) continue;
       mentionSeen.current.add(p.id);
       if (p.read || nowMs - p.msg.ts > 120_000) continue;
+      // a belled bot column's new message: that column's sound, and a notification that opens the column
+      if (p.bot) {
+        const col = flatColumns.find((c) => c.alert?.on && botOfColumn(c) === p.bot);
+        if (sound) playSound(col?.alert?.sound ?? 'chirp');
+        if (notify === 'granted') {
+          try {
+            const n = new Notification(col?.title && col.title !== `@${p.bot}` ? `${col.title} · @${p.bot}` : `@${p.bot}`, { body: plainText(p.msg.text).slice(0, 180), tag: `ping:${p.id}` });
+            n.onclick = () => {
+              window.focus();
+              openBotColumn(p.bot!);
+              n.close();
+            };
+          } catch {
+            /* notifications unavailable */
+          }
+        }
+        continue;
+      }
       // a favorite's call has its own sound, and its desktop notification comes from the ping event;
       // a watched token's call just chimes; a watchlist alert rings and notifies
       if (sound) playSound(p.alert ? 'alarm' : p.call ? 'coin' : 'chirp');
@@ -1381,9 +1419,10 @@ export default function App() {
   const actionsFor = (col: ColumnDef, parentId?: string): ColumnActions => ({
     onEdit: () => setEditing({ col, parentId }),
     onRemove: () => setConfirmRemove(col.id),
-    ...(col.type === 'chat' || col.type === 'calls' || col.type === 'j7' || col.type === 'vampy'
+    ...(col.type === 'chat' || col.type === 'calls' || col.type === 'j7' || col.type === 'vampy' || isBotColumn(col)
       ? {
           alertOn: !!col.alert?.on,
+          ...(isBotColumn(col) ? { alertHint: "Ping me on this bot's new messages" } : {}),
           onAlert: () => {
             const next = { on: !col.alert?.on, sound: col.alert?.sound ?? 'ping' };
             if (next.on) playSound(next.sound, { force: true });
@@ -1778,7 +1817,7 @@ export default function App() {
           }}
         />
       )}
-      <PingsPanel mentions={mentions} now={now} open={pingsOpen} canSend={canSend} onOpen={openPings} onRead={readMentions} onJump={jumpToMessage} onOpenToken={openAnyToken} />
+      <PingsPanel mentions={mentions} now={now} open={pingsOpen} canSend={canSend} onOpen={openPings} onRead={readMentions} onJump={jumpToMessage} onOpenToken={openAnyToken} onOpenBot={openBotColumn} />
       <div
         className="tabs"
         ref={tabsRef}

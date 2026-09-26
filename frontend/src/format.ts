@@ -172,3 +172,13 @@ export function chartEmbedUrl(
   // a chain the chosen provider doesn't cover (or not known yet): Dexscreener's embed
   return t.embedUrl;
 }
+
+/** Chat markdown as plain text, for a desktop notification: links keep their words, markers go. */
+export function plainText(md: string): string {
+  return md
+    .replace(/\[((?:[^[\]\n]|\[[^[\]\n]*\])+)\]\([^)\s]+\)/g, '$1')
+    .replace(/\*\*|__|~~|`/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+}

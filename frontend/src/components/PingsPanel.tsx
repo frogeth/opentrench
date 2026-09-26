@@ -5,6 +5,7 @@ import { timeAgo } from '../format';
 import { Avatar } from './Avatar';
 import { Composer } from './Composer';
 import { Icon } from './Icon';
+import { RichText } from './RichText';
 
 const chatShort = (name: string) => name.replace(/\s*\([^)]*\)\s*$/, '');
 const KIND = { user: '@you', everyone: '@everyone', role: '@role' } as const;
@@ -43,6 +44,7 @@ export function PingsPanel({
   onRead,
   onJump,
   onOpenToken,
+  onOpenBot,
 }: {
   mentions: Mention[];
   now: number;
@@ -53,6 +55,8 @@ export function PingsPanel({
   onJump: (id: string) => void;
   /** a watchlist alert opens its token instead of jumping to a chat */
   onOpenToken?: (address: string) => void;
+  /** a bot ping's "open column" */
+  onOpenBot?: (bot: string) => void;
 }) {
   const [replying, setReplying] = useState<string | null>(null);
   const list = useMemo(() => [...mentions].sort((a, b) => b.msg.ts - a.msg.ts), [mentions]);
@@ -85,7 +89,7 @@ export function PingsPanel({
         </button>
       </div>
       <div className="pings-body">
-        {list.length === 0 && <div className="empty">Nobody has pinged you yet. Mentions, replies to you, @everyone, your roles, your favorites' first calls, calls on tokens you watch and watchlist alerts land here.</div>}
+        {list.length === 0 && <div className="empty">Nobody has pinged you yet. Mentions, replies to you, @everyone, your roles, your favorites' first calls, calls on tokens you watch, watchlist alerts and new messages from bot columns with their bell on land here.</div>}
         {list.map((p) => {
           const m = p.msg;
           if (p.alert) {
@@ -105,6 +109,31 @@ export function PingsPanel({
                 <div className="ping-actions">
                   <button className="hdr-toggle" onClick={() => onOpenToken?.(a.address)}>
                     open token
+                  </button>
+                </div>
+              </div>
+            );
+          }
+          if (p.bot) {
+            const bot = p.bot;
+            return (
+              <div key={p.id} className={`ping ping-bot${p.read ? '' : ' ping-unread'}`} onMouseEnter={() => !p.read && onRead([p.id])}>
+                <div className="ping-head">
+                  <Avatar src={m.avatar} name={bot} size={22} />
+                  <span className="ping-who">
+                    <b>{m.author}</b>
+                    <span className="muted">
+                      <span className="src-dot telegram" /> Telegram bot
+                    </span>
+                  </span>
+                  <span className="ping-kind">🤖 new message</span>
+                  <span className="ping-time muted">{timeAgo(m.ts, now)}</span>
+                  {!p.read && <span className="ping-dot" />}
+                </div>
+                <div className="ping-bot-text">{m.text ? <RichText text={m.text} contracts={m.contracts.map((c) => c.address)} /> : <span className="muted">📎 media</span>}</div>
+                <div className="ping-actions">
+                  <button className="hdr-toggle" onClick={() => onOpenBot?.(bot)}>
+                    open column
                   </button>
                 </div>
               </div>
