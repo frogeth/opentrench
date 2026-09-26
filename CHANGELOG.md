@@ -7,6 +7,10 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.16.3 — 2026-09-26
+
+- Fix: Telegram could sit on "connecting" for good. If the connection was rebuilt while your network was down, the reconnect gave up after a few tries and never tried again, so no chats or messages came through until a restart. A reconnect now gives up after a minute and keeps trying: after 5 seconds, 15, 30, then every minute until it connects.
+
 ## v0.16.2 — 2026-09-26
 
 - A bot can be a favorite caller: its ⋯ menu in a chat has 👑 Favorite caller next to Hide this bot, it wears the crown, and its first call on a token pings you like any favorite's. A hidden bot still has to be shown first.
