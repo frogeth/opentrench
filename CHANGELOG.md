@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.16.2 — 2026-09-26
+
 - A bot can be a favorite caller: its ⋯ menu in a chat has 👑 Favorite caller next to Hide this bot, it wears the crown, and its first call on a token pings you like any favorite's. A hidden bot still has to be shown first.
 
 ## v0.16.1 — 2026-09-25
