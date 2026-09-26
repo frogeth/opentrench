@@ -42,6 +42,10 @@ const FATAL_AUTH = [
 const HEALTH_INTERVAL_MS = 30_000;
 const HEALTH_PROBE_MS = 15_000;
 const HEALTH_FAILURES_BEFORE_REBUILD = 2;
+/** gramjs can sit on a connect forever once its own retries run out (seen after the network dropped) */
+const CONNECT_TIMEOUT_MS = 60_000;
+/** after a failed connect that is not a login problem: try again, backing off to once a minute */
+const RECONNECT_DELAYS_MS = [5_000, 15_000, 30_000, 60_000];
 const DIALOGS_TIMEOUT_MS = 20_000;
 
 /** `p`, or a rejection with `label` after `ms` (the underlying call is left to finish or not). */
@@ -103,6 +107,10 @@ export class TelegramWrapper extends EventEmitter {
   private pending: { code?: Deferred<string>; password?: Deferred<string> } = {};
   private stepWaiters: ((s: LoginStep) => void)[] = [];
   private healthTimer?: ReturnType<typeof setInterval>;
+  private retryTimer?: ReturnType<typeof setTimeout>;
+  private retryAttempt = 0;
+  /** bumped by every teardown, so a connect that finishes after a newer one (or a logout) drops its client */
+  private connectGen = 0;
   private avatars = new Map<string, Buffer | null>();
   /** `${chatId}:${msgId}` -> gramjs message, for later media download */
   private mediaMsgs = new Map<string, any>();
@@ -130,17 +138,38 @@ export class TelegramWrapper extends EventEmitter {
       return;
     }
     this.setState('connecting');
+    const gen = this.connectGen;
+    const client = this.makeClient(this.session);
     try {
-      const client = this.makeClient(this.session);
-      await client.connect();
-      if (!(await client.isUserAuthorized())) {
+      const authorized = await withTimeout(
+        client.connect().then(() => client.isUserAuthorized()),
+        CONNECT_TIMEOUT_MS,
+        'connect timeout',
+      );
+      if (gen !== this.connectGen) return void client.disconnect().catch(() => {});
+      if (!authorized) {
         await client.disconnect();
         this.setState('needs_login');
         return;
       }
+      this.retryAttempt = 0;
       this.onAuthorized(client);
     } catch (e: any) {
-      this.setState(this.isFatal(e) ? 'needs_login' : 'auth_error', e?.message ?? String(e));
+      void Promise.race([client.disconnect().catch(() => {}), new Promise((r) => setTimeout(r, 5000))]);
+      if (gen !== this.connectGen) return;
+      if (this.isFatal(e)) {
+        this.setState('needs_login', e?.message ?? String(e));
+        return;
+      }
+      // the network or Telegram, not the login: keep trying, or it sits on "connecting" for good
+      const delay = RECONNECT_DELAYS_MS[Math.min(this.retryAttempt++, RECONNECT_DELAYS_MS.length - 1)];
+      console.warn(`[telegram] connect failed (${e?.message ?? e}); retrying in ${delay / 1000}s`);
+      this.setState('connecting', e?.message ?? String(e));
+      this.retryTimer = setTimeout(() => {
+        this.retryTimer = undefined;
+        void this.connect();
+      }, delay);
+      this.retryTimer.unref?.();
     }
   }
 
@@ -953,6 +982,9 @@ export class TelegramWrapper extends EventEmitter {
   }
 
   private async teardown(): Promise<void> {
+    this.connectGen++;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
     if (this.healthTimer) clearInterval(this.healthTimer);
     this.healthTimer = undefined;
     if (this.pollTimer) clearInterval(this.pollTimer);
