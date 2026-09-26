@@ -20,8 +20,12 @@ import { RoomsManager } from './rooms/manager.js';
 import { Minter } from './opensea/minter.js';
 import { createLaunchWatcher } from './deploys.js';
 import { detectContracts } from './contracts.js';
+import { alertBots } from './botalerts.js';
 import type { FeedMessage, Reaction, Source } from './types.js';
 import type { PluginRegistry } from './plugins/registry.js';
+
+/** a bot message older than this (history read back, a reconnect catching up) never pings */
+const BOT_PING_FRESH_MS = 120_000;
 
 /** the sharing port: fixed, except a second instance on one machine (a test bench) may pick another */
 const togetherPort = (): number => Number(process.env.TRENCHFEED_TOGETHER_PORT) || TOGETHER_PORT;
@@ -480,7 +484,24 @@ export class Services {
   }
 
   /** Columns changed: start/stop the feeds that depend on which column types exist. */
+  /** Bots whose column has its bell on (lowercase usernames). */
+  private alertBots(): Set<string> {
+    const c = this.cfg.get();
+    return alertBots(c.columns, c.buy.provider);
+  }
+
+  /**
+   * Telegram only relays a bot's messages once its conversation has been opened; a bell has to
+   * work with the window closed, so the backend opens each belled bot's conversation itself.
+   */
+  private listenToAlertBots(): void {
+    const tg = this.telegram;
+    if (!tg || tg.state !== 'connected') return;
+    for (const bot of this.alertBots()) void tg.botHistory(bot, 1).catch((e: any) => console.warn(`[telegram] bot ${bot} for pings: ${e?.message ?? e}`));
+  }
+
   syncColumnFeeds(): void {
+    this.listenToAlertBots();
     this.startMintGo();
     const cols = this.cfg.get().columns.flatMap((c) => (c.split ? [c, c.split.bottom] : [c]));
     this.rankings.want([...new Set(cols.filter((c) => c.type === 'nftvol').map(keyFor))]);
@@ -692,7 +713,14 @@ export class Services {
       this.hub.setTelegramUser(tg.selfUsername);
       this.hub.recomputeBuyLinks();
     });
-    tg.on('bot', (bot: string, msg: import('./types.js').BotMessage) => this.hub.emit('event', { type: 'bot', bot, msg }));
+    tg.on('bot', (bot: string, msg: import('./types.js').BotMessage) => {
+      this.hub.emit('event', { type: 'bot', bot, msg });
+      // a bot column with its bell on: each new message from the bot is a ping (edits of a panel are not)
+      if (!msg.out && !msg.edited && Date.now() - msg.ts < BOT_PING_FRESH_MS && this.alertBots().has(bot.toLowerCase())) this.hub.addBotPing(bot, msg);
+    });
+    tg.on('state', (s: string) => {
+      if (s === 'connected') this.listenToAlertBots();
+    });
     tg.on('botDelete', (ids: number[]) => this.hub.emit('event', { type: 'botDelete', ids }));
     this.telegram = tg;
     await tg.connect();

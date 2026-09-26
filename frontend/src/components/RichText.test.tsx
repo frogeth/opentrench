@@ -48,3 +48,19 @@ describe('bot panel links', () => {
     expect(container.textContent).not.toContain('](');
   });
 });
+
+describe('room invites in chat text', () => {
+  const invite = 'opentrench://room/relay.example.com/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE';
+
+  it('are links, bare or in code, so a click reaches the app', () => {
+    act(() => root.render(<RichText text={`join us ${invite} and \`${invite}\``} />));
+    const links = [...container.querySelectorAll('a.md-link')];
+    expect(links).toHaveLength(2);
+    for (const a of links) expect(a.getAttribute('href')).toBe(invite);
+  });
+
+  it('leave other custom schemes as text', () => {
+    act(() => root.render(<RichText text="opentrench://together/10.0.0.2:3211/tok and javascript://x" />));
+    expect(container.querySelector('a')).toBeNull();
+  });
+});

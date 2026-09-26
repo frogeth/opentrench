@@ -14,6 +14,7 @@ export interface BuyOptions {
 }
 import type { ExtractedMeta } from './links.js';
 import type {
+  BotMessage,
   BotPolicy,
   BotSeen,
   DiscordState,
@@ -472,7 +473,31 @@ export class MessageHub extends EventEmitter {
       repeat: false,
       hasAttachment: false,
     };
-    const mention: Mention = { id: msg.id, msg, before: [], after: [], read: false, alert: hit };
+    return this.pushPing({ id: msg.id, msg, before: [], after: [], read: false, alert: hit });
+  }
+
+  /** A new message from a bot whose column has its bell on, as a ping of its own. Once per message. */
+  addBotPing(bot: string, m: BotMessage): Mention | undefined {
+    const name = bot.replace(/^@/, '').toLowerCase();
+    const id = `bot:${name}:${m.id}`;
+    if (this.mentionList.some((x) => x.id === id)) return undefined;
+    const msg: FeedMessage = {
+      id,
+      source: 'telegram',
+      chatId: `bot:${name}`,
+      chatName: `@${name}`,
+      author: `@${name}`,
+      isBot: true,
+      text: m.text,
+      ts: m.ts,
+      contracts: (m.contracts ?? []).map((address) => ({ chain: address.startsWith('0x') ? 'evm' : 'sol', address })),
+      repeat: false,
+      hasAttachment: !!m.hasMedia,
+    };
+    return this.pushPing({ id, msg, before: [], after: [], read: false, bot: name });
+  }
+
+  private pushPing(mention: Mention): Mention {
     this.mentionList.push(mention);
     if (this.mentionList.length > MENTION_MAX) this.mentionList.splice(0, this.mentionList.length - MENTION_MAX);
     this.emit('event', { type: 'mention', mention } satisfies ServerEvent);
