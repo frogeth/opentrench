@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.16.4 — 2026-09-26
+
 - **Bot columns can ping you.** The bell on a Telegram bot column (Cielo, Salpha, any bot) and on the Cove / BasedBot column now sends each new message from that bot to Pings, with the column's sound and a desktop notification. The ping shows the whole message with its contracts, and Open column jumps to the bot. Edits to a bot's panel don't ping. Works with the window closed, like watchlist alerts.
 - A TrenchTogether invite (`opentrench://room/…`) posted in a chat is a link now: click it and Settings → Together opens with the invite filled in, one press on Join away.
 
