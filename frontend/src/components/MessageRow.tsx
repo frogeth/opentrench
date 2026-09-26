@@ -152,7 +152,7 @@ export function MessageRow({
       document.removeEventListener('keydown', onKey);
     };
   }, [pick]);
-  const fav = !m.isBot && m.source !== 'plugin' && isFavorite(favorites, m.author);
+  const fav = m.source !== 'plugin' && isFavorite(favorites, m.author);
   // `plugin:<plugin>:<chat>`: the plugin's own name when we have it, else its id
   const pluginId = m.source === 'plugin' ? m.chatId.split(':')[1] : '';
   const pluginName = pluginNames[pluginId] ?? pluginId;
