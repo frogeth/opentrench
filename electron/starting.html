@@ -1,0 +1,121 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>opentrench</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0a0c0f;
+        color: #e6e8ee;
+        font: 14px/1.5 -apple-system, 'Segoe UI', system-ui, sans-serif;
+        -webkit-app-region: drag;
+      }
+      main {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 0 24px;
+        text-align: center;
+      }
+      h1 {
+        font-size: 17px;
+        font-weight: 600;
+        margin: 0;
+      }
+      p {
+        margin: 0;
+        max-width: 460px;
+        color: #8b93a3;
+      }
+      .spin {
+        width: 22px;
+        height: 22px;
+        border: 2px solid #2a303a;
+        border-top-color: #e6e8ee;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      button {
+        -webkit-app-region: no-drag;
+        background: #1a1f27;
+        color: #e6e8ee;
+        border: 1px solid #2a303a;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #232a34;
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="spin" id="spin"></div>
+      <h1 id="title">Starting opentrench…</h1>
+      <p id="note"></p>
+      <div class="row" id="actions" hidden>
+        <button id="retry" hidden>Try again</button>
+        <button id="logs">Open log folder</button>
+      </div>
+    </main>
+    <script>
+      // The desktop shell shows this while the backend starts, and loads the app over it the moment the
+      // backend answers. `#failed` = the backend stopped before it ever answered; the shell sets it with a
+      // hash change, which does not reload the page, so the view follows `hashchange`. The buttons speak
+      // to the shell the same way (it watches in-page navigation); no bridge needed.
+      const $ = (id) => document.getElementById(id);
+      const ask = (what) => (location.hash = `${what}-${Date.now()}`);
+      let started = Date.now();
+      let failed = false;
+      const render = () => {
+        $('spin').hidden = failed;
+        $('retry').hidden = !failed;
+        if (failed) {
+          $('title').textContent = "opentrench's backend stopped while starting";
+          $('note').textContent = 'Try again, and if it keeps happening, send the desktop.log from the log folder to whoever gave you opentrench.';
+          $('actions').hidden = false;
+          return;
+        }
+        const s = Math.round((Date.now() - started) / 1000);
+        $('title').textContent = 'Starting opentrench…';
+        $('note').textContent = s >= 20 ? `Still starting (${s}s). The first start on a new computer can take a minute or two while the system checks the new files.` : '';
+        $('actions').hidden = s < 90;
+      };
+      const follow = () => {
+        if (location.hash === '#failed') failed = true;
+        render();
+      };
+      $('logs').onclick = () => ask('open-logs');
+      $('retry').onclick = () => {
+        failed = false;
+        started = Date.now();
+        render();
+        ask('retry');
+      };
+      window.addEventListener('hashchange', follow);
+      setInterval(() => failed || render(), 1000);
+      follow();
+    </script>
+  </body>

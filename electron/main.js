@@ -21,26 +21,73 @@ let link = null;
 // the page takes it: the page pulls it once on start (`link:pending`) and hears later ones as `link`.
 let pendingLink;
 
+// A machine whose graphics process keeps dying (a missing driver DLL: exit -1073741515 on an older
+// Windows laptop, crash after crash on every start) gets hardware acceleration switched off: after
+// the third crash in one run a flag file is left in the app data folder, the app restarts once, and
+// every start after that renders in software. Deleting the file turns acceleration back on.
+const GPU_OFF = path.join(app.getPath('userData'), 'gpu-off');
+const gpuOff = fs.existsSync(GPU_OFF);
+if (gpuOff) app.disableHardwareAcceleration();
+let gpuCrashes = 0;
+app.on('child-process-gone', (_e, d) => {
+  if (d.type !== 'GPU' || gpuOff || d.reason === 'clean-exit' || ++gpuCrashes !== 3) return;
+  try {
+    fs.mkdirSync(path.dirname(GPU_OFF), { recursive: true });
+    fs.writeFileSync(GPU_OFF, `${new Date().toISOString()} GPU process ${d.reason} exit=${d.exitCode}\n`);
+  } catch (e) {
+    console.error('[desktop] could not switch hardware acceleration off:', e.message);
+    return;
+  }
+  console.error(`[desktop] the graphics process keeps crashing; restarting without hardware acceleration (delete ${GPU_OFF} to undo)`);
+  // our backend goes first, so the restarted app does not attach to one on its way out
+  let restarting = false;
+  const restart = () => {
+    if (restarting) return;
+    restarting = true;
+    app.relaunch();
+    app.exit(0);
+  };
+  const c = child;
+  if (!c) return restart();
+  c.once('exit', restart);
+  setTimeout(restart, 5000).unref();
+  stopBackend();
+});
+
 // A plain-text log next to the backend's (app.getPath('logs')): what the desktop shell prints,
 // plus every renderer or helper process Chromium loses, with its reason. A Website column that
 // turns into Chromium's sad page on Windows is invisible otherwise.
 const LOG_MAX = 2 * 1024 * 1024;
 let logFile = null;
+let logBytes = 0;
+/** Appends to desktop.log, rolling it over to desktop.log.1 past LOG_MAX (the backend's output lands here too). */
+function logAppend(text) {
+  if (!logFile) return;
+  try {
+    if (logBytes + text.length > LOG_MAX) {
+      fs.renameSync(logFile, `${logFile}.1`);
+      logBytes = 0;
+    }
+    fs.appendFileSync(logFile, text);
+    logBytes += Buffer.byteLength(text);
+  } catch {}
+}
+/** A chunk of the backend's stdout or stderr, one log line per line, so a start that hangs or dies can be read afterwards. */
+function logBackend(level, chunk) {
+  const at = new Date().toISOString();
+  const lines = String(chunk).split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length) logAppend(lines.map((l) => `${at} ${level} [backend] ${l}\n`).join(''));
+}
 function openLog() {
   try {
     const dir = app.getPath('logs');
     fs.mkdirSync(dir, { recursive: true });
     logFile = path.join(dir, 'desktop.log');
     try {
-      if (fs.statSync(logFile).size > LOG_MAX) fs.renameSync(logFile, `${logFile}.1`);
+      logBytes = fs.statSync(logFile).size;
     } catch {}
     const orig = { log: console.log.bind(console), error: console.error.bind(console) };
-    const write = (level, args) => {
-      const line = `${new Date().toISOString()} ${level} ${args.map((a) => (a instanceof Error ? a.stack ?? a.message : typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}\n`;
-      try {
-        fs.appendFileSync(logFile, line);
-      } catch {}
-    };
+    const write = (level, args) => logAppend(`${new Date().toISOString()} ${level} ${args.map((a) => (a instanceof Error ? a.stack ?? a.message : typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}\n`);
     console.log = (...args) => {
       orig.log(...args);
       write('INFO', args);
@@ -213,14 +260,63 @@ async function startBackend() {
     stdio: [secretKey ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   });
   if (secretKey) child.stdin.end(secretKey + '\n');
-  child.stdout.on('data', (d) => process.stdout.write(`[backend] ${d}`));
-  child.stderr.on('data', (d) => process.stderr.write(`[backend] ${d}`));
+  child.stdout.on('data', (d) => {
+    process.stdout.write(`[backend] ${d}`);
+    logBackend('INFO', d);
+  });
+  child.stderr.on('data', (d) => {
+    process.stderr.write(`[backend] ${d}`);
+    logBackend('ERROR', d);
+  });
   child.on('exit', (code) => {
     console.log('[desktop] backend exited', code);
     child = null;
   });
-  if (!(await waitFor(20_000))) throw new Error('backend did not come up');
+  // no deadline here: a slow first start (a new machine scanning the new files) is waited out by the
+  // window, which shows the starting page until the backend answers (loadWhenUp)
   return true;
+}
+
+const STARTING_PAGE = path.join(__dirname, 'starting.html');
+
+/**
+ * The app page once the backend answers. Until then the window shows the starting page, and if the
+ * backend stops before it ever answered, the same page says so with Try again / Open log folder.
+ * A window pointed at a backend that was not up yet used to stay blank for good (a slow Windows
+ * laptop, 2026-09-28: the backend took longer than the 20 s the shell waited).
+ */
+async function loadWhenUp() {
+  const w = win;
+  if (!w) return;
+  const since = Date.now();
+  // a quick start goes straight to the app, without flashing the starting page
+  if (await waitFor(3000)) return void w.loadURL(URL);
+  if (w.isDestroyed()) return;
+  await w.loadFile(STARTING_PAGE).catch(() => {});
+  console.log('[desktop] backend not answering yet; showing the starting page');
+  while (win === w && !w.isDestroyed()) {
+    if (await ping()) {
+      console.log(`[desktop] backend answered after ${Math.round((Date.now() - since) / 1000)}s; loading the app`);
+      if (link) void shellLink.hello(URL, link);
+      return void w.loadURL(URL);
+    }
+    if (!child) {
+      console.error('[desktop] backend stopped before it ever answered');
+      return void w.loadFile(STARTING_PAGE, { hash: 'failed' }).catch(() => {});
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+/** The starting page's Try again: start the backend once more and wait for it. */
+async function retryBackend() {
+  if (child) return;
+  try {
+    if (!(await startBackend())) return void app.quit();
+  } catch (e) {
+    console.error('[desktop]', e);
+  }
+  void loadWhenUp();
 }
 
 /**
@@ -315,7 +411,13 @@ function createWindow() {
     }
     callback(changed ? { responseHeaders: headers } : {});
   });
-  win.loadURL(URL);
+  void loadWhenUp();
+  // The starting page's buttons change its hash; nothing else in the app navigates a file:// page.
+  win.webContents.on('did-navigate-in-page', (_e, url) => {
+    if (!url.startsWith('file:')) return;
+    if (/#open-logs-\d+$/.test(url)) void shell.openPath(app.getPath('logs'));
+    else if (/#retry-\d+$/.test(url)) void retryBackend();
+  });
   // Every external link (Cove, X, charts, explorers) opens in the default browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (!url.startsWith(URL)) {
@@ -614,6 +716,7 @@ app.whenReady().then(async () => {
   // another opentrench already holds the lock and got our link; we are on our way out
   if (!singleInstance) return;
   openLog();
+  if (gpuOff) console.log(`[desktop] hardware acceleration off (${GPU_OFF} is there from earlier graphics crashes)`);
   buildMenu();
   wireDiscordSetup();
   try {
