@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { __resetStonksCache, classifyBySuffix, createLaunchpadClassifier, decodeStrings, fetchPons, fetchStonks, ipfsToHttp, mapBankrLaunch, mapClanker, mapFlap, mapPumpfun, mapStonksCoin, mapVirtuals, fetchArgus, fetchWarp, mapWarp, decodeDynamicStrings, mapPeach, fetchPeach, fetchDyor, mapSynthra, fetchSynthra, SYNTHRA_CHAINS, GENIUS_FACTORY, GENIUS_SEL, decodeGeniusLaunch, decodeGeniusTokenInfo, geniusNote, fetchGenius, fetchLoong, LOONG_FACTORY, cleanLabel, geniusStackCandidate, LOONG_STACK } from './launchpads.js';
+import { __resetStonksCache, classifyBySuffix, createLaunchpadClassifier, decodeStrings, fetchStonks, ipfsToHttp, mapBankrLaunch, mapFlap, mapPumpfun, mapStonksCoin, mapVirtuals, fetchArgus, fetchWarp, mapWarp, decodeDynamicStrings, mapPeach, fetchPeach, fetchDyor, mapSynthra, fetchSynthra, SYNTHRA_CHAINS, GENIUS_FACTORY, GENIUS_SEL, decodeGeniusLaunch, decodeGeniusTokenInfo, geniusNote, fetchGenius, fetchLoong, LOONG_FACTORY, cleanLabel, curveQuoteLabel, geniusStackCandidate, LOONG_STACK } from './launchpads.js';
 
 const A = '0xa419Bb493ed5059f28dfd84348A2F93D70ECf003';
 
@@ -35,14 +35,14 @@ describe('launchpads', () => {
     expect(ipfsToHttp('')).toBeUndefined();
   });
 
-  it('maps a pump.fun coin (bonding tokens have mcap but no pair)', () => {
+  it('maps a pump.fun coin (bonding tokens have mcap but no pair); the quote is left to the curve', () => {
+    const MINT = '8XuSJqe3Ki9iAHeKHH6g2D7Qrsw8UxgucWXGfdpkpump';
     expect(
-      mapPumpfun({ mint: 'Mintpump', name: 'Fantasy', symbol: 'FIX', image_uri: 'https://ipfs.io/ipfs/QmImg', usd_market_cap: 312596.2, created_timestamp: 1788983429000, twitter: null, website: 'https://fix.fun' }),
+      mapPumpfun({ mint: MINT, name: 'Fantasy', symbol: 'FIX', image_uri: 'https://ipfs.io/ipfs/QmImg', usd_market_cap: 312596.2, created_timestamp: 1788983429000, twitter: null, website: 'https://fix.fun' }, MINT),
     ).toEqual({
       launchpad: 'pumpfun',
-      launchpadUrl: 'https://pump.fun/coin/Mintpump',
+      launchpadUrl: `https://pump.fun/coin/${MINT}`,
       network: 'solana',
-      quoteSymbol: 'SOL',
       dex: 'pump.fun',
       name: 'Fantasy',
       symbol: 'FIX',
@@ -52,11 +52,15 @@ describe('launchpads', () => {
       website: 'https://fix.fun',
     });
     expect(mapPumpfun({ statusCode: 404 })).toBeUndefined();
+    // a record for another mint, or a "mint" that is not an address, is not this coin
+    expect(mapPumpfun({ mint: '9XuSJqe3Ki9iAHeKHH6g2D7Qrsw8UxgucWXGfdpkpump' }, MINT)).toBeUndefined();
+    expect(mapPumpfun({ mint: 'javascript:alert(1)' })).toBeUndefined();
+    expect(mapPumpfun({ mint: MINT, bonding_curve: '../../etc' }, MINT)?.pairAddress).toBeUndefined();
   });
 
   it('maps a Virtuals agent', () => {
     expect(
-      mapVirtuals({ id: 1199, name: 'aixbt', symbol: 'AIXBT', chain: 'BASE', image: { url: 'https://cdn/x.png' }, socials: { VERIFIED_LINKS: { TWITTER: 'https://x.com/aixbt_agent' } }, lpCreatedAt: '2024-11-02T05:26:35.000Z' }, '0xabc'),
+      mapVirtuals({ id: 1199, tokenAddress: '0xABC', name: 'aixbt', symbol: 'AIXBT', chain: 'BASE', image: { url: 'https://cdn/x.png' }, socials: { VERIFIED_LINKS: { TWITTER: 'https://x.com/aixbt_agent' } }, lpCreatedAt: '2024-11-02T05:26:35.000Z' }, '0xabc'),
     ).toEqual({
       launchpad: 'virtuals',
       launchpadUrl: 'https://app.virtuals.io/virtuals/aixbt',
@@ -69,29 +73,26 @@ describe('launchpads', () => {
     });
   });
 
-  it('maps Flap metadata and a Clanker search hit', () => {
-    expect(mapFlap({ image: 'ipfs://QmF', twitter: '@flapper', telegram: 'flapchat', website: 'https://flap.example' }, 'bsc', '0xABC')).toEqual({
+  it('a Virtuals record for some other token is not this one', () => {
+    expect(mapVirtuals({ id: 1, tokenAddress: '0xdef', name: 'other' }, '0xabc')).toBeUndefined();
+    expect(mapVirtuals({ id: 1, name: 'unfiltered list' }, '0xabc')).toBeUndefined();
+    expect(mapVirtuals({ id: 1, preToken: '0xABC', name: 'pre' }, '0xabc')?.name).toBe('pre');
+  });
+
+  it('maps Flap metadata onto the token page on its own chain', () => {
+    expect(mapFlap({ image: 'ipfs://QmFlapImage0000000000000000000000000000000000', twitter: '@flapper', telegram: 'flapchat', website: 'https://flap.example', name: 'Flappy', symbol: 'FLP' }, 'bsc', '0xABC', { status: 1, progress: 10n ** 17n, quote: '0x' + '0'.repeat(40) })).toEqual({
       launchpad: 'flap',
-      launchpadUrl: 'https://flap.sh/token/0xabc',
+      launchpadUrl: 'https://flap.sh/bnb/0xabc',
       network: 'bsc',
-      imageUrl: '/api/ipfs/QmF',
+      launchpadNote: 'bonding · 10.0%',
+      name: 'Flappy',
+      symbol: 'FLP',
+      imageUrl: '/api/ipfs/QmFlapImage0000000000000000000000000000000000',
       twitter: 'https://x.com/flapper',
       telegram: 'https://t.me/flapchat',
       website: 'https://flap.example',
     });
-    expect(
-      mapClanker({ data: [{ contract_address: '0xABC', name: 'Clank', symbol: 'CLK', chain_id: 4663, img_url: 'https://i/c.png', socialLinks: [{ name: 'Website', link: 'https://c.example' }, { name: 'X', link: 'https://x.com/clk' }] }] }, '0xabc'),
-    ).toEqual({
-      launchpad: 'clanker',
-      launchpadUrl: 'https://www.clanker.world/clanker/0xabc',
-      network: 'robinhood',
-      name: 'Clank',
-      symbol: 'CLK',
-      imageUrl: 'https://i/c.png',
-      website: 'https://c.example',
-      twitter: 'https://x.com/clk',
-    });
-    expect(mapClanker({ data: [] }, '0xabc')).toBeUndefined();
+    expect(mapFlap(undefined, 'monad', '0xABC').launchpadUrl).toBe('https://flap.sh/monad/0xabc');
   });
 
   it('maps a Bankr launch with its ipfs image', () => {
@@ -135,32 +136,6 @@ describe('launchpads', () => {
   it('decodes abi string tuples', () => {
     expect(decodeStrings(encStrings(['a', 'hello world', '']), 3)).toEqual(['a', 'hello world', '']);
     expect(decodeStrings('0x', 1)).toBeUndefined();
-  });
-
-  it('reads a Pons token off the contract and rejects non-Pons tokens', async () => {
-    const answers: Record<string, string> = {
-      '0x53cd512a': encStrings(['@ponscat', 'ponschat', '', 'https://pons.cat', '']),
-      '0xfb7f21eb': encStrings(['ipfs://bafylogo']),
-      '0x06fdde03': encStrings(['Pons Cat']),
-      '0x95d89b41': encStrings(['PCAT']),
-    };
-    const fetchImpl = (async (_url: string, init: any) => {
-      const data = JSON.parse(init.body).params[0].data;
-      return { ok: true, json: async () => ({ result: answers[data] ?? '0x' }) } as any;
-    }) as unknown as typeof fetch;
-    expect(await fetchPons(A, fetchImpl)).toEqual({
-      launchpad: 'pons',
-      launchpadUrl: 'https://www.ponsfamily.com/launchpad',
-      network: 'robinhood',
-      twitter: 'https://x.com/ponscat',
-      telegram: 'https://t.me/ponschat',
-      website: 'https://pons.cat',
-      imageUrl: '/api/ipfs/bafylogo',
-      name: 'Pons Cat',
-      symbol: 'PCAT',
-    });
-    const revert = (async () => ({ ok: true, json: async () => ({ error: { code: 3, message: 'execution reverted' } }) })) as unknown as typeof fetch;
-    expect(await fetchPons(A, revert)).toBeUndefined();
   });
 
   it('runs probes in order and stops at the first hit', async () => {
@@ -379,6 +354,16 @@ describe('Synthra Launches (Arc, Robinhood)', () => {
     expect(unpriced?.launchpadNote).toBe('graduated');
     expect(unpriced?.marketCap).toBeUndefined();
   });
+  it('a metadata id that could climb out of its path segment is never fetched; a subgraph answer for another token is refused', async () => {
+    for (const bad of ['..', '../admin', 'a/b', 'ipfs://x/../../y', '%2e%2e']) {
+      const urls: string[] = [];
+      const f = fake({ arc: { ...BULL, metadataURI: bad } });
+      const spy = (async (url: string, init?: any) => (urls.push(url), f(url, init))) as unknown as typeof fetch;
+      expect((await fetchSynthra(BULL.id, spy, SYNTHRA_CHAINS, 'https://api'))?.launchpad).toBe('synthra');
+      expect(urls.some((u) => u.includes('/metadata/'))).toBe(false);
+    }
+    expect(await fetchSynthra(BULL.id, fake({ arc: { ...BULL, id: '0x' + '9'.repeat(40) } }), SYNTHRA_CHAINS, 'https://api')).toBeUndefined();
+  });
   it('unknown to both subgraphs: not Synthra; a complete curve says so', async () => {
     expect(await fetchSynthra(BULL.id, fake({}), SYNTHRA_CHAINS, 'https://api')).toBeUndefined();
     expect(mapSynthra({ ...BULL, status: 'COMPLETE' }, SYNTHRA_CHAINS[0])?.launchpadNote).toBe('curve complete · graduating');
@@ -586,6 +571,24 @@ describe('Loong', () => {
     expect(out).toMatchObject({ pairAddress: CURVE, quoteAddress: USDT, quoteSymbol: 'USDT' });
   });
 
+  it('a paired token calling itself USDC or WBNB is not labelled (or priced) as one unless its address is', async () => {
+    const FAKE = '0x' + '5a'.repeat(20);
+    for (const sym of ['USDC', 'usdt', 'WBNB', 'U\u200BSDC']) {
+      const { fetchImpl } = chain({ record: record({ pair: FAKE }) });
+      const f = (async (url: string, init: any) => {
+        const { to, data } = JSON.parse(init.body).params[0];
+        if (to.toLowerCase() === FAKE && data === '0x95d89b41') return { ok: true, json: async () => ({ result: encStrings([sym]) }) } as any;
+        return fetchImpl(url, init);
+      }) as unknown as typeof fetch;
+      const out = await fetchLoong(TOKEN, f);
+      expect(out).toMatchObject({ pairAddress: CURVE, quoteAddress: FAKE });
+      expect(out?.quoteSymbol).toBeUndefined();
+    }
+    expect(curveQuoteLabel(USDT, 'USDT')).toBe('USDT');
+    expect(curveQuoteLabel(FAKE, 'BNCB')).toBe('BNCB');
+    expect(curveQuoteLabel('0x5fc5360d0400a0fd4f2af552add042d716f1d168', 'USDG')).toBe('USDG');
+  });
+
   it('is probed right after Genius', async () => {
     const order: string[] = [];
     const probe = (n: string) => async () => {
@@ -603,5 +606,9 @@ describe('Loong', () => {
     expect(cleanLabel('\u200B\u200B', 5)).toBeUndefined();
     expect(cleanLabel('PE\u00ADPE\u034F\u061C\u180E\u3164\uFFF9\u{E0041}', 10)).toBe('PEPE');
     expect(cleanLabel('🐉🐉🐉', 2)).toBe('🐉🐉');
+    // blank-looking fillers and variation selectors go; a stack of combining marks is cut to two
+    expect(cleanLabel('A\u2800B\uFFA0C\u17B4D\uFE0FE', 10)).toBe('ABCDE');
+    expect(cleanLabel('\u2800\u2800', 5)).toBeUndefined();
+    expect(cleanLabel('Z\u0301\u0302\u0303\u0304\u0305ALGO', 20)).toBe('Z\u0301\u0302ALGO');
   });
 });

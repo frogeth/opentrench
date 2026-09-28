@@ -161,17 +161,25 @@ in settings.
   house: nearby machines by name, an Allow / Ignore prompt with a four-letter
   code, or pair by link. Docs: [docs/together.md](docs/together.md).
 - **Launchpads.** pump.fun (coin API: image + market cap while still
-  bonding), Bankr, Stonks, Pons and Flap (read straight off the token contract
-  on Robinhood Chain / BNB), Genius (genius.fun on BNB Chain: the launch record
-  off its factory, logo and socials off the token, and while a token is still
-  on its curve the curve is priced live like a Pons curve), Loong
-  (loongfamily.app, a Genius fork on BNB Chain, read the same way; only token
-  addresses ending in 9999 are looked up), Virtuals, Clanker
-  and letsbonk are detected
-  automatically; o1 needs an API key (Settings → Trading). The launchpad's logo sits on the
-  token image and links to the launch page, and the launchpad's own token
-  image and socials fill in when no chart site has them yet. IPFS images go
-  through a local gateway-hopping proxy.
+  bonding; a curve raised in USDC is priced in USDC), Bankr, Stonks, Virtuals
+  and letsbonk, plus these read straight off the chain, each from the
+  launchpad's own factory or portal so a token cannot just claim to be one:
+  Pons V1 and V2 (Robinhood Chain; V2 curves priced live, in ETH or whatever
+  the creator paired, USDG included), Flap (BNB, Robinhood, Monad, Base: the
+  Portal's record, with curve progress), Clanker (Base, Arbitrum, Ethereum,
+  Monad, Robinhood: the v4 factory's record, metadata off the token), o1 (Base,
+  Robinhood, Monad, Arc, BNB: the factory's record; an API key only adds the
+  image and socials), Genius (genius.fun on BNB Chain: the launch record off
+  its factory, logo and socials off the token, and while a token is still on
+  its curve the curve is priced live), and Loong (loongfamily.app, a Genius
+  fork on BNB Chain, read the same way; only token addresses ending in 9999 are
+  looked up). The launchpad's logo sits on the token image and links to the
+  launch page, and the launchpad's own token image and socials fill in when no
+  chart site has them yet. Everything a coin's creator writes (name, ticker,
+  logo, socials) is treated as hostile: names are cleaned and capped, links are
+  kept only as web links on the right site, and metadata is only ever read
+  through fixed IPFS gateways, never from a host the creator picked. IPFS images
+  go through a local gateway-hopping proxy.
 - **Buy buttons** open Cove (t.me/cove_trading_bot) with the token and a USD
   amount prefilled, same deep-link format frogr uses. Amounts live in
   Settings → Buy buttons. Every Cove and BasedBot link carries opentrench's own

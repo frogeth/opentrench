@@ -138,8 +138,11 @@ export function createLivePricer(deps: LiveDeps) {
   const itemFromRef = (r: QuoteRef): Item => ({ key: r.key, address: r.address, network: r.network, symbol: r.symbol, pairAddress: r.pairAddress, quoteSymbol: r.quoteSymbol, quoteAddress: r.quoteAddress, dex: r.dex });
   /** what an item's quote is: a dollar, or another item to price first, or a reason it cannot be priced yet */
   const quoteOf = (it: Item, m?: PoolMeta): { usd: 1 } | { item: Item } | { reason: string } => {
-    const symbol = m?.quoteSymbol ?? it.quoteSymbol;
     const address = m?.quoteAddress ?? it.quoteAddress;
+    // a directory's label belongs to the quote it named: once the pool says its quote is some other token, that label
+    // (a "SOL", a "USDC") is not borrowed for it, or the other token's reserves would be priced as SOL
+    const same = !m?.quoteAddress || !it.quoteAddress || quoteKey(it.network, m.quoteAddress) === quoteKey(it.network, it.quoteAddress);
+    const symbol = m?.quoteSymbol ?? (same ? it.quoteSymbol : undefined);
     if (isStable(symbol, address)) return { usd: 1 };
     const native = nativeRef(symbol);
     if (native) return { item: itemFromRef(native) };
@@ -292,6 +295,9 @@ export function createLivePricer(deps: LiveDeps) {
       }
       plan.push({ it, base: calls.length, v4: false });
       calls.push({ to: pair, data: SEL.token0 }, { to: pair, data: SEL.token1 }, { to: pair, data: SEL.slot0 }, { to: pair, data: SEL.getReserves }, { to: it.address, data: SEL.decimals });
+      // a curve does not name its quote: the launchpad did, and that token's own decimals scale the price (USDG has 6)
+      const q = it.quoteAddress?.toLowerCase();
+      if (q && /^0x[0-9a-f]{40}$/.test(q) && q !== ZERO) calls.push({ to: q, data: SEL.decimals });
     }
     if (!plan.length) return;
     const detailed = await evmCallsDetailed(url, calls, fetchImpl);
@@ -336,7 +342,15 @@ export function createLivePricer(deps: LiveDeps) {
       if (!token0 || !token1) {
         // Pons-style curve: no token0/token1, but getReserves answers (quote reserve, token reserve)
         if (reserveWords.length >= 2 && it.quoteSymbol) {
-          const quoteDecimals = 18;
+          const q = it.quoteAddress?.toLowerCase();
+          const erc20Quote = !!q && /^0x[0-9a-f]{40}$/.test(q) && q !== ZERO;
+          const qdec = erc20Quote ? res[p.base + 5] : undefined;
+          const qd = qdec ? words(qdec)[0] : undefined;
+          if (erc20Quote && (qd === undefined || qd > 36n)) {
+            unsupported(st, it, 'quote token decimals did not answer', SOON_MS);
+            continue;
+          }
+          const quoteDecimals = erc20Quote ? Number(qd) : 18;
           const [r0, r1] = reserveWords;
           const p0 = priceFromReserves(r0, r1, tokenDecimals, quoteDecimals); // token is word0
           const p1 = priceFromReserves(r1, r0, tokenDecimals, quoteDecimals); // token is word1
@@ -375,7 +389,9 @@ export function createLivePricer(deps: LiveDeps) {
         s.m.quoteDecimals = Number(w);
         s.m.quoteAddress = s.quote;
         const sym = qres[2 * i + 1] ? decodeString(qres[2 * i + 1]!) : undefined;
-        s.m.quoteSymbol = s.it.quoteSymbol ?? sym;
+        // the directory's label only when it named this very token; else the token's own symbol
+        const named = !s.it.quoteAddress || quoteKey(s.it.network, s.it.quoteAddress) === quoteKey(s.it.network, s.quote);
+        s.m.quoteSymbol = (named ? s.it.quoteSymbol : undefined) ?? sym;
         if (!s.m.quoteSymbol && !isStable(undefined, s.quote)) {
           unsupported(st, s.it, 'quote token has no readable symbol', SOON_MS);
           return;
@@ -493,7 +509,7 @@ export function createLivePricer(deps: LiveDeps) {
       }
       // a pump.fun curve does not name its quote; most are SOL, but a curve raised in another
       // token (a tokenized stock, a meme) is what the directory said it is
-      if (kind === 'pumpfun' && it.quoteAddress && it.quoteAddress !== pool.quoteMint) {
+      if (kind === 'pumpfun' && !pool.quoteNamed && it.quoteAddress && it.quoteAddress !== pool.quoteMint) {
         pool.quoteMint = it.quoteAddress;
         pool.quoteDecimals = undefined;
       }
@@ -546,7 +562,8 @@ export function createLivePricer(deps: LiveDeps) {
         quoteDecimals: qd,
         quoteAddress: pool.quoteMint,
         // the pool's quote mint is the truth; an API's symbol is only a label for it
-        quoteSymbol: it.quoteAddress === pool.quoteMint ? it.quoteSymbol : pool.quoteMint === nativeRef('SOL')!.address ? 'SOL' : isStable(undefined, pool.quoteMint) ? 'USD' : it.quoteSymbol,
+        // a quote the curve names itself is never relabelled by a directory's guess (that would price its reserves as SOL)
+        quoteSymbol: it.quoteAddress === pool.quoteMint ? it.quoteSymbol : pool.quoteMint === nativeRef('SOL')!.address ? 'SOL' : isStable(undefined, pool.quoteMint) ? 'USD' : pool.quoteNamed ? undefined : it.quoteSymbol,
         supplyAt: 0,
         retryAt: 0,
       };

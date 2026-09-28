@@ -7,6 +7,13 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- **Launchpads are recognised by the launchpad itself, on-chain.** Flap, Clanker, o1 and Pons badges now come from each launchpad's own factory or portal naming the token. A contract that only answered the same calls (anyone can deploy one) no longer gets a badge. More chains are covered: Flap on Monad and Base as well as BNB and Robinhood Chain, Clanker on Arbitrum, Ethereum, Monad and Robinhood as well as Base, and o1 on BNB Chain. o1 no longer needs an API key to be recognised; the key only adds the image and socials.
+- Pons: V2 launches show their curve progress and are priced live off the curve, including curves paired with USDG or another token rather than ETH. V1 launches are priced off their Uniswap pool. The badge opens the token's own Pons page. NOXA tokens, which run on the same contracts, are no longer shown as Pons.
+- Flap's badge now opens the token's page on flap.sh (it opened an empty page).
+- Prices: a pump.fun coin raised in USDC was priced as if it were SOL; it is now priced in USDC. Meteora DBC and Raydium LaunchLab coins that have left their curve are no longer priced off the finished curve.
+- Security: names and tickers from every launchpad (not only Genius and Loong) have invisible and text-reversing characters removed and are capped at 64 and 16 characters. A coin's X and Telegram links are kept only when they point at x.com / twitter.com and t.me, and a website only as an http(s) link. Launchpad metadata is read only through fixed IPFS gateways (never from a host a coin's creator named), and every launchpad and node answer is size-capped and checked before use. A launch paired with a token that only calls itself USDC or WBNB is no longer priced as if it were one, and launchpad and node requests no longer follow redirects.
+- Coin logos load again: the public IPFS gateway the app tried first (ipfs.io) stopped serving files; the proxy now starts with one that does.
+
 ## v0.17.0 — 2026-09-28
 
 - **Loong launchpad** (loongfamily.app, BNB Chain). Tokens launched there get the Loong badge linking to their page, their logo and socials straight off the token contract, and a note on where they stand: on the curve with the percentage raised, graduating, or graduated to PancakeSwap. A token still on its curve is priced live off the curve the moment it lands, before any chart site lists it. Read entirely on-chain from Loong's factory, the same way as Genius (Loong is a fork of it); nothing from their site is loaded. Loong is also a filter under Launchpads in the column editor.

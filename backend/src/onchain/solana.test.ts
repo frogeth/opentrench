@@ -57,11 +57,17 @@ describe('solana decoders', () => {
   });
   it('meteora dbc: sqrt price plus the config account that names the quote', () => {
     const d = bytes(424); putKey(d, 72, K_V0); putKey(d, 136, K_BASE); put(d, 280, 2n ** 64n * 2n, 16);
-    expect(decodeSolanaPool('meteoraDbc', d, BASE)).toEqual({ kind: 'meteoraDbc', baseMint: BASE, price: 4, quoteFromConfig: base58(K_V0) });
+    expect(decodeSolanaPool('meteoraDbc', d, BASE)).toEqual({ kind: 'meteoraDbc', baseMint: BASE, price: 4, quoteFromConfig: base58(K_V0), done: false });
+    // is_migrated (byte 305): the sqrt price is stale once the pool has moved on
+    const migrated = d.slice(); migrated[305] = 1;
+    expect(decodeSolanaPool('meteoraDbc', migrated, BASE)?.done).toBe(true);
+    expect(decodeSolanaPool('meteoraDbc', d.subarray(0, 300), BASE)).toBeUndefined();
     expect(decodeSolanaPool('meteoraDbc', d, QUOTE)).toBeUndefined();
   });
   it('raydium launchlab: constant-product curve on virtual + real reserves', () => {
     const d = bytes(429); d[17] = 0; d[18] = 6; d[19] = 9; put(d, 21, 1_000_000n); put(d, 37, 1_000_000n); put(d, 45, 30n); put(d, 53, 200_000n); put(d, 61, 10n); putKey(d, 205, K_BASE); putKey(d, 237, K_QUOTE);
+    const migrating = d.slice(); migrating[17] = 1;
+    expect(decodeSolanaPool('raydiumLaunchlab', migrating, BASE)?.done).toBe(true);
     const p = decodeSolanaPool('raydiumLaunchlab', d, BASE)!;
     expect(p.price).toBeCloseTo(40 / 800_000, 15);
     expect(p).toMatchObject({ quoteMint: QUOTE, baseDecimals: 6, quoteDecimals: 9, done: false, supplyRaw: 1_000_000n });

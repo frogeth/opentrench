@@ -704,8 +704,8 @@ function LaunchpadSection({ cfg, onChange }: { cfg: MaskedConfig; onChange: () =
     <section>
       <h2>Launchpads</h2>
       <div className="hint">
-        Bankr, Stonks, Pons, Genius (genius.fun), Loong (loongfamily.app), pump.fun and letsbonk are detected automatically. o1.exchange needs an API key (starts with
-        o1_launch_).
+        pump.fun, letsbonk, Bankr, Stonks, Virtuals, Pons, Flap, Clanker, o1, Genius (genius.fun) and Loong (loongfamily.app) are detected automatically. An o1.exchange
+        API key (starts with o1_launch_) is optional: it adds the image and socials for o1 launches.
       </div>
       <div className="row-inline">
         <input

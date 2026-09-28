@@ -1,4 +1,4 @@
-import { decodeStrings, type LaunchpadInfo } from './launchpads.js';
+import { applyCreatorFields, cleanLabel, decodeStrings, type LaunchpadInfo } from './launchpads.js';
 import type { TokenInfo } from './types.js';
 
 /**
@@ -71,7 +71,8 @@ export async function resolveNumeraires(addresses: string[], fetchImpl: typeof f
     for (const r of Array.isArray(json) ? json : []) {
       const a = todo[Number(r?.id)];
       if (!a) continue;
-      const sym = typeof r?.result === 'string' && r.result.length > 2 ? decodeStrings(r.result, 1)?.[0]?.trim().slice(0, 12) : undefined;
+      // a launch's ticker is whatever its creator typed: cleaned like any other, before it shows in a note
+      const sym = typeof r?.result === 'string' && /^0x[0-9a-fA-F]{66,}$/.test(r.result) && r.result.length <= 4096 ? cleanLabel(decodeStrings(r.result, 1)?.[0], 12) : undefined;
       symbolCache.set(a, sym || '');
       if (sym) out[a] = sym;
     }
@@ -128,7 +129,7 @@ export function anchorLabel(numeraire: string | undefined, longSymbols: Record<s
   if (!numeraire) return undefined;
   const n = numeraire.toLowerCase();
   if (/^0x0{40}$/.test(n)) return 'ETH';
-  return NUMERAIRES[n] ?? longSymbols[n] ?? `${n.slice(0, 6)}…${n.slice(-4)}`;
+  return NUMERAIRES[n] ?? cleanLabel(longSymbols[n], 12) ?? `${n.slice(0, 6)}…${n.slice(-4)}`;
 }
 
 /** A Long asset → what the call card needs. Pure. */
@@ -138,9 +139,7 @@ export function mapLongAsset(a: any, longSymbols: Record<string, string> = {}): 
   const base = a.auction_pool?.base_token ?? a.graduation_pool?.base_token ?? {};
   const anchor = anchorLabel(a.asset_numeraire_address, longSymbols);
   const out: LaunchpadInfo = { launchpad: 'long', launchpadUrl: longUrl(address), network: 'robinhood' };
-  if (typeof base.token_symbol === 'string' && base.token_symbol) out.symbol = base.token_symbol.slice(0, 20);
-  if (typeof base.token_name === 'string' && base.token_name) out.name = base.token_name.slice(0, 80);
-  if (typeof base.token_image_public_url === 'string' && /^https?:\/\//.test(base.token_image_public_url)) out.imageUrl = base.token_image_public_url;
+  applyCreatorFields(out, { name: base.token_name, symbol: base.token_symbol, image: base.token_image_public_url });
   const created = Date.parse(a.asset_creation_timestamp ?? '');
   if (Number.isFinite(created)) out.pairCreatedAt = created;
   if (anchor) out.launchpadNote = `anchored to ${anchor}`;

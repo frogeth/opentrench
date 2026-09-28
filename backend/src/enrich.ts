@@ -40,7 +40,7 @@ export interface EnrichSources {
   /** GeckoTerminal is backing off a 429: a token the probe placed is returned now, its price comes with the next refresh */
   gtBusy?: () => boolean;
   /** launchpad classifier: badge + image/socials for fresh launches no chart site knows yet */
-  launchpad?: (address: string, chain: Chain) => Promise<LaunchpadInfo | undefined>;
+  launchpad?: (address: string, chain: Chain, network?: string) => Promise<LaunchpadInfo | undefined>;
   /** the chain itself: name, ticker, chain and pool from the contract and the factories (onchain/firstsight.ts) */
   chain?: (address: string, chain: Chain) => Promise<Partial<TokenInfo> | undefined>;
   log?: (msg: string) => void;
@@ -111,7 +111,7 @@ export function createEnricher(src: EnrichSources): TokenFetcher {
     }
     if (src.launchpad) {
       try {
-        const lp = await src.launchpad(address, chain);
+        const lp = await src.launchpad(address, chain, info?.network ?? placed?.network);
         if (lp) {
           info = info ?? {};
           info.launchpad = lp.launchpad;
@@ -147,10 +147,10 @@ export function createDefaultEnricher(opts: { o1ApiKey?: () => string | undefine
       peach: (a) => fetchPeach(a),
       dyor: (a) => fetchDyor(a),
       synthra: (a) => fetchSynthra(a),
-      flap: (a) => fetchFlap(a),
+      flap: (a, n) => fetchFlap(a, undefined, n),
       virtuals: (a) => fetchVirtuals(a),
-      clanker: (a) => fetchClanker(a),
-      o1: (a) => fetchO1(a, opts.o1ApiKey?.()),
+      clanker: (a, n) => fetchClanker(a, undefined, n),
+      o1: (a, n) => fetchO1(a, opts.o1ApiKey?.(), undefined, n),
       pumpfun: (a) => fetchPumpfun(a),
     }),
   });

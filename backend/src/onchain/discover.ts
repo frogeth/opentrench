@@ -4,7 +4,7 @@ import { findProgramAddress, utf8 } from './pda.js';
 import { SEL, addressWord, decodeString, words } from './pools.js';
 import { evmCallsDetailed, solanaAccounts, type FetchLike } from './rpc.js';
 import { decodeSolanaPool, PROGRAMS, SOL_MINT } from './solana.js';
-import { GENIUS_SEL, GENIUS_STACK, LOONG_STACK, cleanLabel, decodeGeniusLaunch, geniusStackCandidate, type GeniusStack } from '../launchpads.js';
+import { GENIUS_SEL, GENIUS_STACK, LOONG_STACK, PONS_STACKS, curveQuoteLabel, decodeGeniusLaunch, geniusStackCandidate, type GeniusStack } from '../launchpads.js';
 
 /**
  * Where a fresh token trades, from the chain itself: Uniswap v2 `getPair` and v3 `getPool` on
@@ -89,6 +89,7 @@ export const QUOTES: Record<string, QuoteAsset[]> = {
   hyperevm: [{ symbol: 'WHYPE', address: '0x5555555555555555555555555555555555555555', decimals: 18 }],
 };
 
+const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const pad32 = (hex: string) => hex.replace(/^0x/, '').toLowerCase().padStart(64, '0');
 const GET_PAIR = '0xe6a43905'; // getPair(address,address)
 const GET_POOL = '0x1698ee82'; // getPool(address,address,uint24)
@@ -105,22 +106,21 @@ export interface DiscoverDeps {
 const learned = new Map<string, Factories>();
 
 /**
- * A launch still on its bonding curve on a Genius-stack launchpad (genius.fun, or its fork Loong,
- * both BNB Chain): the curve is its pool, quoted in native BNB or the ERC-20 the creator picked. One
- * factory call; nothing once it has graduated (the PancakeSwap Infinity pool has no derivable address
- * here, so that waits for the directory).
+ * A launch still on its bonding curve on a Genius-stack launchpad (genius.fun and its fork Loong on
+ * BNB Chain, Pons V2 on Robinhood): the curve is its pool, quoted in the native coin or the ERC-20 the
+ * creator picked. One factory call; nothing once it has graduated (that pool waits for the directory).
  */
 async function discoverOnStack(stack: GeniusStack, token: string, deps: DiscoverDeps): Promise<Discovered | undefined> {
-  const ep = deps.endpoints.urlFor('bsc');
+  const ep = deps.endpoints.urlFor(stack.network);
   if (!ep || !geniusStackCandidate(stack, token)) return undefined;
   const fetchImpl = deps.fetch ?? (fetch as unknown as FetchLike);
   const [rec] = await evmCallsDetailed(ep.url, [{ to: stack.factory, data: GENIUS_SEL.getLaunchedToken + pad32(token) }], fetchImpl);
   const launch = rec?.result ? decodeGeniusLaunch(rec.result) : undefined;
   if (!launch || launch.phase !== 0 || launch.token.toLowerCase() !== token.toLowerCase()) return undefined;
   const zero = '0x0000000000000000000000000000000000000000';
-  if (launch.pairToken.toLowerCase() === zero) return { pairAddress: launch.curve, quoteSymbol: 'BNB', quoteAddress: zero, dex: stack.launchpad };
+  if (launch.pairToken.toLowerCase() === zero) return { pairAddress: launch.curve, quoteSymbol: stack.native, quoteAddress: zero, dex: stack.launchpad };
   const [sym] = await evmCallsDetailed(ep.url, [{ to: launch.pairToken, data: SEL.symbol }], fetchImpl);
-  const quoteSymbol = cleanLabel(sym?.result ? decodeString(sym.result) : undefined, 16);
+  const quoteSymbol = curveQuoteLabel(launch.pairToken, sym?.result ? decodeString(sym.result) : undefined);
   if (!quoteSymbol) return undefined;
   return { pairAddress: launch.curve, quoteSymbol, quoteAddress: launch.pairToken, dex: stack.launchpad };
 }
@@ -129,14 +129,23 @@ export async function discoverGenius(token: string, deps: DiscoverDeps): Promise
   return (await discoverOnStack(GENIUS_STACK, token, deps)) ?? (await discoverOnStack(LOONG_STACK, token, deps));
 }
 
+/** A Pons V2 launch on its curve (Robinhood): each V2 factory's record is asked; only one naming the token counts. */
+export async function discoverPons(token: string, deps: DiscoverDeps): Promise<Discovered | undefined> {
+  for (const stack of PONS_STACKS) {
+    const hit = await discoverOnStack(stack, token, deps).catch(() => undefined);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
 /** Uniswap-style pools for a token on one EVM chain, deepest first (a Genius or Loong curve on BNB Chain first of all). */
 export async function discoverEvm(network: string, token: string, deps: DiscoverDeps): Promise<Discovered[]> {
   const chain = CHAINS[network];
   const ep = deps.endpoints.urlFor(network);
   if (!chain || chain.kind !== 'evm' || !ep || !/^0x[0-9a-fA-F]{40}$/.test(token)) return [];
   const fetchImpl = deps.fetch ?? (fetch as unknown as FetchLike);
-  if (network === 'bsc') {
-    const curve = await discoverGenius(token, deps).catch(() => undefined);
+  if (network === 'bsc' || network === 'robinhood') {
+    const curve = await (network === 'bsc' ? discoverGenius(token, deps) : discoverPons(token, deps)).catch(() => undefined);
     if (curve) return [curve];
   }
   const quotes = QUOTES[network] ?? [];
@@ -192,7 +201,9 @@ export async function discoverSolana(mint: string, deps: DiscoverDeps): Promise<
   const [c, l] = await solanaAccounts(ep.url, [curve, launch], fetchImpl);
   if (c && c.owner === PROGRAMS.pumpfun) {
     const p = decodeSolanaPool('pumpfun', c.data, mint);
-    if (p && !p.done) return { pairAddress: curve, quoteSymbol: 'SOL', quoteAddress: SOL_MINT, dex: 'pumpfun' };
+    // the curve names its quote; SOL and USDC are the ones pump.fun raises in, anything else waits for the directory
+    const quoteSymbol = p?.quoteMint === SOL_MINT ? 'SOL' : p?.quoteMint === USDC_MINT ? 'USDC' : undefined;
+    if (p && !p.done && quoteSymbol) return { pairAddress: curve, quoteSymbol, quoteAddress: p.quoteMint!, dex: 'pumpfun' };
   }
   if (l && l.owner === PROGRAMS.raydiumLaunchlab) {
     const p = decodeSolanaPool('raydiumLaunchlab', l.data, mint);
