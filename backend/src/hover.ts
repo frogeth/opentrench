@@ -2,6 +2,54 @@
  * Hover cards: a website's Open Graph summary and an X profile. Fetched lazily
  * when the user hovers, cached for a while, never stored.
  */
+import { isIP } from 'node:net';
+import { lookup as dnsLookup } from 'node:dns/promises';
+
+export type Lookup = (host: string) => Promise<{ address: string }[]>;
+const systemLookup: Lookup = (host) => dnsLookup(host, { all: true });
+const MAX_REDIRECTS = 5;
+
+/**
+ * An address on the public internet. A token's website is whatever its creator typed, and the preview is
+ * fetched by this machine, so a site on the user's own network (the router, this backend, a NAS) or a
+ * cloud metadata address must never be reached through it.
+ */
+export function isPublicAddress(ip: string): boolean {
+  const v = isIP(ip);
+  if (v === 4) {
+    const [a, b] = ip.split('.').map(Number);
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return false; // this network, private, loopback, multicast / reserved
+    if (a === 100 && b >= 64 && b <= 127) return false; // carrier-grade NAT
+    if (a === 169 && b === 254) return false; // link-local, cloud metadata
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+    if (a === 192 && b === 0) return false; // IETF protocol assignments
+    if (a === 198 && (b === 18 || b === 19)) return false; // benchmarking
+    return true;
+  }
+  if (v === 6) {
+    const x = ip.toLowerCase();
+    const mapped = /^(?:0*:)*:?(?:ffff:)((?:\d{1,3}\.){3}\d{1,3})$/.exec(x) ?? /^::ffff:((?:\d{1,3}\.){3}\d{1,3})$/.exec(x);
+    if (mapped) return isPublicAddress(mapped[1]);
+    if (x === '::' || x === '::1') return false;
+    if (/^f[cd]/.test(x)) return false; // unique local
+    if (/^fe[89ab]/.test(x)) return false; // link-local
+    if (/^ff/.test(x)) return false; // multicast
+    return true;
+  }
+  return false;
+}
+
+/** The URL is http(s) and every address its host resolves to is public; the reason when it is not. */
+async function refusal(url: URL, lookup: Lookup): Promise<string | undefined> {
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return 'not a web address';
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  if (!host || /(^|\.)localhost$/i.test(host)) return 'a local address';
+  const addrs = isIP(host) ? [{ address: host }] : await lookup(host);
+  if (!addrs.length) return 'no address';
+  if (addrs.some((a) => !isPublicAddress(a.address))) return 'a local or private address';
+  return undefined;
+}
 
 export interface SitePreview {
   url: string;
@@ -112,7 +160,7 @@ export interface HoverFetchers {
   xProfile: (handle: string) => Promise<XProfile | undefined>;
 }
 
-export function createHoverFetchers(fetchImpl: typeof fetch = fetch, ttlMs = 30 * 60 * 1000): HoverFetchers {
+export function createHoverFetchers(fetchImpl: typeof fetch = fetch, ttlMs = 30 * 60 * 1000, lookup: Lookup = systemLookup): HoverFetchers {
   const cache = new Map<string, { at: number; v: unknown }>();
   const remember = <T>(key: string, v: T): T => {
     if (cache.size > 1000) cache.delete(cache.keys().next().value!);
@@ -142,10 +190,25 @@ export function createHoverFetchers(fetchImpl: typeof fetch = fetch, ttlMs = 30 
           remember(
             key,
             await withTimeout(async (signal) => {
-              const res = await fetchImpl(url, { signal, redirect: 'follow', headers: { 'user-agent': UA, accept: 'text/html,*/*' } });
-              if (!res.ok || !/text\/html/i.test(res.headers.get('content-type') ?? '')) return null;
-              const html = (await res.text()).slice(0, MAX_HTML);
-              return parseSitePreview(res.url || url, html);
+              // redirects by hand, so every hop is checked, not only the address the creator typed
+              let at = new URL(url);
+              for (let hop = 0; ; hop++) {
+                const why = await refusal(at, lookup);
+                if (why) {
+                  console.warn(`[hover] site preview refused: ${at.host} is ${why}`);
+                  return null;
+                }
+                const res = await fetchImpl(at.href, { signal, redirect: 'manual', headers: { 'user-agent': UA, accept: 'text/html,*/*' } });
+                const next = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+                if (next) {
+                  if (hop >= MAX_REDIRECTS) return null;
+                  at = new URL(next, at);
+                  continue;
+                }
+                if (!res.ok || !/text\/html/i.test(res.headers.get('content-type') ?? '')) return null;
+                const html = (await res.text()).slice(0, MAX_HTML);
+                return parseSitePreview(at.href, html);
+              }
             }),
           ) ?? undefined
         );
