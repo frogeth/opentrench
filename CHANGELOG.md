@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.16.6 — 2026-09-28
+
 - **Security: token links are web links only.** A coin's website, socials and chart link are written by whoever launched it (on-chain for Genius and other launchpads), copied by chart sites, or sent by a friend in a room. A link that wasn't a web address could do more than open a page: on Windows, clicking a coin's website could start a program. Now only `http`/`https` links are kept on a token, the app refuses to hand anything else to the system (`tg:` still opens Telegram, invites still open Join), and links already saved are checked on start.
 - **Security: website previews stay off your network.** Hovering a coin's website fetched it from your computer, so a coin could point it at your router or at opentrench itself. Previews now refuse local, private and cloud-metadata addresses, including through redirects.
 
