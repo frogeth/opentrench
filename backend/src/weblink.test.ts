@@ -16,6 +16,9 @@ describe('token links', () => {
     expect(imageLink('data:image/png;base64,iVBORw0KGgo=')).toBe('data:image/png;base64,iVBORw0KGgo=');
     expect(imageLink('/api/config')).toBeUndefined();
     expect(imageLink('/api/ipfs/Qm/../../config')).toBeUndefined();
+    expect(imageLink('/api/ipfs/Qm/%2e%2e/%2e%2e/api/config')).toBeUndefined();
+    expect(imageLink('/api/ipfs/Qm/a\\b')).toBeUndefined();
+    expect(imageLink('/api/ipfs/Qm/x.png?y=1')).toBeUndefined();
     expect(imageLink('data:image/svg+xml;base64,PHN2Zz4=')).toBeUndefined();
   });
 

@@ -7,6 +7,10 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- **Loong launchpad** (loongfamily.app, BNB Chain). Tokens launched there get the Loong badge linking to their page, their logo and socials straight off the token contract, and a note on where they stand: on the curve with the percentage raised, graduating, or graduated to PancakeSwap. A token still on its curve is priced live off the curve the moment it lands, before any chart site lists it. Read entirely on-chain from Loong's factory, the same way as Genius (Loong is a fork of it); nothing from their site is loaded. Loong is also a filter under Launchpads in the column editor.
+- Security: a coin's website that only looked like opentrench's own address (`http://127.0.0.1:3210@another.site`) could open that other site inside an app window; links are now matched by their real address. Coin logos served through the app's IPFS proxy are images and video only (no SVG, which can carry script), and can never be opened as a page.
+- Coin names and tickers from launchpads that store them on-chain (Genius, Loong) have invisible characters removed, like the ones that reverse text, and are capped at 64 and 16 characters.
+
 ## v0.16.6 — 2026-09-28
 
 - **Security: token links are web links only.** A coin's website, socials and chart link are written by whoever launched it (on-chain for Genius and other launchpads), copied by chart sites, or sent by a friend in a room. A link that wasn't a web address could do more than open a page: on Windows, clicking a coin's website could start a program. Now only `http`/`https` links are kept on a token, the app refuses to hand anything else to the system (`tg:` still opens Telegram, invites still open Join), and links already saved are checked on start.

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { __resetStonksCache, classifyBySuffix, createLaunchpadClassifier, decodeStrings, fetchPons, fetchStonks, ipfsToHttp, mapBankrLaunch, mapClanker, mapFlap, mapPumpfun, mapStonksCoin, mapVirtuals, fetchArgus, fetchWarp, mapWarp, decodeDynamicStrings, mapPeach, fetchPeach, fetchDyor, mapSynthra, fetchSynthra, SYNTHRA_CHAINS, GENIUS_FACTORY, GENIUS_SEL, decodeGeniusLaunch, decodeGeniusTokenInfo, geniusNote, fetchGenius } from './launchpads.js';
+import { __resetStonksCache, classifyBySuffix, createLaunchpadClassifier, decodeStrings, fetchPons, fetchStonks, ipfsToHttp, mapBankrLaunch, mapClanker, mapFlap, mapPumpfun, mapStonksCoin, mapVirtuals, fetchArgus, fetchWarp, mapWarp, decodeDynamicStrings, mapPeach, fetchPeach, fetchDyor, mapSynthra, fetchSynthra, SYNTHRA_CHAINS, GENIUS_FACTORY, GENIUS_SEL, decodeGeniusLaunch, decodeGeniusTokenInfo, geniusNote, fetchGenius, fetchLoong, LOONG_FACTORY, cleanLabel, geniusStackCandidate, LOONG_STACK } from './launchpads.js';
 
 const A = '0xa419Bb493ed5059f28dfd84348A2F93D70ECf003';
 
@@ -401,7 +401,7 @@ describe('genius (BNB Chain)', () => {
     '0x000000000000000000000000c48080b9fd8f3413599102fafd0235b5cb2730fa0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001a00000000000000000000000000000000000000000000000000000000000000042697066733a2f2f6261666b72656964716271367a3336356263783361636d356934647868726f6c3572366a74746a6165756b6d79763668766d7465616b76336233690000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000078546865206e657720424e42205374616e646172642e20466f6375736573206f6e205374616e64617264697a696e6720424e422065636f73797374656d20746f6f6c7320616e64207574696c697469657320616761696e2e205468697320697320746f20656e61626c65206c61746520626c6f6f6d6572732e000000000000000000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
 
   it('decodes the launch record and rejects a missing one', () => {
-    expect(decodeGeniusLaunch(GSTOCK_RECORD)).toEqual({ curve: '0xb72102ac7b63ead66ecb75d67e43f281bfea3d74', pairToken: '0x4902c5ebc598265ed2212b559b042de8a5eeec3f', graduationThreshold: 2036659900000000000000n, phase: 2 });
+    expect(decodeGeniusLaunch(GSTOCK_RECORD)).toEqual({ token: GSTOCK.toLowerCase(), curve: '0xb72102ac7b63ead66ecb75d67e43f281bfea3d74', pairToken: '0x4902c5ebc598265ed2212b559b042de8a5eeec3f', graduationThreshold: 2036659900000000000000n, phase: 2 });
     expect(decodeGeniusLaunch(BNBS_RECORD)?.phase).toBe(0);
     expect(decodeGeniusLaunch(NO_RECORD)).toBeUndefined();
     expect(decodeGeniusLaunch('0x')).toBeUndefined();
@@ -469,5 +469,139 @@ describe('genius (BNB Chain)', () => {
     const classify = createLaunchpadClassifier({ pons: probe('pons'), genius: probe('genius'), flap: probe('flap'), log: () => {} });
     await classify(A, 'evm');
     expect(order).toEqual(['pons', 'genius', 'flap']);
+  });
+});
+
+
+/**
+ * Loong (loongfamily.app): a Genius fork on BNB Chain. Everything about a coin except its factory
+ * record is written by whoever launched it, so these tests play that person.
+ */
+describe('Loong', () => {
+  const TOKEN = '0x1234567890abcdef1234567890abcdef12349999';
+  const CURVE = '0x7349a6f2c41f9bf732f1667caa3f9d9a6f1c0a01';
+  const USDT = '0x55d398326f99059ff775485246999027b3197955';
+  const w = (h: string) => h.replace(/^0x/, '').toLowerCase().padStart(64, '0');
+  const hexStr = (v: string) => {
+    const b = Buffer.from(v, 'utf8');
+    return w(b.length.toString(16)) + b.toString('hex').padEnd(Math.ceil(b.length / 32) * 64, '0');
+  };
+  /** getLaunchedToken's 15-word record: token, curve, …, pairToken, threshold, …, phase, …, exists */
+  const record = (o: { token?: string; pair?: string; phase?: number } = {}) =>
+    '0x' + w(o.token ?? TOKEN) + w(CURVE) + w('c'.repeat(40)) + w('c'.repeat(40)) + w(o.pair ?? '0') + w((12n * 10n ** 18n).toString(16)) + w('0') + w('c8') + w('0') + w('1') + w((o.phase ?? 0).toString(16)) + w('0') + w('0') + w('0') + w('1');
+  /** getTokenInfo(): (address deployer, string logo, string description, (twitter, telegram, discord, website, farcaster)) */
+  const tokenInfo = (logo: string, description: string, socials: string[]) => {
+    const logoEnc = hexStr(logo);
+    const descEnc = hexStr(description);
+    const tails = socials.map(hexStr);
+    let rel = 5 * 32;
+    const heads = tails.map((t) => {
+      const h = w(rel.toString(16));
+      rel += t.length / 2;
+      return h;
+    });
+    const logoOff = 4 * 32;
+    const descOff = logoOff + logoEnc.length / 2;
+    const socOff = descOff + descEnc.length / 2;
+    return '0x' + w('d'.repeat(40)) + w(logoOff.toString(16)) + w(descOff.toString(16)) + w(socOff.toString(16)) + logoEnc + descEnc + heads.join('') + tails.join('');
+  };
+  const chain = (over: { record?: string; info?: string; name?: string; symbol?: string; pairSymbol?: string; real?: bigint } = {}) => {
+    const asked: { to: string; data: string }[] = [];
+    const fetchImpl = (async (_url: string, init: any) => {
+      const { to, data } = JSON.parse(init.body).params[0];
+      asked.push({ to: to.toLowerCase(), data });
+      let result = '0x';
+      if (to === LOONG_FACTORY) result = data.endsWith(w(TOKEN)) ? (over.record ?? record()) : '0x' + '0'.repeat(64 * 15);
+      else if (to.toLowerCase() === TOKEN) result = data === GENIUS_SEL.getTokenInfo ? (over.info ?? tokenInfo('ipfs://bafkreidqbq6z365bcx3acm5i4dxhrol5r6jttjaeukmyv6hvmteakv3b3i', 'hi', ['@loongfam', 't.me/loongfam', '', 'https://loongfamily.app', ''])) : data === '0x06fdde03' ? encStrings([over.name ?? 'Loong Test']) : data === '0x95d89b41' ? encStrings([over.symbol ?? 'LTEST']) : '0x';
+      else if (to.toLowerCase() === CURVE && data === GENIUS_SEL.realQuoteReserve) result = '0x' + w((over.real ?? 3n * 10n ** 18n).toString(16));
+      else if (to.toLowerCase() === USDT && data === '0x95d89b41') result = encStrings([over.pairSymbol ?? 'USDT']);
+      return { ok: true, json: async () => ({ result }) } as any;
+    }) as unknown as typeof fetch;
+    return { fetchImpl, asked };
+  };
+
+  it('only ever asks its factory about addresses ending in 9999', async () => {
+    expect(geniusStackCandidate(LOONG_STACK, TOKEN)).toBe(true);
+    expect(geniusStackCandidate(LOONG_STACK, TOKEN.toUpperCase().replace('0X', '0x'))).toBe(true);
+    expect(geniusStackCandidate(LOONG_STACK, '0x1234567890abcdef1234567890abcdef12349998')).toBe(false);
+    expect(geniusStackCandidate(LOONG_STACK, '0x9999')).toBe(false);
+    const { fetchImpl, asked } = chain();
+    expect(await fetchLoong('0x1234567890abcdef1234567890abcdef12341234', fetchImpl)).toBeUndefined();
+    expect(asked).toEqual([]);
+  });
+
+  it('reads an on-curve launch: its own badge and page, metadata, and the curve as its pool', async () => {
+    const { fetchImpl } = chain();
+    expect(await fetchLoong(TOKEN, fetchImpl)).toEqual({
+      launchpad: 'loong',
+      launchpadUrl: `https://loongfamily.app/#/token/${TOKEN}`,
+      network: 'bsc',
+      launchpadNote: 'on the curve · 25.0% to graduation',
+      imageUrl: '/api/ipfs/bafkreidqbq6z365bcx3acm5i4dxhrol5r6jttjaeukmyv6hvmteakv3b3i',
+      twitter: 'https://x.com/loongfam',
+      telegram: 'https://t.me/loongfam',
+      website: 'https://loongfamily.app',
+      name: 'Loong Test',
+      symbol: 'LTEST',
+      pairAddress: CURVE,
+      dex: 'loong',
+      quoteSymbol: 'BNB',
+    });
+  });
+
+  it("keeps nothing from a creator's metadata that could run or mislead", async () => {
+    const evil = tokenInfo('javascript:alert(1)', 'x', ['javascript:alert(1)', 'tg://msg?text=x', '', 'file://attacker.example/share/x.exe', '']);
+    const { fetchImpl } = chain({ info: evil, name: 'Real\u202Eyarg\u200B Coin\u0000', symbol: 'USDT\u2066\u2069EXTRA_LONG_SYMBOL_TEXT' });
+    const out = await fetchLoong(TOKEN, fetchImpl);
+    expect(out?.imageUrl).toBeUndefined();
+    expect(out?.twitter).toBeUndefined();
+    expect(out?.telegram).toBeUndefined();
+    expect(out?.website).toBeUndefined();
+    expect(out?.name).toBe('Realyarg Coin');
+    expect(out?.symbol).toBe('USDTEXTRA_LONG_S');
+    expect(out?.launchpad).toBe('loong');
+  });
+
+  it('ignores a metadata answer far larger than the contract allows', async () => {
+    const huge = tokenInfo('https://img.example/a.png', 'x'.repeat(20_000), ['', '', '', 'https://ok.example', '']);
+    const { fetchImpl } = chain({ info: huge });
+    const out = await fetchLoong(TOKEN, fetchImpl);
+    expect(out?.launchpad).toBe('loong');
+    expect(out?.imageUrl).toBeUndefined();
+    expect(out?.website).toBeUndefined();
+  });
+
+  it('ignores a node answer that is not hex', async () => {
+    const fetchImpl = (async () => ({ ok: true, json: async () => ({ result: '0x' + 'zz'.repeat(64 * 15) }) })) as unknown as typeof fetch;
+    expect(await fetchLoong(TOKEN, fetchImpl)).toBeUndefined();
+  });
+
+  it('refuses a record for some other token, and one that says it does not exist', async () => {
+    expect(await fetchLoong(TOKEN, chain({ record: record({ token: '0x' + 'ab'.repeat(18) + '9999' }) }).fetchImpl)).toBeUndefined();
+    expect(await fetchLoong(TOKEN, chain({ record: '0x' + '0'.repeat(64 * 15) }).fetchImpl)).toBeUndefined();
+  });
+
+  it('names an ERC-20 quote by a cleaned ticker', async () => {
+    const out = await fetchLoong(TOKEN, chain({ record: record({ pair: USDT }), pairSymbol: 'US\u202EDT' }).fetchImpl);
+    expect(out).toMatchObject({ pairAddress: CURVE, quoteAddress: USDT, quoteSymbol: 'USDT' });
+  });
+
+  it('is probed right after Genius', async () => {
+    const order: string[] = [];
+    const probe = (n: string) => async () => {
+      order.push(n);
+      return undefined;
+    };
+    const classify = createLaunchpadClassifier({ genius: probe('genius'), loong: probe('loong'), flap: probe('flap'), log: () => {} });
+    await classify(TOKEN, 'evm');
+    expect(order).toEqual(['genius', 'loong', 'flap']);
+  });
+
+  it('cleans labels', () => {
+    expect(cleanLabel('  a\u202Eb\u200Bc\tdef  ', 4)).toBe('abcd');
+    expect(cleanLabel('a   b', 5)).toBe('a b');
+    expect(cleanLabel('\u200B\u200B', 5)).toBeUndefined();
+    expect(cleanLabel('PE\u00ADPE\u034F\u061C\u180E\u3164\uFFF9\u{E0041}', 10)).toBe('PEPE');
+    expect(cleanLabel('🐉🐉🐉', 2)).toBe('🐉🐉');
   });
 });

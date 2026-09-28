@@ -223,7 +223,7 @@ export interface TokenInfo {
   sells24h?: number;
   /** pair creation time (ms) — the token's age */
   pairCreatedAt?: number;
-  /** launchpad that deployed it: pumpfun | letsbonk | bankr | stonks | pons | genius | o1 | … */
+  /** launchpad that deployed it: pumpfun | letsbonk | bankr | stonks | pons | genius | loong | o1 | … */
   launchpad?: string;
   launchpadUrl?: string;
   /** one line the launchpad adds to the badge (Long: \"anchored to NVDA\") */

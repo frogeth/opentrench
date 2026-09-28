@@ -2,7 +2,7 @@ import type { Chain, TokenInfo } from './types.js';
 import { fetchDexscreener } from './dexscreener.js';
 import { fetchGeckoTerminal, gtThrottled } from './geckoterminal.js';
 import { probeChains } from './rpcprobe.js';
-import { createLaunchpadClassifier, fetchBankrLaunch, fetchClanker, fetchFlap, fetchO1, fetchPons, fetchGenius, fetchPumpfun, fetchStonks, fetchVirtuals, type LaunchpadInfo, fetchArgus, fetchWarp, fetchPeach, fetchDyor, fetchSynthra } from './launchpads.js';
+import { createLaunchpadClassifier, fetchBankrLaunch, fetchClanker, fetchFlap, fetchO1, fetchPons, fetchGenius, fetchLoong, fetchPumpfun, fetchStonks, fetchVirtuals, type LaunchpadInfo, fetchArgus, fetchWarp, fetchPeach, fetchDyor, fetchSynthra } from './launchpads.js';
 import { fetchLong } from './long.js';
 
 export type TokenFetcher = (address: string, chain: Chain) => Promise<Partial<TokenInfo> | undefined>;
@@ -140,6 +140,7 @@ export function createDefaultEnricher(opts: { o1ApiKey?: () => string | undefine
       stonks: (a) => fetchStonks(a),
       pons: (a) => fetchPons(a),
       genius: (a) => fetchGenius(a),
+      loong: (a) => fetchLoong(a),
       long: (a) => fetchLong(a),
       argus: (a) => fetchArgus(a),
       warp: (a) => fetchWarp(a),
