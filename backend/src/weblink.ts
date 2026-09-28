@@ -23,7 +23,7 @@ export function webLink(v: unknown): string | undefined {
 export function imageLink(v: unknown): string | undefined {
   if (typeof v !== 'string') return undefined;
   const s = v.trim();
-  if (/^\/api\/ipfs\/[A-Za-z0-9]+(?:\/[^?#\s]*)?$/.test(s) && !s.includes('..')) return s;
+  if (/^\/api\/ipfs\/[A-Za-z0-9]+(?:\/[A-Za-z0-9._~-]+)*$/.test(s) && !s.split('/').some((seg) => seg === '..' || seg === '.')) return s;
   if (/^data:image\/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(s) && s.length <= 512_000) return s;
   return webLink(s);
 }

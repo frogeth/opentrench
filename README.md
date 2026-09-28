@@ -164,7 +164,9 @@ in settings.
   bonding), Bankr, Stonks, Pons and Flap (read straight off the token contract
   on Robinhood Chain / BNB), Genius (genius.fun on BNB Chain: the launch record
   off its factory, logo and socials off the token, and while a token is still
-  on its curve the curve is priced live like a Pons curve), Virtuals, Clanker
+  on its curve the curve is priced live like a Pons curve), Loong
+  (loongfamily.app, a Genius fork on BNB Chain, read the same way; only token
+  addresses ending in 9999 are looked up), Virtuals, Clanker
   and letsbonk are detected
   automatically; o1 needs an API key (Settings → Trading). The launchpad's logo sits on the
   token image and links to the launch page, and the launchpad's own token

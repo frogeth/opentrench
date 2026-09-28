@@ -4,6 +4,9 @@
  * browser being allowed to reach it).
  */
 
+/** What the IPFS proxy will serve: raster images and video. No SVG, HTML or anything else a browser could run. */
+export const IPFS_MEDIA = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp', 'image/x-icon', 'image/vnd.microsoft.icon', 'video/mp4', 'video/webm', 'video/quicktime']);
+
 const GATEWAYS = [
   (cid: string, path: string) => `https://ipfs.io/ipfs/${cid}${path}`,
   (cid: string, path: string) => `https://${cid}.ipfs.dweb.link${path}`,
@@ -60,8 +63,10 @@ export class IpfsCache {
         });
         if (!res.ok) continue;
         const mime = (res.headers.get('content-type') ?? '').split(';')[0].trim();
-        // Gateways answer 200 with an HTML interstitial/error page for blocked content — not an image.
-        if (!/^(image|video)\//.test(mime)) continue;
+        // Gateways answer 200 with an HTML interstitial/error page for blocked content — not an image. And
+        // what is behind a CID is whatever a coin's creator uploaded: SVG can carry script, and this is
+        // served from the app's own address, so only raster images and video get through.
+        if (!IPFS_MEDIA.has(mime)) continue;
         const buf = Buffer.from(await res.arrayBuffer());
         if (buf.length === 0 || buf.length > MAX_ITEM) continue;
         return { buf, mime };

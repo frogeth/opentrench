@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { discoverEvm, discoverSolana, FACTORIES, QUOTES } from './discover.js';
-import { GENIUS_FACTORY, GENIUS_SEL } from '../launchpads.js';
+import { GENIUS_FACTORY, GENIUS_SEL, LOONG_FACTORY } from '../launchpads.js';
 import { findProgramAddress, utf8 } from './pda.js';
 import { PROGRAMS, SOL_MINT } from './solana.js';
 
@@ -74,5 +74,30 @@ describe('discover: genius.fun on BNB Chain', () => {
     const f = node({ [`${GENIUS_FACTORY}:${GENIUS_SEL.getLaunchedToken}${w(TOKEN)}`]: record(ZERO, 2) });
     expect(await discoverEvm('bsc', TOKEN, { endpoints, fetch: f as any })).toEqual([]);
     expect(f.mock.calls.length).toBeGreaterThan(1);
+  });
+});
+
+describe('discover: Loong on BNB Chain', () => {
+  const w = (h: string) => h.replace(/^0x/, '').toLowerCase().padStart(64, '0');
+  const LTOKEN = '0x1234567890abcdef1234567890abcdef12349999';
+  const CURVE = '0x7349a6f2c41f9bf732f1667caa3f9d9a6f1c0a01';
+  const ZERO = '0x0000000000000000000000000000000000000000';
+  const record = (token: string, phase: number) => '0x' + w(token) + w(CURVE) + w('c'.repeat(40)) + w('c'.repeat(40)) + w(ZERO) + w('a688906bd8b00000') + w('0') + w('c8') + w('0') + w('1') + w(phase.toString(16)) + w('0') + w('0') + w('0') + w('1');
+  const asked = (f: ReturnType<typeof node>) => f.mock.calls.flatMap(([, init]: any) => JSON.parse(init.body)).map((b: any) => b.params?.[0]?.to).filter(Boolean);
+
+  it('a …9999 launch on its curve is the pool, found after Genius says it is not one of its own', async () => {
+    const f = node({ [`${LOONG_FACTORY}:${GENIUS_SEL.getLaunchedToken}${w(LTOKEN)}`]: record(LTOKEN, 0) });
+    expect(await discoverEvm('bsc', LTOKEN, { endpoints, fetch: f as any })).toEqual([{ pairAddress: CURVE, quoteSymbol: 'BNB', quoteAddress: ZERO, dex: 'loong' }]);
+    expect(asked(f)).toEqual([GENIUS_FACTORY, LOONG_FACTORY]);
+  });
+  it('a record naming some other token is not taken', async () => {
+    const f = node({ [`${LOONG_FACTORY}:${GENIUS_SEL.getLaunchedToken}${w(LTOKEN)}`]: record('0x' + 'ab'.repeat(18) + '9999', 0) });
+    const found = await discoverEvm('bsc', LTOKEN, { endpoints, fetch: f as any });
+    expect(found.some((p) => p.dex === 'loong')).toBe(false);
+  });
+  it('never asks the Loong factory about an address that does not end in 9999', async () => {
+    const f = node({});
+    await discoverEvm('bsc', TOKEN, { endpoints, fetch: f as any });
+    expect(asked(f)).not.toContain(LOONG_FACTORY);
   });
 });

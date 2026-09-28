@@ -4,7 +4,7 @@ import { findProgramAddress, utf8 } from './pda.js';
 import { SEL, addressWord, decodeString, words } from './pools.js';
 import { evmCallsDetailed, solanaAccounts, type FetchLike } from './rpc.js';
 import { decodeSolanaPool, PROGRAMS, SOL_MINT } from './solana.js';
-import { GENIUS_FACTORY, GENIUS_SEL, decodeGeniusLaunch } from '../launchpads.js';
+import { GENIUS_SEL, GENIUS_STACK, LOONG_STACK, cleanLabel, decodeGeniusLaunch, geniusStackCandidate, type GeniusStack } from '../launchpads.js';
 
 /**
  * Where a fresh token trades, from the chain itself: Uniswap v2 `getPair` and v3 `getPool` on
@@ -105,26 +105,31 @@ export interface DiscoverDeps {
 const learned = new Map<string, Factories>();
 
 /**
- * A genius.fun launch still on its bonding curve (BNB Chain): the curve is its pool, quoted in
- * native BNB or the ERC-20 the creator picked. One factory call; nothing once it has graduated
- * (the PancakeSwap Infinity pool has no derivable address here, so that waits for the directory).
+ * A launch still on its bonding curve on a Genius-stack launchpad (genius.fun, or its fork Loong,
+ * both BNB Chain): the curve is its pool, quoted in native BNB or the ERC-20 the creator picked. One
+ * factory call; nothing once it has graduated (the PancakeSwap Infinity pool has no derivable address
+ * here, so that waits for the directory).
  */
-export async function discoverGenius(token: string, deps: DiscoverDeps): Promise<Discovered | undefined> {
+async function discoverOnStack(stack: GeniusStack, token: string, deps: DiscoverDeps): Promise<Discovered | undefined> {
   const ep = deps.endpoints.urlFor('bsc');
-  if (!ep || !/^0x[0-9a-fA-F]{40}$/.test(token)) return undefined;
+  if (!ep || !geniusStackCandidate(stack, token)) return undefined;
   const fetchImpl = deps.fetch ?? (fetch as unknown as FetchLike);
-  const [rec] = await evmCallsDetailed(ep.url, [{ to: GENIUS_FACTORY, data: GENIUS_SEL.getLaunchedToken + pad32(token) }], fetchImpl);
+  const [rec] = await evmCallsDetailed(ep.url, [{ to: stack.factory, data: GENIUS_SEL.getLaunchedToken + pad32(token) }], fetchImpl);
   const launch = rec?.result ? decodeGeniusLaunch(rec.result) : undefined;
-  if (!launch || launch.phase !== 0) return undefined;
+  if (!launch || launch.phase !== 0 || launch.token.toLowerCase() !== token.toLowerCase()) return undefined;
   const zero = '0x0000000000000000000000000000000000000000';
-  if (launch.pairToken.toLowerCase() === zero) return { pairAddress: launch.curve, quoteSymbol: 'BNB', quoteAddress: zero, dex: 'genius' };
+  if (launch.pairToken.toLowerCase() === zero) return { pairAddress: launch.curve, quoteSymbol: 'BNB', quoteAddress: zero, dex: stack.launchpad };
   const [sym] = await evmCallsDetailed(ep.url, [{ to: launch.pairToken, data: SEL.symbol }], fetchImpl);
-  const quoteSymbol = sym?.result ? decodeString(sym.result) : undefined;
+  const quoteSymbol = cleanLabel(sym?.result ? decodeString(sym.result) : undefined, 16);
   if (!quoteSymbol) return undefined;
-  return { pairAddress: launch.curve, quoteSymbol, quoteAddress: launch.pairToken, dex: 'genius' };
+  return { pairAddress: launch.curve, quoteSymbol, quoteAddress: launch.pairToken, dex: stack.launchpad };
 }
 
-/** Uniswap-style pools for a token on one EVM chain, deepest first (a Genius curve on BNB Chain first of all). */
+export async function discoverGenius(token: string, deps: DiscoverDeps): Promise<Discovered | undefined> {
+  return (await discoverOnStack(GENIUS_STACK, token, deps)) ?? (await discoverOnStack(LOONG_STACK, token, deps));
+}
+
+/** Uniswap-style pools for a token on one EVM chain, deepest first (a Genius or Loong curve on BNB Chain first of all). */
 export async function discoverEvm(network: string, token: string, deps: DiscoverDeps): Promise<Discovered[]> {
   const chain = CHAINS[network];
   const ep = deps.endpoints.urlFor(network);

@@ -1,4 +1,5 @@
 import type { Chain, TokenInfo } from './types.js';
+import { webLink } from './weblink.js';
 
 /**
  * Launchpad classification, ported from frogr's per-launchpad probes.
@@ -7,7 +8,7 @@ import type { Chain, TokenInfo } from './types.js';
  * the launchpad itself becomes a badge on the card.
  */
 
-export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'genius' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long' | 'argus' | 'warp' | 'peach' | 'dyor' | 'synthra';
+export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'genius' | 'loong' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long' | 'argus' | 'warp' | 'peach' | 'dyor' | 'synthra';
 
 export interface LaunchpadInfo extends Partial<TokenInfo> {
   launchpad: Launchpad;
@@ -304,6 +305,8 @@ export function decodeStrings(hex: string, n: number): string[] | undefined {
   return out;
 }
 
+const ETH_CALL_MAX_HEX = 262_144;
+
 async function ethCall(rpc: string, to: string, data: string, fetchImpl: typeof fetch): Promise<string | undefined> {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
@@ -317,7 +320,8 @@ async function ethCall(rpc: string, to: string, data: string, fetchImpl: typeof 
     if (!res.ok) return undefined;
     const json: any = await res.json();
     const r = json?.result;
-    return typeof r === 'string' && r.length > 2 ? r : undefined;
+    // a node's answer is data from outside: hex only, and nothing a contract call would legitimately return this big
+    return typeof r === 'string' && r.length > 2 && r.length <= ETH_CALL_MAX_HEX && /^0x[0-9a-fA-F]*$/.test(r) ? r : undefined;
   } finally {
     clearTimeout(t);
   }
@@ -389,6 +393,8 @@ export interface LaunchpadProbes {
   pons?: (a: string) => Promise<LaunchpadInfo | undefined>;
   /** Genius (BNB Chain): one factory call says whether the token is a launch */
   genius?: (a: string) => Promise<LaunchpadInfo | undefined>;
+  /** Loong (BNB Chain, a Genius fork): only addresses ending in 9999 are asked about */
+  loong?: (a: string) => Promise<LaunchpadInfo | undefined>;
   flap?: (a: string) => Promise<LaunchpadInfo | undefined>;
   virtuals?: (a: string) => Promise<LaunchpadInfo | undefined>;
   clanker?: (a: string) => Promise<LaunchpadInfo | undefined>;
@@ -445,6 +451,7 @@ export function createLaunchpadClassifier(p: LaunchpadProbes): (address: string,
       ['stonks', p.stonks],
       ['pons', p.pons],
       ['genius', p.genius],
+      ['loong', p.loong],
       ['flap', p.flap],
       ['virtuals', p.virtuals],
       ['clanker', p.clanker],
@@ -831,7 +838,51 @@ export const GENIUS_FACTORY = '0x78EAE9537C0ef90DFe9B7ae964682Fe8138afe31';
 export const GENIUS_SEL = { getLaunchedToken: '0x3cf28b5a', getTokenInfo: '0xabb1dc44', realQuoteReserve: '0x4f1f58fd' };
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
+/**
+ * Loong (loongfamily.app) is a fork of the same stack on BNB Chain: the factory's launch record, the
+ * token's getTokenInfo and the curve's reserves are byte-for-byte Genius's (checked against their
+ * published ABIs and the deployed factory, 2026-09-28). Its factory only ever deploys tokens whose
+ * address ends in 9999, so no other address is asked about. The address is hardcoded after checking
+ * it on-chain: nothing of theirs (manifest, ABIs, scripts) is fetched at runtime.
+ */
+export const LOONG_FACTORY = '0x60dDcE270E1B9A8325daD4A39dB1442598b26B3A';
+
+/** A launchpad built on the Genius stack: its factory, where a token's page is, and what its addresses end in. */
+export interface GeniusStack {
+  launchpad: 'genius' | 'loong';
+  factory: string;
+  page: (address: string) => string;
+  /** the factory refuses any other token address, so skip the call for anything else */
+  suffix?: string;
+}
+export const GENIUS_STACK: GeniusStack = { launchpad: 'genius', factory: GENIUS_FACTORY, page: (a) => `https://genius.fun/token/${a}` };
+export const LOONG_STACK: GeniusStack = { launchpad: 'loong', factory: LOONG_FACTORY, page: (a) => `https://loongfamily.app/#/token/${a}`, suffix: '9999' };
+
+/** Is this address one the stack's factory could have launched (right shape, right suffix)? */
+export function geniusStackCandidate(stack: GeniusStack, address: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(address) && (!stack.suffix || address.toLowerCase().endsWith(stack.suffix));
+}
+
+/**
+ * A token's name, symbol or quote ticker as a creator wrote it on-chain, made safe to show: control
+ * characters and the invisible ones that flip or hide text (RTL overrides, zero-width marks) are
+ * removed, and the length is capped. React already renders it as text; this stops look-alike tricks.
+ */
+export function cleanLabel(s: string | undefined, max: number): string | undefined {
+  if (!s) return undefined;
+  const clean = s
+    .replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\u3164\ufeff\ufff9-\ufffb\u{e0000}-\u{e007f}]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return clean ? [...clean].slice(0, max).join('') : undefined;
+}
+
+/** getTokenInfo is capped by the contract (logo 512, description 2048, socials 256 bytes each); anything this big is not that. */
+const TOKEN_INFO_MAX_HEX = 32_768;
+
 export interface GeniusLaunch {
+  /** the token the record is for; must be the one asked about */
+  token: string;
   curve: string;
   /** address(0) = native BNB */
   pairToken: string;
@@ -848,7 +899,7 @@ export function decodeGeniusLaunch(hex: string): GeniusLaunch | undefined {
   if (BigInt('0x' + word(14)) !== 1n) return undefined;
   const phase = Number(BigInt('0x' + word(10)));
   if (phase < 0 || phase > 3) return undefined;
-  return { curve: '0x' + word(1).slice(24), pairToken: '0x' + word(4).slice(24), graduationThreshold: BigInt('0x' + word(5)), phase: phase as 0 | 1 | 2 | 3 };
+  return { token: '0x' + word(0).slice(24), curve: '0x' + word(1).slice(24), pairToken: '0x' + word(4).slice(24), graduationThreshold: BigInt('0x' + word(5)), phase: phase as 0 | 1 | 2 | 3 };
 }
 
 /** getTokenInfo(): (address deployer, string logo, string description, (string twitter, telegram, discord, website, farcaster)). */
@@ -893,11 +944,13 @@ export function geniusNote(launch: GeniusLaunch, realQuote: bigint | undefined):
   return `on the curve · ${Math.min(100, pct).toFixed(1)}% to graduation`;
 }
 
-export async function fetchGenius(address: string, fetchImpl: typeof fetch = fetch, rpc = BSC_RPC): Promise<LaunchpadInfo | undefined> {
-  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return undefined;
-  const rec = await ethCall(rpc, GENIUS_FACTORY, GENIUS_SEL.getLaunchedToken + address.slice(2).toLowerCase().padStart(64, '0'), fetchImpl).catch(() => undefined);
+/** One factory call says whether the token is a launch of this stack; then the token's own metadata and the curve. */
+export async function fetchGeniusStack(stack: GeniusStack, address: string, fetchImpl: typeof fetch = fetch, rpc = BSC_RPC): Promise<LaunchpadInfo | undefined> {
+  if (!geniusStackCandidate(stack, address)) return undefined;
+  const rec = await ethCall(rpc, stack.factory, GENIUS_SEL.getLaunchedToken + address.slice(2).toLowerCase().padStart(64, '0'), fetchImpl).catch(() => undefined);
   const launch = rec ? decodeGeniusLaunch(rec) : undefined;
-  if (!launch) return undefined; // not a Genius launch (or the factory did not answer)
+  // not a launch of this stack (or the factory did not answer), or a record for some other token
+  if (!launch || launch.token.toLowerCase() !== address.toLowerCase()) return undefined;
   const native = launch.pairToken.toLowerCase() === ZERO_ADDRESS;
   const [info, name, symbol, real, pairSym] = await Promise.all([
     ethCall(rpc, address, GENIUS_SEL.getTokenInfo, fetchImpl).catch(() => undefined),
@@ -906,10 +959,11 @@ export async function fetchGenius(address: string, fetchImpl: typeof fetch = fet
     launch.phase === 0 ? ethCall(rpc, launch.curve, GENIUS_SEL.realQuoteReserve, fetchImpl).catch(() => undefined) : undefined,
     native ? undefined : ethCall(rpc, launch.pairToken, SEL.symbol, fetchImpl).catch(() => undefined),
   ]);
-  const out: LaunchpadInfo = { launchpad: 'genius', launchpadUrl: `https://genius.fun/token/${address}`, network: 'bsc' };
+  const out: LaunchpadInfo = { launchpad: stack.launchpad, launchpadUrl: stack.page(address), network: 'bsc' };
   const realQuote = real && real.length >= 66 ? BigInt(real.slice(0, 66)) : undefined;
   out.launchpadNote = geniusNote(launch, realQuote);
-  const meta = info ? decodeGeniusTokenInfo(info) : undefined;
+  // everything below is what the coin's creator typed: only web links and clean labels get through
+  const meta = info && info.length <= TOKEN_INFO_MAX_HEX ? decodeGeniusTokenInfo(info) : undefined;
   if (meta) {
     const img = ipfsToHttp(meta.logo);
     if (img) out.imageUrl = img;
@@ -918,22 +972,26 @@ export async function fetchGenius(address: string, fetchImpl: typeof fetch = fet
     if (x) out.twitter = x;
     const tg = tgUrl(telegram);
     if (tg) out.telegram = tg;
-    if (website?.trim()) out.website = website.trim();
+    const site = webLink(website);
+    if (site) out.website = site;
   }
-  const nameStr = name ? decodeStrings(name, 1)?.[0] : undefined;
+  const nameStr = cleanLabel(name ? decodeStrings(name, 1)?.[0] : undefined, 64);
   if (nameStr) out.name = nameStr;
-  const symStr = symbol ? decodeStrings(symbol, 1)?.[0] : undefined;
+  const symStr = cleanLabel(symbol ? decodeStrings(symbol, 1)?.[0] : undefined, 16);
   if (symStr) out.symbol = symStr;
   if (launch.phase === 0) {
     // still on the curve: that is its pool, and the live pricer reads getReserves off it like a Pons curve
     out.pairAddress = launch.curve;
-    out.dex = 'genius';
+    out.dex = stack.launchpad;
     if (native) out.quoteSymbol = 'BNB';
     else {
       out.quoteAddress = launch.pairToken;
-      const ps = pairSym ? decodeStrings(pairSym, 1)?.[0] : undefined;
+      const ps = cleanLabel(pairSym ? decodeStrings(pairSym, 1)?.[0] : undefined, 16);
       if (ps) out.quoteSymbol = ps;
     }
   }
   return out;
 }
+
+export const fetchGenius = (address: string, fetchImpl: typeof fetch = fetch, rpc = BSC_RPC) => fetchGeniusStack(GENIUS_STACK, address, fetchImpl, rpc);
+export const fetchLoong = (address: string, fetchImpl: typeof fetch = fetch, rpc = BSC_RPC) => fetchGeniusStack(LOONG_STACK, address, fetchImpl, rpc);

@@ -124,8 +124,13 @@ export function createApi(cfg: ConfigStore, hub: MessageHub, svc: Services, hove
     const rest = (req.params as any)[0];
     const path = rest ? '/' + String(rest) : '';
     if (!/^[A-Za-z0-9]{10,}$/.test(cid)) return res.status(404).end();
+    // a file inside the CID's folder: plain path characters only, no way up
+    if (path && (!/^(?:\/[A-Za-z0-9._~-]+)+$/.test(path) || path.split('/').some((seg) => seg === '..' || seg === '.'))) return res.status(404).end();
     const blob = await ipfs.get(cid, path);
     if (!blob) return res.status(404).end();
+    // whatever a creator uploaded is shown as media and nothing else, even if opened on its own
+    res.setHeader('x-content-type-options', 'nosniff');
+    res.setHeader('content-security-policy', "sandbox; default-src 'none'; img-src 'self'; media-src 'self'");
     res.setHeader('content-type', blob.mime);
     res.setHeader('cache-control', 'public, max-age=604800, immutable');
     res.send(blob.buf);

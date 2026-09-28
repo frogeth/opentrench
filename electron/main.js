@@ -3,6 +3,7 @@ const { app, BrowserWindow, shell, nativeTheme, dialog, Menu, safeStorage, ipcMa
 const discordSetup = require('./discord-setup');
 const shellLink = require('./shell-link');
 const stale = require('./stale');
+const outside = require('./outside');
 const { isLink, findLink } = require('./deeplink');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
@@ -361,18 +362,15 @@ function loadSecretKey(dataDir) {
  * `search-ms:` on Windows), so only web links reach the browser, `tg:` reaches Telegram, and an
  * opentrench:// invite comes back to us. Everything else is refused and logged.
  */
+/** A link clicked in the app that the app does not handle itself (see outside.js for what is allowed). */
 function openOutside(url) {
-  let u;
-  try {
-    u = new globalThis.URL(url);
-  } catch {
-    console.error('[desktop] refused to open a link that is not a URL');
-    return;
-  }
-  if (u.protocol === 'http:' || u.protocol === 'https:' || u.protocol === 'tg:') return void shell.openExternal(u.href);
-  if (u.protocol === 'opentrench:') return deliverLink(url);
-  console.error(`[desktop] refused to open a ${u.protocol} link`);
+  const r = outside.outsideAction(url);
+  if (r.action === 'open') return void shell.openExternal(r.href);
+  if (r.action === 'link') return deliverLink(url);
+  console.error(`[desktop] refused to open a ${r.scheme} link`);
 }
+
+const isAppUrl = (url) => outside.isAppUrl(url, URL);
 
 function createWindow() {
   nativeTheme.themeSource = 'dark';
@@ -440,14 +438,14 @@ function createWindow() {
   });
   // Every external link (Cove, X, charts, explorers) opens in the default browser, through openOutside.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (!url.startsWith(URL)) {
+    if (!isAppUrl(url)) {
       openOutside(url);
       return { action: 'deny' };
     }
     return { action: 'allow' };
   });
   win.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith(URL)) {
+    if (!isAppUrl(url)) {
       e.preventDefault();
       openOutside(url);
     }

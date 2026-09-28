@@ -31,6 +31,7 @@
       "deeplink.js",
       "discord-setup.js",
       "stale.js",
+      "outside.js",
       "starting.html",
       "entitlements.mac.plist"
     ],
