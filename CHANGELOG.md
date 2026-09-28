@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.16.5 — 2026-09-28
+
 - Fix (desktop): opentrench could open to a blank window and stay that way. On a slow first start (Windows checking the new files on an older PC), the app stopped waiting for its backend after 20 seconds and opened a window with nothing to show, and nothing retried. The window now shows "Starting opentrench…" and opens the app the moment the backend is ready, however long that takes. If the backend stops before it's ready, the window says so, with Try again and Open log folder.
 - Desktop: the backend's own output now goes into desktop.log (Open Log Folder in the File menu on Windows, the opentrench menu on macOS), so a start that goes wrong can be read afterwards.
 - Desktop: on a computer whose graphics process keeps crashing at start (a missing driver file), opentrench switches hardware acceleration off after the third crash and restarts once; it stays off after that. Delete the `gpu-off` file in the app's data folder to turn it back on.
