@@ -7,6 +7,10 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Fix (desktop): opentrench could open to a blank window and stay that way. On a slow first start (Windows checking the new files on an older PC), the app stopped waiting for its backend after 20 seconds and opened a window with nothing to show, and nothing retried. The window now shows "Starting opentrench…" and opens the app the moment the backend is ready, however long that takes. If the backend stops before it's ready, the window says so, with Try again and Open log folder.
+- Desktop: the backend's own output now goes into desktop.log (Open Log Folder in the File menu on Windows, the opentrench menu on macOS), so a start that goes wrong can be read afterwards.
+- Desktop: on a computer whose graphics process keeps crashing at start (a missing driver file), opentrench switches hardware acceleration off after the third crash and restarts once; it stays off after that. Delete the `gpu-off` file in the app's data folder to turn it back on.
+
 ## v0.16.4 — 2026-09-26
 
 - **Bot columns can ping you.** The bell on a Telegram bot column (Cielo, Salpha, any bot) and on the Cove / BasedBot column now sends each new message from that bot to Pings, with the column's sound and a desktop notification. The ping shows the whole message with its contracts, and Open column jumps to the bot. Edits to a bot's panel don't ping. Works with the window closed, like watchlist alerts.
