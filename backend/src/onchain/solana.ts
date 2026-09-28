@@ -73,6 +73,8 @@ export interface SolanaPool {
   vaultLess?: [bigint, bigint];
   /** the curve finished / migrated: this account no longer trades */
   done?: boolean;
+  /** pump.fun: the curve account itself says its quote (a directory's guess must not override it) */
+  quoteNamed?: boolean;
   /** base decimals when the account stores them (else read the mint) */
   baseDecimals?: number;
   quoteDecimals?: number;
@@ -93,7 +95,12 @@ export function decodeSolanaPool(kind: SolanaKind, d: Uint8Array, base: string):
       case 'pumpfun': {
         const c = decodePumpCurve(d);
         if (!c) return undefined;
-        return { kind, baseMint: base, quoteMint: SOL_MINT, price: pumpPriceSol(c) * 1e9 / 1e6, done: c.complete, baseDecimals: 6, quoteDecimals: 9, supplyRaw: c.tokenTotalSupply };
+        // raw quote per raw token; a curve raised in SOL has 9 decimals, one raised in another mint (USDC) is read from that mint
+        const raw = pumpPriceSol(c) * 1e9 / 1e6;
+        const quote = c.quoteMint && c.quoteMint.some((b) => b !== 0) ? base58(c.quoteMint) : undefined;
+        if (quote) return { kind, baseMint: base, quoteMint: quote, quoteNamed: true, price: raw, done: c.complete, baseDecimals: 6, supplyRaw: c.tokenTotalSupply };
+        // no quote named (an older account, or the zero key): SOL, unless the directory knows the curve was raised in something else
+        return { kind, baseMint: base, quoteMint: SOL_MINT, price: raw, done: c.complete, baseDecimals: 6, quoteDecimals: 9, supplyRaw: c.tokenTotalSupply };
       }
       case 'pumpswap': {
         if (d.length < 203) return undefined;
@@ -132,7 +139,8 @@ export function decodeSolanaPool(kind: SolanaKind, d: Uint8Array, base: string):
         if (bm !== base) return undefined;
         const vb = u64(d, 37), vq = u64(d, 45), rb = u64(d, 53), rq = u64(d, 61);
         const denom = vb - rb;
-        return { kind, baseMint: bm, quoteMint: qm, price: denom > 0n ? Number(vq + rq) / Number(denom) : 0, baseDecimals: d[18], quoteDecimals: d[19], done: d[17] >= 2, supplyRaw: u64(d, 21) };
+        // status 0 trades on the curve; 1 is migrating and 2 migrated, and neither trades here any more
+        return { kind, baseMint: bm, quoteMint: qm, price: denom > 0n ? Number(vq + rq) / Number(denom) : 0, baseDecimals: d[18], quoteDecimals: d[19], done: d[17] >= 1, supplyRaw: u64(d, 21) };
       }
       case 'meteoraDlmm': {
         if (d.length < 152) return undefined;
@@ -151,10 +159,11 @@ export function decodeSolanaPool(kind: SolanaKind, d: Uint8Array, base: string):
         return undefined;
       }
       case 'meteoraDbc': {
-        if (d.length < 296) return undefined;
+        if (d.length < 306) return undefined;
         const bm = key(d, 136);
         if (bm !== base) return undefined;
-        return { kind, baseMint: bm, price: priceFromSqrt64(u128(d, 280)), quoteFromConfig: key(d, 72) };
+        // is_migrated (byte 305): the curve's sqrt price is stale once the pool has moved on
+        return { kind, baseMint: bm, price: priceFromSqrt64(u128(d, 280)), quoteFromConfig: key(d, 72), done: d[305] !== 0 };
       }
       case 'orca': {
         if (d.length < 245) return undefined;

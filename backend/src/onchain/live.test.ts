@@ -161,6 +161,7 @@ describe('live pricer: v3, v4 and Pons curves', () => {
       'https://robinhood': {
         [`${PAIR}:${SEL.getReserves}`]: '0x' + word(2n * 10n ** 18n) + word(1_000_000_000n * 10n ** 18n), // 2 ETH virtual : 1e9 tokens
         [`${TOKEN}:${SEL.decimals}`]: '0x' + word(18n),
+        [`${WETH}:${SEL.decimals}`]: '0x' + word(18n),
       },
     });
     const { pricer, apply } = deps(fetchImpl);
@@ -169,6 +170,35 @@ describe('live pricer: v3, v4 and Pons curves', () => {
     expect(apply).toHaveBeenCalledTimes(1);
     expect(apply.mock.calls[0][1].priceUsd).toBeCloseTo(2e-9 * 3000, 12);
     expect(pricer.reason('hyperevm', noMgr.address)).toMatch(/PoolManager/);
+  });
+  it('a curve quoted in an ERC-20 is scaled by that token\'s own decimals (Pons V2 in USDG, 6 decimals)', async () => {
+    const USDG = '0x5fc5360d0400a0fd4f2af552add042d716f1d168';
+    const { fetchImpl } = evmNode({
+      'https://ethereum': ethRefTable(),
+      'https://robinhood': {
+        [`${PAIR}:${SEL.getReserves}`]: '0x' + word(8_000n * 10n ** 6n) + word(1_000_000_000n * 10n ** 18n), // 8,000 USDG virtual : 1e9 tokens
+        [`${TOKEN}:${SEL.decimals}`]: '0x' + word(18n),
+        [`${USDG}:${SEL.decimals}`]: '0x' + word(6n),
+      },
+    });
+    const { pricer, apply } = deps(fetchImpl);
+    await pricer.refresh([token({ network: 'robinhood', dex: 'pons', quoteSymbol: 'USDG', quoteAddress: USDG, priceUsd: undefined, marketCap: undefined })]);
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply.mock.calls[0][1].priceUsd).toBeCloseTo(8e-6, 12);
+  });
+  it('a curve whose quote token does not say its decimals is not priced at a guess', async () => {
+    const USDG = '0x5fc5360d0400a0fd4f2af552add042d716f1d168';
+    const { fetchImpl } = evmNode({
+      'https://ethereum': ethRefTable(),
+      'https://robinhood': {
+        [`${PAIR}:${SEL.getReserves}`]: '0x' + word(8_000n * 10n ** 6n) + word(1_000_000_000n * 10n ** 18n),
+        [`${TOKEN}:${SEL.decimals}`]: '0x' + word(18n),
+      },
+    });
+    const { pricer, apply } = deps(fetchImpl);
+    await pricer.refresh([token({ network: 'robinhood', dex: 'pons', quoteSymbol: 'USDG', quoteAddress: USDG, priceUsd: undefined, marketCap: undefined })]);
+    expect(apply).not.toHaveBeenCalled();
+    expect(pricer.reason('robinhood', TOKEN)).toMatch(/decimals/);
   });
   it('a quote nobody can price is skipped by name; a busy node is retried, not written off; an outage is reported', async () => {
     const { fetchImpl } = evmNode({
@@ -284,6 +314,26 @@ describe('live pricer: Solana', () => {
     expect(apply).toHaveBeenCalledTimes(1);
     expect(apply.mock.calls[0][1].priceUsd).toBeCloseTo(3e-8 * 100, 12);
     expect(apply.mock.calls[0][1].marketCap).toBeCloseTo(3e-6 * 1e9, 6);
+  });
+  it('a pump.fun curve that names USDC (byte 83) is priced in USDC with 6 decimals, whatever a directory says', async () => {
+    const curve = new Uint8Array(151); put(curve, 8, 1_000_000_000_000_000n); put(curve, 16, 30_000_000n); put(curve, 40, 1_000_000_000_000_000n); // 1e9 tokens vs 30 USDC
+    curve.set(bs(USDC_SOL), 83);
+    const { fetchImpl } = evmNode({ 'https://solana': { CurveU: `${PROGRAMS.pumpfun}|${b64(curve)}`, [USDC_SOL]: mintAcc(6, 0n) } });
+    const { pricer, apply } = deps(fetchImpl);
+    await pricer.refresh([token({ address: 'MU', network: 'solana', dex: 'pumpfun', pairAddress: 'CurveU', quoteSymbol: 'SOL', quoteAddress: SOL, priceUsd: undefined, marketCap: undefined })]);
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply.mock.calls[0][1].priceUsd).toBeCloseTo(3e-8, 14);
+  });
+  it('a pump.fun curve naming a quote mint nobody prices is not priced as SOL because a directory said SOL', async () => {
+    const X = base58(K(55));
+    const curve = new Uint8Array(151); put(curve, 8, 1_000_000_000_000_000n); put(curve, 16, 30_000_000n); put(curve, 40, 1_000_000_000_000_000n);
+    curve.set(bs(X), 83);
+    // SOL itself is priceable here, so only the fix stops X's reserves being read as SOL
+    const { fetchImpl } = evmNode({ 'https://solana': { ...solRef(), CurveX: `${PROGRAMS.pumpfun}|${b64(curve)}`, [X]: mintAcc(6, 0n), [SOL]: mintAcc(9, 0n), [USDC_SOL]: mintAcc(6, 0n) } });
+    const { pricer, apply } = deps(fetchImpl);
+    await pricer.refresh([token({ address: 'MX', network: 'solana', dex: 'pumpfun', pairAddress: 'CurveX', quoteSymbol: 'SOL', quoteAddress: SOL, priceUsd: undefined, marketCap: undefined })]);
+    await pricer.refresh([token({ address: 'MX', network: 'solana', dex: 'pumpfun', pairAddress: 'CurveX', quoteSymbol: 'SOL', quoteAddress: SOL, priceUsd: undefined, marketCap: undefined })]);
+    expect(apply).not.toHaveBeenCalled();
   });
   it('an unsupported program, a graduated pump.fun curve and a missing account are skipped with reasons', async () => {
     const curve = new Uint8Array(151); put(curve, 8, 1n); put(curve, 16, 1n); curve[48] = 1;

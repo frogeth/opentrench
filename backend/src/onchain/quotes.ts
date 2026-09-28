@@ -40,6 +40,7 @@ export const STABLE_ADDRESSES = new Set([
   '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // USDC (base)
   '0x55d398326f99059ff775485246999027b3197955', // USDT (bsc)
   '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', // USDC (bsc)
+  '0x5fc5360d0400a0fd4f2af552add042d716f1d168', // USDG (robinhood; 6 decimals, the Pons V2 dollar quote)
 ]);
 
 export const isStable = (symbol: string | undefined, address: string | undefined): boolean =>

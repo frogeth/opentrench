@@ -28,6 +28,7 @@ import { ShellLink } from './plugins/shell.js';
 import { createPluginsApi } from './plugins/api.js';
 import { jsonErrors } from './http.js';
 import { createEndpoints } from './onchain/endpoints.js';
+import { setLaunchpadRpc } from './launchpads.js';
 import { createChainSource } from './onchain/firstsight.js';
 import { createBlockFinder } from './onchain/history.js';
 import { CHAINS } from './onchain/chains.js';
@@ -50,6 +51,8 @@ else console.log(`[backend] secrets in config.json sealed with the key from ${fr
 const cfg = new ConfigStore(configFile, new SecretBox(secretKey));
 // RPC endpoints (custom > Alchemy > public) come first: the enricher asks the chain itself about a contract
 const endpoints = createEndpoints(() => ({ alchemyKey: cfg.get().marketData.alchemyKey, rpc: cfg.get().rpc }), fetch as any, (m) => console.warn('[market]', m));
+// launchpad probes read the chain through the same endpoints, so a paid key spares them the public nodes' rate limits
+setLaunchpadRpc((n) => endpoints.urlFor(n)?.url);
 const chainSource = createChainSource({
   endpoints,
   // the chains the feed's tokens usually live on are asked first

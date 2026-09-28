@@ -7,11 +7,12 @@
 /** What the IPFS proxy will serve: raster images and video. No SVG, HTML or anything else a browser could run. */
 export const IPFS_MEDIA = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp', 'image/x-icon', 'image/vnd.microsoft.icon', 'video/mp4', 'video/webm', 'video/quicktime']);
 
+// Pinata first: since 2026-09 ipfs.io and dweb.link answer every request with a "service worker gateway" notice (429)
 const GATEWAYS = [
-  (cid: string, path: string) => `https://ipfs.io/ipfs/${cid}${path}`,
-  (cid: string, path: string) => `https://${cid}.ipfs.dweb.link${path}`,
   (cid: string, path: string) => `https://gateway.pinata.cloud/ipfs/${cid}${path}`,
   (cid: string, path: string) => `https://${cid}.ipfs.w3s.link${path}`,
+  (cid: string, path: string) => `https://ipfs.io/ipfs/${cid}${path}`,
+  (cid: string, path: string) => `https://${cid}.ipfs.dweb.link${path}`,
 ];
 const TIMEOUT_MS = 10_000;
 const MAX_ITEM = 8 * 1024 * 1024;

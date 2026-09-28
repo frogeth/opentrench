@@ -82,6 +82,11 @@ export interface PumpCurve {
   realSolReserves: bigint;
   tokenTotalSupply: bigint;
   complete: boolean;
+  /**
+   * The quote mint, on curves long enough to carry it (byte 83; pump.fun's IDL, checked on a live USDC
+   * curve 2026-09-28). The all-zero key, or a short account, means SOL.
+   */
+  quoteMint?: Uint8Array;
 }
 export function decodePumpCurve(data: Uint8Array): PumpCurve | undefined {
   if (data.length < 8 + 5 * 8 + 1) return undefined;
@@ -94,6 +99,7 @@ export function decodePumpCurve(data: Uint8Array): PumpCurve | undefined {
     realSolReserves: u64(32),
     tokenTotalSupply: u64(40),
     complete: data[48] === 1,
+    quoteMint: data.length >= 115 ? data.subarray(83, 115) : undefined,
   };
 }
 /** price in SOL per token: virtual SOL (lamports, 1e9) over virtual tokens (1e6). */
