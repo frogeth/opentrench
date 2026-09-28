@@ -150,6 +150,21 @@ export function chartInterval(pairCreatedAt: number | undefined, now = Date.now(
   return 15;
 }
 
+/**
+ * A link that is safe to put in href or an iframe: a plain web address, or nothing. Token links are
+ * written by strangers (a coin's creator, a chart site, a friend's shared copy); the backend already
+ * drops anything else, and this keeps a `javascript:` link from ever reaching the page if one slips by.
+ */
+export function webHref(u: string | undefined): string | undefined {
+  if (!u) return undefined;
+  try {
+    const p = new URL(u);
+    return p.protocol === 'http:' || p.protocol === 'https:' ? u : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function chartEmbedUrl(
   t: { network?: string; address: string; embedUrl?: string; pairCreatedAt?: number } | undefined,
   provider: ChartProvider,
@@ -170,7 +185,7 @@ export function chartEmbedUrl(
     if (slug) return `https://www.gmgn.cc/kline/${slug}/${t.address}?theme=dark&interval=${interval}`;
   }
   // a chain the chosen provider doesn't cover (or not known yet): Dexscreener's embed
-  return t.embedUrl;
+  return webHref(t.embedUrl);
 }
 
 /** Chat markdown as plain text, for a desktop notification: links keep their words, markers go. */

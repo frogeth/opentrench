@@ -7,6 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- **Security: token links are web links only.** A coin's website, socials and chart link are written by whoever launched it (on-chain for Genius and other launchpads), copied by chart sites, or sent by a friend in a room. A link that wasn't a web address could do more than open a page: on Windows, clicking a coin's website could start a program. Now only `http`/`https` links are kept on a token, the app refuses to hand anything else to the system (`tg:` still opens Telegram, invites still open Join), and links already saved are checked on start.
+- **Security: website previews stay off your network.** Hovering a coin's website fetched it from your computer, so a coin could point it at your router or at opentrench itself. Previews now refuse local, private and cloud-metadata addresses, including through redirects.
+
 ## v0.16.5 — 2026-09-28
 
 - Fix (desktop): opentrench could open to a blank window and stay that way. On a slow first start (Windows checking the new files on an older PC), the app stopped waiting for its backend after 20 seconds and opened a window with nothing to show, and nothing retried. The window now shows "Starting opentrench…" and opens the app the moment the backend is ready, however long that takes. If the backend stops before it's ready, the window says so, with Try again and Open log folder.

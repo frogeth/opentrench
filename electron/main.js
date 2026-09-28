@@ -354,6 +354,26 @@ function loadSecretKey(dataDir) {
   }
 }
 
+/**
+ * A link clicked in the app that the app does not handle itself. Links come from strangers: a coin's
+ * website is whatever its creator wrote on-chain, messages come from anyone in a chat. Handing any
+ * scheme to the OS lets such a link start programs (a `file:` path on a remote share, `ms-msdt:`,
+ * `search-ms:` on Windows), so only web links reach the browser, `tg:` reaches Telegram, and an
+ * opentrench:// invite comes back to us. Everything else is refused and logged.
+ */
+function openOutside(url) {
+  let u;
+  try {
+    u = new globalThis.URL(url);
+  } catch {
+    console.error('[desktop] refused to open a link that is not a URL');
+    return;
+  }
+  if (u.protocol === 'http:' || u.protocol === 'https:' || u.protocol === 'tg:') return void shell.openExternal(u.href);
+  if (u.protocol === 'opentrench:') return deliverLink(url);
+  console.error(`[desktop] refused to open a ${u.protocol} link`);
+}
+
 function createWindow() {
   nativeTheme.themeSource = 'dark';
   win = new BrowserWindow({
@@ -418,10 +438,10 @@ function createWindow() {
     if (/#open-logs-\d+$/.test(url)) void shell.openPath(app.getPath('logs'));
     else if (/#retry-\d+$/.test(url)) void retryBackend();
   });
-  // Every external link (Cove, X, charts, explorers) opens in the default browser.
+  // Every external link (Cove, X, charts, explorers) opens in the default browser, through openOutside.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (!url.startsWith(URL)) {
-      shell.openExternal(url);
+      openOutside(url);
       return { action: 'deny' };
     }
     return { action: 'allow' };
@@ -429,7 +449,7 @@ function createWindow() {
   win.webContents.on('will-navigate', (e, url) => {
     if (!url.startsWith(URL)) {
       e.preventDefault();
-      shell.openExternal(url);
+      openOutside(url);
     }
   });
   win.webContents.on('unresponsive', () => console.error('[desktop] page unresponsive'));

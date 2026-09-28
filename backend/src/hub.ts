@@ -40,6 +40,7 @@ import type {
   WatchEntry,
 } from './types.js';
 import { alertText } from './watchlist.js';
+import { scrubLinks } from './weblink.js';
 
 /** Identifies this server process; the UI reloads when it changes so a restart with a new build never leaves stale assets. */
 const BOOT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -219,6 +220,7 @@ export class MessageHub extends EventEmitter {
     if (known) return known;
     const t: TokenInfo = { ...info, seen: 0, calledIn: [], calls: [], lastCallTs: 0, firstSeenTs: info.firstSeenTs || Date.now() };
     delete t.firstCaller;
+    scrubLinks(t);
     this.applyBuy(t);
     this.tokens.set(t.address, t);
     this.tokenChats.set(t.address, new Set());
@@ -326,6 +328,8 @@ export class MessageHub extends EventEmitter {
     for (const k of ['firstCallMarketCap', 'athMarketCap', 'security'] as const) if (t[k] === undefined && incoming[k] !== undefined) ((t as any)[k] = incoming[k]), (changed = true);
     // identity (ticker, name, socials): a later share fills what is still missing, never what this machine found
     for (const k of META_KEYS) if (t[k] === undefined && incoming[k]) ((t as any)[k] = incoming[k]), (changed = true);
+    // a friend's copy is someone else's data: only plain web links survive (a new token was copied whole above)
+    scrubLinks(t);
     if (t.via && incoming.athMarketCap !== undefined) t.athMarketCap = Math.max(t.athMarketCap ?? 0, incoming.athMarketCap);
     if (fresh) this.applyBuy(t);
     // shared the instant the call landed, before the friend's own enrichment answered: the chain
@@ -774,6 +778,7 @@ export class MessageHub extends EventEmitter {
       if (!o) continue;
       for (const k of DATA_KEYS) if (o[k] !== undefined) (t as any)[k] = o[k];
       for (const k of META_KEYS) if (o[k]) t[k] = o[k];
+      scrubLinks(t);
       if (o.security) t.security = o.security;
       if (o.firstCallMarketCap !== undefined) t.firstCallMarketCap = o.firstCallMarketCap;
       for (const c of t.calls) {
@@ -1040,13 +1045,17 @@ export class MessageHub extends EventEmitter {
       if (n) console.warn(`[hub] repair: ${n} bot echo(es) dropped from the calls (a bot answering a call had counted as a caller)`);
     }
     this.restoredMintJobs = (snap.mintJobs ?? []).filter((j) => j && typeof j.id === 'string' && (!!j.txHash || j.state === 'waiting'));
+    let scrubbed = 0;
     for (const t of this.tokens.values()) {
+      // links saved before they were checked on the way in
+      scrubbed += scrubLinks(t);
       if (!this.tokenChats.has(t.address)) this.tokenChats.set(t.address, new Set());
       if (t.lastCallTs === undefined) t.lastCallTs = t.firstSeenTs;
       if (!Array.isArray(t.calls)) t.calls = t.firstCaller ? [{ ...t.firstCaller }] : [];
       this.applyBuy(t);
       if ((t.priceUsd === undefined || !this.hasIdentity(t)) && now - t.firstSeenTs < REENRICH_MAX_AGE_MS) this.enrich(t);
     }
+    if (scrubbed) console.warn(`[hub] dropped ${scrubbed} saved token link(s) that were not plain web addresses`);
   }
 
   private changed(): void {
@@ -1074,6 +1083,7 @@ export class MessageHub extends EventEmitter {
         if (info) {
           for (const k of DATA_KEYS) if (info[k] !== undefined) (live as any)[k] = info[k];
           for (const k of META_KEYS) if (info[k] && !live[k]) live[k] = info[k];
+          scrubLinks(live);
           live.enrichedAt = Date.now();
           if (live.marketCap !== undefined) live.athMarketCap = Math.max(live.athMarketCap ?? 0, live.marketCap);
           this.noteFirstCallMc(live);
@@ -1115,6 +1125,7 @@ export class MessageHub extends EventEmitter {
       if (info) {
         for (const k of DATA_KEYS) if (info[k] !== undefined) (t as any)[k] = info[k];
         for (const k of META_KEYS) if (info[k] && !t[k]) t[k] = info[k];
+        scrubLinks(t);
         if (t.marketCap !== undefined) t.athMarketCap = t.marketCap;
         this.applyBuy(t);
       }
@@ -1203,4 +1214,5 @@ function applyMeta(t: TokenInfo, meta: ExtractedMeta, override: boolean): void {
     if (!v) continue;
     if (override || !t[k]) t[k] = v;
   }
+  scrubLinks(t);
 }

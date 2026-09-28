@@ -1,4 +1,4 @@
-import { netLabel } from '../format';
+import { netLabel, webHref } from '../format';
 import { useVisibleToken } from '../visible';
 import { LiveDot } from './LiveDot';
 import { useState } from 'react';
@@ -40,12 +40,13 @@ export function TokenCard({ c, t }: { c: Contract; t?: TokenInfo }) {
   const net = t?.network;
   const label = netLabel(net, c.chain);
   const links: [IconName, string, string | undefined][] = [
-    ['chart', 'open chart', t?.chartUrl],
-    ['globe', 'website', t?.website],
-    ['x', 'X / Twitter', t?.twitter],
-    ['telegram', 'Telegram', t?.telegram],
-    ['explorer', 'explorer', t?.explorerUrl],
+    ['chart', 'open chart', webHref(t?.chartUrl)],
+    ['globe', 'website', webHref(t?.website)],
+    ['x', 'X / Twitter', webHref(t?.twitter)],
+    ['telegram', 'Telegram', webHref(t?.telegram)],
+    ['explorer', 'explorer', webHref(t?.explorerUrl)],
   ];
+  const embed = webHref(t?.embedUrl);
 
   return (
     <div ref={ref} className={`token token-${c.chain}${showChart ? ' token-open' : ''}`}>
@@ -85,7 +86,7 @@ export function TokenCard({ c, t }: { c: Contract; t?: TokenInfo }) {
             {t && t.priceUsd === undefined && <span className="token-pending">no pair yet · retrying</span>}
           </div>
           <div className="token-links">
-            {t?.embedUrl && (
+            {embed && (
               <button
                 className={`token-link${showChart ? ' active' : ''}`}
                 onClick={() => setShowChart((s) => !s)}
@@ -104,11 +105,11 @@ export function TokenCard({ c, t }: { c: Contract; t?: TokenInfo }) {
           </div>
         </div>
       </div>
-      {showChart && t?.embedUrl && (
+      {showChart && embed && (
         <iframe
           className="token-chart"
-          src={t.embedUrl}
-          title={`${t.symbol ?? short} chart`}
+          src={embed}
+          title={`${t?.symbol ?? short} chart`}
           loading="lazy"
           allow="clipboard-write"
         />
