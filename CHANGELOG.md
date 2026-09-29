@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.18.0 — 2026-09-29
+
 - **32-bit Windows.** The Windows installer now also runs on 32-bit Windows 10/11, alongside 64-bit and ARM. It is one installer for all three (about 90 MB larger), so updates keep working the same way on every machine.
 
 - **NOXA Fun, Nad.fun and UBI.fun launchpads.** NOXA Fun (Robinhood Chain, MegaETH, Monad, Arc), Nad.fun (Monad) and UBI.fun (Arc) launches get their badge, linking to the token's page, with their logo and socials, all read off the chain. Nad.fun shows whether a coin is still bonding or has graduated; graduated Nad.fun coins and every UBI.fun coin are priced live off their pools the moment they are seen. Each is a filter under Launchpads in the column editor. A token has to be on the launchpad's own records to get the badge. Nad.fun's metadata is read only from Nad.fun's own storage, and an image the creator marked NSFW is not shown.
