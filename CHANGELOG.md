@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Every launchpad badge shows its logo. Clanker, StonkFun and Believe had no icon, and letsbonk's and Long's stopped loading when their sites changed, so those badges showed letters. All launchpad icons now ship with the app instead of loading from each launchpad's site, so a badge never falls back to letters when a site is down, and no launchpad sees who is looking at a token.
+
 ## v0.18.0 — 2026-09-29
 
 - **32-bit Windows.** The Windows installer now also runs on 32-bit Windows 10/11, alongside 64-bit and ARM. It is one installer for all three (about 90 MB larger), so updates keep working the same way on every machine.
