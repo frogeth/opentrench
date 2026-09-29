@@ -13,7 +13,9 @@ import { STABLE_ADDRESSES, isStable, nativeRef } from './onchain/quotes.js';
 export type Launchpad =
   | 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'genius' | 'loong' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long' | 'argus' | 'warp' | 'peach' | 'dyor' | 'synthra'
   // Solana, read off the chain (solanapads.ts)
-  | 'stonkfun' | 'launchlab' | 'bags' | 'moonshot' | 'believe' | 'daosfun' | 'trends' | 'dbc';
+  | 'stonkfun' | 'launchlab' | 'bags' | 'moonshot' | 'believe' | 'daosfun' | 'trends' | 'dbc'
+  // EVM, read off the chain (evmpads.ts)
+  | 'noxa' | 'nadfun' | 'ubifun';
 
 export interface LaunchpadInfo extends Partial<TokenInfo> {
   launchpad: Launchpad;
@@ -642,6 +644,12 @@ export interface LaunchpadProbes {
   /** Loong (BNB Chain, a Genius fork): only addresses ending in 9999 are asked about */
   loong?: (a: string, network?: string) => Promise<LaunchpadInfo | undefined>;
   flap?: (a: string, network?: string) => Promise<LaunchpadInfo | undefined>;
+  /** NOXA Fun (Robinhood, MegaETH, Monad, Arc): the token names an allowlisted factory whose record names it */
+  noxa?: (a: string, network?: string) => Promise<LaunchpadInfo | undefined>;
+  /** Nad.fun (Monad): only addresses ending in 7777 are asked */
+  nadfun?: (a: string, network?: string) => Promise<LaunchpadInfo | undefined>;
+  /** UBI.fun (Arc) */
+  ubifun?: (a: string, network?: string) => Promise<LaunchpadInfo | undefined>;
   virtuals?: (a: string, network?: string) => Promise<LaunchpadInfo | undefined>;
   clanker?: (a: string, network?: string) => Promise<LaunchpadInfo | undefined>;
   o1?: (a: string, network?: string) => Promise<LaunchpadInfo | undefined>;
@@ -725,9 +733,12 @@ export function createLaunchpadClassifier(p: LaunchpadProbes): (address: string,
       ['bankr', p.bankr],
       ['stonks', p.stonks],
       ['pons', p.pons],
+      ['noxa', p.noxa],
       ['genius', p.genius],
       ['loong', p.loong],
       ['flap', p.flap],
+      ['nadfun', p.nadfun],
+      ['ubifun', p.ubifun],
       ['virtuals', p.virtuals],
       ['clanker', p.clanker],
       ['o1', p.o1],
