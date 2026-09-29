@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { encodeAbiParameters, keccak256 } from 'viem';
 import { createLivePricer } from './live.js';
 import { SEL } from './pools.js';
-import { knownQuote, NATIVE_REFS } from './quotes.js';
+import { knownQuote, normalizeQuote, NATIVE_REFS } from './quotes.js';
 import { base58, PROGRAMS } from './solana.js';
 import type { TokenInfo } from '../types.js';
 
@@ -370,6 +370,21 @@ describe('live pricer: a quote is a dollar or a native coin only by its address'
     const b = deps(fetchImpl);
     await b.pricer.refresh([token({ dex: 'pons', quoteSymbol: 'ETH', quoteAddress: undefined, priceUsd: undefined, marketCap: undefined })]);
     expect(b.apply).toHaveBeenCalled();
+  });
+
+  it('a directory writing native ETH as 0xEeee…EEeE is read as the chain\'s own coin (a v4 native pool)', async () => {
+    const { fetchImpl } = evmNode({
+      'https://ethereum': ethRefTable(),
+      'https://base': {
+        [`${V4}:${SEL.extsload}`]: '0x' + word(Q96 / 100n), // sqrt(1e-4): 1 token = 0.0001 ETH either way round, orientation from the zero address
+        [`${TOKEN}:${SEL.decimals}`]: '0x' + word(18n),
+      },
+    });
+    const { pricer, apply } = deps(fetchImpl);
+    await pricer.refresh([token({ pairAddress: POOL_ID, quoteSymbol: 'ETH', quoteAddress: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', priceUsd: undefined, marketCap: undefined })]);
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(normalizeQuote('0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE')).toBe('0x0000000000000000000000000000000000000000');
+    expect(normalizeQuote('0x' + 'e'.repeat(39) + 'f')).toBe('0x' + 'e'.repeat(39) + 'f');
   });
 
   it('the same address on another chain is not assumed to be the same token', () => {

@@ -3,7 +3,7 @@ import type { TokenInfo } from '../types.js';
 import { CHAINS } from './chains.js';
 import type { Endpoints } from './endpoints.js';
 import { SEL, V4_POOLS_SLOT, addressWord, decodeString, isV4PoolId, orientBySanity, priceFromReserves, priceFromSqrt, words } from './pools.js';
-import { isStable, knownQuote, nativeRef, quoteKey, type QuoteRef } from './quotes.js';
+import { isStable, knownQuote, nativeRef, normalizeQuote, quoteKey, type QuoteRef } from './quotes.js';
 import { evmCalls, evmCallsDetailed, isRevert, solanaAccounts, type EvmResult, type FetchLike } from './rpc.js';
 import type { BlockAt } from './history.js';
 import { decodeSolanaPool, kindOf, mintDecimals, tokenAccountAmount, type SolanaKind, type SolanaPool } from './solana.js';
@@ -189,7 +189,7 @@ export function createLivePricer(deps: LiveDeps) {
           discovered.set(key, { at: now(), usd: true });
           return;
         }
-        discovered.set(key, { at: now(), item: { key, address, network: it.network, symbol: sym, pairAddress: pair, quoteSymbol: info?.quoteSymbol, quoteAddress: info?.quoteAddress, dex: info?.dex, ref: qUsd } });
+        discovered.set(key, { at: now(), item: { key, address, network: it.network, symbol: sym, pairAddress: pair, quoteSymbol: info?.quoteSymbol, quoteAddress: normalizeQuote(info?.quoteAddress), dex: info?.dex, ref: qUsd } });
       })
       .catch((e) => {
         discovered.set(key, { at: now(), error: `lookup failed for ${symbol ?? address.slice(0, 6)}: ${(e as Error).message}` });
@@ -602,7 +602,7 @@ export function createLivePricer(deps: LiveDeps) {
     if (!t.network || !t.pairAddress || !CHAINS[t.network]) return undefined;
     const key = quoteKey(t.network, t.address);
     byAddress.set(t.address, key);
-    return { key, address: t.address, network: t.network, symbol: t.symbol ?? t.address.slice(0, 6), pairAddress: t.pairAddress, quoteSymbol: t.quoteSymbol, quoteAddress: t.quoteAddress, dex: t.dex, token: t };
+    return { key, address: t.address, network: t.network, symbol: t.symbol ?? t.address.slice(0, 6), pairAddress: t.pairAddress, quoteSymbol: t.quoteSymbol, quoteAddress: normalizeQuote(t.quoteAddress), dex: t.dex, token: t };
   };
 
   async function round(items: Item[]): Promise<void> {

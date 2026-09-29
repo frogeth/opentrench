@@ -220,6 +220,7 @@ export class MessageHub extends EventEmitter {
     if (known) return known;
     const t: TokenInfo = { ...info, seen: 0, calledIn: [], calls: [], lastCallTs: 0, firstSeenTs: info.firstSeenTs || Date.now() };
     delete t.firstCaller;
+    delete t.noLaunchpad;
     scrubLinks(t);
     this.applyBuy(t);
     this.tokens.set(t.address, t);
@@ -1083,6 +1084,11 @@ export class MessageHub extends EventEmitter {
         if (info) {
           for (const k of DATA_KEYS) if (info[k] !== undefined) (live as any)[k] = info[k];
           for (const k of META_KEYS) if (info[k] && !live[k]) live[k] = info[k];
+          if (info.noLaunchpad) {
+            delete live.launchpad;
+            delete live.launchpadUrl;
+            delete live.launchpadNote;
+          }
           scrubLinks(live);
           live.enrichedAt = Date.now();
           if (live.marketCap !== undefined) live.athMarketCap = Math.max(live.athMarketCap ?? 0, live.marketCap);

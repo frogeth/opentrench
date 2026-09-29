@@ -663,3 +663,18 @@ describe('watchlist in the hub', () => {
     expect(hub.mentions()[0].alert?.kind).toBe('above');
   });
 });
+
+describe('a launchpad the chain rules out', () => {
+  it('clears a badge a token had from an older, looser rule', async () => {
+    const M = 'Gy2XXE5mLZVfUYDbhy2XmqtsW4HDgpE2gWyA3Rmkpump';
+    const hub = new MessageHub(500, async () => ({ noLaunchpad: true, priceUsd: 1 }), { retryDelaysMs: [] });
+    hub.adopt({ chain: 'sol', address: M, symbol: 'X', seen: 0, calledIn: [], calls: [], firstSeenTs: 0, lastCallTs: 0, launchpad: 'pumpfun', launchpadUrl: `https://pump.fun/coin/${M}`, launchpadNote: 'bonding' } as TokenInfo);
+    await new Promise((r) => setTimeout(r, 0));
+    const t = hub.getToken(M)!;
+    expect(t.launchpad).toBeUndefined();
+    expect(t.launchpadUrl).toBeUndefined();
+    expect(t.launchpadNote).toBeUndefined();
+    expect((t as any).noLaunchpad).toBeUndefined();
+    expect(t.priceUsd).toBe(1);
+  });
+});

@@ -96,6 +96,13 @@ export const STABLE_ADDRESSES = new Set(Object.values(KNOWN).flatMap((m) => Obje
 const ZERO = '0x0000000000000000000000000000000000000000';
 
 /**
+ * Directories write a chain's own coin as 0xEeee…EEeE (the common "native" placeholder) where a Uniswap v4
+ * pool and our launchpad readers use the zero address. Read as the zero address, it gets the native
+ * coin's decimals, the pool's real orientation and the native price; as an ERC-20 it answers nothing.
+ */
+export const normalizeQuote = (address: string | undefined): string | undefined => (address && /^0xe{40}$/i.test(address) ? ZERO : address);
+
+/**
  * What a quote asset is, from its address alone: a dollar, a native coin (with its reference pool), or
  * undefined (then it is priced through its own pool, like a tokenized stock). The zero address is the
  * chain's own coin.
