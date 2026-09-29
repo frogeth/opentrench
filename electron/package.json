@@ -11,7 +11,7 @@
     "prepare-backend": "node scripts/prepare-backend.js",
     "prepare-vencord": "scripts/build-vencord.sh",
     "dist": "npm run prepare-vencord && npm run prepare-backend && electron-builder --mac dmg --publish never",
-    "dist:win": "npm run prepare-vencord && npm run prepare-backend && electron-builder --win nsis --x64 --publish never",
+    "dist:win": "npm run prepare-vencord && npm run prepare-backend && electron-builder --win nsis --publish never",
     "release": "scripts/release.sh"
   },
   "devDependencies": {
@@ -82,7 +82,9 @@
         {
           "target": "nsis",
           "arch": [
-            "x64"
+            "x64",
+            "arm64",
+            "ia32"
           ]
         }
       ],
