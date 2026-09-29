@@ -19,6 +19,7 @@ const LAUNCHPADS: [string, string][] = [
   ['pumpfun', 'Pump.fun'], ['letsbonk', 'letsbonk'], ['bankr', 'Bankr'], ['stonks', 'Stonks'], ['pons', 'Pons'], ['genius', 'Genius'], ['loong', 'Loong'],
   ['o1', 'o1'], ['virtuals', 'Virtuals'], ['flap', 'Flap'], ['clanker', 'Clanker'], ['long', 'Long'],
   ['argus', 'Argus'], ['warp', 'Warp'], ['peach', 'Peach'], ['dyor', 'DYOR'], ['synthra', 'Synthra'],
+  ['stonkfun', 'StonkFun'], ['launchlab', 'LaunchLab'], ['bags', 'Bags'], ['moonshot', 'Moonshot'], ['believe', 'Believe'], ['daosfun', 'daos.fun'], ['trends', 'trends.fun'], ['dbc', 'Meteora DBC'],
 ];
 const MUST: [string, string][] = [
   ['website', 'Website'], ['twitter', 'Twitter'], ['telegram', 'Telegram'], ['social', '≥1 social'], ['image', 'Image'], ['devSold', 'Dev sold'], ['lpLocked', 'LP locked'],

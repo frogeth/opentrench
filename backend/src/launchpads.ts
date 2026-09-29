@@ -10,7 +10,10 @@ import { STABLE_ADDRESSES, isStable, nativeRef } from './onchain/quotes.js';
  * the launchpad itself becomes a badge on the card.
  */
 
-export type Launchpad = 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'genius' | 'loong' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long' | 'argus' | 'warp' | 'peach' | 'dyor' | 'synthra';
+export type Launchpad =
+  | 'pumpfun' | 'letsbonk' | 'bankr' | 'stonks' | 'pons' | 'genius' | 'loong' | 'o1' | 'virtuals' | 'flap' | 'clanker' | 'long' | 'argus' | 'warp' | 'peach' | 'dyor' | 'synthra'
+  // Solana, read off the chain (solanapads.ts)
+  | 'stonkfun' | 'launchlab' | 'bags' | 'moonshot' | 'believe' | 'daosfun' | 'trends' | 'dbc';
 
 export interface LaunchpadInfo extends Partial<TokenInfo> {
   launchpad: Launchpad;
@@ -650,6 +653,8 @@ export interface LaunchpadProbes {
   dyor?: (address: string, network?: string) => Promise<LaunchpadInfo | undefined>;
   synthra?: (address: string, network?: string) => Promise<LaunchpadInfo | undefined>;
   long?: (a: string, network?: string) => Promise<LaunchpadInfo | undefined>;
+  /** Solana: which program holds the mint's curve and under which brand's config (solanapads.ts) */
+  solana?: (mint: string) => Promise<{ definitive: boolean; info?: LaunchpadInfo }>;
   log?: (m: string) => void;
 }
 
@@ -657,10 +662,36 @@ export interface LaunchpadProbes {
  * First launchpad that claims the token wins. Solana: pump.fun mints (suffix)
  * get the pump.fun API for image/mcap; letsbonk by suffix. EVM: probes in order.
  */
-export function createLaunchpadClassifier(p: LaunchpadProbes): (address: string, chain: Chain, network?: string) => Promise<LaunchpadInfo | undefined> {
+/** A launchpad, or null when the chain says for certain the token came from none we know (a badge it had is cleared), or undefined when nobody could tell. */
+export function createLaunchpadClassifier(p: LaunchpadProbes): (address: string, chain: Chain, network?: string) => Promise<LaunchpadInfo | null | undefined> {
   const log = p.log ?? ((m: string) => console.warn('[launchpad]', m));
   // `network` is where the chart sites or the chain placed the token; a multi-chain probe then asks that chain alone
   return async (address, chain, network) => {
+    if (chain === 'sol' && p.solana) {
+      // the chain decides; a vanity suffix is only a hint for when it cannot be asked
+      const v = await p.solana(address).catch((e: any) => (log(`solana launchpad lookup failed for ${address}: ${e?.message ?? e}`), undefined));
+      if (v?.definitive) {
+        if (!v.info) return null;
+        if (v.info.launchpad !== 'pumpfun' || !p.pumpfun) return v.info;
+        // pump.fun's own record adds the name, image, socials and market cap; the chain's badge, note and pool stand
+        const api = await p.pumpfun(address).catch(() => undefined);
+        if (!api) return v.info;
+        const onchain = Object.fromEntries(Object.entries(v.info).filter(([, x]) => x !== undefined));
+        const merged: LaunchpadInfo = { ...api, ...onchain } as LaunchpadInfo;
+        // a finished curve is no pool, whatever the API still lists
+        if (!v.info.pairAddress) delete merged.pairAddress;
+        return merged;
+      }
+      // the chain could not be asked (a busy node): a suffix alone is not proof (tens of thousands of "…pump" mints
+      // are other launchpads'), so only pump.fun's own record can still say it is theirs
+      if (!p.pumpfun) return undefined;
+      try {
+        return await p.pumpfun(address);
+      } catch (e: any) {
+        log(`pumpfun probe failed for ${address}: ${e?.message ?? e}`);
+        return undefined;
+      }
+    }
     const bySuffix = classifyBySuffix(address, chain);
     if (bySuffix?.launchpad === 'pumpfun' && p.pumpfun) {
       try {

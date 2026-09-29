@@ -23,6 +23,15 @@ const LOGOS: Record<string, { src: string; label: string; short: string }> = {
   peach: { src: 'https://www.peach.ag/images/logo.png', label: 'Peach', short: '🍑' },
   dyor: { src: 'https://dyorswap.org/favicon.ico', label: 'DYOR', short: 'DY' },
   synthra: { src: 'https://synthra.org/favicon.ico', label: 'Synthra', short: 'SY' },
+  // Solana brands read off the chain; letters until their icons ship in public/launchpads
+  stonkfun: { src: '', label: 'StonkFun', short: 'SF' },
+  launchlab: { src: '', label: 'Raydium LaunchLab', short: 'LL' },
+  bags: { src: '', label: 'Bags', short: 'BG' },
+  moonshot: { src: '', label: 'Moonshot', short: 'MS' },
+  believe: { src: '', label: 'Believe', short: 'BL' },
+  daosfun: { src: '', label: 'daos.fun', short: 'DF' },
+  trends: { src: '', label: 'trends.fun', short: 'TR' },
+  dbc: { src: '', label: 'Meteora DBC', short: 'MD' },
 };
 
 export function LaunchpadBadge({ launchpad, url, note, size = 18 }: { launchpad?: string; url?: string; /** one more line for the tooltip (Long: anchored to NVDA) */ note?: string; size?: number }) {

@@ -2,7 +2,8 @@ import type { Chain, TokenInfo } from './types.js';
 import { fetchDexscreener } from './dexscreener.js';
 import { fetchGeckoTerminal, gtThrottled } from './geckoterminal.js';
 import { probeChains } from './rpcprobe.js';
-import { createLaunchpadClassifier, fetchBankrLaunch, fetchClanker, fetchFlap, fetchO1, fetchPons, fetchGenius, fetchLoong, fetchPumpfun, fetchStonks, fetchVirtuals, type LaunchpadInfo, fetchArgus, fetchWarp, fetchPeach, fetchDyor, fetchSynthra } from './launchpads.js';
+import { classifySolana } from './solanapads.js';
+import { createLaunchpadClassifier, rpcUrl, fetchBankrLaunch, fetchClanker, fetchFlap, fetchO1, fetchPons, fetchGenius, fetchLoong, fetchPumpfun, fetchStonks, fetchVirtuals, type LaunchpadInfo, fetchArgus, fetchWarp, fetchPeach, fetchDyor, fetchSynthra } from './launchpads.js';
 import { fetchLong } from './long.js';
 
 export type TokenFetcher = (address: string, chain: Chain) => Promise<Partial<TokenInfo> | undefined>;
@@ -40,7 +41,7 @@ export interface EnrichSources {
   /** GeckoTerminal is backing off a 429: a token the probe placed is returned now, its price comes with the next refresh */
   gtBusy?: () => boolean;
   /** launchpad classifier: badge + image/socials for fresh launches no chart site knows yet */
-  launchpad?: (address: string, chain: Chain, network?: string) => Promise<LaunchpadInfo | undefined>;
+  launchpad?: (address: string, chain: Chain, network?: string) => Promise<LaunchpadInfo | null | undefined>;
   /** the chain itself: name, ticker, chain and pool from the contract and the factories (onchain/firstsight.ts) */
   chain?: (address: string, chain: Chain) => Promise<Partial<TokenInfo> | undefined>;
   log?: (msg: string) => void;
@@ -112,7 +113,11 @@ export function createEnricher(src: EnrichSources): TokenFetcher {
     if (src.launchpad) {
       try {
         const lp = await src.launchpad(address, chain, info?.network ?? placed?.network);
-        if (lp) {
+        if (lp === null) {
+          // the chain says no launchpad we know: a badge from an older, looser rule (a pump suffix alone) goes
+          info = info ?? {};
+          info.noLaunchpad = true;
+        } else if (lp) {
           info = info ?? {};
           info.launchpad = lp.launchpad;
           info.launchpadUrl = lp.launchpadUrl;
@@ -152,6 +157,7 @@ export function createDefaultEnricher(opts: { o1ApiKey?: () => string | undefine
       clanker: (a, n) => fetchClanker(a, undefined, n),
       o1: (a, n) => fetchO1(a, opts.o1ApiKey?.(), undefined, n),
       pumpfun: (a) => fetchPumpfun(a),
+      solana: (a) => classifySolana(a, rpcUrl('solana')),
     }),
   });
 }

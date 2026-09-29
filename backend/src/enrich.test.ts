@@ -204,3 +204,12 @@ describe('mapGeckoTerminal', () => {
     expect(await boom('0xabc', 'evm')).toMatchObject({ symbol: 'OK' });
   });
 });
+
+describe('enrich: a launchpad ruled out', () => {
+  it('passes the chain\'s "none" on so a stale badge can be cleared', async () => {
+    const enrich = createEnricher({ launchpad: async () => null, log: () => {} });
+    expect(await enrich('Gy2XXE5mLZVfUYDbhy2XmqtsW4HDgpE2gWyA3Rmkpump', 'sol')).toMatchObject({ noLaunchpad: true });
+    const unknown = createEnricher({ launchpad: async () => undefined, log: () => {} });
+    expect((await unknown('Gy2XXE5mLZVfUYDbhy2XmqtsW4HDgpE2gWyA3Rmkpump', 'sol'))?.noLaunchpad).toBeUndefined();
+  });
+});
