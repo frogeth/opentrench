@@ -584,9 +584,10 @@ describe('Loong', () => {
       expect(out).toMatchObject({ pairAddress: CURVE, quoteAddress: FAKE });
       expect(out?.quoteSymbol).toBeUndefined();
     }
-    expect(curveQuoteLabel(USDT, 'USDT')).toBe('USDT');
-    expect(curveQuoteLabel(FAKE, 'BNCB')).toBe('BNCB');
-    expect(curveQuoteLabel('0x5fc5360d0400a0fd4f2af552add042d716f1d168', 'USDG')).toBe('USDG');
+    expect(curveQuoteLabel('bsc', USDT, 'USDT')).toBe('USDT');
+    expect(curveQuoteLabel('bsc', FAKE, 'BNCB')).toBe('BNCB');
+    expect(curveQuoteLabel('bsc', '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c', 'WBNB')).toBe('WBNB');
+    expect(curveQuoteLabel('robinhood', '0x5fc5360d0400a0fd4f2af552add042d716f1d168', 'USDG')).toBe('USDG');
   });
 
   it('is probed right after Genius', async () => {

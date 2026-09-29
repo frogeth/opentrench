@@ -23,6 +23,18 @@ const LOGOS: Record<string, { src: string; label: string; short: string }> = {
   peach: { src: 'https://www.peach.ag/images/logo.png', label: 'Peach', short: '🍑' },
   dyor: { src: 'https://dyorswap.org/favicon.ico', label: 'DYOR', short: 'DY' },
   synthra: { src: 'https://synthra.org/favicon.ico', label: 'Synthra', short: 'SY' },
+  // Solana brands read off the chain; icons shipped with the app (re-encoded 64px PNGs), letters where the site could not be reached
+  stonkfun: { src: '', label: 'StonkFun', short: 'SF' },
+  launchlab: { src: '/launchpads/launchlab.png', label: 'Raydium LaunchLab', short: 'LL' },
+  bags: { src: '/launchpads/bags.png', label: 'Bags', short: 'BG' },
+  moonshot: { src: '/launchpads/moonshot.png', label: 'Moonshot', short: 'MS' },
+  believe: { src: '', label: 'Believe', short: 'BL' },
+  daosfun: { src: '/launchpads/daosfun.png', label: 'daos.fun', short: 'DF' },
+  trends: { src: '/launchpads/trends.png', label: 'trends.fun', short: 'TR' },
+  dbc: { src: '/launchpads/dbc.png', label: 'Meteora DBC', short: 'MD' },
+  noxa: { src: '/launchpads/noxa.png', label: 'NOXA Fun', short: 'NX' },
+  nadfun: { src: '/launchpads/nadfun.png', label: 'Nad.fun', short: 'NF' },
+  ubifun: { src: '/launchpads/ubifun.png', label: 'UBI.fun', short: 'UB' },
 };
 
 export function LaunchpadBadge({ launchpad, url, note, size = 18 }: { launchpad?: string; url?: string; /** one more line for the tooltip (Long: anchored to NVDA) */ note?: string; size?: number }) {

@@ -160,12 +160,19 @@ in settings.
   mode is still there for people on one Wi-Fi who want nothing to leave the
   house: nearby machines by name, an Allow / Ignore prompt with a four-letter
   code, or pair by link. Docs: [docs/together.md](docs/together.md).
-- **Launchpads.** pump.fun (coin API: image + market cap while still
-  bonding; a curve raised in USDC is priced in USDC), Bankr, Stonks, Virtuals
-  and letsbonk, plus these read straight off the chain, each from the
+- **Launchpads.** On Solana the chain decides, not the mint's vanity suffix:
+  the program that holds the mint's curve and the brand's own config key say
+  pump.fun, BONK.fun, StonkFun or Raydium LaunchLab (LaunchLab pools, any
+  quote), and Bags, Moonshot, Believe, daos.fun, trends.fun or Meteora DBC (DBC
+  pools); pump.fun's coin API then adds image and market cap. Bankr, Stonks
+  and Virtuals come from their APIs, and these are read straight off the chain, each from the
   launchpad's own factory or portal so a token cannot just claim to be one:
   Pons V1 and V2 (Robinhood Chain; V2 curves priced live, in ETH or whatever
-  the creator paired, USDG included), Flap (BNB, Robinhood, Monad, Base: the
+  the creator paired, USDG included), NOXA Fun (Robinhood, MegaETH, Monad,
+  Arc: the token's factory must be NOXA's and name it; Pons V1's contracts,
+  kept apart), Nad.fun (Monad: its curve contracts' records; metadata only
+  from Nad.fun's own storage), UBI.fun (Arc: its Flaunch launch NFT; priced
+  off its Uniswap v4 pool), Flap (BNB, Robinhood, Monad, Base: the
   Portal's record, with curve progress), Clanker (Base, Arbitrum, Ethereum,
   Monad, Robinhood: the v4 factory's record, metadata off the token), o1 (Base,
   Robinhood, Monad, Arc, BNB: the factory's record; an API key only adds the

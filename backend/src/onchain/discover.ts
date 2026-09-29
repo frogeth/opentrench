@@ -90,6 +90,7 @@ export const QUOTES: Record<string, QuoteAsset[]> = {
 };
 
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+const USD1_MINT = 'USD1ttGY1N17NEEHLmELoaybftRBUSErhqYiQzvEmuB';
 const pad32 = (hex: string) => hex.replace(/^0x/, '').toLowerCase().padStart(64, '0');
 const GET_PAIR = '0xe6a43905'; // getPair(address,address)
 const GET_POOL = '0x1698ee82'; // getPool(address,address,uint24)
@@ -120,7 +121,7 @@ async function discoverOnStack(stack: GeniusStack, token: string, deps: Discover
   const zero = '0x0000000000000000000000000000000000000000';
   if (launch.pairToken.toLowerCase() === zero) return { pairAddress: launch.curve, quoteSymbol: stack.native, quoteAddress: zero, dex: stack.launchpad };
   const [sym] = await evmCallsDetailed(ep.url, [{ to: launch.pairToken, data: SEL.symbol }], fetchImpl);
-  const quoteSymbol = curveQuoteLabel(launch.pairToken, sym?.result ? decodeString(sym.result) : undefined);
+  const quoteSymbol = curveQuoteLabel(stack.network, launch.pairToken, sym?.result ? decodeString(sym.result) : undefined);
   if (!quoteSymbol) return undefined;
   return { pairAddress: launch.curve, quoteSymbol, quoteAddress: launch.pairToken, dex: stack.launchpad };
 }
@@ -198,7 +199,9 @@ export async function discoverSolana(mint: string, deps: DiscoverDeps): Promise<
   const fetchImpl = deps.fetch ?? (fetch as unknown as FetchLike);
   const curve = findProgramAddress([utf8('bonding-curve'), mint], PROGRAMS.pumpfun).address;
   const launch = findProgramAddress([utf8('pool'), mint, SOL_MINT], PROGRAMS.raydiumLaunchlab).address;
-  const [c, l] = await solanaAccounts(ep.url, [curve, launch], fetchImpl);
+  // BONK.fun raises in USD1 too (a quarter of its launches): that pool lives at its own derived address
+  const launchUsd1 = findProgramAddress([utf8('pool'), mint, USD1_MINT], PROGRAMS.raydiumLaunchlab).address;
+  const [c, l, u] = await solanaAccounts(ep.url, [curve, launch, launchUsd1], fetchImpl);
   if (c && c.owner === PROGRAMS.pumpfun) {
     const p = decodeSolanaPool('pumpfun', c.data, mint);
     // the curve names its quote; SOL and USDC are the ones pump.fun raises in, anything else waits for the directory
@@ -208,6 +211,10 @@ export async function discoverSolana(mint: string, deps: DiscoverDeps): Promise<
   if (l && l.owner === PROGRAMS.raydiumLaunchlab) {
     const p = decodeSolanaPool('raydiumLaunchlab', l.data, mint);
     if (p && !p.done) return { pairAddress: launch, quoteSymbol: 'SOL', quoteAddress: SOL_MINT, dex: 'raydium-launchlab' };
+  }
+  if (u && u.owner === PROGRAMS.raydiumLaunchlab) {
+    const p = decodeSolanaPool('raydiumLaunchlab', u.data, mint);
+    if (p && !p.done) return { pairAddress: launchUsd1, quoteSymbol: 'USD1', quoteAddress: USD1_MINT, dex: 'raydium-launchlab' };
   }
   return undefined;
 }

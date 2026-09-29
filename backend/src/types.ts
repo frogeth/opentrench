@@ -233,6 +233,8 @@ export interface TokenInfo {
   launchpadUrl?: string;
   /** one line the launchpad adds to the badge (Long: "anchored to NVDA") */
   launchpadNote?: string;
+  /** enrichment only, never stored: the chain says this token came from no launchpad we know, so a badge it had goes */
+  noLaunchpad?: boolean;
   /** when the sources last answered for this token; an opened token older than that is asked again */
   enrichedAt?: number;
   /** TrenchTogether: the friend whose machine this call came from (absent for your own calls) */
