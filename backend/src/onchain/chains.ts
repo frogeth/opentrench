@@ -43,7 +43,7 @@ export const CHAINS: Record<string, ChainDef> = {
 };
 
 /** Quote assets that are a dollar. */
-export const STABLES = new Set(['USDC', 'USDT', 'USDG', 'USD1', 'DAI', 'USDE', 'USDB', 'USDS', 'PYUSD', 'USDT0', 'USDC.E', 'USDBC']);
+export const STABLES = new Set(['USDC', 'USDT', 'USDG', 'USD1', 'DAI', 'USDE', 'USDB', 'USDS', 'PYUSD', 'USDT0', 'USD\u20ae0', 'USDC.E', 'USDBC']);
 
 /** The CoinGecko id for a quote symbol (native coins, wrapped or not); undefined = not a coin we price. */
 export function coingeckoIdFor(symbol: string): string | undefined {

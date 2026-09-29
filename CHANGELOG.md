@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Prices: a coin paired with a worthless token that merely calls itself USDC, USDT, WETH or the like is no longer priced as if its pair were a dollar or ETH. The live pricer now takes a quote asset as a dollar or a native coin only by its address (the real USDC, WETH, WBNB… on each chain); anything else is priced through its own pool. On a chain whose dollar tokens are not listed, a token named like one counts as a dollar only when it really trades at one.
+
 - **Launchpads are recognised by the launchpad itself, on-chain.** Flap, Clanker, o1 and Pons badges now come from each launchpad's own factory or portal naming the token. A contract that only answered the same calls (anyone can deploy one) no longer gets a badge. More chains are covered: Flap on Monad and Base as well as BNB and Robinhood Chain, Clanker on Arbitrum, Ethereum, Monad and Robinhood as well as Base, and o1 on BNB Chain. o1 no longer needs an API key to be recognised; the key only adds the image and socials.
 - Pons: V2 launches show their curve progress and are priced live off the curve, including curves paired with USDG or another token rather than ETH. V1 launches are priced off their Uniswap pool. The badge opens the token's own Pons page. NOXA tokens, which run on the same contracts, are no longer shown as Pons.
 - Flap's badge now opens the token's page on flap.sh (it opened an empty page).

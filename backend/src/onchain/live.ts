@@ -3,7 +3,7 @@ import type { TokenInfo } from '../types.js';
 import { CHAINS } from './chains.js';
 import type { Endpoints } from './endpoints.js';
 import { SEL, V4_POOLS_SLOT, addressWord, decodeString, isV4PoolId, orientBySanity, priceFromReserves, priceFromSqrt, words } from './pools.js';
-import { isStable, nativeRef, quoteKey, type QuoteRef } from './quotes.js';
+import { isStable, knownQuote, nativeRef, quoteKey, type QuoteRef } from './quotes.js';
 import { evmCalls, evmCallsDetailed, isRevert, solanaAccounts, type EvmResult, type FetchLike } from './rpc.js';
 import type { BlockAt } from './history.js';
 import { decodeSolanaPool, kindOf, mintDecimals, tokenAccountAmount, type SolanaKind, type SolanaPool } from './solana.js';
@@ -92,6 +92,8 @@ const LIVE_STALE_MS = 60_000;
 const QUOTE_STALE_MS = 120_000;
 const DISCOVER_TTL_MS = 10 * 60_000;
 const DISCOVER_FAIL_MS = 60_000;
+/** curves our launchpad readers name the quote of (backend/src/launchpads.ts): the only labels that may stand without an address */
+const CURVE_DEXES = new Set(['genius', 'loong', 'pons']);
 const VISIBLE_TTL_MS = 30_000;
 const MAX_DEPTH = 3;
 
@@ -110,7 +112,11 @@ export function createLivePricer(deps: LiveDeps) {
   /** dollar price of quote assets, by quote key */
   const quoteUsd = new Map<string, { usd: number; at: number }>();
   /** where a quote asset trades, by quote key */
-  const discovered = new Map<string, { item?: Item; at: number; pending?: Promise<void>; error?: string }>();
+/** how far from $1 a stable-named quote may trade and still count as a dollar */
+  const STABLE_BAND = 0.02;
+  const discovered = new Map<string, { item?: Item; usd?: true; at: number; pending?: Promise<void>; error?: string }>();
+  /** a dollar token found by its market must have real depth behind that $1, and is looked at again now and then */
+  const STABLE_MIN_LIQUIDITY = 50_000;
   const visible = new Map<string, { addresses: string[]; at: number }>();
   let inflight = false;
 
@@ -143,15 +149,27 @@ export function createLivePricer(deps: LiveDeps) {
     // (a "SOL", a "USDC") is not borrowed for it, or the other token's reserves would be priced as SOL
     const same = !m?.quoteAddress || !it.quoteAddress || quoteKey(it.network, m.quoteAddress) === quoteKey(it.network, it.quoteAddress);
     const symbol = m?.quoteSymbol ?? (same ? it.quoteSymbol : undefined);
-    if (isStable(symbol, address)) return { usd: 1 };
-    const native = nativeRef(symbol);
-    if (native) return { item: itemFromRef(native) };
-    if (!address) return { reason: symbol ? `no address for ${symbol}` : 'no quote asset yet' };
+    if (!address) {
+      // no address at all: a label is trusted only when our own launchpad reader set it (a curve's native coin),
+      // never one a chart site copied from a pool name
+      if (!it.dex || !CURVE_DEXES.has(it.dex)) return { reason: symbol ? `no address for ${symbol}` : 'no quote asset yet' };
+      if (isStable(symbol, undefined)) return { usd: 1 };
+      const native = nativeRef(symbol);
+      if (native) return { item: itemFromRef(native) };
+      return { reason: symbol ? `no address for ${symbol}` : 'no quote asset yet' };
+    }
+    // with an address, only the address says dollar or native coin: a symbol() is whatever the deployer typed, and a
+    // worthless token calling itself "USDC" or "WETH" must not price a pool as if it were one
+    const known = knownQuote(it.network, address);
+    if (known) return 'usd' in known ? { usd: 1 } : { item: itemFromRef(known.native) };
+    if (/^0x0{40}$/.test(address)) return { reason: `${CHAINS[it.network]?.native ?? 'the native coin'} is not priced on-chain` };
     const key = quoteKey(it.network, address);
     const d = discovered.get(key);
+    // a market's say-so is re-checked every few minutes: a depeg, or a thin pool pulled after it read $1, shows
+    if (d?.usd && now() - d.at < DISCOVER_TTL_MS) return { usd: 1 };
     if (d?.item) return { item: d.item };
-    if (d && d.pending) return { reason: `finding a pool for ${symbol ?? address.slice(0, 6)}` };
-    if (d && now() - d.at < DISCOVER_FAIL_MS) return { reason: d.error ?? `no pool for ${symbol ?? address.slice(0, 6)}` };
+    if (d && !d.usd && d.pending) return { reason: `finding a pool for ${symbol ?? address.slice(0, 6)}` };
+    if (d && !d.usd && now() - d.at < DISCOVER_FAIL_MS) return { reason: d.error ?? `no pool for ${symbol ?? address.slice(0, 6)}` };
     if (!deps.discover) return { reason: `paired with ${symbol ?? address.slice(0, 6)}, which is not priced` };
     const entry = { at: now(), pending: undefined as Promise<void> | undefined };
     entry.pending = deps
@@ -164,6 +182,13 @@ export function createLivePricer(deps: LiveDeps) {
         }
         const sym = info?.symbol ?? symbol ?? address.slice(0, 6);
         const qUsd = info?.priceUsd;
+        // a dollar token on a chain whose stables are not listed by address (Monad's USDC, USDT0): taken as $1 only
+        // when its own market says so; a worthless token that only calls itself USDC trades nowhere near a dollar
+        const depth = info?.liquidity;
+        if (isStable(info?.symbol, undefined) && typeof qUsd === 'number' && Math.abs(qUsd - 1) <= STABLE_BAND && typeof depth === 'number' && depth >= STABLE_MIN_LIQUIDITY) {
+          discovered.set(key, { at: now(), usd: true });
+          return;
+        }
         discovered.set(key, { at: now(), item: { key, address, network: it.network, symbol: sym, pairAddress: pair, quoteSymbol: info?.quoteSymbol, quoteAddress: info?.quoteAddress, dex: info?.dex, ref: qUsd } });
       })
       .catch((e) => {

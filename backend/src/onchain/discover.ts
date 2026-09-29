@@ -120,7 +120,7 @@ async function discoverOnStack(stack: GeniusStack, token: string, deps: Discover
   const zero = '0x0000000000000000000000000000000000000000';
   if (launch.pairToken.toLowerCase() === zero) return { pairAddress: launch.curve, quoteSymbol: stack.native, quoteAddress: zero, dex: stack.launchpad };
   const [sym] = await evmCallsDetailed(ep.url, [{ to: launch.pairToken, data: SEL.symbol }], fetchImpl);
-  const quoteSymbol = curveQuoteLabel(launch.pairToken, sym?.result ? decodeString(sym.result) : undefined);
+  const quoteSymbol = curveQuoteLabel(stack.network, launch.pairToken, sym?.result ? decodeString(sym.result) : undefined);
   if (!quoteSymbol) return undefined;
   return { pairAddress: launch.curve, quoteSymbol, quoteAddress: launch.pairToken, dex: stack.launchpad };
 }

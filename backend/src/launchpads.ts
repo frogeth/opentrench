@@ -1,7 +1,7 @@
 import type { Chain, TokenInfo } from './types.js';
 import { imageLink, webLink } from './weblink.js';
 import { CHAINS } from './onchain/chains.js';
-import { STABLE_ADDRESSES, isStable, nativeRef } from './onchain/quotes.js';
+import { isStable, knownQuote, nativeRef } from './onchain/quotes.js';
 
 /**
  * Launchpad classification, ported from frogr's per-launchpad probes.
@@ -1123,10 +1123,10 @@ export function geniusStackCandidate(stack: GeniusStack, address: string): boole
  * symbol reading as a dollar or a native coin at its word, so a token calling itself "USDC" or "WBNB"
  * only gets that label when its address really is one; otherwise it gets none and is not priced off it.
  */
-export function curveQuoteLabel(address: string, symbol: string | undefined): string | undefined {
+export function curveQuoteLabel(network: string, address: string, symbol: string | undefined): string | undefined {
   const label = cleanLabel(symbol, 16);
   if (!label) return undefined;
-  if ((isStable(label, undefined) || nativeRef(label)) && !STABLE_ADDRESSES.has(address.toLowerCase())) return undefined;
+  if ((isStable(label, undefined) || nativeRef(label)) && !knownQuote(network, address)) return undefined;
   return label;
 }
 
@@ -1248,7 +1248,7 @@ export async function fetchGeniusStack(stack: GeniusStack, address: string, fetc
     if (native) out.quoteSymbol = stack.native;
     else {
       out.quoteAddress = launch.pairToken;
-      const ps = curveQuoteLabel(launch.pairToken, pairSym ? decodeStrings(pairSym, 1)?.[0] : undefined);
+      const ps = curveQuoteLabel(stack.network, launch.pairToken, pairSym ? decodeStrings(pairSym, 1)?.[0] : undefined);
       if (ps) out.quoteSymbol = ps;
     }
   }

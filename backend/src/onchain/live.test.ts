@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { encodeAbiParameters, keccak256 } from 'viem';
 import { createLivePricer } from './live.js';
 import { SEL } from './pools.js';
-import { NATIVE_REFS } from './quotes.js';
+import { knownQuote, NATIVE_REFS } from './quotes.js';
 import { base58, PROGRAMS } from './solana.js';
 import type { TokenInfo } from '../types.js';
 
@@ -10,7 +10,9 @@ const word = (n: bigint) => n.toString(16).padStart(64, '0');
 const addr = (a: string) => '0x' + a.replace(/^0x/, '').toLowerCase().padStart(64, '0');
 const abiString = (s: string) => '0x' + word(32n) + word(BigInt(s.length)) + Buffer.from(s).toString('hex').padEnd(64, '0');
 const TOKEN = '0x1111111111111111111111111111111111111111';
-const WETH = '0x2222222222222222222222222222222222222222';
+/** Base's real WETH: a quote is only ever ETH by its address */
+const WETH = '0x4200000000000000000000000000000000000006';
+const RH_WETH = '0x0bd7d308f8e1639fab988df18a8011f41eacad73';
 const USDC = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
 const PAIR = '0x3333333333333333333333333333333333333333';
 const V4 = '0x498581ff718922c3f8e6a244956af099b2652b2b'; // base
@@ -161,12 +163,12 @@ describe('live pricer: v3, v4 and Pons curves', () => {
       'https://robinhood': {
         [`${PAIR}:${SEL.getReserves}`]: '0x' + word(2n * 10n ** 18n) + word(1_000_000_000n * 10n ** 18n), // 2 ETH virtual : 1e9 tokens
         [`${TOKEN}:${SEL.decimals}`]: '0x' + word(18n),
-        [`${WETH}:${SEL.decimals}`]: '0x' + word(18n),
+        [`${RH_WETH}:${SEL.decimals}`]: '0x' + word(18n),
       },
     });
     const { pricer, apply } = deps(fetchImpl);
     const noMgr = token({ address: '0x4444444444444444444444444444444444444444', network: 'hyperevm', pairAddress: POOL_ID, quoteSymbol: 'WHYPE' });
-    await pricer.refresh([token({ network: 'robinhood', dex: 'pons-v2', quoteSymbol: 'WETH', priceUsd: undefined, marketCap: undefined }), noMgr]);
+    await pricer.refresh([token({ network: 'robinhood', dex: 'pons-v2', quoteSymbol: 'WETH', quoteAddress: RH_WETH, priceUsd: undefined, marketCap: undefined }), noMgr]);
     expect(apply).toHaveBeenCalledTimes(1);
     expect(apply.mock.calls[0][1].priceUsd).toBeCloseTo(2e-9 * 3000, 12);
     expect(pricer.reason('hyperevm', noMgr.address)).toMatch(/PoolManager/);
@@ -201,14 +203,15 @@ describe('live pricer: v3, v4 and Pons curves', () => {
     expect(pricer.reason('robinhood', TOKEN)).toMatch(/decimals/);
   });
   it('a quote nobody can price is skipped by name; a busy node is retried, not written off; an outage is reported', async () => {
+    const NVDA = '0x2222222222222222222222222222222222222222';
     const { fetchImpl } = evmNode({
       'https://base': {
         [`${PAIR}:${SEL.token0}`]: addr(TOKEN),
-        [`${PAIR}:${SEL.token1}`]: addr(WETH),
+        [`${PAIR}:${SEL.token1}`]: addr(NVDA),
         [`${PAIR}:${SEL.getReserves}`]: '0x' + word(1n) + word(1n) + word(0n),
         [`${TOKEN}:${SEL.decimals}`]: '0x' + word(18n),
-        [`${WETH}:${SEL.decimals}`]: '0x' + word(18n),
-        [`${WETH}:${SEL.symbol}`]: abiString('NVDA'),
+        [`${NVDA}:${SEL.decimals}`]: '0x' + word(18n),
+        [`${NVDA}:${SEL.symbol}`]: abiString('NVDA'),
       },
     });
     const { pricer, apply } = deps(fetchImpl);
@@ -227,6 +230,8 @@ describe('live pricer: v3, v4 and Pons curves', () => {
     expect(p3.pricer.status().base.lastError).toBe('rpc 502');
   });
   it('an unknown quote is found through the directory once, then priced through its own pool (a tokenized stock against USDC)', async () => {
+    // Robinhood's own dollar (by address on that chain; Base's USDC address means nothing here)
+    const USDG = '0x5fc5360d0400a0fd4f2af552add042d716f1d168';
     const GOOGL = '0x5555555555555555555555555555555555555555';
     const GPAIR = '0x6666666666666666666666666666666666666666';
     const { fetchImpl, calls } = evmNode({
@@ -238,13 +243,13 @@ describe('live pricer: v3, v4 and Pons curves', () => {
         [`${GOOGL}:${SEL.decimals}`]: '0x' + word(18n),
         [`${GOOGL}:${SEL.symbol}`]: abiString('GOOGL'),
         [`${GPAIR}:${SEL.token0}`]: addr(GOOGL),
-        [`${GPAIR}:${SEL.token1}`]: addr(USDC),
+        [`${GPAIR}:${SEL.token1}`]: addr(USDG),
         [`${GPAIR}:${SEL.getReserves}`]: '0x' + word(1000n * 10n ** 18n) + word(200_000n * 10n ** 6n) + word(0n), // 200 USDC per GOOGL
-        [`${USDC}:${SEL.decimals}`]: '0x' + word(6n),
-        [`${USDC}:${SEL.symbol}`]: abiString('USDC'),
+        [`${USDG}:${SEL.decimals}`]: '0x' + word(6n),
+        [`${USDG}:${SEL.symbol}`]: abiString('USDC'),
       },
     });
-    const discover = vi.fn(async (_n: string, address: string) => (address === GOOGL ? { symbol: 'GOOGL', pairAddress: GPAIR, quoteSymbol: 'USDC', quoteAddress: USDC, dex: 'uniswap', priceUsd: 199 } : undefined));
+    const discover = vi.fn(async (_n: string, address: string) => (address === GOOGL ? { symbol: 'GOOGL', pairAddress: GPAIR, quoteSymbol: 'USDC', quoteAddress: USDG, dex: 'uniswap', priceUsd: 199 } : undefined));
     const { pricer, apply } = deps(fetchImpl, { discover });
     const t = token({ network: 'robinhood', quoteSymbol: 'GOOGL', quoteAddress: GOOGL, priceUsd: undefined, marketCap: undefined });
     await pricer.refresh([t]);
@@ -257,6 +262,134 @@ describe('live pricer: v3, v4 and Pons curves', () => {
     expect(apply.mock.calls[0][1].priceUsd).toBeCloseTo(0.02, 9); // 0.0001 × 200
     expect(pricer.quotes()[`robinhood:${GOOGL}`]).toBeCloseTo(200, 6);
     expect(calls.filter((c) => c === `${GPAIR}:${SEL.getReserves}`).length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('live pricer: a quote is a dollar or a native coin only by its address', () => {
+  const FAKE = '0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a';
+  const pool = (quoteSymbol: string) => ({
+    'https://ethereum': ethRefTable(),
+    'https://base': {
+      [`${PAIR}:${SEL.token0}`]: addr(TOKEN),
+      [`${PAIR}:${SEL.token1}`]: addr(FAKE),
+      [`${PAIR}:${SEL.getReserves}`]: '0x' + word(1000n * 10n ** 18n) + word(1n * 10n ** 18n) + word(0n),
+      [`${TOKEN}:${SEL.decimals}`]: '0x' + word(18n),
+      [`${FAKE}:${SEL.decimals}`]: '0x' + word(18n),
+      [`${FAKE}:${SEL.symbol}`]: abiString(quoteSymbol),
+    },
+  });
+  for (const sym of ['USDC', 'WETH', 'USDT', 'ETH']) {
+    it(`a pool paired with a worthless token calling itself ${sym} is not priced as ${sym}`, async () => {
+      const { fetchImpl } = evmNode(pool(sym));
+      const { pricer, apply } = deps(fetchImpl);
+      await pricer.refresh([token({ quoteSymbol: undefined, quoteAddress: undefined, priceUsd: undefined, marketCap: undefined })]);
+      expect(apply).not.toHaveBeenCalled();
+      expect(Object.keys(pricer.status().base.reasons)[0]).toMatch(new RegExp(`paired with ${sym}, which is not priced`));
+    });
+  }
+  it('a chart site naming an unknown address "USDC" does not make it a dollar either', async () => {
+    const { fetchImpl } = evmNode(pool('USDC'));
+    const { pricer, apply } = deps(fetchImpl);
+    await pricer.refresh([token({ quoteSymbol: 'USDC', quoteAddress: FAKE, priceUsd: undefined, marketCap: undefined })]);
+    expect(apply).not.toHaveBeenCalled();
+  });
+  it('an unlisted token named USDC counts as a dollar only when its own market trades it at a dollar', async () => {
+    const QPOOL = '0x6666666666666666666666666666666666666666';
+    const table = pool('USDC');
+    // FAKE's own pool: 1 FAKE = 1 WETH (3000 USD), a pool the directory finds for it
+    Object.assign(table['https://base'], {
+      [`${QPOOL}:${SEL.token0}`]: addr(FAKE),
+      [`${QPOOL}:${SEL.token1}`]: addr(WETH),
+      [`${QPOOL}:${SEL.getReserves}`]: '0x' + word(10n ** 18n) + word(10n ** 18n) + word(0n),
+      [`${WETH}:${SEL.decimals}`]: '0x' + word(18n),
+      [`${WETH}:${SEL.symbol}`]: abiString('WETH'),
+    });
+    for (const [marketUsd, expectUsd] of [[1.003, 1e-3], [3000, 3]] as const) {
+      const { fetchImpl } = evmNode(table);
+      const discover = vi.fn(async () => ({ symbol: 'USDC', pairAddress: QPOOL, quoteSymbol: 'WETH', quoteAddress: WETH, dex: 'uniswap', priceUsd: marketUsd, liquidity: 250_000 }));
+      const { pricer, apply } = deps(fetchImpl, { discover });
+      const t = token({ quoteSymbol: undefined, quoteAddress: undefined, priceUsd: undefined, marketCap: undefined });
+      for (let i = 0; i < 4; i++) {
+        await pricer.refresh([t]);
+        await new Promise((r) => setImmediate(r));
+      }
+      // 1000 tokens per FAKE: at $1 a FAKE the token is $0.001; at FAKE's real $3000 it is $3, never the fake's claimed $1
+      expect(apply.mock.calls.at(-1)?.[1].priceUsd).toBeCloseTo(expectUsd, 6);
+    }
+  });
+  it('a $1 market with no depth does not make a dollar, and a dollar verdict is looked at again', async () => {
+    let clock = 1_000_000;
+    const QPOOL = '0x6666666666666666666666666666666666666666';
+    const table = pool('USDC');
+    Object.assign(table['https://base'], {
+      [`${QPOOL}:${SEL.token0}`]: addr(FAKE),
+      [`${QPOOL}:${SEL.token1}`]: addr(WETH),
+      [`${QPOOL}:${SEL.getReserves}`]: '0x' + word(10n ** 18n) + word(10n ** 18n) + word(0n),
+      [`${WETH}:${SEL.decimals}`]: '0x' + word(18n),
+      [`${WETH}:${SEL.symbol}`]: abiString('WETH'),
+    });
+    const run = async (market: { priceUsd: number; liquidity: number }[]) => {
+      const { fetchImpl } = evmNode(table);
+      let n = 0;
+      const discover = vi.fn(async () => ({ symbol: 'USDC', pairAddress: QPOOL, quoteSymbol: 'WETH', quoteAddress: WETH, dex: 'uniswap', ...market[Math.min(n++, market.length - 1)] }));
+      const { pricer, apply } = deps(fetchImpl, { discover, now: () => clock });
+      const t = token({ quoteSymbol: undefined, quoteAddress: undefined, priceUsd: undefined, marketCap: undefined });
+      const tick = async () => {
+        for (let i = 0; i < 3; i++) {
+          await pricer.refresh([t]);
+          await new Promise((r) => setImmediate(r));
+        }
+      };
+      return { tick, apply, discover };
+    };
+    // thin: a $1 reading on $1k of liquidity is not a dollar; the token is priced through FAKE's own pool (1 FAKE = 1 WETH)
+    const thin = await run([{ priceUsd: 1, liquidity: 1_000 }]);
+    await thin.tick();
+    expect(thin.apply.mock.calls.at(-1)?.[1].priceUsd).toBeCloseTo(3, 6);
+    // deep at first, then the pool is pulled: after the re-check the $1 no longer stands
+    const pulled = await run([{ priceUsd: 1, liquidity: 500_000 }, { priceUsd: 3000, liquidity: 500_000 }]);
+    await pulled.tick();
+    expect(pulled.apply.mock.calls.at(-1)?.[1].priceUsd).toBeCloseTo(1e-3, 9);
+    clock += 11 * 60_000;
+    await pulled.tick();
+    expect(pulled.discover).toHaveBeenCalledTimes(2);
+    expect(pulled.apply.mock.calls.at(-1)?.[1].priceUsd).toBeCloseTo(3, 6);
+  });
+
+  it('a label with no address stands only for our own launchpad curves', async () => {
+    const { fetchImpl } = evmNode({
+      'https://ethereum': ethRefTable(),
+      'https://base': {
+        [`${PAIR}:${SEL.getReserves}`]: '0x' + word(2n * 10n ** 18n) + word(1_000_000_000n * 10n ** 18n),
+        [`${TOKEN}:${SEL.decimals}`]: '0x' + word(18n),
+      },
+    });
+    const a = deps(fetchImpl);
+    await a.pricer.refresh([token({ dex: 'uniswap', quoteSymbol: 'USDC', quoteAddress: undefined, priceUsd: undefined, marketCap: undefined })]);
+    expect(a.apply).not.toHaveBeenCalled();
+    const b = deps(fetchImpl);
+    await b.pricer.refresh([token({ dex: 'pons', quoteSymbol: 'ETH', quoteAddress: undefined, priceUsd: undefined, marketCap: undefined })]);
+    expect(b.apply).toHaveBeenCalled();
+  });
+
+  it('the same address on another chain is not assumed to be the same token', () => {
+    expect(knownQuote('plasma', '0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb')).toEqual({ usd: true });
+    expect(knownQuote('monad', '0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb')).toBeUndefined();
+    expect(knownQuote('robinhood', '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913')).toBeUndefined();
+    expect(knownQuote('solana', 'epjfwdd5aufqssqem2qn1xzybapc8g4wegGkZwyTDt1v')).toBeUndefined();
+  });
+
+  it('knows the real ones by address, and a chain\'s own coin at the zero address', () => {
+    expect(knownQuote('base', '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913')).toEqual({ usd: true });
+    expect(knownQuote('base', '0x4200000000000000000000000000000000000006')).toMatchObject({ native: { symbol: 'WETH' } });
+    expect(knownQuote('robinhood', '0x0BD7D308F8E1639FAB988DF18A8011F41EACAD73')).toMatchObject({ native: { symbol: 'WETH' } });
+    expect(knownQuote('bsc', '0x0000000000000000000000000000000000000000')).toMatchObject({ native: { symbol: 'WBNB' } });
+    expect(knownQuote('arc', '0x0000000000000000000000000000000000000000')).toEqual({ usd: true });
+    expect(knownQuote('monad', '0x0000000000000000000000000000000000000000')).toBeUndefined();
+    expect(knownQuote('solana', 'So11111111111111111111111111111111111111112')).toMatchObject({ native: { symbol: 'SOL' } });
+    // Base's WETH address on a chain where it is something else is not WETH
+    expect(knownQuote('bsc', '0x4200000000000000000000000000000000000006')).toBeUndefined();
+    expect(knownQuote('base', FAKE)).toBeUndefined();
   });
 });
 
