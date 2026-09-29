@@ -32,6 +32,9 @@ const LOGOS: Record<string, { src: string; label: string; short: string }> = {
   daosfun: { src: '/launchpads/daosfun.png', label: 'daos.fun', short: 'DF' },
   trends: { src: '/launchpads/trends.png', label: 'trends.fun', short: 'TR' },
   dbc: { src: '/launchpads/dbc.png', label: 'Meteora DBC', short: 'MD' },
+  noxa: { src: '/launchpads/noxa.png', label: 'NOXA Fun', short: 'NX' },
+  nadfun: { src: '/launchpads/nadfun.png', label: 'Nad.fun', short: 'NF' },
+  ubifun: { src: '/launchpads/ubifun.png', label: 'UBI.fun', short: 'UB' },
 };
 
 export function LaunchpadBadge({ launchpad, url, note, size = 18 }: { launchpad?: string; url?: string; /** one more line for the tooltip (Long: anchored to NVDA) */ note?: string; size?: number }) {

@@ -3,6 +3,7 @@ import { fetchDexscreener } from './dexscreener.js';
 import { fetchGeckoTerminal, gtThrottled } from './geckoterminal.js';
 import { probeChains } from './rpcprobe.js';
 import { classifySolana } from './solanapads.js';
+import { fetchNadfun, fetchNoxa, fetchUbifun } from './evmpads.js';
 import { createLaunchpadClassifier, rpcUrl, fetchBankrLaunch, fetchClanker, fetchFlap, fetchO1, fetchPons, fetchGenius, fetchLoong, fetchPumpfun, fetchStonks, fetchVirtuals, type LaunchpadInfo, fetchArgus, fetchWarp, fetchPeach, fetchDyor, fetchSynthra } from './launchpads.js';
 import { fetchLong } from './long.js';
 
@@ -153,6 +154,9 @@ export function createDefaultEnricher(opts: { o1ApiKey?: () => string | undefine
       dyor: (a) => fetchDyor(a),
       synthra: (a) => fetchSynthra(a),
       flap: (a, n) => fetchFlap(a, undefined, n),
+      noxa: (a, n) => fetchNoxa(a, undefined, n),
+      nadfun: (a, n) => fetchNadfun(a, undefined, n),
+      ubifun: (a, n) => fetchUbifun(a, undefined, n),
       virtuals: (a) => fetchVirtuals(a),
       clanker: (a, n) => fetchClanker(a, undefined, n),
       o1: (a, n) => fetchO1(a, opts.o1ApiKey?.(), undefined, n),

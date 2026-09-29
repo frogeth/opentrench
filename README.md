@@ -168,7 +168,11 @@ in settings.
   and Virtuals come from their APIs, and these are read straight off the chain, each from the
   launchpad's own factory or portal so a token cannot just claim to be one:
   Pons V1 and V2 (Robinhood Chain; V2 curves priced live, in ETH or whatever
-  the creator paired, USDG included), Flap (BNB, Robinhood, Monad, Base: the
+  the creator paired, USDG included), NOXA Fun (Robinhood, MegaETH, Monad,
+  Arc: the token's factory must be NOXA's and name it; Pons V1's contracts,
+  kept apart), Nad.fun (Monad: its curve contracts' records; metadata only
+  from Nad.fun's own storage), UBI.fun (Arc: its Flaunch launch NFT; priced
+  off its Uniswap v4 pool), Flap (BNB, Robinhood, Monad, Base: the
   Portal's record, with curve progress), Clanker (Base, Arbitrum, Ethereum,
   Monad, Robinhood: the v4 factory's record, metadata off the token), o1 (Base,
   Robinhood, Monad, Arc, BNB: the factory's record; an API key only adds the
