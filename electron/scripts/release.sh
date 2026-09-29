@@ -49,7 +49,10 @@ npm run prepare-backend
 # The assets go up through the GitHub CLI (with retries) into a DRAFT, so the updater never sees
 # a half-uploaded release; the manifests are written by scripts/manifests.js; then the release
 # is flipped live only once every asset is verified on GitHub.
-npx electron-builder --mac --win --x64 --arm64 --publish never
+# Architectures come from package.json (mac: arm64 + x64; Windows: x64 + arm64 + ia32, one installer
+# for all three so the updater's single latest.yml serves every machine). No --x64/--arm64 here: CLI arch
+# flags apply to every platform, and macOS has no ia32.
+npx electron-builder --mac --win --publish never
 node scripts/manifests.js "$VERSION"
 ASSETS=(
   "dist/latest.yml" "dist/latest-mac.yml"
