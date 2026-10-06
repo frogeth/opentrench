@@ -257,3 +257,40 @@ export function entitiesToMarkdown(text: string, entities: any[] | undefined): s
   }
   return out + text.slice(pos);
 }
+
+/**
+ * A rich message (a bot's laid-out report: photo, paragraphs, quotes, tables, collapsible
+ * sections) rendered as the inline markdown the UI understands. Media placeholders go (the
+ * photo is shown as media), quotes lose their marker, headings turn bold, in-message anchors
+ * lose their link, and a table is listed column by column under its bold header.
+ */
+export function flattenRichMarkdown(md: string): string {
+  const cells = (l: string) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+  const lines = md.split('\n');
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    let l = lines[i];
+    if (/^\s*\|/.test(l)) {
+      const rows: string[][] = [];
+      for (; i < lines.length && /^\s*\|/.test(lines[i]); i++) if (!/^\s*\|[\s|:-]+\|?\s*$/.test(lines[i])) rows.push(cells(lines[i]));
+      i--;
+      const [head = [], ...body] = rows;
+      head.forEach((h, c) => {
+        const items = body.map((r) => r[c]).filter(Boolean);
+        out.push('', h ? `**${h.replace(/^\*\*|\*\*$/g, '')}**` : '', ...items.map((x) => `• ${x}`));
+      });
+      out.push('');
+      continue;
+    }
+    if (/^\[(?:photo|video|audio|document)(?::[^\]]*)?\]$/.test(l.trim())) continue;
+    if (/^```/.test(l.trim())) continue;
+    l = l.replace(/^>\s?(?:— )?/, '');
+    l = l.replace(/^#{1,6}\s+(.*)$/, (_, t) => `**${t.replace(/^\*\*|\*\*$/g, '')}**`);
+    l = l.replace(/^- /, '• ');
+    l = l.replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s).,:;!?])/g, '$1*$2*');
+    if (l.trim() === '---') l = '';
+    l = l.replace(/\[([^\]]+)\]\(#[^)]*\)/g, '$1');
+    out.push(l.replace(/[\s ]+$/, ''));
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}

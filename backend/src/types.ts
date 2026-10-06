@@ -314,6 +314,8 @@ export interface BotMessage {
   buttons: { text: string; data?: string; url?: string }[][];
   edited?: boolean;
   hasMedia?: boolean;
+  /** the photo of a rich message (a report's card), served by the media endpoint */
+  image?: string;
   /** contract addresses in the text, highlighted click-to-copy like in the feed */
   contracts?: string[];
 }

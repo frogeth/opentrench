@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, entitiesToMarkdown } from './normalize.js';
+import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, entitiesToMarkdown, flattenRichMarkdown } from './normalize.js';
 
 describe('normalizeTelegram', () => {
   it('maps plain fields', () => {
@@ -140,5 +140,51 @@ describe('bot chats', () => {
     expect(normalizeTelegram({ ...base, chatId: '8907690046', senderId: '8907690046' }).botChat).toBe(true);
     expect('botChat' in normalizeTelegram({ ...base, chatId: '-1002354433918', senderId: '8907690046' })).toBe(false);
     expect('botChat' in normalizeTelegram({ ...base, isBot: false, chatId: '55', senderId: '55' })).toBe(false);
+  });
+});
+
+describe('flattenRichMarkdown', () => {
+  it('lays a rich bot report out as inline markdown', () => {
+    const md = [
+      '[photo]',
+      '',
+      'Shared in **4%** of chats',
+      '',
+      '> Rulr launches pump.fun coins.',
+      '',
+      '[**Full Report**](#report)',
+      '## Team',
+      '_No team named._',
+      '',
+      '| ▲ Bull Case | ▼ Bear Case |',
+      '| --- | --- |',
+      '| Customizable | Security risk |',
+      '| Dev active | Copycats |',
+      '',
+      ' ',
+      '',
+      '↳ via [@rulrfun](https://x.com/rulrfun/status/1)',
+    ].join('\n');
+    expect(flattenRichMarkdown(md)).toBe(
+      [
+        'Shared in **4%** of chats',
+        '',
+        'Rulr launches pump.fun coins.',
+        '',
+        '**Full Report**',
+        '**Team**',
+        '*No team named.*',
+        '',
+        '**▲ Bull Case**',
+        '• Customizable',
+        '• Dev active',
+        '',
+        '**▼ Bear Case**',
+        '• Security risk',
+        '• Copycats',
+        '',
+        '↳ via [@rulrfun](https://x.com/rulrfun/status/1)',
+      ].join('\n'),
+    );
   });
 });
