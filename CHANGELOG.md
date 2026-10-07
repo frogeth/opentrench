@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.18.3 — 2026-10-07
+
 - A favorite's call pings even when a TrenchTogether friend in the same chat shared it a moment before your own copy arrived. It used to count as already seen, so the ping never came.
 
 ## v0.18.2 — 2026-10-07
