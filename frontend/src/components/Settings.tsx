@@ -9,7 +9,7 @@ import { Avatar } from './Avatar';
 import { DOCS } from '../site';
 import { PeoplePicker } from './PeoplePicker';
 import { CHART_PROVIDERS, copyText, type ChartProvider } from '../format';
-import { DISCORD_MOD_NAMES, desktop, hasBridge } from '../desktop';
+import { DISCORD_MOD_NAMES, desktop, hasBridge, type DiscordMod } from '../desktop';
 
 /** Enter in a one-line form does what its button does (when the button would be enabled). */
 const onEnter = (enabled: boolean, fn: () => void) => (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -245,21 +245,30 @@ function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: 
   const [setupMsg, setSetupMsg] = useState<string | null>(null);
   // shells from before the BetterDiscord option install Vencord without asking
   const [canPickMod, setCanPickMod] = useState(false);
+  /** the client mod injected into Discord, as the shell sees it on disk */
+  const [installedMod, setInstalledMod] = useState<DiscordMod | null>(null);
   useEffect(() => {
     if (!hasBridge('discordStatus')) return;
     let live = true;
     desktop!
       .discordStatus()
-      .then((s) => live && setCanPickMod(!!s.mods?.betterdiscord && !!s.mods?.vencord))
+      .then((s) => {
+        if (!live) return;
+        setCanPickMod(!!s.mods?.betterdiscord && !!s.mods?.vencord);
+        setInstalledMod(s.installs.find((i) => i.injected)?.mod ?? null);
+      })
       .catch(() => {});
     return () => {
       live = false;
     };
-  }, []);
-  const setupDiscord = () =>
+  }, [status.discordClient]);
+  // what the plugin says it runs in, else what is on disk; the switch goes to the other one
+  const currentMod: DiscordMod | null = (bridge && status.discordClient) || installedMod;
+  const otherMod: DiscordMod | null = currentMod ? (currentMod === 'vencord' ? 'betterdiscord' : 'vencord') : null;
+  const setupDiscord = (pick?: DiscordMod) =>
     run(async () => {
       setSetupMsg(null);
-      const r = await desktop!.discordSetup();
+      const r = await desktop!.discordSetup(pick ? { mod: pick } : undefined);
       if (r.cancelled) return;
       if (!r.ok) throw new Error(r.error ?? 'setup failed');
       const mod = DISCORD_MOD_NAMES[r.mod ?? 'vencord'];
@@ -293,6 +302,15 @@ function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: 
                 </button>
               </>
             )}
+            {canPickMod && otherMod && (
+              <>
+                {' · '}
+                <button className="link" disabled={busy} onClick={() => void setupDiscord(otherMod)}>
+                  switch to {DISCORD_MOD_NAMES[otherMod]}
+                </button>
+              </>
+            )}
+            {setupMsg && <div className="hint">{setupMsg}</div>}
           </div>
         ) : (
           <>

@@ -65,7 +65,8 @@ until you allow opentrench under System Settings → Privacy & Security → App
 Management; the app offers to open that pane, then press the button again. An existing Vencord is replaced by the same
 Vencord plus the plugin, settings kept; an existing BetterDiscord keeps its
 plugins and themes and gets this one added. Picking one client mod removes the
-other. *remove the plugin* undoes it.
+other; once connected, *switch to BetterDiscord* / *switch to Vencord* in the same
+card swaps them in one click. *remove the plugin* undoes it.
 
 **By hand** (older versions, or a Discord installed somewhere unusual), about
 five minutes, with separate Mac and Windows steps:

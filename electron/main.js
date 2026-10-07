@@ -661,12 +661,13 @@ async function confirmDiscordSetup(mod) {
     chosen = mods[response];
   } else {
     chosen = mods[0];
+    const switching = !!target.mod && target.mod !== chosen;
     const { response } = await dialog.showMessageBox(win ?? undefined, {
       type: 'question',
-      buttons: ['Set up Discord', 'Cancel'],
+      buttons: [switching ? `Switch to ${MOD_NAMES[chosen]}` : 'Set up Discord', 'Cancel'],
       defaultId: 0,
       cancelId: 1,
-      message: `Set up Discord (${target.name}) with ${MOD_NAMES[chosen]}`,
+      message: switching ? `Switch ${target.name} from ${MOD_NAMES[target.mod]} to ${MOD_NAMES[chosen]}?` : `Set up Discord (${target.name}) with ${MOD_NAMES[chosen]}`,
       detail: `${intro}\n\n` + (target.mod ? `${current} ${replacing(chosen)}` : terms),
     });
     if (response !== 0) return { ok: false, cancelled: true };
