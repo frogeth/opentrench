@@ -32,6 +32,8 @@ export interface DiscordInternals {
 }
 
 export interface BridgeHost {
+    /** which client mod this runs in, so opentrench can say what you are connected through */
+    client: "vencord" | "betterdiscord";
     /** called on start: the client mod's stores and actions, resolved by then */
     discord(): DiscordInternals;
     /** the opentrench backend's port */
@@ -108,6 +110,7 @@ export function createBridge(host: BridgeHost) {
         send({
             t: "hello",
             version: VERSION,
+            client: host.client,
             dms,
             user: { id: String(me.id), username: String(me.username), globalName: me.globalName ?? undefined, avatar: me.avatar ?? undefined },
             guilds,

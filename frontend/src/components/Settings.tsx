@@ -280,7 +280,7 @@ function DiscordAccount({ cfg, status, onChange }: { cfg: MaskedConfig; status: 
 
       <div className={`acct-card${bridge ? ' acct-card-on' : ''}`}>
         <div className="acct-card-title">
-          <b>opentrench plugin for Vencord or BetterDiscord</b> <span className="muted">recommended · reads and sends · no token</span>
+          <b>opentrench plugin for {bridge && status.discordClient ? DISCORD_MOD_NAMES[status.discordClient] : 'Vencord or BetterDiscord'}</b> <span className="muted">recommended · reads and sends · no token</span>
         </div>
         {bridge ? (
           <div className="hint">

@@ -55,7 +55,7 @@ function discord(): DiscordInternals {
 }
 
 export default class OpentrenchBridge {
-    private bridge = createBridge({ discord, port });
+    private bridge = createBridge({ client: "betterdiscord", discord, port });
 
     start() {
         this.bridge.start();

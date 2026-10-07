@@ -38,6 +38,7 @@ const settings = definePluginSettings({
 });
 
 const bridge = createBridge({
+    client: "vencord",
     port: () => settings.store.port,
     // read at start(): the @webpack/common stores are live bindings filled in as Discord loads
     discord: () => ({
