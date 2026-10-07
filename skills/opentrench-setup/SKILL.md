@@ -29,23 +29,27 @@ usual source of "npm missing", "make missing" and dependency errors.
 
 ## 2. Connect Discord
 
-Discord connects through a Vencord plugin inside the user's own Discord app, so no token is
+Discord connects through a Vencord or BetterDiscord plugin inside the user's own Discord app, so no token is
 pasted or stored. Discord must be open for that side of the feed to work.
 
 Preferred: in opentrench, ⚙ → Accounts → Discord → **Set up Discord**. The app quits Discord,
-installs its bundled Vencord (with the opentrench plugin enabled) and relaunches Discord. The
+asks Vencord or BetterDiscord, installs its bundled copy (with the opentrench plugin enabled; an
+existing BetterDiscord is kept, just gaining the plugin) and relaunches Discord. The
 `discord` pill turns green within a few seconds.
 
 If the button is missing or fails (Discord installed somewhere unusual, or a permissions
 error), the manual route is https://opentrench.app/docs/discord/ (git + Node + pnpm, clone
-Vencord, copy `vencord/opentrench-bridge` into `src/userplugins`, `pnpm build`, `pnpm inject`).
+Vencord, copy `vencord/opentrench-bridge` into `src/userplugins`, `pnpm build`, `pnpm inject`),
+or for BetterDiscord users: drop `OpentrenchBridge.plugin.js` from the latest GitHub release into
+BetterDiscord's plugins folder and switch it on.
 
 Known failure modes:
 - "macOS blocked the change (App Management)": macOS gates edits to other apps' bundles.
   System Settings → Privacy & Security → App Management → switch on opentrench, press Set
   up Discord again. The dialog in the app offers to open that pane.
 - Pill stays red: Discord is not running, or the plugin is disabled (Discord → User Settings →
-  Vencord → Plugins → OpentrenchBridge), or it points at a different port than the backend.
+  Vencord → Plugins or BetterDiscord → Plugins → OpentrenchBridge), or it points at a different
+  port than the backend.
 - Discord updated itself: on macOS an update replaces the app bundle and removes the
   injection. Run Set up Discord again.
 - "Discord is not installed" from the button: only /Applications/Discord*.app (macOS) and

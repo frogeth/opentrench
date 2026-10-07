@@ -10,8 +10,9 @@
     "test": "node --test",
     "prepare-backend": "node scripts/prepare-backend.js",
     "prepare-vencord": "scripts/build-vencord.sh",
-    "dist": "npm run prepare-vencord && npm run prepare-backend && electron-builder --mac dmg --publish never",
-    "dist:win": "npm run prepare-vencord && npm run prepare-backend && electron-builder --win nsis --publish never",
+    "prepare-betterdiscord": "scripts/build-betterdiscord.sh",
+    "dist": "npm run prepare-vencord && npm run prepare-betterdiscord && npm run prepare-backend && electron-builder --mac dmg --publish never",
+    "dist:win": "npm run prepare-vencord && npm run prepare-betterdiscord && npm run prepare-backend && electron-builder --win nsis --publish never",
     "release": "scripts/release.sh"
   },
   "devDependencies": {
@@ -43,6 +44,10 @@
       {
         "from": "resources/vencord",
         "to": "vencord"
+      },
+      {
+        "from": "resources/betterdiscord",
+        "to": "betterdiscord"
       },
       {
         "from": "../frontend/dist",

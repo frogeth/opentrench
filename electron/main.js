@@ -111,7 +111,9 @@ function paths() {
   const data = app.getPath('userData');
   // the Vencord build shipped for one-click Discord setup (scripts/build-vencord.sh)
   const vencord = packaged ? path.join(process.resourcesPath, 'vencord') : path.join(__dirname, 'resources', 'vencord');
-  return { packaged, backendDir, entry, data, vencord, config: path.join(data, 'config.json'), state: path.join(data, 'state.json') };
+  // …and the BetterDiscord one (scripts/build-betterdiscord.sh)
+  const betterdiscord = packaged ? path.join(process.resourcesPath, 'betterdiscord') : path.join(__dirname, 'resources', 'betterdiscord');
+  return { packaged, backendDir, entry, data, vencord, betterdiscord, config: path.join(data, 'config.json'), state: path.join(data, 'state.json') };
 }
 
 /** First run: adopt the old trenchfeed app-data folder, or (from the repo) the dev checkout's files. */
@@ -618,27 +620,67 @@ function checkForUpdatesNow() {
 // ---------- one-click Discord setup ----------
 // The page asks over IPC (preload.js); the confirmation is a native dialog so a page can never
 // trigger the install on its own. The same flow hangs off the app menu.
-async function confirmDiscordSetup() {
+const MOD_NAMES = { vencord: 'Vencord', betterdiscord: 'BetterDiscord' };
+/**
+ * `mod` is 'vencord' or 'betterdiscord' when the page already picked one; otherwise, with both
+ * shipped, the dialog itself asks (the app menu, and pages older than the choice, land here).
+ */
+async function confirmDiscordSetup(mod) {
   const p = paths();
-  const st = await discordSetup.status(p.vencord, p.data);
+  const st = await discordSetup.status(p.vencord, p.data, p.betterdiscord);
   if (!st.available) return { ok: false, error: st.reason };
   const target = st.installs[0];
   if (!target) return { ok: false, error: process.platform === 'darwin' ? 'Discord is not installed in /Applications' : 'Discord is not installed for this user' };
-  const { response } = await dialog.showMessageBox(win ?? undefined, {
-    type: 'question',
-    buttons: ['Set up Discord', 'Cancel'],
-    defaultId: 0,
-    cancelId: 1,
-    message: `Set up Discord (${target.name})`,
-    detail:
-      `opentrench will quit Discord, install its copy of Vencord with the opentrench plugin into\n${target.path}\nand open Discord again.\n\n` +
-      (target.injected
-        ? 'Vencord is already installed there. It will be replaced by this copy: the same Vencord plus the opentrench plugin, with your settings and plugins kept.'
-        : "Vencord is a Discord client mod. Client mods are outside Discord's terms; Vencord has a very large user base and Discord has not banned for it."),
-  });
-  if (response !== 0) return { ok: false, cancelled: true };
+  const mods = ['vencord', 'betterdiscord'].filter((m) => st.mods?.[m] && (!mod || m === mod));
+  if (mods.length === 0) return { ok: false, error: `this build of opentrench does not include the ${MOD_NAMES[mod] ?? mod} plugin` };
+  const current = target.mod ? `${MOD_NAMES[target.mod]} is installed there now.` : '';
+  const replacing = (m) =>
+    !target.mod
+      ? ''
+      : target.mod === m
+        ? m === 'vencord'
+          ? 'It will be replaced by this copy: the same Vencord plus the opentrench plugin, with your settings and plugins kept.'
+          : 'The opentrench plugin is added to it; your other plugins and themes are kept.'
+        : `Choosing ${MOD_NAMES[m]} removes ${MOD_NAMES[target.mod]} from Discord (its settings stay on disk).`;
+  const intro = `opentrench will quit Discord, install the opentrench plugin into\n${target.path}\nand open Discord again.`;
+  const terms = "Both are Discord client mods with very large user bases. Client mods are outside Discord's terms; Discord has not banned for using them.";
+  let chosen;
+  if (mods.length === 2) {
+    const { response } = await dialog.showMessageBox(win ?? undefined, {
+      type: 'question',
+      buttons: ['Vencord', 'BetterDiscord', 'Cancel'],
+      defaultId: target.mod === 'betterdiscord' ? 1 : 0,
+      cancelId: 2,
+      message: `Set up Discord (${target.name})`,
+      detail:
+        `${intro}\n\nThe plugin runs inside a client mod: pick the one you use, or Vencord if you use neither.\n\n` +
+        (target.mod ? `${current} ${replacing(target.mod === 'vencord' ? 'betterdiscord' : 'vencord')}\n\n` : '') +
+        terms,
+    });
+    if (response === 2) return { ok: false, cancelled: true };
+    chosen = mods[response];
+  } else {
+    chosen = mods[0];
+    const { response } = await dialog.showMessageBox(win ?? undefined, {
+      type: 'question',
+      buttons: ['Set up Discord', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+      message: `Set up Discord (${target.name}) with ${MOD_NAMES[chosen]}`,
+      detail: `${intro}\n\n` + (target.mod ? `${current} ${replacing(chosen)}` : terms),
+    });
+    if (response !== 0) return { ok: false, cancelled: true };
+  }
   try {
-    const r = await discordSetup.setup({ bundledDir: p.vencord, dataDir: p.data, port: PORT, flavour: target.id, log: (m) => console.log('[discord-setup]', m) });
+    const r = await discordSetup.setup({
+      bundledDir: p.vencord,
+      bdBundledDir: p.betterdiscord,
+      dataDir: p.data,
+      port: PORT,
+      flavour: target.id,
+      mod: chosen,
+      log: (m) => console.log('[discord-setup]', m),
+    });
     console.log('[discord-setup] done', JSON.stringify(r));
     return r;
   } catch (e) {
@@ -660,16 +702,19 @@ async function confirmDiscordSetup() {
 }
 async function confirmDiscordRemove() {
   const p = paths();
-  const st = await discordSetup.status(p.vencord, p.data);
+  const st = await discordSetup.status(p.vencord, p.data, p.betterdiscord);
   const target = st.installs.find((i) => i.injected);
   if (!target) return { ok: true, nothing: true };
+  const name = MOD_NAMES[target.mod] ?? 'the client mod';
   const { response } = await dialog.showMessageBox(win ?? undefined, {
     type: 'question',
     buttons: ['Remove', 'Cancel'],
     defaultId: 1,
     cancelId: 1,
     message: `Remove the plugin from ${target.name}?`,
-    detail: `This puts Discord's original files back (Vencord is removed entirely from ${target.path}) and reopens Discord.`,
+    detail:
+      `This puts Discord's original files back (${name} is removed entirely from ${target.path}) and reopens Discord.` +
+      (target.mod === 'betterdiscord' ? '\n\nYour other BetterDiscord plugins and themes stay in its folder for next time.' : ''),
   });
   if (response !== 0) return { ok: false, cancelled: true };
   try {
@@ -682,9 +727,9 @@ async function confirmDiscordRemove() {
 function wireDiscordSetup() {
   ipcMain.handle('discord:status', () => {
     const p = paths();
-    return discordSetup.status(p.vencord, p.data);
+    return discordSetup.status(p.vencord, p.data, p.betterdiscord);
   });
-  ipcMain.handle('discord:setup', () => confirmDiscordSetup());
+  ipcMain.handle('discord:setup', (_e, opts) => confirmDiscordSetup(opts?.mod === 'vencord' || opts?.mod === 'betterdiscord' ? opts.mod : undefined));
   ipcMain.handle('discord:remove', () => confirmDiscordRemove());
   ipcMain.handle('app:version', () => app.getVersion());
   ipcMain.handle('updates:check', () => {
@@ -695,6 +740,7 @@ function wireDiscordSetup() {
   try {
     const p = paths();
     if (discordSetup.refreshDist(p.vencord, p.data)) console.log('[discord-setup] refreshed the Vencord build in', p.data);
+    if (discordSetup.refreshBdPlugin(p.betterdiscord)) console.log('[discord-setup] refreshed the BetterDiscord plugin');
   } catch (e) {
     console.error('[discord-setup] refresh', e);
   }
