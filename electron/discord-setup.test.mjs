@@ -142,3 +142,24 @@ test('bdPaths: unavailable without a bundled folder or with half of it', () => {
   fs.rmSync(path.join(b, 'betterdiscord.asar'));
   assert.equal(bdPaths(b).available, false);
 });
+
+test('originalToUnderscore: a lone _app.asar (app.asar gone) is kept as the original, never deleted', () => {
+  const r = resources();
+  fs.renameSync(path.join(r, 'app.asar'), path.join(r, '_app.asar'));
+  setup.originalToUnderscore(r);
+  assert.equal(read(r, '_app.asar'), REAL);
+});
+
+test('originalToUnderscore: a live app.asar replaces a stale _app.asar', () => {
+  const r = resources();
+  fs.writeFileSync(path.join(r, '_app.asar'), 'stale');
+  setup.originalToUnderscore(r);
+  assert.equal(read(r, '_app.asar'), REAL);
+  assert.equal(exists(r, 'app.asar'), false);
+});
+
+test('probeWritable: passes on a writable folder and leaves nothing behind', () => {
+  const r = resources();
+  setup.probeWritable(r);
+  assert.deepEqual(fs.readdirSync(r), ['app.asar']);
+});

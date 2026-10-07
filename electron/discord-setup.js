@@ -341,13 +341,37 @@ function uninjectBetterDiscord(resources) {
   fs.rmSync(path.join(resources, 'app'), { recursive: true, force: true });
 }
 
-/** Undo a Vencord-style injection: `_app.asar` back to `app.asar`. */
+/**
+ * Undo a Vencord-style injection: `_app.asar` back to `app.asar`, in one rename over the injector
+ * (never delete-then-rename: a rename refused after the delete leaves Discord with no app.asar).
+ */
 function uninjectVencord(resources) {
   const appAsar = path.join(resources, 'app.asar');
   const original = path.join(resources, '_app.asar');
   if (!fs.existsSync(original)) throw new Error(`Vencord is installed in ${resources} but Discord's original _app.asar is missing; reinstall Discord`);
-  fs.rmSync(appAsar, { force: true });
   fs.renameSync(original, appAsar);
+}
+
+/**
+ * Can files be created in resources/? macOS App Management lets an app without the permission
+ * delete inside another app's bundle but not create or rename there, so this runs before any
+ * change: a refusal then leaves Discord exactly as it was.
+ */
+function probeWritable(resources) {
+  const probe = path.join(resources, `.opentrench-probe-${process.pid}-${Date.now()}`);
+  fs.writeFileSync(probe, '');
+  fs.rmSync(probe, { force: true });
+}
+
+/**
+ * Discord's real app when no injector is live: `app.asar`, or a `_app.asar` left alone by an
+ * injection whose app.asar is gone. Makes sure it is at `_app.asar` for a Vencord injector.
+ */
+function originalToUnderscore(resources) {
+  const appAsar = path.join(resources, 'app.asar');
+  const original = path.join(resources, '_app.asar');
+  if (fs.existsSync(appAsar)) fs.renameSync(appAsar, original); // replaces a stale _app.asar from before a Discord update
+  else if (!fs.existsSync(original)) throw new Error(`no app.asar in ${resources}; reinstall Discord`);
 }
 
 /** After an app update: a newer bundled plugin replaces the installed one (BetterDiscord reloads it live). */
@@ -404,19 +428,22 @@ async function setup({ bundledDir, bdBundledDir, dataDir, port = 3210, flavour, 
   if (!install) throw new Error(process.platform === 'darwin' ? 'Discord is not installed in /Applications' : 'Discord is not installed for this user');
   if (mod === 'vencord') refreshDist(bundledDir, dataDir);
   else prepareBetterDiscord(bdBundledDir, install.id, port);
+  try {
+    probeWritable(install.resources);
+  } catch (e) {
+    if (e && (e.code === 'EPERM' || e.code === 'EACCES')) throw appManagementError(install);
+    throw e;
+  }
   log(`quitting ${install.name}`);
   await quit(install);
   const before = inspect(install.resources);
   const had = modOf(before);
   const appAsar = path.join(install.resources, 'app.asar');
-  const original = path.join(install.resources, '_app.asar');
   try {
     if (mod === 'vencord') {
       if (had === 'betterdiscord') uninjectBetterDiscord(install.resources);
       if (had !== 'vencord') {
-        // a real Discord asar in place; a leftover _app.asar is from a Discord update that wrote over an injection
-        if (fs.existsSync(original)) fs.rmSync(original, { force: true });
-        fs.renameSync(appAsar, original);
+        originalToUnderscore(install.resources);
       } else if (!before.hasOriginal) {
         throw new Error(`${install.name} has an injector but no _app.asar next to it; reinstall Discord`);
       }
@@ -446,6 +473,12 @@ async function remove({ flavour } = {}) {
   const s = inspect(install.resources);
   const mod = modOf(s);
   if (!mod || (mod === 'vencord' && !s.hasOriginal)) return { ok: true, install: install.name, nothing: true };
+  try {
+    probeWritable(install.resources);
+  } catch (e) {
+    if (e && (e.code === 'EPERM' || e.code === 'EACCES')) throw appManagementError(install);
+    throw e;
+  }
   await quit(install);
   try {
     if (mod === 'vencord') uninjectVencord(install.resources);
@@ -480,6 +513,8 @@ module.exports = {
   bdPaths,
   prepareBetterDiscord,
   injectBetterDiscord,
+  originalToUnderscore,
+  probeWritable,
   uninjectBetterDiscord,
   uninjectVencord,
   refreshBdPlugin,
