@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.18.2 — 2026-10-07
+
 - Cove's buttons work again. Since v0.18.1, pressing a button on a bot's message (Cove, or any bot column) did nothing.
 ## v0.18.1 — 2026-10-07
 
