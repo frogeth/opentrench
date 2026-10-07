@@ -455,6 +455,28 @@ describe('MessageHub', () => {
     expect(listed?.before.map((m) => m.id)).toEqual(['discord:2']);
   });
 
+  it("pings for a favorite's call even when a friend shared that same message first", () => {
+    const hub = new MessageHub(500, undefined, { favorites: () => ['@Eonbase'] });
+    const pings: any[] = [];
+    hub.on('event', (e) => e.type === 'ping' && pings.push(e));
+    // a friend in the same chat shares the call a moment before our own copy of the message lands
+    const now = Date.now();
+    hub.applyRemoteToken('spedly', {
+      chain: 'solana', address: SOL, seen: 1, calledIn: ['Green Garden'], firstSeenTs: now, lastCallTs: now,
+      calls: [{ author: '@Eonbase', chatName: 'Green Garden', source: 'discord', msgId: 'discord:7', ts: now, marketCap: 1 }],
+    } as any);
+    const events: ServerEvent[] = [];
+    hub.on('event', (e) => events.push(e));
+    hub.push(msg(7, SOL, { author: '@Eonbase', chatId: 'g', chatName: 'Green Garden', ts: now }));
+    expect(pings.map((p) => [p.token.address, p.msg.id])).toEqual([[SOL, 'discord:7']]);
+    expect(hub.mentions().find((m) => m.id === 'discord:7')?.call?.address).toBe(SOL);
+    // the call is ours now: counted once, no longer tagged as the friend's, and not a repeat
+    const t = hub.getToken(SOL)!;
+    expect(t.calls.map((c) => [c.msgId, c.via])).toEqual([['discord:7', undefined]]);
+    expect(t.seen).toBe(1);
+    expect(events.filter((e) => e.type === 'message').map((e) => (e as any).msg.repeat)).toEqual([false]);
+  });
+
   it('a plugin cannot ping as a favorite, nor claim a mention, but is still blacklisted by name', () => {
     const hub = new MessageHub(500, undefined, { favorites: () => ['scanner'] });
     const pings: any[] = [];

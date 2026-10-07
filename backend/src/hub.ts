@@ -705,6 +705,14 @@ export class MessageHub extends EventEmitter {
       // (TrenchTogether) may have arrived first under its remote key: fold it into ours.
       const key = callKey(msg.chatId, msg.author);
       const remoteKey = remoteCallKey(msg.source, msg.chatName, msg.author);
+      // our own copy of the very message a friend shared a moment earlier: the call is ours, and it is
+      // judged as one (a favorite's first call still pings) rather than skipped as already counted
+      const shared = t.calls.find((x) => x.msgId === msg.id && x.via);
+      if (shared && !history) {
+        t.calls.splice(t.calls.indexOf(shared), 1);
+        chats.delete(remoteKey);
+        t.seen = chats.size;
+      }
       if (chats.has(remoteKey)) {
         chats.delete(remoteKey);
         chats.add(key);
@@ -716,7 +724,7 @@ export class MessageHub extends EventEmitter {
       const echoed = msg.isBot && t.calls.some((x) => x.source === msg.source && x.chatName === msg.chatName);
       if (!blocked && !echoed && !chats.has(key) && !already) {
         // the token's first call: new to the hub, or a watched token adopted before anyone called it
-        const firstCall = !existed || (t.calls.length === 0 && !t.firstCaller);
+        const firstCall = !existed || (t.calls.length === 0 && (!t.firstCaller || t.firstCaller.msgId === msg.id));
         if (firstCall && existed) {
           t.firstSeenTs = msg.ts;
           t.firstCaller = { author: msg.author, avatar: msg.avatar, chatName: msg.chatName, source: msg.source, msgId: msg.id, link: msg.link, ts: msg.ts };
