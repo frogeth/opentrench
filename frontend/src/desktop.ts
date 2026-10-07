@@ -1,11 +1,15 @@
 /** What the desktop shell exposes to the page (electron/preload.js). Absent in a browser tab. */
+export type DiscordMod = 'vencord' | 'betterdiscord';
+export const DISCORD_MOD_NAMES: Record<DiscordMod, string> = { vencord: 'Vencord', betterdiscord: 'BetterDiscord' };
 export interface DiscordInstallStatus {
   id: string;
   name: string;
   path: string;
-  /** some Vencord injector is in place */
+  /** a client mod is injected */
   injected: boolean;
-  /** …and it is the copy opentrench installed */
+  /** which one (absent from shells older than the BetterDiscord option, where it is always Vencord) */
+  mod?: DiscordMod | null;
+  /** …and the opentrench plugin is in it */
   ours: boolean;
   running: boolean;
 }
@@ -13,6 +17,8 @@ export interface DiscordSetupStatus {
   /** this build ships the plugin */
   available: boolean;
   version?: string;
+  /** which client mods this build can install (absent from older shells: Vencord only) */
+  mods?: Record<DiscordMod, boolean>;
   installs: DiscordInstallStatus[];
   reason?: string;
 }
@@ -21,13 +27,18 @@ export interface DiscordSetupResult {
   cancelled?: boolean;
   error?: string;
   install?: string;
-  /** an existing Vencord was replaced by ours */
+  /** the client mod it went in with (absent from older shells: Vencord) */
+  mod?: DiscordMod;
+  /** an existing client mod was replaced */
   replaced?: boolean;
+  /** …namely this one */
+  replacedMod?: DiscordMod;
   nothing?: boolean;
 }
 export interface DesktopBridge {
   discordStatus(): Promise<DiscordSetupStatus>;
-  discordSetup(): Promise<DiscordSetupResult>;
+  /** with no `mod`, the shell's dialog asks which client mod to use */
+  discordSetup(opts?: { mod?: DiscordMod }): Promise<DiscordSetupResult>;
   discordRemove(): Promise<DiscordSetupResult>;
   version(): Promise<string>;
   checkForUpdates(): Promise<{ ok: boolean; version: string }>;

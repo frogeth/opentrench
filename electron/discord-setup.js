@@ -1,12 +1,22 @@
-// One-click Discord setup. Installs the Vencord build the app ships (upstream Vencord plus the
-// opentrench bridge plugin, see scripts/build-vencord.sh) into the user's Discord the way
-// Vencord's own installer does: Discord's `resources/app.asar` becomes `_app.asar`, and a tiny
-// new `app.asar` (index.js + package.json) is written in its place whose index.js requires our
-// `patcher.js`. Vencord's patcher finds the real app in `_app.asar` next to it and boots Discord.
-// The plugin is switched on in Vencord's settings file before Discord comes back up.
+// One-click Discord setup, with either client mod the user picks.
 //
-// Removing puts `_app.asar` back. If the user already had Vencord, ours replaces it (it is the
+// Vencord: installs the Vencord build the app ships (upstream Vencord plus the opentrench bridge
+// plugin, see scripts/build-vencord.sh) the way Vencord's own installer does: Discord's
+// `resources/app.asar` becomes `_app.asar`, and a tiny new `app.asar` (index.js + package.json) is
+// written in its place whose index.js requires our `patcher.js`. Vencord's patcher finds the real
+// app in `_app.asar` next to it and boots Discord. The plugin is switched on in Vencord's settings
+// file before Discord comes back up. If the user already had Vencord, ours replaces it (it is the
 // same Vencord with one extra plugin; their settings and plugins carry over untouched).
+//
+// BetterDiscord: the way BetterDiscord's own installer does it (github.com/BetterDiscord/Installer,
+// discord/injection.go): `app.asar` becomes `betterdiscord.app.asar` and an `app/` folder is
+// written whose index.js loads `BetterDiscord/data/betterdiscord.asar` and then the real app.
+// The pinned betterdiscord.asar the app ships (scripts/build-betterdiscord.sh) is only put there
+// when none is installed yet: BetterDiscord updates itself. Our plugin is one file in
+// `BetterDiscord/plugins/`, switched on in that Discord channel's `plugins.json`.
+//
+// Only one of the two is injected at a time; picking the other undoes the first. Removing puts
+// Discord's original app.asar back.
 // Electron's own `fs` treats every path ending in .asar as an archive to read *inside* of, so
 // Discord's app.asar cannot be read, renamed or replaced through it ("ENOENT, not found in
 // app.asar"). `original-fs` is the unpatched module; under plain Node it does not exist.
@@ -22,6 +32,9 @@ const os = require('node:os');
 const { execFile } = require('node:child_process');
 
 const PLUGIN = 'OpentrenchBridge';
+/** where BetterDiscord's injection keeps Discord's real app.asar */
+const BD_PRESERVED = 'betterdiscord.app.asar';
+const MODS = { vencord: 'Vencord', betterdiscord: 'BetterDiscord' };
 const FLAVOURS =
   process.platform === 'darwin'
     ? [
@@ -42,7 +55,7 @@ const run = (cmd, args) =>
 /** A Discord install: where its resources live and how to stop and start it. */
 function findInstalls() {
   const out = [];
-  const hasApp = (resources) => fs.existsSync(path.join(resources, 'app.asar')) || fs.existsSync(path.join(resources, '_app.asar'));
+  const hasApp = (resources) => ['app.asar', '_app.asar', BD_PRESERVED].some((f) => fs.existsSync(path.join(resources, f)));
   if (process.platform === 'darwin') {
     for (const f of FLAVOURS) {
       for (const dir of ['/Applications', path.join(os.homedir(), 'Applications')]) {
@@ -77,7 +90,11 @@ function cmpVersion(a, b) {
   return 0;
 }
 
-/** What is in resources/: the real Discord asar, or an injector (and where it points). */
+/**
+ * What is in resources/: the real Discord asar, a Vencord-style injector (and where it points),
+ * or BetterDiscord's app/ folder. A live app.asar wins over app/ when Electron boots, so app/
+ * only counts while app.asar is gone.
+ */
 function inspect(resources) {
   const appAsar = path.join(resources, 'app.asar');
   const st = fs.existsSync(appAsar) ? fs.statSync(appAsar) : null;
@@ -92,8 +109,11 @@ function inspect(resources) {
       }
     }
   }
-  return { hasApp: !!st, hasOriginal: fs.existsSync(path.join(resources, '_app.asar')), injector };
+  const betterdiscord = !st && fs.existsSync(path.join(resources, 'app', 'index.js')) && fs.existsSync(path.join(resources, BD_PRESERVED));
+  return { hasApp: !!st, hasOriginal: fs.existsSync(path.join(resources, '_app.asar')), injector, betterdiscord };
 }
+/** which client mod is injected: 'vencord' (any Vencord-style injector), 'betterdiscord' or null */
+const modOf = (s) => (s.injector ? 'vencord' : s.betterdiscord ? 'betterdiscord' : null);
 
 /**
  * A minimal asar writer: an 8-byte size pickle, a header pickle (JSON directory, padded to 4),
@@ -210,70 +230,292 @@ function refreshDist(bundledDir, dataDir) {
   return true;
 }
 
-async function status(bundledDir, dataDir) {
+// ---------- BetterDiscord ----------
+
+/** BetterDiscord's own folder (what its installer and its app/index.js resolve at runtime). */
+function bdRoot() {
+  const base =
+    process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support')
+      : process.platform === 'win32'
+        ? (process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'))
+        : (process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'));
+  return path.join(base, 'BetterDiscord');
+}
+const bdPluginFile = (root = bdRoot()) => path.join(root, 'plugins', `${PLUGIN}.plugin.js`);
+
+/** The bundled BetterDiscord build and plugin (scripts/build-betterdiscord.sh). */
+function bdPaths(bdBundledDir) {
+  const asar = bdBundledDir ? path.join(bdBundledDir, 'betterdiscord.asar') : '';
+  const plugin = bdBundledDir ? path.join(bdBundledDir, `${PLUGIN}.plugin.js`) : '';
+  return { available: !!bdBundledDir && fs.existsSync(asar) && fs.existsSync(plugin), asar, plugin };
+}
+
+// BetterDiscord's injection script, as its installer writes it (discord/assets/app_index.js in
+// github.com/BetterDiscord/Installer, MIT). A broken or missing BetterDiscord never keeps Discord
+// from starting: the require is wrapped, and the real app loads either way.
+const BD_APP_INDEX = `// BetterDiscord's Injection Script (app.asar method)
+const path = require("path");
+const electron = require("electron");
+
+try {
+    let userConfig = path.join(electron.app.getPath("userData"), "..");
+    if (process.platform !== "win32" && process.platform !== "darwin") {
+        const homeDir = process.env.HOME || require("os").homedir();
+        userConfig = process.env.XDG_CONFIG_HOME || path.join(homeDir, ".config");
+    }
+    require(path.join(userConfig, "BetterDiscord", "data", "betterdiscord.asar"));
+}
+catch (error) {
+    console.error("Failed to load BetterDiscord:", error);
+}
+
+module.exports = require("../betterdiscord.app.asar");
+`;
+const BD_APP_PACKAGE = '{"main": "./index.js"}';
+
+/**
+ * Put BetterDiscord, our plugin (switched on for this Discord channel) and its port in place.
+ * Touches only BetterDiscord's folder, never Discord. An installed betterdiscord.asar is kept:
+ * BetterDiscord updates itself, so it is likely newer than the one we ship.
+ */
+function prepareBetterDiscord(bdBundledDir, channel, port, root = bdRoot()) {
+  const b = bdPaths(bdBundledDir);
+  for (const d of ['data', 'plugins', 'themes', path.join('data', channel)]) fs.mkdirSync(path.join(root, d), { recursive: true });
+  const asar = path.join(root, 'data', 'betterdiscord.asar');
+  if (!fs.existsSync(asar)) fs.copyFileSync(b.asar, asar);
+  fs.copyFileSync(b.plugin, bdPluginFile(root));
+  const enabled = path.join(root, 'data', channel, 'plugins.json');
+  let state = {};
+  try {
+    state = JSON.parse(fs.readFileSync(enabled, 'utf8'));
+  } catch {
+    /* fresh */
+  }
+  state[PLUGIN] = true;
+  fs.writeFileSync(enabled, JSON.stringify(state, null, 4));
+  // the plugin's own settings, read with BdApi.Data.load('OpentrenchBridge', 'port')
+  const cfgFile = path.join(root, 'plugins', `${PLUGIN}.config.json`);
+  let cfg = {};
+  try {
+    cfg = JSON.parse(fs.readFileSync(cfgFile, 'utf8'));
+  } catch {
+    /* fresh */
+  }
+  cfg.port = port;
+  fs.writeFileSync(cfgFile, JSON.stringify(cfg, null, 4));
+}
+
+/** BetterDiscord's injection, rolled back on any failure so Discord always has an app to load. */
+function injectBetterDiscord(resources) {
+  const appAsar = path.join(resources, 'app.asar');
+  const preserved = path.join(resources, BD_PRESERVED);
+  const appDir = path.join(resources, 'app');
+  if (fs.existsSync(appAsar)) {
+    // a live app.asar is Discord's current app; a preserved copy next to it is from before a Discord update
+    if (fs.existsSync(preserved)) fs.rmSync(preserved, { force: true });
+    fs.renameSync(appAsar, preserved);
+  } else if (!fs.existsSync(preserved)) {
+    throw new Error(`no app.asar in ${resources}; reinstall Discord`);
+  }
+  try {
+    fs.mkdirSync(appDir, { recursive: true });
+    fs.writeFileSync(path.join(appDir, 'package.json'), BD_APP_PACKAGE);
+    fs.writeFileSync(path.join(appDir, 'index.js'), BD_APP_INDEX);
+  } catch (e) {
+    fs.rmSync(appDir, { recursive: true, force: true });
+    if (!fs.existsSync(appAsar) && fs.existsSync(preserved)) fs.renameSync(preserved, appAsar);
+    throw e;
+  }
+}
+
+/** Undo BetterDiscord's injection: the original app.asar back first, then app/ away. */
+function uninjectBetterDiscord(resources) {
+  const appAsar = path.join(resources, 'app.asar');
+  const preserved = path.join(resources, BD_PRESERVED);
+  if (fs.existsSync(preserved)) {
+    if (!fs.existsSync(appAsar)) fs.renameSync(preserved, appAsar);
+    else fs.rmSync(preserved, { force: true });
+  }
+  if (!fs.existsSync(appAsar)) throw new Error(`no app.asar to restore in ${resources}; reinstall Discord`);
+  fs.rmSync(path.join(resources, 'app'), { recursive: true, force: true });
+}
+
+/**
+ * Undo a Vencord-style injection: `_app.asar` back to `app.asar`, in one rename over the injector
+ * (never delete-then-rename: a rename refused after the delete leaves Discord with no app.asar).
+ */
+function uninjectVencord(resources) {
+  const appAsar = path.join(resources, 'app.asar');
+  const original = path.join(resources, '_app.asar');
+  if (!fs.existsSync(original)) throw new Error(`Vencord is installed in ${resources} but Discord's original _app.asar is missing; reinstall Discord`);
+  fs.renameSync(original, appAsar);
+}
+
+/**
+ * Can files be created in resources/? macOS App Management lets an app without the permission
+ * delete inside another app's bundle but not create or rename there, so this runs before any
+ * change: a refusal then leaves Discord exactly as it was.
+ */
+function probeWritable(resources) {
+  const probe = path.join(resources, `.opentrench-probe-${process.pid}-${Date.now()}`);
+  fs.writeFileSync(probe, '');
+  fs.rmSync(probe, { force: true });
+}
+
+/**
+ * Discord's real app when no injector is live: `app.asar`, or a `_app.asar` left alone by an
+ * injection whose app.asar is gone. Makes sure it is at `_app.asar` for a Vencord injector.
+ */
+function originalToUnderscore(resources) {
+  const appAsar = path.join(resources, 'app.asar');
+  const original = path.join(resources, '_app.asar');
+  if (fs.existsSync(appAsar)) fs.renameSync(appAsar, original); // replaces a stale _app.asar from before a Discord update
+  else if (!fs.existsSync(original)) throw new Error(`no app.asar in ${resources}; reinstall Discord`);
+}
+
+/** After an app update: a newer bundled plugin replaces the installed one (BetterDiscord reloads it live). */
+function refreshBdPlugin(bdBundledDir, root = bdRoot()) {
+  const b = bdPaths(bdBundledDir);
+  const installed = bdPluginFile(root);
+  if (!b.available || !fs.existsSync(installed)) return false;
+  const want = fs.readFileSync(b.plugin);
+  if (want.equals(fs.readFileSync(installed))) return false;
+  fs.writeFileSync(installed, want);
+  return true;
+}
+
+// ---------- both ----------
+
+async function status(bundledDir, dataDir, bdBundledDir) {
   const p = distPaths(bundledDir, dataDir);
+  const bd = bdPaths(bdBundledDir);
   const installs = [];
   for (const i of findInstalls()) {
     const s = inspect(i.resources);
-    installs.push({ id: i.id, name: i.name, path: i.resources, injected: !!s.injector, ours: !!s.injector && s.injector.startsWith(p.ours), running: await isRunning(i) });
+    const mod = modOf(s);
+    const ours = mod === 'vencord' ? s.injector.startsWith(p.ours) : mod === 'betterdiscord' ? fs.existsSync(bdPluginFile()) : false;
+    installs.push({ id: i.id, name: i.name, path: i.resources, injected: !!mod, mod, ours, running: await isRunning(i) });
   }
-  return { available: p.available, version: p.version, installs, reason: p.available ? undefined : 'this build of opentrench does not include the Discord plugin' };
+  const available = p.available || bd.available;
+  return {
+    available,
+    version: p.version,
+    mods: { vencord: p.available, betterdiscord: bd.available },
+    installs,
+    reason: available ? undefined : 'this build of opentrench does not include the Discord plugin',
+  };
 }
 
-/** Quit Discord, put our Vencord in, switch the plugin on, bring Discord back. */
-async function setup({ bundledDir, dataDir, port = 3210, flavour, log = () => {} }) {
+const appManagementError = (install) => {
+  const err = new Error(
+    process.platform === 'darwin'
+      ? `macOS blocked the change to ${install.name} (App Management). Allow opentrench under System Settings → Privacy & Security → App Management, then press Set up Discord again.`
+      : `no permission to change ${install.resources}; run opentrench as the user who installed Discord`,
+  );
+  err.code = 'APP_MANAGEMENT';
+  return err;
+};
+
+/** Quit Discord, put the chosen client mod and our plugin in, bring Discord back. */
+async function setup({ bundledDir, bdBundledDir, dataDir, port = 3210, flavour, mod = 'vencord', log = () => {} }) {
+  if (!MODS[mod]) throw new Error(`unknown client mod ${mod}`);
   const p = distPaths(bundledDir, dataDir);
-  if (!p.available) throw new Error('this build of opentrench does not include the Discord plugin');
+  const bd = bdPaths(bdBundledDir);
+  if (mod === 'vencord' ? !p.available : !bd.available) throw new Error(`this build of opentrench does not include the ${MODS[mod]} plugin`);
   const installs = findInstalls();
   const install = flavour ? installs.find((i) => i.id === flavour) : installs[0];
   if (!install) throw new Error(process.platform === 'darwin' ? 'Discord is not installed in /Applications' : 'Discord is not installed for this user');
-  refreshDist(bundledDir, dataDir);
+  if (mod === 'vencord') refreshDist(bundledDir, dataDir);
+  else prepareBetterDiscord(bdBundledDir, install.id, port);
+  try {
+    probeWritable(install.resources);
+  } catch (e) {
+    if (e && (e.code === 'EPERM' || e.code === 'EACCES')) throw appManagementError(install);
+    throw e;
+  }
   log(`quitting ${install.name}`);
   await quit(install);
   const before = inspect(install.resources);
+  const had = modOf(before);
   const appAsar = path.join(install.resources, 'app.asar');
-  const original = path.join(install.resources, '_app.asar');
   try {
-    if (!before.injector) {
-      // a real Discord asar in place; a leftover _app.asar is from a Discord update that wrote over an injection
-      if (before.hasOriginal) fs.rmSync(original, { force: true });
-      fs.renameSync(appAsar, original);
-    } else if (!before.hasOriginal) {
-      throw new Error(`${install.name} has an injector but no _app.asar next to it; reinstall Discord`);
+    if (mod === 'vencord') {
+      if (had === 'betterdiscord') uninjectBetterDiscord(install.resources);
+      if (had !== 'vencord') {
+        originalToUnderscore(install.resources);
+      } else if (!before.hasOriginal) {
+        throw new Error(`${install.name} has an injector but no _app.asar next to it; reinstall Discord`);
+      }
+      fs.writeFileSync(appAsar, injectorAsar(p.patcher));
+      enablePlugin(port);
+    } else {
+      if (had === 'vencord') uninjectVencord(install.resources);
+      injectBetterDiscord(install.resources);
     }
-    fs.writeFileSync(appAsar, injectorAsar(p.patcher));
-    enablePlugin(port);
   } catch (e) {
-    // nothing was changed (the first write is what fails): bring Discord back, then explain
+    // the injections roll back their own partial work: bring Discord back, then explain
     await launch(install).catch(() => {});
-    if (e && (e.code === 'EPERM' || e.code === 'EACCES')) {
-      const err = new Error(
-        process.platform === 'darwin'
-          ? `macOS blocked the change to ${install.name} (App Management). Allow opentrench under System Settings → Privacy & Security → App Management, then press Set up Discord again.`
-          : `no permission to change ${install.resources}; run opentrench as the user who installed Discord`,
-      );
-      err.code = 'APP_MANAGEMENT';
-      throw err;
-    }
+    if (e && (e.code === 'EPERM' || e.code === 'EACCES')) throw appManagementError(install);
     throw e;
   }
-  log(`injected into ${install.resources}`);
+  log(`injected ${MODS[mod]} into ${install.resources}`);
   await launch(install);
-  return { ok: true, install: install.name, replaced: !!before.injector && !(before.injector ?? '').startsWith(p.ours) };
+  const replaced = had === 'vencord' ? mod !== 'vencord' || !before.injector.startsWith(p.ours) : had === 'betterdiscord' && mod !== 'betterdiscord';
+  return { ok: true, install: install.name, mod, replaced, replacedMod: replaced ? had : undefined };
 }
 
-/** Put the original app.asar back (removes Vencord entirely) and restart Discord. */
+/** Put the original app.asar back (removes whichever client mod is injected) and restart Discord. */
 async function remove({ flavour } = {}) {
   const installs = findInstalls();
-  const install = flavour ? installs.find((i) => i.id === flavour) : installs.find((i) => inspect(i.resources).injector) ?? installs[0];
+  const install = flavour ? installs.find((i) => i.id === flavour) : installs.find((i) => modOf(inspect(i.resources))) ?? installs[0];
   if (!install) throw new Error('Discord is not installed');
   const s = inspect(install.resources);
-  if (!s.injector || !s.hasOriginal) return { ok: true, install: install.name, nothing: true };
+  const mod = modOf(s);
+  if (!mod || (mod === 'vencord' && !s.hasOriginal)) return { ok: true, install: install.name, nothing: true };
+  try {
+    probeWritable(install.resources);
+  } catch (e) {
+    if (e && (e.code === 'EPERM' || e.code === 'EACCES')) throw appManagementError(install);
+    throw e;
+  }
   await quit(install);
-  fs.rmSync(path.join(install.resources, 'app.asar'), { force: true });
-  fs.renameSync(path.join(install.resources, '_app.asar'), path.join(install.resources, 'app.asar'));
+  try {
+    if (mod === 'vencord') uninjectVencord(install.resources);
+    else {
+      uninjectBetterDiscord(install.resources);
+      // BetterDiscord's folder (the user's other plugins and themes) stays; only ours goes
+      fs.rmSync(bdPluginFile(), { force: true });
+    }
+  } catch (e) {
+    await launch(install).catch(() => {});
+    if (e && (e.code === 'EPERM' || e.code === 'EACCES')) throw appManagementError(install);
+    throw e;
+  }
   await launch(install);
-  return { ok: true, install: install.name };
+  return { ok: true, install: install.name, mod };
 }
 
-module.exports = { findInstalls, inspect, makeAsar, injectorAsar, refreshDist, distPaths, status, setup, remove, vencordSettingsFile, enablePlugin };
+module.exports = {
+  findInstalls,
+  inspect,
+  modOf,
+  makeAsar,
+  injectorAsar,
+  refreshDist,
+  distPaths,
+  status,
+  setup,
+  remove,
+  vencordSettingsFile,
+  enablePlugin,
+  bdRoot,
+  bdPaths,
+  prepareBetterDiscord,
+  injectBetterDiscord,
+  originalToUnderscore,
+  probeWritable,
+  uninjectBetterDiscord,
+  uninjectVencord,
+  refreshBdPlugin,
+};

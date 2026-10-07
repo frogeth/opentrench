@@ -318,7 +318,7 @@ export class Services {
         this.stopGateway();
         this.hub.setDiscordMode('bridge');
         this.hub.setStatus('discord', 'connected');
-        this.hub.setDiscordUser(b.self?.username);
+        this.hub.setDiscordUser(b.self?.username, b.self?.client);
       } else if (s === 'disconnected') {
         this.hub.setDiscordUser(undefined);
         // the plugin went away: fall back to the read-only token session if there is one

@@ -32,7 +32,7 @@ and the create / join forms under it.
 
 ![TrenchTogether rooms](docs/img/together.png)
 
-> **Discord** connects through a small [Vencord plugin](vencord/) inside your own Discord app, so there is no token and no self-bot session. From 0.8.7 the desktop app installs it for you: ⚙ → Accounts → Discord → **Set up Discord**. Discord has to be open for that side of the feed to work. A user token still works as a read-only fallback. Website and setup guides: **https://opentrench.app**
+> **Discord** connects through a small plugin for [Vencord](vencord/) or [BetterDiscord](betterdiscord/) inside your own Discord app, so there is no token and no self-bot session. From 0.8.7 the desktop app installs it for you: ⚙ → Accounts → Discord → **Set up Discord**. Discord has to be open for that side of the feed to work. A user token still works as a read-only fallback. Website and setup guides: **https://opentrench.app**
 
 > **OpenSea mint wallet**: use a dedicated wallet, not one holding real funds. The private key is stored encrypted in `config.json` with a key kept in your OS keychain, but anyone who can run code as your user on this machine can still get at it. Mint transactions are irreversible once sent. MintGo and OpenSea expose no official public API for any of this; opentrench reads their unofficial web endpoints, which can change without notice.
 

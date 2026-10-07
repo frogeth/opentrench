@@ -437,6 +437,8 @@ export interface Status {
   favorites: string[];
   /** who the Discord plugin is signed in as */
   discordUser?: string;
+  /** the client mod the Discord plugin runs in */
+  discordClient?: 'vencord' | 'betterdiscord';
   /** the Telegram account's @handle, lower-case */
   telegramUser?: string;
   /** how Discord is connected: the Vencord bridge (read + write) or a legacy token (read only) */

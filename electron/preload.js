@@ -5,9 +5,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('desktop', {
   /** which Discord installs exist and whether our plugin is injected */
   discordStatus: () => ipcRenderer.invoke('discord:status'),
-  /** confirm (native dialog), quit Discord, inject, relaunch */
-  discordSetup: () => ipcRenderer.invoke('discord:setup'),
-  /** confirm, quit Discord, restore the original app.asar, relaunch */
+  /** confirm (native dialog, which asks Vencord or BetterDiscord unless `mod` is given), quit Discord, inject, relaunch */
+  discordSetup: (opts) => ipcRenderer.invoke('discord:setup', opts),
+  /** confirm, quit Discord, restore the original app.asar (whichever client mod), relaunch */
   discordRemove: () => ipcRenderer.invoke('discord:remove'),
   /** the app's own version */
   version: () => ipcRenderer.invoke('app:version'),

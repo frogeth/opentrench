@@ -44,6 +44,7 @@ NOTES_FILE=$(mktemp)
 printf "%s\n" "$NOTES_BODY" > "$NOTES_FILE"
 ( cd .. && npm run build )
 npm run prepare-vencord
+npm run prepare-betterdiscord
 npm run prepare-backend
 # Build without publishing: electron-builder's own GitHub uploader stalls silently from here.
 # The assets go up through the GitHub CLI (with retries) into a DRAFT, so the updater never sees
@@ -61,6 +62,8 @@ ASSETS=(
   "dist/opentrench-$VERSION-arm64-mac.zip" "dist/opentrench-$VERSION-arm64-mac.zip.blockmap"
   "dist/opentrench-$VERSION.dmg" "dist/opentrench-$VERSION.dmg.blockmap"
   "dist/opentrench-$VERSION-arm64.dmg" "dist/opentrench-$VERSION-arm64.dmg.blockmap"
+  # the BetterDiscord plugin on its own, for people who install it by hand
+  "resources/betterdiscord/OpentrenchBridge.plugin.js"
 )
 for f in "${ASSETS[@]}"; do [ -f "$f" ] || { echo "!! missing build output $f" >&2; exit 1; }; done
 if ! gh release view "v$VERSION" --repo frogeth/opentrench >/dev/null 2>&1; then

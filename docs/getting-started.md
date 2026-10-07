@@ -10,11 +10,11 @@ Telegram themselves.
 Community, help and release news: **https://discord.gg/6ByE8fPNN**
 
 > **How Discord is wired.** opentrench does **not** need your Discord token.
-> A small plugin runs inside your own Discord app (via Vencord) and feeds
+> A small plugin runs inside your own Discord app (via Vencord or BetterDiscord) and feeds
 > opentrench from there, so to Discord it is just you using Discord. Discord
 > must be open for that side of the feed to work. Client mods are still
-> outside Discord's terms; Vencord has a very large user base and Discord has
-> not banned for it. A user token is accepted as a read-only fallback, which
+> outside Discord's terms; both have very large user bases and Discord has
+> not banned for them. A user token is accepted as a read-only fallback, which
 > is a self-bot and carries ban risk. The Telegram side uses your own account
 > through Telegram's official API, which Telegram allows.
 
@@ -54,15 +54,19 @@ build && npm start`, then open http://127.0.0.1:3210.
 
 ## 2. Connect Discord
 
-Discord connects through the **opentrench plugin for Vencord**, which lives
-inside your own Discord app: no token to paste, nothing stored.
+Discord connects through the **opentrench plugin for Vencord or BetterDiscord**,
+which lives inside your own Discord app: no token to paste, nothing stored.
 
 **One click (0.8.8 and later):** ⚙ → Accounts → Discord → **Set up Discord**.
-opentrench quits Discord, installs its own copy of Vencord with the plugin
-switched on, and reopens Discord. On a Mac the first attempt may be blocked
+opentrench asks whether you use Vencord or BetterDiscord (pick Vencord if
+neither), quits Discord, installs the client mod with the plugin switched on,
+and reopens Discord. On a Mac the first attempt may be blocked
 until you allow opentrench under System Settings → Privacy & Security → App
 Management; the app offers to open that pane, then press the button again. An existing Vencord is replaced by the same
-Vencord plus the plugin, settings kept; *remove the plugin* undoes it.
+Vencord plus the plugin, settings kept; an existing BetterDiscord keeps its
+plugins and themes and gets this one added. Picking one client mod removes the
+other; once connected, *switch to BetterDiscord* / *switch to Vencord* in the same
+card swaps them in one click. *remove the plugin* undoes it.
 
 **By hand** (older versions, or a Discord installed somewhere unusual), about
 five minutes, with separate Mac and Windows steps:

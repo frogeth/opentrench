@@ -38,6 +38,14 @@ const HELLO = {
 };
 
 describe('DiscordBridge', () => {
+  it('remembers which client mod the plugin runs in', () => {
+    const b = new DiscordBridge();
+    const ws = new FakeSocket();
+    b.accept(ws as any);
+    ws.recv({ ...HELLO, client: 'betterdiscord' });
+    expect(b.self?.client).toBe('betterdiscord');
+  });
+
   it('learns who we are and the channel list from hello, then tells the plugin what to watch', () => {
     const b = new DiscordBridge();
     const states: string[] = [];
@@ -47,7 +55,8 @@ describe('DiscordBridge', () => {
     b.accept(ws as any);
     ws.recv(HELLO);
     expect(states).toEqual(['connecting', 'connected']);
-    expect(b.self).toEqual({ id: '42', username: 'frog.eth', roles: new Map([['g1', ['r1']]]) });
+    // a hello without `client` is from a plugin that predates BetterDiscord support: Vencord
+    expect(b.self).toEqual({ id: '42', username: 'frog.eth', client: 'vencord', roles: new Map([['g1', ['r1']]]) });
     expect([...b.channels.values()]).toEqual([
       { id: 'c1', name: 'alpha-calls', guildId: 'g1', guildName: 'Trenches', guildIcon: 'https://cdn/icon.png', category: 'CALLS', position: 3 },
       { id: 'c2', name: 'news', guildId: 'g1', guildName: 'Trenches', guildIcon: 'https://cdn/icon.png', category: undefined, position: 0 },

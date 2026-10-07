@@ -25,6 +25,8 @@ export interface DiscordChannel {
 export interface DiscordSelf {
   id: string;
   username: string;
+  /** the client mod the plugin runs in (plugins from before BetterDiscord support only ran in Vencord); none for the read-only token session */
+  client?: 'vencord' | 'betterdiscord';
   /** guild id → role ids you hold there */
   roles: Map<string, string[]>;
 }
@@ -121,7 +123,8 @@ export class DiscordBridge extends EventEmitter {
             avatar: typeof d.avatar === 'string' ? d.avatar : undefined,
           });
         }
-        this.self = msg.user?.id ? { id: String(msg.user.id), username: String(msg.user.globalName ?? msg.user.username ?? ''), roles } : undefined;
+        const client = msg.client === 'betterdiscord' ? 'betterdiscord' : 'vencord';
+        this.self = msg.user?.id ? { id: String(msg.user.id), username: String(msg.user.globalName ?? msg.user.username ?? ''), client, roles } : undefined;
         this.emit('self', this.self);
         this.emit('channels', [...this.channels.values()]);
         for (const [gid, map] of this.roles) this.emit('roles', gid, map);

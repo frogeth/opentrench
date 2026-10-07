@@ -856,8 +856,9 @@ export class MessageHub extends EventEmitter {
     this.emitStatus();
   }
 
-  setDiscordUser(name?: string): void {
+  setDiscordUser(name?: string, client?: Status['discordClient']): void {
     this.status.discordUser = name;
+    this.status.discordClient = client;
     this.emitStatus();
   }
 
