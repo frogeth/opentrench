@@ -118,8 +118,9 @@ export function CoveView({
         {connected && state === 'ready' && msgs.length === 0 && <div className="empty">Nothing yet. Press a buy button on any call, or type a command below.</div>}
         {msgs.map((m) => (
           <div key={m.id} className={`bmsg${m.out ? ' bmsg-out' : ''}`}>
+            {m.image && <img className="media-img bmsg-img" src={m.image} alt="" loading="lazy" />}
             <div className="bmsg-text">
-              {m.text ? <RichText text={m.text} contracts={m.contracts} /> : m.hasMedia ? <span className="muted">📎 media</span> : null}
+              {m.text ? <RichText text={m.text} contracts={m.contracts} /> : m.hasMedia && !m.image ? <span className="muted">📎 media</span> : null}
             </div>
             {m.buttons.length > 0 && (
               <div className="bkeys">

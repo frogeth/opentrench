@@ -1,13 +1,13 @@
 import { EventEmitter } from 'node:events';
 import bigInt from 'big-integer';
-import { TelegramClient } from 'telegram';
-import { StringSession } from 'telegram/sessions/index.js';
-import { NewMessage, Raw, type NewMessageEvent } from 'telegram/events/index.js';
-import { Api } from 'telegram/tl/index.js';
-import { getPeerId } from 'telegram/Utils.js';
-import { CustomFile } from 'telegram/client/uploads.js';
-import type { BotMessage, FeedMessage, LoginStep, TelegramState } from '../types.js';
-import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, type TelegramPlain, entitiesToMarkdown, entitiesToDiscord } from './normalize.js';
+import { TelegramClient, Rich } from 'teleproto';
+import { StringSession } from 'teleproto/sessions/index.js';
+import { NewMessage, Raw, type NewMessageEvent } from 'teleproto/events/index.js';
+import { Api } from 'teleproto/tl/index.js';
+import { getPeerId } from 'teleproto/Utils.js';
+import { CustomFile } from 'teleproto/client/uploads.js';
+import type { BotMessage, FeedMessage, LoginStep, MediaItem, TelegramState } from '../types.js';
+import { classifyMedia, mapTelegramReactions, normalizeTelegram, webpagePreview, type TelegramPlain, entitiesToMarkdown, entitiesToDiscord, flattenRichMarkdown, polishReport } from './normalize.js';
 import { extractLinks, type ExtractedMeta, type LinkIn } from '../links.js';
 import { canonicalChatId } from './ids.js';
 import { detectContracts } from '../contracts.js';
@@ -102,6 +102,25 @@ function entityLinks(text: string, entities: any[] | undefined): LinkIn[] {
  * Events: 'state' (TelegramState, error?), 'step' (LoginStep), 'session' (string|undefined),
  * 'message' (FeedMessage, ExtractedMeta), 'reactions' (msgId, Reaction[]).
  */
+/**
+ * A rich message (Telegram's laid-out bot messages) carries its content in blocks, not in the
+ * message text: its text as the UI's markdown, or undefined for an ordinary message.
+ */
+function richText(m: any): string | undefined {
+  return m?.richMessage ? flattenRichMarkdown(Rich.toMarkdown(m.richMessage)) : undefined;
+}
+
+/** The first photo of a rich message (a report's card), shown as the message's media. */
+function richPhoto(m: any): any {
+  return m?.richMessage?.photos?.[0];
+}
+
+/** Telegram may deliver a long rich message in part; fetch the rest before rendering it. */
+async function fullRich(m: any): Promise<void> {
+  if (!m?.richMessage?.part || typeof m.fetchRichMessage !== 'function') return;
+  await m.fetchRichMessage().catch((e: any) => console.warn('[telegram] rich message fetch failed', e?.message ?? e));
+}
+
 export class TelegramWrapper extends EventEmitter {
   private client?: TelegramClient;
   private pending: { code?: Deferred<string>; password?: Deferred<string> } = {};
@@ -303,11 +322,15 @@ export class TelegramWrapper extends EventEmitter {
         const got = await client.getMessages(bigInt(chatId), { ids: [msgId] });
         msg = got?.[0];
       }
-      if (!msg?.media) return null;
-      const media = msg.media;
+      const photo = richPhoto(msg);
+      if (!msg?.media && !photo) return null;
+      const media = msg.media ?? {};
       let target: any = msg;
       let mime = 'application/octet-stream';
-      if (media.className === 'MessageMediaWebPage') {
+      if (!msg.media) {
+        target = photo;
+        mime = 'image/jpeg';
+      } else if (media.className === 'MessageMediaWebPage') {
         if (!media.webpage?.photo) return null;
         target = media.webpage.photo;
         mime = 'image/jpeg';
@@ -389,9 +412,14 @@ export class TelegramWrapper extends EventEmitter {
       /* the chat's name will do */
     }
     // a bot's report is laid out as one (headings, sections); a person's message stays as typed
-    const text = entitiesToDiscord(String(m.message ?? ''), m.entities, { report: fromBot });
+    await fullRich(m);
+    const rich = richText(m);
+    const text = rich !== undefined ? (fromBot ? polishReport(rich) : rich) : entitiesToDiscord(String(m.message ?? ''), m.entities, { report: fromBot });
     let photo: { name: string; mime: string; data: Buffer } | undefined;
-    if (m.media?.className === 'MessageMediaPhoto' || (m.media?.className === 'MessageMediaDocument' && /^image\//.test(String(m.media.document?.mimeType ?? '')))) {
+    if (!m.media && richPhoto(m)) {
+      const data: any = await this.client.downloadMedia(richPhoto(m), {});
+      if (Buffer.isBuffer(data) && data.length > 0 && data.length <= 8 * 1024 * 1024) photo = { name: 'forward.jpg', mime: 'image/jpeg', data };
+    } else if (m.media?.className === 'MessageMediaPhoto' || (m.media?.className === 'MessageMediaDocument' && /^image\//.test(String(m.media.document?.mimeType ?? '')))) {
       const data: any = await this.client.downloadMedia(m, {});
       if (Buffer.isBuffer(data) && data.length > 0 && data.length <= 8 * 1024 * 1024) {
         const mime = m.media.className === 'MessageMediaPhoto' ? 'image/jpeg' : String(m.media.document.mimeType);
@@ -454,9 +482,10 @@ export class TelegramWrapper extends EventEmitter {
         ...(b.url ? { url: String(b.url) } : {}),
       })),
     );
-    const raw = String(m.message ?? '');
+    const rich = richText(m);
+    const raw = rich ?? String(m.message ?? '');
     const contracts = detectContracts(raw).map((c) => c.address);
-    return { id: Number(m.id), ts: Number(m.date) * 1000, out: !!m.out, text: entitiesToMarkdown(raw, m.entities), buttons, hasMedia: !!m.media, ...(contracts.length ? { contracts } : {}) };
+    return { id: Number(m.id), ts: Number(m.date) * 1000, out: !!m.out, text: rich ?? entitiesToMarkdown(raw, m.entities), buttons, hasMedia: !!m.media || !!richPhoto(m), ...(richPhoto(m) && !m.media && m.peerId?.userId ? { image: `/api/telegram/media/${m.peerId.userId}/${m.id}` } : {}), ...(contracts.length ? { contracts } : {}) };
   }
 
   /** Is this update about a bot conversation we relay? Returns the bot username. */
@@ -471,6 +500,7 @@ export class TelegramWrapper extends EventEmitter {
   async botHistory(username: string, limit = 40): Promise<BotMessage[]> {
     const peer = await this.botPeer(username);
     const msgs: any[] = await this.client!.getMessages(peer, { limit });
+    await Promise.all(msgs.map(fullRich));
     return msgs
       .filter((m) => m && m.className === 'Message')
       .map((m) => this.toBotMessage(m))
@@ -624,7 +654,6 @@ export class TelegramWrapper extends EventEmitter {
   private makeClient(session: string): TelegramClient {
     return new TelegramClient(new StringSession(session), this.apiId, this.apiHash, {
       connectionRetries: 5,
-      useWSS: false,
     });
   }
 
@@ -640,18 +669,20 @@ export class TelegramWrapper extends EventEmitter {
         }
       })
       .catch((e: any) => console.warn('[telegram] getMe failed', e?.message ?? e));
-    client.addEventHandler((ev: NewMessageEvent) => {
+    client.addEventHandler(async (ev: NewMessageEvent) => {
+      await fullRich(ev.message);
       const bot = this.botFor(ev.message);
       // a bot column gets its panel; the same conversation can also be a watched chat in the feed
       if (bot) this.emit('bot', bot, this.toBotMessage(ev.message));
       void this.onNewMessage(ev);
     }, new NewMessage({}));
     // Bots edit their panel messages in place after a button press: relay edits too.
-    client.addEventHandler((u: any) => {
+    client.addEventHandler(async (u: any) => {
       try {
         const m = u?.message;
         if (!m || m.className !== 'Message') return;
         const bot = this.botFor(m);
+        if (bot) await fullRich(m);
         if (bot) this.emit('bot', bot, { ...this.toBotMessage(m), edited: true });
       } catch (e: any) {
         console.warn('[telegram] bot edit failed', e?.message ?? e);
@@ -865,7 +896,8 @@ export class TelegramWrapper extends EventEmitter {
     const senderName = sender?.username
       ? `@${sender.username}`
       : [sender?.firstName, sender?.lastName].filter(Boolean).join(' ') || sender?.title || chat?.title || 'unknown';
-    const text = m.message ?? '';
+    await fullRich(m);
+    const text = richText(m) ?? m.message ?? '';
     const senderId = m.senderId ? String(m.senderId) : undefined;
     let replyTo: TelegramPlain['replyTo'];
     if (m.replyTo) {
@@ -875,15 +907,15 @@ export class TelegramWrapper extends EventEmitter {
         const rName = rs?.username
           ? `@${rs.username}`
           : [rs?.firstName, rs?.lastName].filter(Boolean).join(' ') || rs?.title || 'unknown';
-        replyTo = { author: rName, text: String(r.message ?? '').trim() || (r.media ? '📎 media' : ''), id: `telegram:${chatId}:${r.id}` };
+        replyTo = { author: rName, text: (richText(r) ?? String(r.message ?? '')).trim() || (r.media ? '📎 media' : ''), id: `telegram:${chatId}:${r.id}` };
       }
     }
     // a group's admins carry a tag (owner, admin, or the title the group gave them); channels post as the channel and get none
     const authorTag = senderId && sender?.bot !== true && sender?.className === 'User' ? await this.adminRank(chatId, senderId).catch(() => undefined) : undefined;
     const mediaUrl = `/api/telegram/media/${chatId}/${m.id}`;
-    const media = classifyMedia(m.media, mediaUrl);
+    const media: MediaItem[] = !m.media && richPhoto(m) ? [{ kind: 'image', url: mediaUrl, mime: 'image/jpeg' }] : classifyMedia(m.media, mediaUrl);
     const preview = webpagePreview(m.media, `${mediaUrl}?thumb=1`);
-    if (m.media && (media.length || preview?.image)) {
+    if ((m.media || richPhoto(m)) && (media.length || preview?.image)) {
       this.mediaMsgs.set(`${chatId}:${m.id}`, m);
       if (this.mediaMsgs.size > MEDIA_MSG_MAX) this.mediaMsgs.delete(this.mediaMsgs.keys().next().value!);
     }
@@ -898,7 +930,7 @@ export class TelegramWrapper extends EventEmitter {
       authorTag,
       text,
       date: m.date,
-      hasMedia: !!m.media && m.media.className !== 'MessageMediaWebPage',
+      hasMedia: (!!m.media && m.media.className !== 'MessageMediaWebPage') || !!richPhoto(m),
       replyTo,
       // Telegram flags incoming mentions/replies for us; for our own messages, only an explicit @me counts
       mentioned: m.out ? !!this.selfUsername && new RegExp(`(^|[^\\w])@${this.selfUsername}(?![\\w])`, 'i').test(text) : !!m.mentioned,
@@ -906,7 +938,7 @@ export class TelegramWrapper extends EventEmitter {
       media,
       previews: preview ? [preview] : [],
     };
-    const meta: ExtractedMeta = extractLinks(text, entityLinks(text, m.entities as any[] | undefined));
+    const meta: ExtractedMeta = extractLinks(text, m.richMessage ? [] : entityLinks(text, m.entities as any[] | undefined));
     return { msg: normalizeTelegram(plain), meta };
   }
 

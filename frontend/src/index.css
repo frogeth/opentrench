@@ -1029,6 +1029,7 @@ button.share { cursor: pointer; }
 .bmsg:hover .bmsg-fwd { opacity: 1; }
 .bmsg { max-width: 92%; align-self: flex-start; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px 12px 12px 4px; padding: 8px 10px; }
 .bmsg-out { align-self: flex-end; background: rgba(65, 200, 146, 0.12); border-color: rgba(65, 200, 146, 0.35); border-radius: 12px 12px 4px 12px; }
+.bmsg-img { margin-bottom: 6px; }
 .bmsg-text { font-size: 13px; white-space: pre-wrap; word-break: break-word; }
 .bmsg-time { font-size: 10px; color: var(--dim); margin-top: 4px; text-align: right; }
 .bkeys { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
