@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.19.0 — 2026-10-07
+
 - Discord setup now works with **BetterDiscord** as well as Vencord. *Set up Discord* asks which one you use, and once connected, *switch to BetterDiscord* / *switch to Vencord* in ⚙ → Accounts → Discord swaps them in one click. BetterDiscord users who prefer to install by hand can drop `OpentrenchBridge.plugin.js` (attached to this release) into their plugins folder.
 - Reacting to a Discord message from opentrench goes through Discord's reaction endpoint directly. Current Discord builds no longer expose the reaction functions the plugin looked up by name.
 - One-click Discord setup checks it may change the Discord app before quitting Discord. A refusal from macOS now leaves Discord exactly as it was; it could leave Discord unable to start before.
