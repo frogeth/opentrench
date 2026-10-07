@@ -7,6 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.18.1 — 2026-10-07
+
+- Salpha reports show again. Salpha now sends Telegram's new rich messages (a card, quotes, a table and a collapsible full report), which showed only as "media". They now show the card image and the full report, in the Salpha column, in the feed and when forwarded to a chat.
 - Every launchpad badge shows its logo. Clanker, StonkFun and Believe had no icon, and letsbonk's and Long's stopped loading when their sites changed, so those badges showed letters. All launchpad icons now ship with the app instead of loading from each launchpad's site, so a badge never falls back to letters when a site is down, and no launchpad sees who is looking at a token.
 
 ## v0.18.0 — 2026-09-29
