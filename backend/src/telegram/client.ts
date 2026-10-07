@@ -476,11 +476,16 @@ export class TelegramWrapper extends EventEmitter {
   private toBotMessage(m: any): BotMessage {
     const rows = m.replyMarkup?.className === 'ReplyInlineMarkup' ? m.replyMarkup.rows : [];
     const buttons = rows.map((r: any) =>
-      (r.buttons ?? []).map((b: any) => ({
-        text: String(b.text ?? ''),
-        ...(b.data ? { data: Buffer.from(b.data).toString('base64') } : {}),
-        ...(b.url ? { url: String(b.url) } : {}),
-      })),
+      (r.buttons ?? []).map((b: any) => {
+        // since layer 229 a button's callback data and link sit in its `type`
+        const data = b.type?.data ?? b.data;
+        const url = b.type?.url ?? b.url;
+        return {
+          text: String(b.text ?? ''),
+          ...(data ? { data: Buffer.from(data).toString('base64') } : {}),
+          ...(url ? { url: String(url) } : {}),
+        };
+      }),
     );
     const rich = richText(m);
     const raw = rich ?? String(m.message ?? '');

@@ -7,6 +7,7 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Cove's buttons work again. Since v0.18.1, pressing a button on a bot's message (Cove, or any bot column) did nothing.
 ## v0.18.1 — 2026-10-07
 
 - Salpha reports show again. Salpha now sends Telegram's new rich messages (a card, quotes, a table and a collapsible full report), which showed only as "media". They now show the card image and the full report, in the Salpha column, in the feed and when forwarded to a chat.
