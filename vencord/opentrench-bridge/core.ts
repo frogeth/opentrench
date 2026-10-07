@@ -23,10 +23,8 @@ export interface DiscordInternals {
     FluxDispatcher: any;
     RestAPI: any;
     SnowflakeUtils: any;
-    /** addReaction / removeReaction */
-    ReactionActions: any;
-    /** the gateway session this client is on; an interaction names it so the reply comes back here */
-    SessionInfo: any;
+    /** AuthenticationStore: getSessionId() is the gateway session this client is on; an interaction names it so the reply comes back here */
+    AuthenticationStore: any;
     /** Discord's upload class (the same one its own composer uses) */
     CloudUpload: any;
     /** the client's own message send, with an optional reply reference */
@@ -43,6 +41,9 @@ export interface BridgeHost {
 const VERSION = 2;
 
 const messagesUrl = (channelId: string) => `/channels/${channelId}/messages`;
+/** your own reaction on a message; a custom emoji is `name:id`, a unicode one its character(s) */
+const ownReactionUrl = (channelId: string, messageId: string, emoji: { id: string | null; name: string; }) =>
+    `${messagesUrl(channelId)}/${messageId}/reactions/${encodeURIComponent(emoji.id ? `${emoji.name}:${emoji.id}` : emoji.name)}/@me`;
 
 export function createBridge(host: BridgeHost) {
     let D: DiscordInternals;
@@ -194,9 +195,13 @@ export function createBridge(host: BridgeHost) {
                 });
                 result = res?.body ?? null;
             } else if (op === "react") {
-                const emoji = { id: req.emoji?.id ?? null, name: String(req.emoji?.name ?? ""), animated: !!req.emoji?.animated };
-                if (req.on) await D.ReactionActions.addReaction(String(req.channelId), String(req.messageId), emoji);
-                else await D.ReactionActions.removeReaction(String(req.channelId), String(req.messageId), emoji);
+                // the REST call the client's own reaction button ends in (its action module's export
+                // names are minified and change between Discord builds); the gateway echoes it back
+                const emoji = { id: req.emoji?.id ? String(req.emoji.id) : null, name: String(req.emoji?.name ?? "") };
+                if (!emoji.name) throw new Error("no emoji");
+                const url = ownReactionUrl(String(req.channelId), String(req.messageId), emoji);
+                if (req.on) await D.RestAPI.put({ url, query: { location: "Message", type: 0 } });
+                else await D.RestAPI.del({ url, query: { location: "Message", burst: false } });
                 result = true;
             } else if (op === "history") {
                 const res: any = await D.RestAPI.get({ url: messagesUrl(String(req.channelId)), query: { limit: Math.min(100, Number(req.limit) || 50) }, retries: 1 });
@@ -252,7 +257,7 @@ export function createBridge(host: BridgeHost) {
                 let cmd = commandCache.get(String(req.commandId));
                 if (!cmd) cmd = (await searchCommands(channelId, String(req.name ?? ""))).commands.find(c => String(c.id) === String(req.commandId));
                 if (!cmd) throw new Error("that command is not available here any more");
-                const sessionId = D.SessionInfo?.getSessionId?.();
+                const sessionId = D.AuthenticationStore?.getSessionId?.();
                 if (!sessionId) throw new Error("no gateway session yet; is Discord connected?");
                 await D.RestAPI.post({
                     url: "/interactions",

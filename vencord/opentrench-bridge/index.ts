@@ -22,13 +22,11 @@ import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
-import { findByPropsLazy, findLazy } from "@webpack";
-import { ChannelStore, FluxDispatcher, GuildChannelStore, GuildMemberStore, GuildRoleStore, GuildStore, RestAPI, SnowflakeUtils, UserStore } from "@webpack/common";
+import { findLazy } from "@webpack";
+import { AuthenticationStore, ChannelStore, FluxDispatcher, GuildChannelStore, GuildMemberStore, GuildRoleStore, GuildStore, RestAPI, SnowflakeUtils, UserStore } from "@webpack/common";
 
 import { createBridge } from "./core";
 
-const ReactionActions = findByPropsLazy("addReaction", "removeReaction");
-const SessionInfo: any = findByPropsLazy("getSessionId");
 const CloudUpload: any = findLazy(m => m.prototype?.trackUploadFinished);
 
 const settings = definePluginSettings({
@@ -52,8 +50,7 @@ const bridge = createBridge({
         FluxDispatcher,
         RestAPI,
         SnowflakeUtils,
-        ReactionActions,
-        SessionInfo,
+        AuthenticationStore,
         CloudUpload,
         sendMessage: (channelId, content, extra) => sendMessage(channelId, { content }, undefined, extra),
     }),

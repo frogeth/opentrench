@@ -46,8 +46,7 @@ function discord(): DiscordInternals {
         FluxDispatcher: byKeys("dispatch", "subscribe", "unsubscribe"),
         RestAPI: find(m => typeof m === "object" && m.del && m.put && m.get && m.post, "RestAPI"),
         SnowflakeUtils: byKeys("fromTimestamp", "extractTimestamp"),
-        ReactionActions: byKeys("addReaction", "removeReaction"),
-        SessionInfo: byKeys("getSessionId"),
+        AuthenticationStore: store("AuthenticationStore"),
         CloudUpload: find(m => typeof m === "function" && m.prototype?.trackUploadFinished, "upload class"),
         // what Vencord's sendMessage helper sends: the composer's own message shape
         sendMessage: (channelId, content, extra) =>
