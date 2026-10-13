@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.19.1 — 2026-10-13
+
 - Market caps on older tokens are right again. The background market refresh could get stuck after a network drop and stay stuck, so off-screen numbers and liquidity froze. A stuck pass is now dropped after two minutes and the next one starts.
 - A token that graduates off its bonding curve (pump.fun, LaunchLab, Meteora DBC) moves to its new pool right away and is priced there on-chain. It used to keep showing its last curve price until the refresh caught up.
 
