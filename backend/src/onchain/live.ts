@@ -96,6 +96,7 @@ const DISCOVER_FAIL_MS = 60_000;
 const CURVE_DEXES = new Set(['genius', 'loong', 'pons']);
 const VISIBLE_TTL_MS = 30_000;
 const MAX_DEPTH = 3;
+const ROUND_DEADLINE_MS = 60_000;
 
 const pad32 = (hex: string) => hex.replace(/^0x/, '').toLowerCase().padStart(64, '0');
 const v4Slot = (poolId: string) => keccak256(encodeAbiParameters([{ type: 'bytes32' }, { type: 'uint256' }], [poolId as `0x${string}`, V4_POOLS_SLOT]));
@@ -119,6 +120,7 @@ export function createLivePricer(deps: LiveDeps) {
   const STABLE_MIN_LIQUIDITY = 50_000;
   const visible = new Map<string, { addresses: string[]; at: number }>();
   let inflight = false;
+  let inflightAt = 0;
 
   const skip = (st: NetworkStatus, reason: string) => {
     st.skipped++;
@@ -204,6 +206,30 @@ export function createLivePricer(deps: LiveDeps) {
     const v = quoteUsd.get(q.item.key);
     if (v && now() - v.at < QUOTE_STALE_MS) return v.usd;
     return { reason: `${q.item.symbol} not priced yet` };
+  };
+
+  /** when each graduated token last asked the directory where it trades now, by key */
+  const followed = new Map<string, number>();
+  /**
+   * A curve that finished no longer trades: its token moved to the pool it migrated into. The directory
+   * names that pool at once (and its price, until the next tick reads the pool itself), so a graduated
+   * token never sits on its last curve price waiting for the slow refresh loop.
+   */
+  const followMigration = (it: Item) => {
+    if (!it.token || !deps.discover) return;
+    const last = followed.get(it.key);
+    if (last !== undefined && now() - last < SOON_MS) return;
+    followed.set(it.key, now());
+    deps
+      .discover(it.network, it.address)
+      .then((info) => {
+        if (!info?.pairAddress || info.pairAddress === it.pairAddress) return;
+        const { pairAddress, dex, quoteSymbol, quoteAddress, chartUrl, embedUrl, priceUsd, marketCap } = info;
+        const priced = priceUsd !== undefined ? { priceUsd, marketCap, priceSource: 'api' as const, priceAt: now() } : {};
+        log(`${it.symbol} graduated: now on ${dex ?? 'a new pool'} ${pairAddress}`);
+        deps.apply(it.address, { pairAddress, dex, quoteSymbol, quoteAddress, chartUrl, embedUrl, ...priced });
+      })
+      .catch(() => {});
   };
 
   // ---------- publishing ----------
@@ -483,6 +509,7 @@ export function createLivePricer(deps: LiveDeps) {
         }
         if (pool.done) {
           unsupported(st, it, 'curve complete (graduated)', SOON_MS);
+          followMigration(it);
           return;
         }
         if (pool.supplyRaw !== undefined) {
@@ -540,6 +567,7 @@ export function createLivePricer(deps: LiveDeps) {
       }
       if (pool.done) {
         unsupported(st, it, 'curve complete (graduated)', SOON_MS);
+        followMigration(it);
         return;
       }
       pending.push({ it, pool, kind });
@@ -662,8 +690,10 @@ export function createLivePricer(deps: LiveDeps) {
   return {
     /** price every token that has a pool: the quotes' quotes, then the quotes, then the tokens */
     async refresh(tokens: TokenInfo[]): Promise<void> {
-      if (inflight) return;
+      // a round that never came back (a request that never settled) is given up on after a while, not waited on forever
+      if (inflight && now() - inflightAt < ROUND_DEADLINE_MS) return;
       inflight = true;
+      inflightAt = now();
       try {
         for (const st of status.values()) {
           st.live = 0;

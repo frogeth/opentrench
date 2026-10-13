@@ -7,6 +7,9 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+- Market caps on older tokens are right again. The background market refresh could get stuck after a network drop and stay stuck, so off-screen numbers and liquidity froze. A stuck pass is now dropped after two minutes and the next one starts.
+- A token that graduates off its bonding curve (pump.fun, LaunchLab, Meteora DBC) moves to its new pool right away and is priced there on-chain. It used to keep showing its last curve price until the refresh caught up.
+
 ## v0.19.0 — 2026-10-07
 
 - Discord setup now works with **BetterDiscord** as well as Vencord. *Set up Discord* asks which one you use, and once connected, *switch to BetterDiscord* / *switch to Vencord* in ⚙ → Accounts → Discord swaps them in one click. BetterDiscord users who prefer to install by hand can drop `OpentrenchBridge.plugin.js` (attached to this release) into their plugins folder.

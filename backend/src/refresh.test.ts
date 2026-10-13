@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { refreshMarket } from './refresh.js';
+import { describe, expect, it, vi } from 'vitest';
+import { createMarketRefresher, refreshMarket } from './refresh.js';
 import type { TokenInfo } from './types.js';
 
 const tok = (address: string, network?: string): TokenInfo =>
@@ -77,5 +77,23 @@ describe('refreshMarket', () => {
     });
     expect(applied).toEqual(['0xb']);
     expect(r.missing).toEqual(['0xa']);
+  });
+});
+
+describe('createMarketRefresher', () => {
+  it('a pass that never settles is given up on, so the loop keeps going', async () => {
+    let calls = 0;
+    const apply = vi.fn();
+    const dex = vi.fn(async (_c: string, a: string[]) => {
+      if (calls++ === 0) return new Promise<Map<string, Partial<TokenInfo>>>(() => {}); // hangs forever
+      return new Map(a.map((x) => [x, { priceUsd: 1 }]));
+    });
+    const log = vi.fn();
+    const run = createMarketRefresher(apply, log, { gt: false }, { dex, gt: async () => new Map(), apply, log }, 20);
+    const t = { address: 'A', network: 'solana' } as TokenInfo;
+    await run([t]);
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/ran past/));
+    await run([t]);
+    expect(apply).toHaveBeenCalledWith('A', { priceUsd: 1 });
   });
 });

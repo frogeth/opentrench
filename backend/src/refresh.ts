@@ -105,16 +105,30 @@ export async function refreshMarket(tokens: TokenInfo[], deps: RefreshDeps, opts
   return { updated, missing };
 }
 
-export function createMarketRefresher(apply: RefreshDeps['apply'], log?: RefreshDeps['log'], opts: RefreshOptions = {}): (tokens: TokenInfo[]) => Promise<void> {
-  const deps: RefreshDeps = { dex: (c, a) => fetchDexscreenerChain(c, a), dexAny: (a) => fetchDexscreenerBatch(a), gt: (s, a) => fetchGeckoTerminalMulti(s, a), apply, log };
+/** a pass that has not finished by now is given up on, so one request that never settles cannot stop the loop */
+export const PASS_DEADLINE_MS = 120_000;
+
+export function createMarketRefresher(
+  apply: RefreshDeps['apply'],
+  log?: RefreshDeps['log'],
+  opts: RefreshOptions = {},
+  deps: RefreshDeps = { dex: (c, a) => fetchDexscreenerChain(c, a), dexAny: (a) => fetchDexscreenerBatch(a), gt: (s, a) => fetchGeckoTerminalMulti(s, a), apply, log },
+  deadlineMs = PASS_DEADLINE_MS,
+): (tokens: TokenInfo[]) => Promise<void> {
+  // A fetch whose promise never settled (seen after a network drop) once held this guard for days:
+  // every token's numbers froze, and graduated tokens stayed on their dead curve. A pass now has a deadline.
   let running = false;
   return async (tokens) => {
     if (running) return;
     running = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<'late'>((r) => (timer = setTimeout(() => r('late'), deadlineMs)));
     try {
-      const r = await refreshMarket(tokens, deps, opts);
-      if (r.missing.length && opts.gt !== false) log?.(`no market data for ${r.missing.length} token(s)`);
+      const r = await Promise.race([refreshMarket(tokens, deps, opts), deadline]);
+      if (r === 'late') log?.(`a market pass ran past ${Math.round(deadlineMs / 1000)}s; starting fresh`);
+      else if (r.missing.length && opts.gt !== false) log?.(`no market data for ${r.missing.length} token(s)`);
     } finally {
+      clearTimeout(timer);
       running = false;
     }
   };

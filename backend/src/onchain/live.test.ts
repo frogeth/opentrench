@@ -497,6 +497,20 @@ describe('live pricer: Solana', () => {
     expect(pricer.reason('solana', 'M2')).toMatch(/weird pool program is not supported/);
     expect(pricer.reason('solana', 'M3')).toBe('pool account not found');
   });
+  it('a graduated curve asks the directory where the token trades now and moves it there at once', async () => {
+    const curve = new Uint8Array(151); put(curve, 8, 1n); put(curve, 16, 1n); curve[48] = 1;
+    const { fetchImpl } = evmNode({ 'https://solana': { Curve1: `${PROGRAMS.pumpfun}|${b64(curve)}` } });
+    const discover = vi.fn(async () => ({ pairAddress: 'Swap1', dex: 'pumpswap', quoteSymbol: 'SOL', quoteAddress: SOL, priceUsd: 0.00004, marketCap: 40_000 }));
+    const { pricer, apply } = deps(fetchImpl, { discover });
+    const t = token({ address: 'M1', network: 'solana', dex: 'pumpfun', pairAddress: 'Curve1', quoteSymbol: 'SOL', quoteAddress: SOL });
+    await pricer.refresh([t]);
+    await new Promise((r) => setImmediate(r));
+    expect(discover).toHaveBeenCalledWith('solana', 'M1');
+    expect(apply).toHaveBeenCalledWith('M1', expect.objectContaining({ pairAddress: 'Swap1', dex: 'pumpswap', marketCap: 40_000, priceSource: 'api' }));
+    // asked once a minute at most while the record still points at the curve
+    await pricer.refresh([t]);
+    expect(discover.mock.calls).toEqual([['solana', 'M1']]);
+  });
 });
 
 describe('live pricer: screens', () => {
