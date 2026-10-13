@@ -27,9 +27,17 @@ describe('solana decoders', () => {
   });
   it('pumpswap: vaults oriented to the base, whichever side it is', () => {
     const d = bytes(301); putKey(d, 43, K_BASE); putKey(d, 75, K_QUOTE); putKey(d, 139, K_V0); putKey(d, 171, K_V1);
-    expect(decodeSolanaPool('pumpswap', d, BASE)).toEqual({ kind: 'pumpswap', baseMint: BASE, quoteMint: QUOTE, vaults: [base58(K_V0), base58(K_V1)] });
+    expect(decodeSolanaPool('pumpswap', d, BASE)).toEqual({ kind: 'pumpswap', baseMint: BASE, quoteMint: QUOTE, vaults: [base58(K_V0), base58(K_V1)], vaultLess: [0n, 0n] });
     expect(decodeSolanaPool('pumpswap', d, QUOTE)!.vaults).toEqual([base58(K_V1), base58(K_V0)]);
     expect(decodeSolanaPool('pumpswap', d, 'other')).toBeUndefined();
+  });
+  it('pumpswap: the virtual quote reserve (i64 at 245) is added to the quote vault', () => {
+    const d = bytes(301); putKey(d, 43, K_BASE); putKey(d, 75, K_QUOTE); putKey(d, 139, K_V0); putKey(d, 171, K_V1);
+    put(d, 245, 17_580_782_432n); // UNITS' pool, 2026-10-13: vaults 86.58 SOL / 173.66M read 4.99e-7, trades at 6.07e-7
+    expect(decodeSolanaPool('pumpswap', d, BASE)!.vaultLess).toEqual([0n, -17_580_782_432n]);
+    expect(decodeSolanaPool('pumpswap', d, QUOTE)!.vaultLess).toEqual([-17_580_782_432n, 0n]);
+    put(d, 245, (1n << 64n) - 36_616n); // a few pools hold a tiny negative there
+    expect(decodeSolanaPool('pumpswap', d, BASE)!.vaultLess).toEqual([0n, 36_616n]);
   });
   it('raydium v4: vaults, pnl to subtract and decimals', () => {
     const d = bytes(752); put(d, 32, 6n); put(d, 40, 9n); put(d, 192, 5n); put(d, 200, 7n); putKey(d, 336, K_V0); putKey(d, 368, K_V1); putKey(d, 400, K_BASE); putKey(d, 432, K_QUOTE);

@@ -486,8 +486,9 @@ export function createLivePricer(deps: LiveDeps) {
     const plan = ready.map(({ it, m }) => {
       const p = m.sol!;
       const supply = it.token && now() - m.supplyAt > SUPPLY_TTL_MS ? at(it.address) : -1;
-      if (p.vaults) return { pool: -1, vb: at(p.vaults[0]), vq: at(p.vaults[1]), supply };
-      return { pool: at(it.pairAddress), vb: -1, vq: -1, supply };
+      // PumpSwap's virtual quote reserve drifts trade by trade, so its pool account is read with the vaults
+      if (p.vaults) return { pool: -1, vb: at(p.vaults[0]), vq: at(p.vaults[1]), supply, again: m.solKind === 'pumpswap' ? at(it.pairAddress) : -1 };
+      return { pool: at(it.pairAddress), vb: -1, vq: -1, supply, again: -1 };
     });
     const acc = await solanaAccounts(ep.url, keys, fetchImpl);
     ready.forEach(({ it, m }, i) => {
@@ -524,6 +525,8 @@ export function createLivePricer(deps: LiveDeps) {
           skip(st, 'pool vaults did not answer');
           return;
         }
+        const fresh = p.again >= 0 && acc[p.again] ? decodeSolanaPool(m.solKind!, acc[p.again]!.data, it.address) : undefined;
+        if (fresh?.vaultLess) m.sol!.vaultLess = fresh.vaultLess;
         const less = m.sol!.vaultLess ?? [0n, 0n];
         const bn = b - less[0], qn = q - less[1];
         raw = bn > 0n && qn > 0n ? Number(qn) / Number(bn) : 0;

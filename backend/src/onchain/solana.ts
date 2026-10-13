@@ -105,7 +105,12 @@ export function decodeSolanaPool(kind: SolanaKind, d: Uint8Array, base: string):
       case 'pumpswap': {
         if (d.length < 203) return undefined;
         const m0 = key(d, 43), m1 = key(d, 75), v0 = key(d, 139), v1 = key(d, 171);
-        return m0 === base ? { kind, baseMint: m0, quoteMint: m1, vaults: [v0, v1] } : m1 === base ? { kind, baseMint: m1, quoteMint: m0, vaults: [v1, v0] } : undefined;
+        // newer pools price on the quote vault plus a virtual quote reserve (i64 at 245, ~17.5 SOL on fresh
+        // migrations); the vaults alone read 20–55% low on those. Negative as "less" adds it to the quote side.
+        const virt = d.length >= 253 ? dv(d).getBigInt64(245, true) : 0n;
+        if (m0 === base) return { kind, baseMint: m0, quoteMint: m1, vaults: [v0, v1], vaultLess: [0n, -virt] };
+        if (m1 === base) return { kind, baseMint: m1, quoteMint: m0, vaults: [v1, v0], vaultLess: [-virt, 0n] };
+        return undefined;
       }
       case 'raydiumV4': {
         if (d.length < 464) return undefined;
