@@ -7,6 +7,8 @@ app shows the same text in its update prompt.
 
 ## Unreleased
 
+## v0.19.2 — 2026-10-13
+
 - PumpSwap prices are right on newer pools. Those pools add a virtual SOL reserve to the pool's real one, and opentrench read only the real one, so graduated pump.fun tokens showed a market cap 20–55% too low (UNITS read $48.8K while it traded at $62K).
 
 ## v0.19.1 — 2026-10-13
